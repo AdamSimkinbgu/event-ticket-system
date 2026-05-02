@@ -7,7 +7,7 @@
 | **Language** | Java 21 (LTS) — records for DTOs, sealed classes for domain constraints |
 | **Framework** | Spring Boot 3.x — DI, REST APIs, application configuration |
 | **Database ORM** | Spring Data JPA (Hibernate) → PostgreSQL |
-| **Caching/Locking** | Spring Data Redis — 10-minute cart lock and queueing |
+| **Cart Locking** | DB timestamp (`reserved_until` column) — simpler, no extra service required |
 | **Unit Tests** | JUnit 5 + Mockito — domain layer and services, no DB |
 | **Integration Tests** | JUnit 5 + SpringBootTest — H2 in-memory DB |
 | **Acceptance Tests** | JUnit 5 + SpringBootTest — real PostgreSQL instance |

@@ -8,7 +8,6 @@
 |---|---|
 | `spring-boot-starter-web` | REST API controllers — exposes HTTP endpoints via `@RestController` |
 | `spring-boot-starter-data-jpa` | ORM layer — maps Java classes to database tables via Hibernate |
-| `spring-boot-starter-data-redis` | Cart locking (10-minute reservation timer) and virtual queue management |
 | `spring-boot-starter-validation` | Input validation on DTOs at system boundaries |
 
 ### Database
@@ -122,8 +121,8 @@ The HTTP boundary. REST controllers accept requests and delegate to Application 
 ### `application.yml` (production)
 - PostgreSQL datasource connection (host, port, DB name via environment variables)
 - JPA/Hibernate dialect and DDL settings
-- Redis connection for cart locking
 - Flyway migration settings
+- Cart locking handled via DB timestamp (`reserved_until` column), no Redis needed
 
 ### `application-test.yml` (integration tests)
 - Overrides datasource to H2 in-memory DB
