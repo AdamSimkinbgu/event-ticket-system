@@ -15,9 +15,7 @@
 | Dependency | Why |
 |---|---|
 | `postgresql` | Main production database driver |
-| `flyway-core` | Manages DB schema via versioned SQL migration files |
-| `flyway-database-postgresql` | Flyway's PostgreSQL-specific dialect support |
-| `h2` | In-memory database for tests — no real Postgres required in CI |
+| `h2` | In-memory database for integration tests — no external DB required |
 
 ### Utilities
 
@@ -71,9 +69,7 @@ event-ticket-system/
     │   │           └── middleware/       # GlobalExceptionHandler, SecurityFilters
     │   │
     │   └── resources/
-    │       ├── application.yml           # Production: DB, Redis, Spring config
-    │       └── db/migration/             # Flyway SQL schema migration files
-    │           └── V1__init_schema.sql   # Initial schema
+    │       └── application.yml           # Production: DB connection, JPA settings
     │
     └── test/
         ├── java/
@@ -120,19 +116,16 @@ The HTTP boundary. REST controllers accept requests and delegate to Application 
 
 ### `application.yml` (production)
 - PostgreSQL datasource connection (host, port, DB name via environment variables)
-- JPA/Hibernate dialect and DDL settings
-- Flyway migration settings
-- Cart locking handled via DB timestamp (`reserved_until` column), no Redis needed
+- `ddl-auto: update` — Hibernate auto-manages schema from `@Entity` classes
+- Cart locking via `reserved_until` DB timestamp column, no external service needed
 
 ### `application-test.yml` (integration tests)
-- Overrides datasource to H2 in-memory DB
-- Disables Redis (or uses an embedded stub)
-- Flyway runs migrations against H2
+- H2 in-memory datasource
+- `ddl-auto: create-drop` — schema created fresh per test run
 
 ### `application-acceptance.yml` (acceptance tests)
-- Points to a real PostgreSQL instance
-- Used by full-stack acceptance tests that must verify real DB behavior
-- Requires a running PostgreSQL instance (local or Docker)
+- Real PostgreSQL instance
+- `ddl-auto: create-drop` — clean schema per acceptance test run
 
 ### `db/migration/V1__init_schema.sql`
 The first Flyway migration file. Establishes the initial database schema. Subsequent schema changes are added as new versioned files (`V2__...`, `V3__...`) and never modify existing ones.
