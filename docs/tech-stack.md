@@ -8,9 +8,10 @@
 | **Framework** | Spring Boot 3.x — DI, REST APIs, application configuration |
 | **Database ORM** | Spring Data JPA (Hibernate) → PostgreSQL |
 | **Caching/Locking** | Spring Data Redis — 10-minute cart lock and queueing |
-| **Unit/Integration Tests** | JUnit 5 + Mockito |
-| **Acceptance Tests** | Cucumber for Java (Gherkin format) |
-| **Build Tool** | Maven (or Gradle) |
+| **Unit Tests** | JUnit 5 + Mockito — domain layer and services, no DB |
+| **Integration Tests** | JUnit 5 + SpringBootTest — H2 in-memory DB |
+| **Acceptance Tests** | JUnit 5 + SpringBootTest — real PostgreSQL instance |
+| **Build Tool** | Maven |
 
 ---
 
@@ -60,18 +61,13 @@ ticket-management-system/
 │       │       │   ├── domain/
 │       │       │   └── application/
 │       │       │
-│       │       ├── integration/          # SpringBootTest (loads context, checks DB)
+│       │       ├── integration/          # SpringBootTest against H2 in-memory DB
 │       │       │
-│       │       └── acceptance/           # Version 0 Acceptance Test Implementations
-│       │           ├── RunCucumberTest.java     # Cucumber runner class
-│       │           └── stepdefinitions/         # Java code that executes the Gherkin steps
+│       │       └── acceptance/           # Full-stack JUnit tests against real PostgreSQL
 │       │
 │       └── resources/
-│           ├── application-test.yml      # Test configurations (e.g., in-memory DB)
-│           └── features/                 # Customer Acceptance Tests (Version 0 focus)
-│               ├── reserve_ticket.feature
-│               ├── define_discount_policy.feature
-│               └── register_company.feature
+│           ├── application-test.yml      # Integration test config: H2 in-memory DB
+│           └── application-acceptance.yml # Acceptance test config: real PostgreSQL
 ```
 
 ---
@@ -85,19 +81,9 @@ Design the classes for:
 
 > No database or controllers needed yet.
 
-### 2. Acceptance Tests (Gherkin)
-Write plain-English scenarios in `src/test/resources/features/`.
-
-**Example — `reserve_ticket.feature`:**
-```gherkin
-Feature: Reserving a Ticket
-
-  Scenario: Successfully reserving an available seat
-    Given a logged-in Member "Alice"
-    And an Event "Rock Concert" with available seats in "Zone A"
-    When Alice adds a "Zone A" ticket to her cart
-    Then the ticket should be locked for 10 minutes
-```
-
-### 3. Step Definitions
-Map Gherkin steps to empty Java methods in `src/test/java/.../acceptance/stepdefinitions/` — proving the tests can be wired to real code in Version 1.
+### 2. Tests
+Three layers of testing, all JUnit 5:
+- `src/test/java/.../unit/domain/` — domain model and aggregate tests (Mockito, no Spring)
+- `src/test/java/.../unit/application/` — service tests (Mockito, no Spring)
+- `src/test/java/.../integration/` — SpringBootTest against H2 in-memory DB
+- `src/test/java/.../acceptance/` — full-stack SpringBootTest against real PostgreSQL

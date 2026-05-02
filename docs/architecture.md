@@ -31,10 +31,8 @@
 | Dependency | Why |
 |---|---|
 | `spring-boot-starter-test` | Bundles JUnit 5 + Mockito for unit and integration tests |
-| `cucumber-java` | Acceptance test framework — executes Gherkin `.feature` files |
-| `cucumber-spring` | Wires Cucumber into the Spring application context |
-| `cucumber-junit-platform-engine` | Allows JUnit 5 to discover and run Cucumber tests |
-| `junit-platform-suite` | Enables the `@Suite` runner for Cucumber test entry point |
+| `h2` | In-memory database for integration tests — fast, no external DB required |
+| `postgresql` | Also used in acceptance tests against a real PostgreSQL instance |
 
 ---
 
@@ -85,18 +83,13 @@ event-ticket-system/
         │       │   ├── domain/
         │       │   └── application/
         │       │
-        │       ├── integration/          # SpringBootTest — loads context, hits H2 DB
+        │       ├── integration/          # SpringBootTest — loads context, hits H2 in-memory DB
         │       │
-        │       └── acceptance/           # Cucumber acceptance tests (Version 0)
-        │           ├── RunCucumberTest.java     # Cucumber suite runner
-        │           └── stepdefinitions/         # Java step definition classes
+        │       └── acceptance/           # Full-stack JUnit tests against real PostgreSQL
         │
         └── resources/
-            ├── application-test.yml      # Test overrides: H2 in-memory DB
-            └── features/                 # Gherkin .feature files
-                ├── reserve_ticket.feature
-                ├── define_discount_policy.feature
-                └── register_company.feature
+            ├── application-test.yml      # Integration test overrides: H2 in-memory DB
+            └── application-acceptance.yml # Acceptance test overrides: real PostgreSQL
 ```
 
 ---
@@ -132,10 +125,15 @@ The HTTP boundary. REST controllers accept requests and delegate to Application 
 - Redis connection for cart locking
 - Flyway migration settings
 
-### `application-test.yml` (tests)
+### `application-test.yml` (integration tests)
 - Overrides datasource to H2 in-memory DB
 - Disables Redis (or uses an embedded stub)
-- Flyway runs migrations against H2 for integration tests
+- Flyway runs migrations against H2
+
+### `application-acceptance.yml` (acceptance tests)
+- Points to a real PostgreSQL instance
+- Used by full-stack acceptance tests that must verify real DB behavior
+- Requires a running PostgreSQL instance (local or Docker)
 
 ### `db/migration/V1__init_schema.sql`
 The first Flyway migration file. Establishes the initial database schema. Subsequent schema changes are added as new versioned files (`V2__...`, `V3__...`) and never modify existing ones.
