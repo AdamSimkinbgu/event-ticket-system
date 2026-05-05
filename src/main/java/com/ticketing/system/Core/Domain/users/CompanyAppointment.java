@@ -1,4 +1,4 @@
-package com.ticketing.system.Core.Domain.company;
+package com.ticketing.system.Core.Domain.users;
 
 import java.util.List;
 
