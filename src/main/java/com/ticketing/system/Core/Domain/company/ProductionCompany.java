@@ -69,6 +69,30 @@ public class ProductionCompany {
        
     }
 
+    public void RevokeManager(int targetId) {
+        if (managers.containsKey(targetId)) {
+            managers.remove(targetId);
+        }
+        else {
+            throw new RuntimeException("User is not a manager");
+        }
+    }
+
+    public void ModifyManagerPermissions(int companyId2, int targetId, List<Permission> newPermissions) {
+        if (this.companyId != companyId2) {
+            throw new RuntimeException("Invalid company");
+        }
+        else if (!managers.containsKey(targetId)) {
+            throw new RuntimeException("User is not a manager");
+        }
+        else if (newPermissions == null || newPermissions.isEmpty()) {
+            throw new RuntimeException("Invalid permissions");
+        }
+        else {
+            managers.put(targetId, newPermissions);
+        }
+    }
+
 
     
     

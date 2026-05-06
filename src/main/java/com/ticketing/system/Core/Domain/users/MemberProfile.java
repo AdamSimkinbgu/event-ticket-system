@@ -9,5 +9,11 @@ public class MemberProfile {
         this.companyId = companyId;
         this.companyRole = CompanyRole.Manager;
     }
+
+    public void RevokeManagerRole(int companyId2) {
+        if (this.companyId == companyId2) {
+            this.companyRole = CompanyRole.None;
+        }
+    }
     
 }

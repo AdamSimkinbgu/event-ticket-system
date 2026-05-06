@@ -89,6 +89,57 @@ public class CompanyManagementService {
         companyRepository.updateCompany(company);
     }
 
+    public void RevokeManager(String token, int companyId, int targetId) {
+        if (!authenticationService.validateToken(token)) {
+            throw new RuntimeException("Invalid token");
+        }
+        int ownerId = authenticationService.extractUserId(token);
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null) {
+            throw new RuntimeException("Company not found");
+        }
+        if (company.getOwnerId() != ownerId) {
+            throw new RuntimeException("Only the owner can revoke managers");
+        }
+        User targetUser = userRepository.getUserById(targetId);
+        if (targetUser == null) {
+            throw new RuntimeException("Target user not found");
+        }
+
+        company.RevokeManager(targetId);
+        targetUser.removeCompanyAppointment(companyId);
+
+        
+        userRepository.updateUser(targetUser);
+        companyRepository.updateCompany(company);
+
+    }
+
+    public void ModifyManagerPermissions(String token, int companyId, int targetId, List<Permission> newPermissions) {
+        if (!authenticationService.validateToken(token)) {
+            throw new RuntimeException("Invalid token");
+        }
+        int ownerId = authenticationService.extractUserId(token);
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null) {
+            throw new RuntimeException("Company not found");
+        }
+        if (company.getOwnerId() != ownerId) {
+            throw new RuntimeException("Only the owner can modify manager permissions");
+        }
+        User targetUser = userRepository.getUserById(targetId);
+        if (targetUser == null) {
+            throw new RuntimeException("Target user not found");
+        }
+
+        company.ModifyManagerPermissions(companyId, targetId, newPermissions);
+        targetUser.ModifyManagerPermissions(companyId, targetId, newPermissions);
+
+         userRepository.updateUser(targetUser);
+        companyRepository.updateCompany(company);   
+
+    }
+
 
 
 }
