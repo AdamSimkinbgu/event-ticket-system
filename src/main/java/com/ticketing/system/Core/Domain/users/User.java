@@ -1,32 +1,44 @@
 package com.ticketing.system.Core.Domain.users;
 
-import java.security.Permission;
 import java.util.List;
 
 
 public class User {
 
-    MemberProfile memberProfile;
-    List <SystemRole> systemRoles;
-    Inbox inbox;
-    int userId;
-    String username;
-    String password;
+    private MemberProfile memberProfile;
+    private List <ManagementInvitation> managementInvitations;
+    private Inbox inbox;
+    private int userId;
+    private String username;
+    private String password;
+    private List<CompanyAppointment> companyAppointments;
+    
+    
+    
     public void addCompanyAppointment(int companyId, int ownerid, List<Permission> permissions) {
         // TODO Auto-generated method stub
         throw new UnsupportedOperationException("Unimplemented method 'addCompanyAppointment'");
     }
-    public void setAsmanager(int companyId) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'setAsmanager'");
+
+    public void InvitetoCompanyAppointment(int companyId, int ownerid, List<Permission> permissions) {
+        managementInvitations.add(new ManagementInvitation(companyId, this.userId, ownerid, permissions));
     }
-    public void InvitetoCompanyAppointment(int companyId, int ownerid,
-            List<com.ticketing.system.Core.Domain.users.Permission> permissions) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'InvitetoCompanyAppointment'");
+    public ManagementInvitation acceptInvitation(int companyId) {
+     for (ManagementInvitation invitation : managementInvitations) {
+         if (invitation.getCompanyId() == companyId) {
+             memberProfile.setAsManager(companyId);
+             managementInvitations.remove(invitation);
+             companyAppointments.add(new CompanyAppointment(companyId, this.userId, invitation.getInviterId(), invitation.getPermissions()));
+             return invitation;
+         }
+         
+     }
+        throw new RuntimeException("No invitation found for the specified company");    
     }
 
-    
+    public void setAsManager(int companyId) {
+        memberProfile.setAsManager(companyId);
+    }
 
 
 
