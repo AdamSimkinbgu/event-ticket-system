@@ -68,6 +68,27 @@ public class CompanyManagementService {
         companyRepository.updateCompany(company);
     }
 
+    public void rejectManagerInvitation(String token, int companyId) {
+        if (!authenticationService.validateToken(token)) {
+            throw new RuntimeException("Invalid token");
+        }
+        int targetId = authenticationService.extractUserId(token);
+        User targetUser = userRepository.getUserById(targetId);
+        if (targetUser == null) {
+            throw new RuntimeException("Target user not found");
+        }
+
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null) {
+            throw new RuntimeException("Company not found");
+        }
+
+        targetUser.rejectInvitation(companyId);
+        company.rejectManagerInvitation(targetId);
+        userRepository.updateUser(targetUser);
+        companyRepository.updateCompany(company);
+    }
+
 
 
 }

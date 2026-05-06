@@ -61,6 +61,14 @@ public class ProductionCompany {
     managers.put(targetId, permissions);
 }
 
+    public void rejectManagerInvitation(int targetId) {
+        if (!pendingManagers.containsKey(targetId)) {
+            throw new RuntimeException("No pending manager invitation for this user");
+        }
+        pendingManagers.remove(targetId);
+       
+    }
+
 
     
     

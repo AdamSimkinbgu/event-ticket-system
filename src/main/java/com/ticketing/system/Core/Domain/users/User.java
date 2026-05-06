@@ -1,5 +1,6 @@
 package com.ticketing.system.Core.Domain.users;
 
+import java.util.Collection;
 import java.util.List;
 
 
@@ -36,12 +37,18 @@ public class User {
         throw new RuntimeException("No invitation found for the specified company");    
     }
 
-    public void setAsManager(int companyId) {
-        memberProfile.setAsManager(companyId);
+    public List<ManagementInvitation> getManagementInvitations() {
+       return this.managementInvitations;
     }
 
+    public void rejectInvitation(int companyId) {
+        for (ManagementInvitation invitation : managementInvitations) {
+            if (invitation.getCompanyId() == companyId) {
+                managementInvitations.remove(invitation);
+                return;
+            }
+        }
+        throw new RuntimeException("No invitation found for the specified company");
+    }
 
-
-
-    
 }
