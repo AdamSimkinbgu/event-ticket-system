@@ -57,5 +57,14 @@ public class User {
         }
         throw new RuntimeException("No appointment found for the specified company");
     }
+    public void ModifyManagerPermissions(int companyId, int targetId, List<Permission> newPermissions) {
+        for (CompanyAppointment appointment : companyAppointments) {
+            if (appointment.getCompanyId() == companyId && appointment.getTargetId() == targetId) {
+                appointment.setPermissions(newPermissions);
+                return;
+            }
+        }
+        throw new RuntimeException("No appointment found for the specified company and target user");
+    }
 
 }

@@ -19,4 +19,12 @@ public class CompanyAppointment {
         return this.companyId;
     }
 
+    public int getTargetId() {
+      return this.targetId;
+    }
+
+    public void setPermissions(List<Permission> newPermissions) {
+        this.permissions = newPermissions;
+    }
+
 }
