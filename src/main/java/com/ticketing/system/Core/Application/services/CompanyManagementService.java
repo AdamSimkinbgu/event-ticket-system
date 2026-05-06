@@ -1,11 +1,11 @@
 package com.ticketing.system.Core.Application.services;
 
-import java.security.Permission;
 import java.util.List;
 
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
+import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
 
 public class CompanyManagementService {
@@ -20,7 +20,10 @@ public class CompanyManagementService {
         this.authenticationService = authenticationService;
     }
 
-    public int AppointCompanyManager(String token, int companyId, int TargetId, List<Permission> permissions) {
+
+
+
+    public int InvitetoCompanyManager(String token, int companyId, int TargetId, List<Permission> permissions) {
         boolean isAuthenticated = authenticationService.validateToken(token);
         int Ownerid = -1;
 
@@ -39,12 +42,10 @@ public class CompanyManagementService {
             throw new RuntimeException("Target user not found");
         }
 
-        int result = company.assignManager(Ownerid, TargetId, permissions);
+        int result = company.inviteManager(Ownerid, TargetId, permissions);
+        targetUser.InvitetoCompanyAppointment(companyId, Ownerid, permissions);
 
-        companyRepository.updateCompany(company);
-
-    return result;
+        return result;
     }
-
 
 }
