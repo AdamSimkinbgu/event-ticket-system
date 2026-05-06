@@ -28,20 +28,7 @@ public class ProductionCompany {
     }
 
 
-    public int inviteManager(int ownerid, int targetId, List<Permission> permissions) {
-           if (ownerid != this.ownerId) {
-            throw new RuntimeException("Only the owner can assign managers");
-        }
-        else if (managers.containsKey(targetId) || targetId == ownerId) {
-            throw new RuntimeException("User is already a manager or the owner");
-        }else if (permissions == null || permissions.isEmpty()) {
-            throw new IllegalArgumentException("Manager must receive at least one permission");
-        } else {
-            pendingManagers.put(targetId, permissions);
-        }
-        return 1;
-    }
-
+    
     
     
 
