@@ -16,11 +16,7 @@ public class User {
     
     
     
-    public void addCompanyAppointment(int companyId, int ownerid, List<Permission> permissions) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'addCompanyAppointment'");
-    }
-
+  
     public void InvitetoCompanyAppointment(int companyId, int ownerid, List<Permission> permissions) {
         managementInvitations.add(new ManagementInvitation(companyId, this.userId, ownerid, permissions));
     }
@@ -49,6 +45,17 @@ public class User {
             }
         }
         throw new RuntimeException("No invitation found for the specified company");
+    }
+
+    public void removeCompanyAppointment(int companyId) {
+        for (CompanyAppointment appointment : companyAppointments) {
+            if (appointment.getCompanyId() == companyId) {
+                companyAppointments.remove(appointment);
+                this.memberProfile.RevokeManagerRole(companyId);
+                return;
+            }
+        }
+        throw new RuntimeException("No appointment found for the specified company");
     }
 
 }

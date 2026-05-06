@@ -15,4 +15,8 @@ public class CompanyAppointment {
         this.permissions = permissions;
     }
 
+    public int getCompanyId() {
+        return this.companyId;
+    }
+
 }

@@ -69,6 +69,15 @@ public class ProductionCompany {
        
     }
 
+    public void RevokeManager(int targetId) {
+        if (managers.containsKey(targetId)) {
+            managers.remove(targetId);
+        }
+        else {
+            throw new RuntimeException("User is not a manager");
+        }
+    }
+
 
     
     
