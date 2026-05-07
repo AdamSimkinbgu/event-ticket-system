@@ -1,8 +1,10 @@
 package com.ticketing.system.Core.Domain.orders;
 
+import java.time.LocalDateTime;
+
 public class OrderItemLine {
 
-    public OrderItemLine(String ticketId, double price, String seatInfo) {
+    public OrderItemLine(String ticketId, double price, String seatInfo, LocalDateTime addedAt) {
         //TODO Auto-generated constructor stub
     }
 

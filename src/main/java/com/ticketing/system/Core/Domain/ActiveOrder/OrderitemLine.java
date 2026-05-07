@@ -5,24 +5,25 @@ import java.time.Duration;
 
 public class OrderitemLine {
 
-    private String ticketId;
-    private double priceAtReservation;
-    private String seatInfo;
+    private String eventId;
+    private String zoneId;
+    private double priceAtoneticketReservation;
     private LocalDateTime addedAt; 
-    private final Duration EXPIRATION_LIMIT; 
+    private final Duration EXPIRATION_LIMIT = Duration.ofMinutes(10); 
 
-    public OrderitemLine(String ticketId, double priceAtReservation, String seatInfo, LocalDateTime addedAt) {
-        this.ticketId = ticketId;
-        this.priceAtReservation = priceAtReservation;
-        this.seatInfo = seatInfo;
+    public OrderitemLine(String eventId,String zoneId, double priceAtReservation, LocalDateTime addedAt) {
+        this.eventId = eventId;
+        this.zoneId = zoneId;
+        this.priceAtoneticketReservation = priceAtReservation;
         this.addedAt = addedAt;
-        EXPIRATION_LIMIT = Duration.ofMinutes(10);
     }
 
     // Getters
-    public String getTicketId() { return ticketId; }
-    public double getPriceAtReservation() { return priceAtReservation; }
-    public String getSeatInfo() { return seatInfo; }
+    public String geteventId() { return eventId; }
+     public String getzoneId() { return zoneId; }
+
+    public double getPriceAtReservation() { return priceAtoneticketReservation; }
+
     public LocalDateTime getAddedAt() { return addedAt; }
 
 
