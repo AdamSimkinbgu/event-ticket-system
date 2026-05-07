@@ -35,11 +35,6 @@ public class ReservationService {
               activeOrderRepository.save(newact);
             }
 
-            activeOrderRepository.add(
-                    buyerId,
-                    eventId,
-                    zoneId,
-                    quantity
-            );
+           
         }
 }
