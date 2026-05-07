@@ -9,7 +9,8 @@ import java.util.List;
 import com.ticketing.system.Core.Domain.orders.OrderItemLine;
 
 public class ActiveOrder {
-      private String userId;
+
+    private String userId;
     private String status;
     private List<OrderItemLine> items;
 
@@ -25,6 +26,7 @@ public void addReservation(String ticketId, double price, String seatInfo) {
         this.status = "Reserved";
     }
 
+    
     public List<String> removeExpiredItems() {
     List<String> expiredTicketIds = new ArrayList<>();
     
