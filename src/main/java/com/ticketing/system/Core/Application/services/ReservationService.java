@@ -34,7 +34,6 @@ public class ReservationService {
               newact.addReservation(eventId,zoneId , quantity, priceoerticket,LocalDateTime.now());
               activeOrderRepository.save(newact);
             }
-
            
         }
 }
