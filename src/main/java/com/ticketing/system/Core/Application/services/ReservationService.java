@@ -19,7 +19,7 @@ public class ReservationService {
     }
 
                                
-    public void reserveTickets(String buyerId, String eventId,String zoneId,int quantity){
+    public boolean reserveTickets(String buyerId, String eventId,String zoneId,int quantity){
 
         Event event = (Event) eventRepository.findById(eventId);
         double priceoerticket= event.getZone(zoneId).getprice();
@@ -27,13 +27,16 @@ public class ReservationService {
             if(!activeOrderRepository.getByUserId(buyerId).equals(null)){
 
                activeOrderRepository.getByUserId(buyerId).addReservation(eventId,zoneId , quantity, priceoerticket,LocalDateTime.now()); 
+           return true;
             } 
+
             else{
 
               ActiveOrder newact =new ActiveOrder(buyerId);
               newact.addReservation(eventId,zoneId , quantity, priceoerticket,LocalDateTime.now());
               activeOrderRepository.save(newact);
+              return true;
             }
-           
         }
+
 }

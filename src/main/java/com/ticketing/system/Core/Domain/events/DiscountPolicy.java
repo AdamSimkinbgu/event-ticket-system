@@ -1,5 +1,8 @@
 package com.ticketing.system.Core.Domain.events;
 
+import java.time.LocalDateTime;
+import java.util.Map;
+
 public class DiscountPolicy {
     private final double discountPercentage;
 
@@ -18,4 +21,14 @@ public class DiscountPolicy {
 
      throw new UnsupportedOperationException("Unimplemented method 'validate'");
     }
+
+
+
+    public double calculate(Map<Integer, Double> tickets,LocalDateTime now) {
+    double total = 0;
+
+   // TODO Auto-generated method stub
+    throw new UnsupportedOperationException("Unimplemented method 'calculatePrice'");
+}  
+   
 }
