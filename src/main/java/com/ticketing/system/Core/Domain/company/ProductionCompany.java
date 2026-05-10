@@ -94,6 +94,10 @@ public class ProductionCompany {
     // ---------------------------------------------------------------------------
     // Skeleton additions — CompanyStatus lifecycle + cycle check + getters.
     // ---------------------------------------------------------------------------
+    public HashMap<Integer, List<Permission>> getManagers() {
+        return this.managers;
+    }
+
 
     public CompanyStatus getStatus() {
         throw new UnsupportedOperationException("not implemented (add status enum field)");
