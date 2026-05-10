@@ -51,7 +51,39 @@ public class User {
     }
 
 
+public List<ManagementInvitation> getManagementInvitations() {
+       return this.managementInvitations;
+    }
 
+    public void rejectInvitation(int companyId) {
+        for (ManagementInvitation invitation : managementInvitations) {
+            if (invitation.getCompanyId() == companyId) {
+                managementInvitations.remove(invitation);
+                return;
+            }
+        }
+        throw new RuntimeException("No invitation found for the specified company");
+    }
+
+    public void removeCompanyAppointment(int companyId) {
+        for (CompanyAppointment appointment : companyAppointments) {
+            if (appointment.getCompanyId() == companyId) {
+                companyAppointments.remove(appointment);
+                this.memberProfile.RevokeManagerRole(companyId);
+                return;
+            }
+        }
+        throw new RuntimeException("No appointment found for the specified company");
+    }
+    public void ModifyManagerPermissions(int companyId, int targetId, List<Permission> newPermissions) {
+        for (CompanyAppointment appointment : companyAppointments) {
+            if (appointment.getCompanyId() == companyId && appointment.getTargetId() == targetId) {
+                appointment.setPermissions(newPermissions);
+                return;
+            }
+        }
+        throw new RuntimeException("No appointment found for the specified company and target user");
+    }
 
     
 }
