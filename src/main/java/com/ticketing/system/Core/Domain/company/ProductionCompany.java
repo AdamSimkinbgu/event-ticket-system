@@ -93,6 +93,10 @@ public class ProductionCompany {
         }
     }
 
+    public HashMap<Integer, List<Permission>> getManagers() {
+        return this.managers;
+    }
+
 
     
     
