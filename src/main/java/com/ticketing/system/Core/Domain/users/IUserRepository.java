@@ -1,21 +1,28 @@
 package com.ticketing.system.Core.Domain.users;
 
-public class IUserRepository {
-    
+import java.util.Optional;
 
-    public User getUserById(int targetId) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getUserById'");
-    }
+// Aggregate-root entry point for the User aggregate.
+public interface IUserRepository {
 
-    public boolean sendInvitation(int targetId, int companyId) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'sendInvitation'");
-    }
+    User getUserById(int targetId);
 
-    public void updateUser(User targetUser) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'updateUser'");
-    }
-    
+    boolean sendInvitation(int targetId, int companyId);
+
+    void updateUser(User targetUser);
+
+    // UC-11 / UC-12 — by-username lookup for registration uniqueness check + login.
+    Optional<User> findByUsername(String username);
+
+    // UC-11 — secondary uniqueness lookup.
+    Optional<User> findByEmail(String email);
+
+    // UC-11 — fast existence check used during registration validation.
+    boolean existsByUsername(String username);
+
+    // UC-11 — persist newly-registered User (User aggregate creation).
+    void save(User user);
+
+    // II.6.2.x (Cancelled in v0) — defensive: defined for completeness.
+    void delete(int userId);
 }

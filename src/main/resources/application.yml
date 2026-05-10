@@ -12,3 +12,20 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+
+# JWT (consumed by Infrastructure/security/JwtSessionManager — UC-12).
+# In production the secret MUST be supplied via environment variable, never committed.
+jwt:
+  secret: ${JWT_SECRET:dev-only-secret-please-override-in-prod-must-be-at-least-256-bits-long}
+  expiration-minutes: ${JWT_EXPIRATION_MINUTES:1440}
+
+# Actuator (SLR.8.1 telemetry / SLR.8.2 logging visibility).
+# Restrict in production by listing only the endpoints you actually want exposed.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized

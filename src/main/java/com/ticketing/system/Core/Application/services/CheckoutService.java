@@ -9,28 +9,28 @@ import java.util.stream.Collectors;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
-import com.ticketing.system.Core.Domain.ActiveOrder.OrderitemLine;
+import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.events.Event;
-import com.ticketing.system.Core.Domain.events.EventRepository;
-import com.ticketing.system.Core.Domain.orders.OrderItemLine;
+import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
-import com.ticketing.system.Core.Domain.orders.IOrderReciptRepository;
+import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
-import com.ticketing.system.Core.Domain.Tickets.TicketRepository;
+import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 
 public class CheckoutService {
 
     private final IActiveOrderRepository activeOrderRepository;
-    private final EventRepository eventRepository;
-      private final TicketRepository ticketRepository;
-    private final IOrderReciptRepository orderReceiptRepository;
+    private final IEventRepository eventRepository;
+      private final ITicketRepository ticketRepository;
+    private final IOrderReceiptRepository orderReceiptRepository;
 
     public CheckoutService(
             IActiveOrderRepository activeOrderRepository,
-            EventRepository eventRepository,
-            TicketRepository ticketRepository,
-            IOrderReciptRepository orderReceiptRepository
+            IEventRepository eventRepository,
+            ITicketRepository ticketRepository,
+            IOrderReceiptRepository orderReceiptRepository
     ) {
         this.activeOrderRepository = activeOrderRepository;
         this.eventRepository = eventRepository;
@@ -49,11 +49,11 @@ public void checkout(String userId, PaymentGateway paymentGateway) {
         }
          double totalPrice = 0;
 
-Map<String, List<OrderitemLine>> itemsByEvent =  order.getItems() .stream().collect(Collectors.groupingBy(OrderitemLine::geteventId));
+Map<String, List<CartLineItem>> itemsByEvent =  order.getItems() .stream().collect(Collectors.groupingBy(CartLineItem::geteventId));
 
-for (Map.Entry<String, List<OrderitemLine>> entry : itemsByEvent.entrySet()) {
+for (Map.Entry<String, List<CartLineItem>> entry : itemsByEvent.entrySet()) {
     String eventId = entry.getKey();
-    List<OrderitemLine> eventItems = entry.getValue();
+    List<CartLineItem> eventItems = entry.getValue();
 
     Event event = eventRepository.findById(eventId);
 
@@ -73,7 +73,7 @@ for (Map.Entry<String, List<OrderitemLine>> entry : itemsByEvent.entrySet()) {
             throw new IllegalStateException("Payment failed");
         }
 
-        for (OrderitemLine item : order.buy()) {
+        for (CartLineItem item : order.buy()) {
             Ticket ticket = new Ticket(
                     item.geteventId(),
                     item.getzoneId(),
@@ -91,7 +91,7 @@ for (Map.Entry<String, List<OrderitemLine>> entry : itemsByEvent.entrySet()) {
         }
 
     } catch (Exception e) {
-        List<OrderitemLine> returnToStock = order.ReturnToStock();
+        List<CartLineItem> returnToStock = order.ReturnToStock();
     }
 }
 
@@ -102,14 +102,14 @@ for (Map.Entry<String, List<OrderitemLine>> entry : itemsByEvent.entrySet()) {
 //         ActiveOrder order = activeOrderRepository.getByUserId(userId);
 
 //             try {
-//              List <OrderitemLine>  temp =order.getItems();
+//              List <CartLineItem>  temp =order.getItems();
 
 
 //             double price = order.calculateTotalPrice(); // יש בעיה
 
 //             if (order.validateCanCheckout()&& PaymentGateway.Paying(price)  ) {
                   
-//             for (OrderitemLine item : order.buy()) {
+//             for (CartLineItem item : order.buy()) {
 //                 Ticket ticket = new Ticket( item.geteventId(), item.getzoneId(), item.getPriceAtReservation() );
 //                  OrderReceipt neworder = new OrderReceipt(item.geteventId(), item.getzoneId(), item.getPriceAtReservation() );
 //                 ticketRepository.save(ticket);
@@ -119,7 +119,7 @@ for (Map.Entry<String, List<OrderitemLine>> entry : itemsByEvent.entrySet()) {
 //         }
 //     }
 //         catch (Exception e) {
-//         List<OrderitemLine> returnToStock = order.ReturnToStock();
+//         List<CartLineItem> returnToStock = order.ReturnToStock();
 
 //          }
 //    }

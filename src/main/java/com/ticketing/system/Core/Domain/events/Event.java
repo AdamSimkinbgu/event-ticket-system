@@ -72,4 +72,61 @@ public double calculatePrice(Map<Integer, Double> tickets,LocalDateTime now) {
     return discountPolicy.calculate(tickets,now);
 }
 
+    // ---------------------------------------------------------------------------
+    // Skeleton additions — EventStatus lifecycle + missing getters.
+    // ---------------------------------------------------------------------------
+
+    public EventStatus getStatus() {
+        throw new UnsupportedOperationException("not implemented (add status field)");
+    }
+
+    // UC-19 / UC-32 — DRAFT/SCHEDULED -> ON_SALE when admin opens or owner publishes.
+    public void transitionToOnSale() {
+        throw new UnsupportedOperationException("UC-19/32: not implemented");
+    }
+
+    // UC-19 — soft cancel; fires EventCancelled event for UC-4.
+    public void transitionToCanceled(String reason) {
+        throw new UnsupportedOperationException("UC-19: not implemented");
+    }
+
+    // ON_SALE -> COMPLETED after the last show date.
+    public void transitionToCompleted() {
+        throw new UnsupportedOperationException("not implemented");
+    }
+
+    // ON_SALE -> SOLD_OUT when no AVAILABLE tickets remain.
+    public void markSoldOut() {
+        throw new UnsupportedOperationException("not implemented");
+    }
+
+    // UC-19 — II.3.5.2 immutability check; returns false if 'field' is frozen by sales.
+    public boolean canBeEdited(String field) {
+        throw new UnsupportedOperationException("UC-19: not implemented");
+    }
+
+    // Missing getters.
+    public String getName() {
+        return name;
+    }
+
+    public String getCompanyId() {
+        return comapnyid;
+    }
+
+    public List<ShowDate> getShowDates() {
+        return showDates;
+    }
+
+    public VenueMap getVenueMap() {
+        return venueMap;
+    }
+
+    public PurchasePolicy getPurchasePolicy() {
+        return purchasePolicy;
+    }
+
+    public DiscountPolicy getDiscountPolicy() {
+        return discountPolicy;
+    }
 }
