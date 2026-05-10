@@ -61,6 +61,10 @@ public class ProductionCompany {
     managers.put(targetId, permissions);
 }
 
+    public HashMap<Integer, List<Permission>> getManagers() {
+        return this.managers;
+    }
+
 
     
     
