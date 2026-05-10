@@ -33,3 +33,6 @@ target/
 *.csv
 *.xlsx
 *.xls
+
+scripts/*
+docs/*
