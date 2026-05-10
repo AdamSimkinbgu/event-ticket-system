@@ -19,9 +19,10 @@ public class User {
         this.username = username;
         this.password = password;
         this.managementInvitations = new ArrayList<>();
-        this.inbox = new Inbox();
         this.memberProfile = new MemberProfile();
         this.companyAppointments = new ArrayList<>();
+        // Messaging is its own aggregate now (Conversation / IConversationRepository in messaging/);
+        // User no longer holds an inbox field.
     }
     
     
