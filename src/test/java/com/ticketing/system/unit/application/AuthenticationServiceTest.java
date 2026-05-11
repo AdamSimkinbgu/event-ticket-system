@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -18,9 +19,13 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
+import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
+import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
+import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateEmailException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateUsernameException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidEmailFormatException;
@@ -32,13 +37,15 @@ class AuthenticationServiceTest {
 
     private IUserRepository mockUserRepo;
     private IPasswordHasher mockHasher;
+    private ISessionManager mockSessionManager;
     private AuthenticationService service;
 
     @BeforeEach
     void setUp() {
         mockUserRepo = mock(IUserRepository.class);
         mockHasher = mock(IPasswordHasher.class);
-        service = new AuthenticationService(mockUserRepo, mockHasher);
+        mockSessionManager = mock(ISessionManager.class);
+        service = new AuthenticationService(mockUserRepo, mockHasher, mockSessionManager);
     }
 
     @Test
@@ -156,11 +163,71 @@ class AuthenticationServiceTest {
         verify(mockUserRepo, never()).existsByUsername(any());
     }
 
-    @Test @Disabled("UC-12: login on valid credentials issues JWT")
-    void givenValidCredentials_whenLogin_thenTokenIssued() {}
+    @Test
+    void givenValidCredentials_whenLogin_thenTokenIssued() {
+        User user = new User(7, "alice", "alice@example.com", "STORED_HASH");
+        when(mockUserRepo.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(mockHasher.matches("Password1", "STORED_HASH")).thenReturn(true);
+        when(mockSessionManager.generateToken(7, "alice")).thenReturn("ISSUED_TOKEN");
+        when(mockSessionManager.extractExpiration("ISSUED_TOKEN")).thenReturn(9999L);
 
-    @Test @Disabled("UC-12: login on invalid credentials rejects with generic error")
-    void givenInvalidCredentials_whenLogin_thenRejected() {}
+        AuthTokenDTO result = service.login(new LoginRequestDTO("alice", "Password1"));
+
+        assertEquals("ISSUED_TOKEN", result.token());
+        assertEquals(9999L, result.expiresAtEpochMillis());
+        assertEquals(7, result.userId());
+        assertEquals("alice", result.username());
+    }
+
+    @Test
+    void givenWrongPassword_whenLogin_thenAuthenticationFailedExceptionThrown() {
+        User user = new User(7, "alice", "alice@example.com", "STORED_HASH");
+        when(mockUserRepo.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(mockHasher.matches("wrong", "STORED_HASH")).thenReturn(false);
+
+        assertThrows(AuthenticationFailedException.class, () ->
+            service.login(new LoginRequestDTO("alice", "wrong"))
+        );
+        verify(mockSessionManager, never()).generateToken(anyInt(), any());
+    }
+
+    @Test
+    void givenNoSuchUser_whenLogin_thenSameGenericRejection() {
+        when(mockUserRepo.findByUsername("ghost")).thenReturn(Optional.empty());
+
+        // Same exception type as wrong-password — no enumeration leak.
+        assertThrows(AuthenticationFailedException.class, () ->
+            service.login(new LoginRequestDTO("ghost", "whatever"))
+        );
+        verifyNoInteractions(mockHasher);
+        verify(mockSessionManager, never()).generateToken(anyInt(), any());
+    }
+
+    @Test
+    void givenInvalidCredentials_whenLogin_thenRejected() {
+        // Acceptance-style negative check: bad password rejected, no token issued.
+        User user = new User(7, "alice", "alice@example.com", "STORED_HASH");
+        when(mockUserRepo.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(mockHasher.matches("badpass", "STORED_HASH")).thenReturn(false);
+
+        assertThrows(AuthenticationFailedException.class, () ->
+            service.login(new LoginRequestDTO("alice", "badpass"))
+        );
+    }
+
+    @Test
+    void extractUserId_delegatesToSessionManager() {
+        when(mockSessionManager.extractUserId("T")).thenReturn(42);
+        assertEquals(42, service.extractUserId("T"));
+        verify(mockSessionManager).extractUserId("T");
+    }
+
+    @Test
+    void validateToken_delegatesToSessionManager() {
+        when(mockSessionManager.validateToken("T")).thenReturn(true);
+        assertTrue(service.validateToken("T"));
+        verify(mockSessionManager).validateToken("T");
+    }
 
     @Test @Disabled("UC-14: logout invalidates session, abandons cart (II.3.0.1)")
     void givenLoggedInMember_whenLogout_thenSessionEndedAndCartReleased() {}
