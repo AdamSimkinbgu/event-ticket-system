@@ -6,7 +6,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
+import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
+import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
@@ -25,55 +28,73 @@ public class CheckoutService {
     private final IEventRepository eventRepository;
       private final ITicketRepository ticketRepository;
     private final IOrderReceiptRepository orderReceiptRepository;
+    private final ITicketIssuer ticketIssuer;
 
-    public CheckoutService(
-            IActiveOrderRepository activeOrderRepository,
-            IEventRepository eventRepository,
-            ITicketRepository ticketRepository,
-            IOrderReceiptRepository orderReceiptRepository
-    ) {
+    public CheckoutService( IActiveOrderRepository activeOrderRepository,IEventRepository eventRepository,ITicketRepository ticketRepository, IOrderReceiptRepository orderReceiptRepository,ITicketIssuer ticketIssuer) {
         this.activeOrderRepository = activeOrderRepository;
         this.eventRepository = eventRepository;
         this.ticketRepository = ticketRepository;
         this.orderReceiptRepository = orderReceiptRepository;
+        this.ticketIssuer=ticketIssuer;
     }
-
 public void checkout(String userId, PaymentGateway paymentGateway) {
 
     ActiveOrder order = activeOrderRepository.getByUserId(userId);
 
     try {
-
-         if (!order.validateCanCheckout()) {
+        if (!order.validateCanCheckout()) {
             throw new IllegalStateException("Order cannot checkout");
         }
-         double totalPrice = 0;
 
-Map<String, List<CartLineItem>> itemsByEvent =  order.getItems() .stream().collect(Collectors.groupingBy(CartLineItem::geteventId));
+        double totalPrice = 0;
 
-for (Map.Entry<String, List<CartLineItem>> entry : itemsByEvent.entrySet()) {
-    String eventId = entry.getKey();
-    List<CartLineItem> eventItems = entry.getValue();
+        Map<String, List<CartLineItem>> itemsByEvent = order.getItems().stream() .collect(Collectors.groupingBy(CartLineItem::geteventId));
 
-    Event event = eventRepository.findById(eventId);
+        for (Map.Entry<String, List<CartLineItem>> entry : itemsByEvent.entrySet()) {
+            String eventId = entry.getKey();
+            List<CartLineItem> eventItems = entry.getValue();
 
-    Map<Integer, Double> tickets =
-            java.util.stream.IntStream.range(0, eventItems.size())
-                    .boxed()
-                    .collect(Collectors.toMap(
-                            i -> i,
-                            i -> eventItems.get(i).getPriceAtReservation()
-                    ));
+            Event event = eventRepository.findById(eventId);
 
-    totalPrice += event.calculatePrice(tickets, LocalDateTime.now());
-}
-     
+            Map<Integer, Double> tickets =  java.util.stream.IntStream.range(0, eventItems.size()) .boxed().collect(Collectors.toMap( i -> i, i -> eventItems.get(i).getPriceAtReservation()  ));
+
+            totalPrice += event.calculatePrice(tickets, LocalDateTime.now());
+        }
 
         if (!paymentGateway.Paying(totalPrice)) {
             throw new IllegalStateException("Payment failed");
         }
 
-        for (CartLineItem item : order.buy()) {
+        List<CartLineItem> boughtItems = order.buy();
+
+        List<IssuanceRequestDTO.TicketIssuanceItemDTO> issuanceItems =
+                boughtItems.stream()
+                        .map(item -> {
+                            Event event = eventRepository.findById(item.geteventId());
+
+                            return new IssuanceRequestDTO.TicketIssuanceItemDTO(
+                                    null,
+                                    item.geteventId(),
+                                    event.getName(),
+                                    item.getzoneId(),
+                                    null
+                            );
+                        })
+                        .toList();
+
+        IssuanceRequestDTO request = new IssuanceRequestDTO(
+                null,
+                Integer.parseInt(userId),
+                null,
+                issuanceItems
+        );
+
+        IssuanceResultDTO result = ticketIssuer.issue(request);
+
+       if (result == null || result.barcodes() == null || result.barcodes().isEmpty()) {
+    throw new IllegalStateException("Ticket issuance failed");
+}
+        for (CartLineItem item : boughtItems) {
             Ticket ticket = new Ticket(
                     item.geteventId(),
                     item.getzoneId(),
@@ -92,6 +113,16 @@ for (Map.Entry<String, List<CartLineItem>> entry : itemsByEvent.entrySet()) {
 
     } catch (Exception e) {
         List<CartLineItem> returnToStock = order.ReturnToStock();
+
+        for (CartLineItem item : returnToStock) {
+            Event event = eventRepository.findById(item.geteventId());
+
+            event.releaseTickets(item.getzoneId(), 1);
+
+            eventRepository.save(event);
+        }
+
+        throw new IllegalStateException("Checkout failed, tickets returned to stock", e);
     }
 }
 

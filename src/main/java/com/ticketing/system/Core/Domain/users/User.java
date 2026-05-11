@@ -11,12 +11,14 @@ public class User {
     private List <ManagementInvitation> managementInvitations;
     private int userId;
     private String username;
+    private String email;
     private String password;
     private List<CompanyAppointment> companyAppointments;
 
-    public User(int userId, String username, String password) {
+    public User(int userId, String username, String email, String password) {
         this.userId = userId;
         this.username = username;
+        this.email = email;
         this.password = password;
         this.managementInvitations = new ArrayList<>();
         this.memberProfile = new MemberProfile();
@@ -95,6 +97,10 @@ public List<ManagementInvitation> getManagementInvitations() {
 
     public String getUsername() {
         return username;
+    }
+
+    public String getEmail() {
+        return email;
     }
 
     public MemberProfile getMemberProfile() {
