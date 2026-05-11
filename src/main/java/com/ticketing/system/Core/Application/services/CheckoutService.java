@@ -90,9 +90,19 @@ for (Map.Entry<String, List<OrderitemLine>> entry : itemsByEvent.entrySet()) {
             orderReceiptRepository.save(receipt);
         }
 
-    } catch (Exception e) {
-        List<OrderitemLine> returnToStock = order.ReturnToStock();
+    }  catch (Exception e) {
+    List<OrderitemLine> returnToStock = order.ReturnToStock();
+
+    for (OrderitemLine item : returnToStock) {
+        Event event = eventRepository.findById(item.geteventId());
+
+        event.releaseTickets(item.getzoneId(), 1);
+
+        eventRepository.save(event);
     }
+
+    throw new IllegalStateException("Checkout failed, tickets returned to stock", e);
+}
 }
 
 
