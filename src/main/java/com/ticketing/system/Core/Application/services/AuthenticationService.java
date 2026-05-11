@@ -10,6 +10,8 @@ import com.ticketing.system.Core.Application.dto.LogoutRequestDTO;
 import com.ticketing.system.Core.Application.dto.RefreshTokenRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
+import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateEmailException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateUsernameException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidEmailFormatException;
@@ -24,20 +26,23 @@ public class AuthenticationService {
 
     private final IUserRepository userRepository;
     private final IPasswordHasher passwordHasher;
+    private final ISessionManager sessionManager;
 
-    public AuthenticationService(IUserRepository userRepository, IPasswordHasher passwordHasher) {
+    public AuthenticationService(
+            IUserRepository userRepository,
+            IPasswordHasher passwordHasher,
+            ISessionManager sessionManager) {
         this.userRepository = userRepository;
         this.passwordHasher = passwordHasher;
+        this.sessionManager = sessionManager;
     }
 
     public int extractUserId(String token) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'extractUserId'");
+        return sessionManager.extractUserId(token);
     }
 
     public boolean validateToken(String token) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'validateToken'");
+        return sessionManager.validateToken(token);
     }
 
     // UC-11 — register a new Member; session intentionally remains Guest per II.1.4.
@@ -82,7 +87,16 @@ public class AuthenticationService {
     // UC-12 — issue a JWT after credential verification; publishes MemberLoggedIn event
     // (UC-13 + UC-37 listen).
     public AuthTokenDTO login(LoginRequestDTO request) {
-        throw new UnsupportedOperationException("UC-12: not implemented");
+        User user = userRepository.findByUsername(request.username())
+                .orElseThrow(AuthenticationFailedException::new);
+
+        if (!user.verifyPassword(request.rawPassword(), passwordHasher)) {
+            throw new AuthenticationFailedException();
+        }
+
+        String token = sessionManager.generateToken(user.getUserId(), user.getUsername());
+        long expiresAt = sessionManager.extractExpiration(token);
+        return new AuthTokenDTO(token, expiresAt, user.getUserId(), user.getUsername());
     }
 
     // UC-14 — invalidate session, abandon cart per II.3.0.1; publishes MemberLoggedOut event.
