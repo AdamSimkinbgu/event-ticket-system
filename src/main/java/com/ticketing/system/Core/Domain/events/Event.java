@@ -5,6 +5,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+import jakarta.persistence.criteria.CriteriaBuilder.In;
+
 
 
 
@@ -71,6 +73,29 @@ public boolean releaseTickets(String zoneId, int quantity) {
 public double calculatePrice(Map<Integer, Double> tickets,LocalDateTime now) {
     return discountPolicy.calculate(tickets,now);
 }
+
+
+    public void ConfigureEvent(List<InventoryZone> inventoryZones) {
+
+        if (inventoryZones.isEmpty()) {
+            throw new IllegalArgumentException("Inventory zones cannot be empty");
+        }
+        for (InventoryZone zone : inventoryZones) {
+
+            if (!this.venueMap.getInventoryZones().contains(zone)) {
+                throw new IllegalArgumentException("Invalid inventory zone: " + zone.getId());
+            }
+            else{
+                this.venueMap.updateZone(zone);
+            }
+        }
+    }
+
+        
+
+    
+
+    
 
     // ---------------------------------------------------------------------------
     // Skeleton additions — EventStatus lifecycle + missing getters.

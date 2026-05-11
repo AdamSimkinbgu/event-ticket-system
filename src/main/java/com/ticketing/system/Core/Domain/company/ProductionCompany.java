@@ -139,4 +139,10 @@ public class ProductionCompany {
     public boolean canAppoint(int appointerUserId, int appointeeUserId) {
         throw new UnsupportedOperationException("UC-23 / II.4.8.3: not implemented");
     }
+
+    public void ValidateManagerOrOwner(int userId) {
+        if (userId != ownerId && !managers.containsKey(userId)) {
+            throw new RuntimeException("User is not authorized");
+        }
+    }
 }
