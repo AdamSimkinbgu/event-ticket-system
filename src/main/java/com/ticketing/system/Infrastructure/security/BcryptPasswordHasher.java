@@ -1,15 +1,18 @@
 package com.ticketing.system.Infrastructure.security;
 
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Component;
+
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 
-// Implements IPasswordHasher using Spring Security's BCryptPasswordEncoder.
-// Lecture 2 recommends BCrypt for password hashing.
-// All bodies are stubs — V1 implementation is owned by the team member assigned to UC-11.
+@Component
 public class BcryptPasswordHasher implements IPasswordHasher {
+
+    private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
     @Override
     public String hash(String rawPassword) {
-        throw new UnsupportedOperationException("UC-11: wire BCryptPasswordEncoder.encode here");
+        return encoder.encode(rawPassword);
     }
 
     @Override

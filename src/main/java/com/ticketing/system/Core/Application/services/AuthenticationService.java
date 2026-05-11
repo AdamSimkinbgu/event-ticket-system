@@ -1,12 +1,34 @@
 package com.ticketing.system.Core.Application.services;
 
+import java.util.regex.Pattern;
+
+import org.springframework.stereotype.Service;
+
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.dto.LogoutRequestDTO;
 import com.ticketing.system.Core.Application.dto.RefreshTokenRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
+import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
+import com.ticketing.system.Core.Domain.exceptions.DuplicateEmailException;
+import com.ticketing.system.Core.Domain.exceptions.DuplicateUsernameException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidEmailFormatException;
+import com.ticketing.system.Core.Domain.exceptions.WeakPasswordException;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
+import com.ticketing.system.Core.Domain.users.User;
 
+@Service
 public class AuthenticationService {
+
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+
+    private final IUserRepository userRepository;
+    private final IPasswordHasher passwordHasher;
+
+    public AuthenticationService(IUserRepository userRepository, IPasswordHasher passwordHasher) {
+        this.userRepository = userRepository;
+        this.passwordHasher = passwordHasher;
+    }
 
     public int extractUserId(String token) {
         // TODO Auto-generated method stub
@@ -20,7 +42,41 @@ public class AuthenticationService {
 
     // UC-11 — register a new Member; session intentionally remains Guest per II.1.4.
     public void register(RegisterRequestDTO request) {
-        throw new UnsupportedOperationException("UC-11: not implemented");
+        validateEmail(request.email());
+        validatePassword(request.rawPassword());
+
+        if (userRepository.existsByUsername(request.username())) {
+            throw new DuplicateUsernameException(request.username());
+        }
+        if (userRepository.findByEmail(request.email()).isPresent()) {
+            throw new DuplicateEmailException(request.email());
+        }
+
+        String hashed = passwordHasher.hash(request.rawPassword());
+        User user = new User(userRepository.nextId(), request.username(), request.email(), hashed);
+        userRepository.save(user);
+    }
+
+    private static void validateEmail(String email) {
+        if (email == null || !EMAIL_PATTERN.matcher(email).matches()) {
+            throw new InvalidEmailFormatException(email);
+        }
+    }
+
+    private static void validatePassword(String rawPassword) {
+        if (rawPassword == null || rawPassword.length() < 8) {
+            throw new WeakPasswordException("must be at least 8 characters");
+        }
+        boolean hasLetter = false;
+        boolean hasDigit = false;
+        for (int i = 0; i < rawPassword.length(); i++) {
+            char c = rawPassword.charAt(i);
+            if (Character.isLetter(c)) hasLetter = true;
+            else if (Character.isDigit(c)) hasDigit = true;
+        }
+        if (!hasLetter || !hasDigit) {
+            throw new WeakPasswordException("must contain at least one letter and one digit");
+        }
     }
 
     // UC-12 — issue a JWT after credential verification; publishes MemberLoggedIn event
