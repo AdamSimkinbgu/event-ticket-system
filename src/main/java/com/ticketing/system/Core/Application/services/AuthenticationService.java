@@ -104,8 +104,10 @@ public class AuthenticationService {
         throw new UnsupportedOperationException("UC-14: not implemented");
     }
 
-    // UC-12 supplemental — refresh an expiring token without forcing re-login.
+    // Deferred from V1. Not in the UC-12 spec, no acceptance test gates it, and a
+    // proper refresh-token flow needs a separate token store + revocation (overlaps
+    // with UC-14 logout). Revisit if a later UC requires it.
     public AuthTokenDTO refreshToken(RefreshTokenRequestDTO request) {
-        throw new UnsupportedOperationException("UC-12 (refresh): not implemented");
+        throw new UnsupportedOperationException("refresh-token flow deferred from V1");
     }
 }
