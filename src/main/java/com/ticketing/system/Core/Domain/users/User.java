@@ -1,6 +1,7 @@
 package com.ticketing.system.Core.Domain.users;
 
 import java.util.Collection;
+import java.util.ArrayList;
 import java.util.List;
 
 
@@ -8,18 +9,30 @@ public class User {
 
     private MemberProfile memberProfile;
     private List <ManagementInvitation> managementInvitations;
-    private Inbox inbox;
     private int userId;
     private String username;
     private String password;
     private List<CompanyAppointment> companyAppointments;
+
+    public User(int userId, String username, String password) {
+        this.userId = userId;
+        this.username = username;
+        this.password = password;
+        this.managementInvitations = new ArrayList<>();
+        this.memberProfile = new MemberProfile();
+        this.companyAppointments = new ArrayList<>();
+        // Messaging is its own aggregate now (Conversation / IConversationRepository in messaging/);
+        // User no longer holds an inbox field.
+    }
     
     
     
   
     public void InvitetoCompanyAppointment(int companyId, int ownerid, List<Permission> permissions) {
-        managementInvitations.add(new ManagementInvitation(companyId, this.userId, ownerid, permissions));
+         ManagementInvitation invitation = new ManagementInvitation(companyId, this.userId, ownerid, permissions);
+        managementInvitations.add(invitation);
     }
+
     public ManagementInvitation acceptInvitation(int companyId) {
      for (ManagementInvitation invitation : managementInvitations) {
          if (invitation.getCompanyId() == companyId) {
@@ -33,7 +46,12 @@ public class User {
         throw new RuntimeException("No invitation found for the specified company");    
     }
 
-    public List<ManagementInvitation> getManagementInvitations() {
+    public void setAsManager(int companyId) {
+        memberProfile.setAsManager(companyId);
+    }
+
+
+public List<ManagementInvitation> getManagementInvitations() {
        return this.managementInvitations;
     }
 
@@ -67,4 +85,38 @@ public class User {
         throw new RuntimeException("No appointment found for the specified company and target user");
     }
 
+    // ---------------------------------------------------------------------------
+    // Skeleton additions — accessors + secure password change.
+    // ---------------------------------------------------------------------------
+
+    public int getUserId() {
+        return userId;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public MemberProfile getMemberProfile() {
+        return memberProfile;
+    }
+
+    public List<CompanyAppointment> getCompanyAppointments() {
+        return companyAppointments;
+    }
+
+    // UC-11 / future profile-edit — domain receives already-hashed password (per lecture 2).
+    public void changePassword(String newHashedPassword) {
+        throw new UnsupportedOperationException("UC-11: not implemented");
+    }
+
+    // Helper for permission-checking flows (UC-19/21/22/24).
+    public boolean hasAppointmentInCompany(int companyId) {
+        throw new UnsupportedOperationException("not implemented");
+    }
+
+    // Returns the User's appointment in the given company, or null if absent.
+    public CompanyAppointment getAppointmentForCompany(int companyId) {
+        throw new UnsupportedOperationException("not implemented");
+    }
 }

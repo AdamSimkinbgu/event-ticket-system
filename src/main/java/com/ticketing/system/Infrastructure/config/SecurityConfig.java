@@ -1,0 +1,17 @@
+package com.ticketing.system.Infrastructure.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+// Provides the BCryptPasswordEncoder bean used by Infrastructure/security/BcryptPasswordHasher.
+// This is wiring config, not domain logic — it just hands the encoder to whoever asks for it.
+@Configuration
+public class SecurityConfig {
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+}

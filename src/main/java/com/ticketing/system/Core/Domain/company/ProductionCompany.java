@@ -8,8 +8,7 @@ import com.ticketing.system.Core.Domain.users.Permission;
 
 
 public class ProductionCompany {
-    private Inbox inbox;
-    private ComapanyStatus companyStatus;
+    private CompanyStatus companyStatus;
     private List<DiscountPolicy> discountPolicies;
     private List<PurchasePolicy> purchasePolicies;
     private final int companyId;
@@ -20,8 +19,7 @@ public class ProductionCompany {
     public ProductionCompany(int companyId, int ownerId) {
         this.companyId = companyId;
         this.ownerId = ownerId;
-        this.inbox = new Inbox();
-        this.companyStatus = new ComapanyStatus();
+        this.companyStatus = new CompanyStatus();
         this.discountPolicies = new ArrayList<>();
         this.purchasePolicies = new ArrayList<>();
         this.managers = new HashMap<>();
@@ -93,10 +91,52 @@ public class ProductionCompany {
         }
     }
 
+    // ---------------------------------------------------------------------------
+    // Skeleton additions — CompanyStatus lifecycle + cycle check + getters.
+    // ---------------------------------------------------------------------------
+    public HashMap<Integer, List<Permission>> getManagers() {
+        return this.managers;
+    }
 
-    
-    
-    
 
-    
+    public CompanyStatus getStatus() {
+        throw new UnsupportedOperationException("not implemented (add status enum field)");
+    }
+
+    public boolean isActive() {
+        throw new UnsupportedOperationException("not implemented");
+    }
+
+    // II.4.13.x (Cancelled v0; defensive).
+    public void close(String reason) {
+        throw new UnsupportedOperationException("II.4.13.x (Cancelled in v0): not implemented");
+    }
+
+    // II.4.14 (Cancelled v0; defensive).
+    public void reopen() {
+        throw new UnsupportedOperationException("II.4.14 (Cancelled in v0): not implemented");
+    }
+
+    public String getName() {
+        throw new UnsupportedOperationException("not implemented (add name field)");
+    }
+
+    public String getDescription() {
+        throw new UnsupportedOperationException("not implemented (add description field)");
+    }
+
+    // UC-18 — Founder is the original creator (currently aliased to ownerId; see open Q).
+    public int getFounderId() {
+        return ownerId;
+    }
+
+    public int getCompanyId() {
+        return companyId;
+    }
+
+    // UC-23 — II.4.8.3 cycle prevention. Walks the appointment tree and returns false
+    // if the proposed appointment would create a cycle.
+    public boolean canAppoint(int appointerUserId, int appointeeUserId) {
+        throw new UnsupportedOperationException("UC-23 / II.4.8.3: not implemented");
+    }
 }

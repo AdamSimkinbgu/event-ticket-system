@@ -1,21 +1,26 @@
 package com.ticketing.system.Core.Domain.company;
 
 import java.util.List;
+import java.util.Optional;
 
-public class IProductionCompanyRepository {
+// Aggregate-root entry point for the ProductionCompany aggregate.
+public interface IProductionCompanyRepository {
 
-    List<ProductionCompany> companies;
+    ProductionCompany getCompanyById(int companyId);
 
-    public ProductionCompany getCompanyById(int companyId) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getCompanyById'");
-    }
+    void updateCompany(ProductionCompany company);
 
-    public void updateCompany(ProductionCompany company) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'updateCompany'");
-    }
-    
-    
-    
+    // UC-18 — uniqueness check at registration.
+    Optional<ProductionCompany> findByName(String name);
+
+    boolean existsByName(String name);
+
+    // UC-3 / UC-7 — public catalog excludes closed/suspended companies.
+    List<ProductionCompany> findActive();
+
+    // Owner's own list of companies they founded (informational).
+    List<ProductionCompany> findByFounder(int founderUserId);
+
+    // UC-18 — persist newly-registered company.
+    void save(ProductionCompany company);
 }

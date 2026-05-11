@@ -11,3 +11,8 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
+
+# JWT (test-only secret, never used in prod).
+jwt:
+  secret: test-only-secret-do-not-use-anywhere-else-must-be-at-least-256-bits-long
+  expiration-minutes: 60
