@@ -4,19 +4,24 @@ package com.ticketing.system.Core.Domain.Tickets;
 
 
 public class Ticket {
-  
-    private String zoneid;
+
+    private String ticketId;
+    private String zoneId;
     private String eventId;
     private double price;
 
 
-    public Ticket(String eventId,String zoneid ,double price) {
+    public Ticket(String eventId,String zoneId ,double price) {
         this.eventId = eventId;
-         this.zoneid=zoneid;
+         this.zoneId = zoneId;
         this.price = price;
     }
 
-    
+
+
+    public String getId() {
+        return ticketId;
+    }
 
     public String getEventId() {
         return eventId;
@@ -85,7 +90,7 @@ public class Ticket {
 
     // Missing getters per the unified-Ticket model.
     public String getZoneId() {
-        return zoneid;
+        return zoneId;
     }
 
     public String getSeatNumber() {

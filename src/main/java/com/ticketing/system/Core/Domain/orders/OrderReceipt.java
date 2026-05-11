@@ -7,15 +7,18 @@ import java.util.List;
 
 public class OrderReceipt {
 
+    private String receiptId;
     private String eventId;
     private String zoneId;
     private double priceAtoneticketReservation;
+    private LocalDateTime purchaseTime;
      
 
     public OrderReceipt(String eventId,String zoneId, double priceAtReservation) {
         this.eventId = eventId;
         this.zoneId = zoneId;
         this.priceAtoneticketReservation = priceAtReservation;
+            this.purchaseTime = LocalDateTime.now();
       
     }
 
@@ -23,7 +26,7 @@ public class OrderReceipt {
         return eventId;
     }
 
-    public String getzoneId() {
+    public String getZoneId() {
         return zoneId;
     }
 
@@ -32,7 +35,11 @@ public class OrderReceipt {
     // ---------------------------------------------------------------------------
 
     public String getId() {
-        throw new UnsupportedOperationException("not implemented (add id field)");
+        return receiptId;
+    }
+
+    public LocalDateTime getPurchaseTime() {
+        return purchaseTime;
     }
 
     public int getHolderUserId() {
