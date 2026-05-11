@@ -28,7 +28,7 @@ public class UserTest {
 
     @BeforeEach
     public void setUp() {
-        user = new User(USER_ID, "targetUser", "password");
+        user = new User(USER_ID, "targetUser","", "password");
 
         defaultPermissions = new ArrayList<>();
         defaultPermissions.add(Permission.APPOINT_MANAGER);
