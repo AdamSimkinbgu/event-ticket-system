@@ -1,0 +1,25 @@
+package com.ticketing.system.unit.domain;
+
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+
+// Unit tests for the Ticket aggregate (the unified inventory + post-purchase record).
+// State machine: AVAILABLE -> RESERVED -> PAID -> ISSUED -> USED | REFUNDED | VOIDED
+class TicketTest {
+
+    @Test
+    @Disabled("V1: implement Ticket lifecycle invariants")
+    void givenAvailableTicket_whenReserve_thenStatusReserved() {}
+
+    @Test
+    @Disabled("V1: implement SLR.1.2 race condition prevention via optimistic lock")
+    void givenReservedTicket_whenAnotherReserveAttempted_thenRejected() {}
+
+    @Test
+    @Disabled("V1: implement RESERVED -> PAID transition on successful checkout (UC-10)")
+    void givenReservedTicket_whenPaid_thenStatusPaid() {}
+
+    @Test
+    @Disabled("V1: implement RESERVED -> AVAILABLE on expiry (UC-2)")
+    void givenReservedTicket_whenExpired_thenStatusAvailable() {}
+}

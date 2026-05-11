@@ -10,7 +10,7 @@ public class ActiveOrder {
 
     private String userId;
     private String status;
-    private List<OrderitemLine> items;
+    private List<CartLineItem> items;
 
 public ActiveOrder(String userId) {
         this.userId = userId;
@@ -22,17 +22,17 @@ public ActiveOrder(String userId) {
     
 public void addReservation(String eventId,String zoneId ,int quantity,double price, LocalDateTime addedAt) {
     for (int i=1; i <=quantity; i=i+1){
-        OrderitemLine newItem = new OrderitemLine(eventId, zoneId,price, addedAt);
+        CartLineItem newItem = new CartLineItem(eventId, zoneId,price, addedAt);
           this.items.add(newItem);
     }
     
     }
-public List<OrderitemLine> getItems() {
+public List<CartLineItem> getItems() {
     return items;
     }    
     
-   public List<OrderitemLine> ReturnToStock() {
-    List<OrderitemLine> returnToStock = new ArrayList<>();
+   public List<CartLineItem> ReturnToStock() {
+    List<CartLineItem> returnToStock = new ArrayList<>();
 
             returnToStock.addAll(items);
                  clear();
@@ -45,7 +45,7 @@ public List<OrderitemLine> getItems() {
     }
 
     public boolean hasExpiredItem() {
-        for (OrderitemLine item : items) {
+        for (CartLineItem item : items) {
             if (item.isExpired()) {
                 return true;
             }
@@ -67,9 +67,9 @@ public boolean validateCanCheckout() {
         return true;
     }
 
-      public List<OrderitemLine> buy() {
+      public List<CartLineItem> buy() {
 
-        List<OrderitemLine> ticketToBUY = new ArrayList<>();
+        List<CartLineItem> ticketToBUY = new ArrayList<>();
 
          if (isEmpty()) {
         throw new IllegalStateException("Cannot buy an empty order");
@@ -84,9 +84,49 @@ public boolean validateCanCheckout() {
        }
 
 
- public void clear() {    
+ public void clear() {
      items.clear();
 }
-  
 
+    // ---------------------------------------------------------------------------
+    // Skeleton additions for ActiveOrder.
+    // ---------------------------------------------------------------------------
+
+    // UC-9 — sum of priceAtReservation across all lines (for cart-display + checkout pre-check).
+    public double getTotalPrice() {
+        throw new UnsupportedOperationException("UC-9: not implemented");
+    }
+
+    // UC-5 / UC-9 — minimum remaining time across lines (the cart expires when the first line does).
+    public java.time.Duration getRemainingTime() {
+        throw new UnsupportedOperationException("UC-5/9: not implemented");
+    }
+
+    // UC-9 — remove a single ticket from the cart; releases its lock.
+    public void removeReservation(String ticketId) {
+        throw new UnsupportedOperationException("UC-9: not implemented");
+    }
+
+    // UC-9 — adjust quantity-mode reservation in a standing zone.
+    public void updateQuantity(String zoneId, int newQuantity) {
+        throw new UnsupportedOperationException("UC-9: not implemented");
+    }
+
+    // Identifier accessors (in case ActiveOrder gains its own id beyond userId).
+    public String getOrderId() {
+        throw new UnsupportedOperationException("not implemented (add orderId field)");
+    }
+
+    public String getSessionId() {
+        throw new UnsupportedOperationException("not implemented (add sessionId field for Guest carts)");
+    }
+
+    public java.time.LocalDateTime getCreatedAt() {
+        throw new UnsupportedOperationException("not implemented (add createdAt field)");
+    }
+
+    // UC-2 — explicit expire transition (called by sweeper).
+    public void expire() {
+        throw new UnsupportedOperationException("UC-2: not implemented");
+    }
 }

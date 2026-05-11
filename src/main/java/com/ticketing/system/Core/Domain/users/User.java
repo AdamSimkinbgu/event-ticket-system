@@ -9,7 +9,6 @@ public class User {
 
     private MemberProfile memberProfile;
     private List <ManagementInvitation> managementInvitations;
-    private Inbox inbox;
     private int userId;
     private String username;
     private String password;
@@ -20,9 +19,10 @@ public class User {
         this.username = username;
         this.password = password;
         this.managementInvitations = new ArrayList<>();
-        this.inbox = new Inbox();
         this.memberProfile = new MemberProfile();
         this.companyAppointments = new ArrayList<>();
+        // Messaging is its own aggregate now (Conversation / IConversationRepository in messaging/);
+        // User no longer holds an inbox field.
     }
     
     
@@ -85,5 +85,38 @@ public List<ManagementInvitation> getManagementInvitations() {
         throw new RuntimeException("No appointment found for the specified company and target user");
     }
 
-    
+    // ---------------------------------------------------------------------------
+    // Skeleton additions — accessors + secure password change.
+    // ---------------------------------------------------------------------------
+
+    public int getUserId() {
+        return userId;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public MemberProfile getMemberProfile() {
+        return memberProfile;
+    }
+
+    public List<CompanyAppointment> getCompanyAppointments() {
+        return companyAppointments;
+    }
+
+    // UC-11 / future profile-edit — domain receives already-hashed password (per lecture 2).
+    public void changePassword(String newHashedPassword) {
+        throw new UnsupportedOperationException("UC-11: not implemented");
+    }
+
+    // Helper for permission-checking flows (UC-19/21/22/24).
+    public boolean hasAppointmentInCompany(int companyId) {
+        throw new UnsupportedOperationException("not implemented");
+    }
+
+    // Returns the User's appointment in the given company, or null if absent.
+    public CompanyAppointment getAppointmentForCompany(int companyId) {
+        throw new UnsupportedOperationException("not implemented");
+    }
 }
