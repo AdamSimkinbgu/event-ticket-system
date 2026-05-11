@@ -49,7 +49,7 @@ public class CompanyManagementServiceTest {
     public void testInviteManager_Success() {
         // --- ARRANGE ---
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
-        User targetUser = new User(TARGET_USER_ID, "targetUser", "password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser", "target@example.com", "password");
         // Mock Authentication behavior
         when(mockAuthService.validateToken(VALID_TOKEN)).thenReturn(true);
         when(mockAuthService.extractUserId(VALID_TOKEN)).thenReturn(OWNER_ID);
@@ -71,7 +71,7 @@ public class CompanyManagementServiceTest {
     public void testAcceptManagerInvitation_Success() {
         // --- ARRANGE ---
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
-        User targetUser = new User(TARGET_USER_ID, "targetUser", "password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser", "target@example.com", "password");
 
         // We must artificially create the "pending" state in our domain objects first
         // so that the accept logic doesn't throw an error!
