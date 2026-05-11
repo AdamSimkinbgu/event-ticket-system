@@ -1,7 +1,9 @@
 package com.ticketing.system.acceptance;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -11,8 +13,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
+import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
+import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateUsernameException;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.User;
@@ -57,10 +62,32 @@ class AuthAcceptanceTest {
     }
 
     // UC-12
-    @Test @Disabled("UC-12 main: login with valid credentials issues JWT")
-    void GivenValidCredentials_WhenLogin_ThenTokenIssued() {}
-    @Test @Disabled("UC-12 negative: invalid credentials → generic rejection (no enumeration)")
-    void GivenInvalidCredentials_WhenLogin_ThenGenericReject() {}
+    @Test
+    void GivenValidCredentials_WhenLogin_ThenTokenIssued() {
+        authService.register(new RegisterRequestDTO("dave", "dave@example.com", "Password1"));
+
+        AuthTokenDTO result = authService.login(new LoginRequestDTO("dave", "Password1"));
+
+        assertNotNull(result.token());
+        assertFalse(result.token().isBlank());
+        assertEquals("dave", result.username());
+        assertTrue(authService.validateToken(result.token()));
+        assertEquals(result.userId(), authService.extractUserId(result.token()));
+        assertTrue(result.expiresAtEpochMillis() > System.currentTimeMillis());
+    }
+
+    @Test
+    void GivenInvalidCredentials_WhenLogin_ThenGenericReject() {
+        authService.register(new RegisterRequestDTO("eve", "eve@example.com", "Password1"));
+
+        // Wrong password and unknown user yield the SAME exception — no enumeration leak.
+        assertThrows(AuthenticationFailedException.class, () ->
+            authService.login(new LoginRequestDTO("eve", "wrongpass"))
+        );
+        assertThrows(AuthenticationFailedException.class, () ->
+            authService.login(new LoginRequestDTO("nosuchuser", "anything1"))
+        );
+    }
 
     // UC-13
     @Test @Disabled("UC-13 main: pending order restored on login")
