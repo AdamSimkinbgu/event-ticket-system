@@ -101,12 +101,18 @@ public List<ManagementInvitation> getManagementInvitations() {
         return username;
     }
 
+    /** Email registered at sign-up. Used for uniqueness checks. UC-11. */
     public String getEmail() {
         return email;
     }
 
-    // UC-12 — verifies a candidate raw password against the stored hash.
-    // Hash never leaves this entity; the hasher does the comparison in place.
+    /**
+     * Verifies a candidate raw password against the stored hash. UC-12.
+     *
+     * <p>The hash never leaves this entity — the hasher does the comparison
+     * in place. The {@link IPasswordHasher} collaborator is passed in rather
+     * than held as a field so the entity stays a pure domain object.
+     */
     public boolean verifyPassword(String rawPassword, IPasswordHasher hasher) {
         return hasher.matches(rawPassword, this.password);
     }

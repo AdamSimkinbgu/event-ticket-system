@@ -243,4 +243,5 @@ class AuthenticationServiceTest {
         service.logout(new LogoutRequestDTO("not-a-real-token"));
         verify(mockSessionManager).invalidate("not-a-real-token");
     }
+
 }

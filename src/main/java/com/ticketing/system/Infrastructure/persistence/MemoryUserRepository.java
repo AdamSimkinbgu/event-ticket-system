@@ -11,6 +11,13 @@ import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.User;
 
+/**
+ * In-memory {@link IUserRepository} for V1.
+ *
+ * <p>Storage is a thread-safe {@code ConcurrentHashMap}; IDs are minted from
+ * an {@code AtomicInteger} starting at 1. A future JPA-backed adapter will
+ * replace this class without touching the application layer.
+ */
 @Repository
 public class MemoryUserRepository implements IUserRepository {
 
