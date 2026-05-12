@@ -3,6 +3,8 @@ package com.ticketing.system.Infrastructure.security;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.crypto.SecretKey;
 
@@ -26,6 +28,7 @@ public class JwtSessionManager implements ISessionManager {
 
     private final SecretKey signingKey;
     private final long expirationMillis;
+    private final Set<String> revokedTokens = ConcurrentHashMap.newKeySet();
 
     public JwtSessionManager(
             @Value("${jwt.secret}") String secret,
@@ -84,7 +87,8 @@ public class JwtSessionManager implements ISessionManager {
 
     @Override
     public void invalidate(String token) {
-        throw new UnsupportedOperationException("UC-14: not implemented");
+        if (token == null || token.isBlank()) return;
+        revokedTokens.add(token);
     }
 
     @Override
@@ -102,6 +106,9 @@ public class JwtSessionManager implements ISessionManager {
     }
 
     private Claims parseClaims(String token) {
+        if (revokedTokens.contains(token)) {
+            throw new InvalidTokenException("token has been revoked");
+        }
         try {
             return Jwts.parser()
                     .verifyWith(signingKey)
