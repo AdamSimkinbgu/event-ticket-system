@@ -17,6 +17,7 @@ public class BcryptPasswordHasher implements IPasswordHasher {
 
     @Override
     public boolean matches(String rawPassword, String storedHash) {
-        throw new UnsupportedOperationException("UC-12: wire BCryptPasswordEncoder.matches here");
+        if (rawPassword == null || storedHash == null) return false;
+        return encoder.matches(rawPassword, storedHash);
     }
 }

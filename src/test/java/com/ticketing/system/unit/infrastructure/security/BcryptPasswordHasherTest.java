@@ -1,5 +1,6 @@
 package com.ticketing.system.unit.infrastructure.security;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -46,5 +47,28 @@ class BcryptPasswordHasherTest {
         String raw = "Password1";
         String result = hasher.hash(raw);
         assertTrue(!result.contains(raw), "hash should not contain the raw password");
+    }
+
+    @Test
+    void matches_returnsTrueForCorrectPassword() {
+        String stored = hasher.hash("Password1");
+        assertTrue(hasher.matches("Password1", stored));
+    }
+
+    @Test
+    void matches_returnsFalseForWrongPassword() {
+        String stored = hasher.hash("Password1");
+        assertFalse(hasher.matches("WrongPassword", stored));
+    }
+
+    @Test
+    void matches_returnsFalseForNullRawPassword() {
+        String stored = hasher.hash("Password1");
+        assertFalse(hasher.matches(null, stored));
+    }
+
+    @Test
+    void matches_returnsFalseForNullStoredHash() {
+        assertFalse(hasher.matches("Password1", null));
     }
 }

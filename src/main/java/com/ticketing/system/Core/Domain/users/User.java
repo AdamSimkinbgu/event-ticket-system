@@ -4,6 +4,8 @@ import java.util.Collection;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
+
 
 public class User {
 
@@ -101,6 +103,12 @@ public List<ManagementInvitation> getManagementInvitations() {
 
     public String getEmail() {
         return email;
+    }
+
+    // UC-12 — verifies a candidate raw password against the stored hash.
+    // Hash never leaves this entity; the hasher does the comparison in place.
+    public boolean verifyPassword(String rawPassword, IPasswordHasher hasher) {
+        return hasher.matches(rawPassword, this.password);
     }
 
     public MemberProfile getMemberProfile() {

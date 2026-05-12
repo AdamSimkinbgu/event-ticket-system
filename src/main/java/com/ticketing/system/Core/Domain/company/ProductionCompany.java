@@ -6,6 +6,8 @@ import java.util.List;
 
 import com.ticketing.system.Core.Domain.users.Permission;
 
+import io.jsonwebtoken.security.Jwks.HASH;
+
 
 public class ProductionCompany {
     private CompanyStatus companyStatus;
@@ -144,5 +146,10 @@ public class ProductionCompany {
         if (userId != ownerId && !managers.containsKey(userId)) {
             throw new RuntimeException("User is not authorized");
         }
+    }
+
+    public HashMap<Integer, List<Permission>> getPendingManagers() {
+
+        return this.pendingManagers;
     }
 }

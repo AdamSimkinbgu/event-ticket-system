@@ -22,6 +22,9 @@ public interface ISessionManager {
     // Quick expiry check without throwing.
     boolean isExpired(String token);
 
+    // UC-12 — epoch millis at which the token expires (read from the exp claim).
+    long extractExpiration(String token);
+
     // UC-14 — invalidate a token explicitly (server-side denylist or stateful session end).
     void invalidate(String token);
 
