@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,7 +19,8 @@ class ProductionCompanyTest {
 
     private final int COMPANY_ID = 100;
     private final int OWNER_ID = 1;
-    private final int TARGET_USER_ID = 2;
+    private final int MANAGER_ID = 2;
+    private final int TARGET_USER_ID = 3;
     private ProductionCompany company;
     private List<Permission> defaultPermissions;
 
@@ -28,7 +30,6 @@ class ProductionCompanyTest {
 
         defaultPermissions = new ArrayList<>();
         defaultPermissions.add(Permission.APPOINT_MANAGER);
-        defaultPermissions.add(Permission.CONFIGURE_VENUE);
         defaultPermissions.add(Permission.MANAGE_INVENTORY);
     }
 
@@ -301,6 +302,45 @@ class ProductionCompanyTest {
                 )
         );
     }
+
+    //////////////////////////////////////////////////////////////////UC-20Tests
+    
+
+    @Test
+    public void GivenManagerWithConfigureVenuePermission_WhenValidateManagerOrOwner_ThenDoesNotThrow() {
+        company.validateManagerInvitation(COMPANY_ID, MANAGER_ID, OWNER_ID, List.of(Permission.CONFIGURE_VENUE));
+        company.acceptManagerInvitation(MANAGER_ID);
+        assertTrue(company.getManagers().get(MANAGER_ID).contains(Permission.CONFIGURE_VENUE));
+    }
+
+    @Test
+    public void GivenOwner_WhenValidateManagerOrOwner_ThenDoesNotThrow() {
+        assertTrue(company.getOwnerId() == OWNER_ID);
+    }
+
+
+    @Test
+
+    public void GivenUserWithoutConfigureVenuePermission_WhenValidateManagerOrOwner_ThenThrowException() {
+       
+       
+        company.validateManagerInvitation(COMPANY_ID, MANAGER_ID, OWNER_ID, List.of(Permission.MANAGE_INVENTORY));
+        company.acceptManagerInvitation(MANAGER_ID);
+        assertThrows(RuntimeException.class, () ->
+        company.ValidateManagerOrOwner(MANAGER_ID)
+        );
+    }  
+    
+    @Test
+        public void GivenUserIsNotManagerOrOwner_WhenValidateManagerOrOwner_ThenThrowException() {
+                assertThrows(RuntimeException.class, () ->
+                company.ValidateManagerOrOwner(TARGET_USER_ID)
+                );
+        }
+
+        
+
+        
 
 
 

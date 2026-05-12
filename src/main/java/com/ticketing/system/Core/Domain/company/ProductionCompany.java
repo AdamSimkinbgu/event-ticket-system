@@ -143,8 +143,13 @@ public class ProductionCompany {
     }
 
     public void ValidateManagerOrOwner(int userId) {
-        if (userId != ownerId && !managers.containsKey(userId)) {
-            throw new RuntimeException("User is not authorized");
+        if (userId == ownerId) {
+            return; 
+        }
+
+        List<Permission> userPermissions = managers.get(userId);
+        if (userPermissions == null || !userPermissions.contains(Permission.CONFIGURE_VENUE)) {
+            throw new RuntimeException("User is not authorized to configure venue");
         }
     }
 

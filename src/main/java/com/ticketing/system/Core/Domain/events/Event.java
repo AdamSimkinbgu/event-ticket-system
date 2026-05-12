@@ -14,7 +14,7 @@ public class Event {
     private final String id;
     private final String name;
      private final String comapnyid;
-    private final VenueMap venueMap;
+    private  VenueMap venueMap;
     private final List<ShowDate> showDates;
     private final PurchasePolicy purchasePolicy;
     private final DiscountPolicy discountPolicy;
@@ -74,26 +74,22 @@ public double calculatePrice(Map<Integer, Double> tickets,LocalDateTime now) {
     return discountPolicy.calculate(tickets,now);
 }
 
-
-    public void ConfigureEvent(List<InventoryZone> inventoryZones) {
-
-        if (inventoryZones.isEmpty()) {
-            throw new IllegalArgumentException("Inventory zones cannot be empty");
+    public void updateZoneCapacity(int zoneId, int newCapacity, int incomingCompanyId) {
+        
+        
+        if (companyId != incomingCompanyId) {
+            throw new RuntimeException("Unauthorized to update zone capacity");
         }
-        for (InventoryZone zone : inventoryZones) {
-
-            if (!this.venueMap.getInventoryZones().contains(zone)) {
-                throw new IllegalArgumentException("Invalid inventory zone: " + zone.getId());
-            }
-            else{
-                this.venueMap.updateZone(zone);
-            }
+       
+        if (this.venueMap == null) {
+            throw new RuntimeException("Venue map must be initialized first");
         }
-    }
 
+        InventoryZone zone = this.venueMap.getZone(zoneId);
         
 
-    
+        zone.setCapacity(newCapacity); 
+    }
 
     
 

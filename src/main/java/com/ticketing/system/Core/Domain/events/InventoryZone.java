@@ -3,7 +3,7 @@ package com.ticketing.system.Core.Domain.events;
 public class InventoryZone {
     private final String id;
     private final String name;
-    private final int capacity;
+    private  int capacity;
     private int reservedAmount;
     private  int price;
 
@@ -51,6 +51,13 @@ public boolean release(int quantity) {
 
     reservedAmount = reservedAmount - quantity;
     return true;
+}
+
+public void setCapacity(int newCapacity) {
+    if (newCapacity < reservedAmount) {
+        throw new IllegalArgumentException("New capacity cannot be less than the number of reserved tickets");
+}
+    this.capacity = newCapacity;
 }
 
 }
