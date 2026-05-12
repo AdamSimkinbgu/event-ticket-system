@@ -1,5 +1,6 @@
 package com.ticketing.system.Core.Application.services;
 
+import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.PurchaseRecordDTO;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
@@ -19,15 +20,18 @@ import java.util.List;
 // stretch the auth boundary — see design_walkthrough_summary.md §6.
 public class MemberAccountService {
 
+    private final AuthenticationService authenticationService; // For user identity verification, if needed for future methods.
     private final IOrderReceiptRepository orderReceiptRepository;
     private final ITicketRepository ticketRepository;
     private final IEventRepository eventRepository; // For event name lookups in history records.
 
     public MemberAccountService(
+            AuthenticationService authenticationService,
             IOrderReceiptRepository orderReceiptRepository,
             ITicketRepository ticketRepository,
             IEventRepository eventRepository
     ) {
+        this.authenticationService = authenticationService;
         this.orderReceiptRepository = orderReceiptRepository;
         this.ticketRepository = ticketRepository;
         this.eventRepository = eventRepository;
@@ -35,18 +39,15 @@ public class MemberAccountService {
 
     // UC-16: comprehensive personal purchase history + real-time status of upcoming tickets.
     // Authorization is a domain concern: only returns history for the authenticated user.
-    public PurchaseHistoryDTO viewMyHistory(int authenticatedUserId) {
-
-        // Implementation would:
-        // 1. Log the request for audit purposes.
-        // 2. Query order receipts for the user, sorted by most recent.
-        // 3. For each receipt, gather ticket details and current status (e.g., valid, cancelled, used).
-        // 4. Compile this into a PurchaseHistoryDTO and return it.
-
+    public PurchaseHistoryDTO viewMyHistory(AuthTokenDTO authToken) {
         try {
-            // Log the request (pseudocode, depends on logging framework).
-            System.out.println("User " + authenticatedUserId + " requested purchase history.");
-            List<OrderReceipt> receipts = orderReceiptRepository.findByHolderUserId(authenticatedUserId);
+            // TODO: Log the request (pseudocode, depends on logging framework).
+            if (!authenticationService.validateToken(authToken.token())) {
+                throw new SecurityException("Invalid auth token");
+            }
+            int userId = authenticationService.extractUserId(authToken.token());
+            System.out.println("User " + userId + " requested purchase history.");
+            List<OrderReceipt> receipts = orderReceiptRepository.findByHolderUserId(userId);
             List<PurchaseRecordDTO> purchaseRecords = new ArrayList<>();
 
             for (OrderReceipt receipt : receipts) {
@@ -71,12 +72,16 @@ public class MemberAccountService {
                 ));
             }
 
-
+            // TODO: Log successful retrieval.
             return new PurchaseHistoryDTO(purchaseRecords);
 
+        } catch (SecurityException e) {
+            // TODO: Log the error with details for debugging.
+            System.err.println("Error retrieving purchase history for user " + e.getMessage());
         } catch (Exception e) {
-            // Handle logging failure gracefully (don't fail the whole request).
-            System.err.println("Logging failed for user " + authenticatedUserId + ": " + e.getMessage());
+            // TODO: Log unexpected errors with stack trace for debugging.
+            // Catch-all for unexpected errors; in production, would want more specific handling.
+            System.err.println("Unexpected error retrieving purchase history: " + e.getMessage());
         }
         return new PurchaseHistoryDTO(new ArrayList<>()); // Return empty history on failure.
     }
