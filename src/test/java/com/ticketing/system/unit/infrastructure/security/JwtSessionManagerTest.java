@@ -114,4 +114,61 @@ class JwtSessionManagerTest {
     void tryExtractUserId_returnsEmptyForGarbage() {
         assertTrue(manager.tryExtractUserId("not.a.jwt").isEmpty());
     }
+
+    @Test
+    void invalidate_thenValidate_throwsInvalidToken() {
+        String token = manager.generateToken(42, "alice");
+        manager.invalidate(token);
+        assertThrows(InvalidTokenException.class, () -> manager.validateToken(token));
+    }
+
+    @Test
+    void invalidate_thenExtractUserId_throwsInvalidToken() {
+        // Revocation flows through parseClaims, so every reader respects it.
+        String token = manager.generateToken(42, "alice");
+        manager.invalidate(token);
+        assertThrows(InvalidTokenException.class, () -> manager.extractUserId(token));
+    }
+
+    @Test
+    void invalidate_thenTryExtractUserId_returnsEmpty() {
+        String token = manager.generateToken(42, "alice");
+        manager.invalidate(token);
+        assertTrue(manager.tryExtractUserId(token).isEmpty());
+    }
+
+    @Test
+    void invalidate_thenIsExpired_returnsTrue() {
+        String token = manager.generateToken(42, "alice");
+        manager.invalidate(token);
+        assertTrue(manager.isExpired(token));
+    }
+
+    @Test
+    void invalidate_twice_doesNotThrow() {
+        String token = manager.generateToken(42, "alice");
+        manager.invalidate(token);
+        manager.invalidate(token);
+    }
+
+    @Test
+    void invalidate_null_doesNotThrow() {
+        manager.invalidate(null);
+    }
+
+    @Test
+    void invalidate_blank_doesNotThrow() {
+        manager.invalidate("   ");
+    }
+
+    @Test
+    void invalidate_doesNotAffectOtherTokens() {
+        String tokenA = manager.generateToken(1, "alice");
+        String tokenB = manager.generateToken(2, "bob");
+        manager.invalidate(tokenA);
+
+        // tokenB is untouched.
+        assertTrue(manager.validateToken(tokenB));
+        assertEquals(2, manager.extractUserId(tokenB));
+    }
 }

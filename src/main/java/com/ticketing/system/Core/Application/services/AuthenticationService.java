@@ -84,8 +84,9 @@ public class AuthenticationService {
         }
     }
 
-    // UC-12 — issue a JWT after credential verification; publishes MemberLoggedIn event
-    // (UC-13 + UC-37 listen).
+    // UC-12 — issue a JWT after credential verification.
+    // Domain-event publication (MemberLoggedIn for UC-13 / UC-37 consumers) is deferred;
+    // see docs/plan-domain-events.md.
     public AuthTokenDTO login(LoginRequestDTO request) {
         User user = userRepository.findByUsername(request.username())
                 .orElseThrow(AuthenticationFailedException::new);
@@ -99,9 +100,12 @@ public class AuthenticationService {
         return new AuthTokenDTO(token, expiresAt, user.getUserId(), user.getUsername());
     }
 
-    // UC-14 — invalidate session, abandon cart per II.3.0.1; publishes MemberLoggedOut event.
+    // UC-14 — terminate the authenticated session by revoking the token; per II.3.1 the
+    // session state downgrades back to Guest-Visitor. Cart state is not touched here
+    // (II.3.0.1 / II.3.0.3 govern Active Orders separately). Idempotent: logout with a
+    // null / blank / already-revoked token is a no-op.
     public void logout(LogoutRequestDTO request) {
-        throw new UnsupportedOperationException("UC-14: not implemented");
+        sessionManager.invalidate(request.token());
     }
 
     // Deferred from V1. Not in the UC-12 spec, no acceptance test gates it, and a
