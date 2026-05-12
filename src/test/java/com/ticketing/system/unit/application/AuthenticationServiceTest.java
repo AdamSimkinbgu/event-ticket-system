@@ -21,6 +21,7 @@ import org.mockito.ArgumentCaptor;
 
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
+import com.ticketing.system.Core.Application.dto.LogoutRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
@@ -229,6 +230,17 @@ class AuthenticationServiceTest {
         verify(mockSessionManager).validateToken("T");
     }
 
-    @Test @Disabled("UC-14: logout invalidates session, abandons cart (II.3.0.1)")
-    void givenLoggedInMember_whenLogout_thenSessionEndedAndCartReleased() {}
+    @Test
+    void logout_delegatesToSessionManagerInvalidate() {
+        service.logout(new LogoutRequestDTO("SOME_TOKEN"));
+        verify(mockSessionManager).invalidate("SOME_TOKEN");
+    }
+
+    @Test
+    void logout_idempotent_doesNotThrowForGarbageToken() {
+        // sessionManager.invalidate is itself idempotent — the service makes no extra
+        // assumptions about the token's shape.
+        service.logout(new LogoutRequestDTO("not-a-real-token"));
+        verify(mockSessionManager).invalidate("not-a-real-token");
+    }
 }

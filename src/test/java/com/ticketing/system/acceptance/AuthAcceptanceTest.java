@@ -15,10 +15,12 @@ import org.springframework.test.context.ActiveProfiles;
 
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
+import com.ticketing.system.Core.Application.dto.LogoutRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateUsernameException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.User;
 
@@ -96,8 +98,31 @@ class AuthAcceptanceTest {
     void GivenExpiredOrder_WhenLogin_ThenNoRestoration() {}
 
     // UC-14
-    @Test @Disabled("UC-14 main: intentional logout abandons cart, releases tickets (II.3.0.1)")
-    void GivenLoggedInWithCart_WhenLogout_ThenCartReleased() {}
-    @Test @Disabled("UC-14 alt: session downgrades to Guest")
-    void GivenLoggedInMember_WhenLogout_ThenStateGuest() {}
+    @Test
+    void GivenLoggedInMember_WhenLogout_ThenStateGuest() {
+        // II.3.1: logout terminates the authenticated session and downgrades the state
+        // back to Guest-Visitor. We verify the downgrade by asserting the issued token
+        // is no longer valid after logout.
+        authService.register(new RegisterRequestDTO("frank", "frank@example.com", "Password1"));
+        AuthTokenDTO session = authService.login(new LoginRequestDTO("frank", "Password1"));
+        assertTrue(authService.validateToken(session.token()));
+
+        authService.logout(new LogoutRequestDTO(session.token()));
+
+        assertThrows(InvalidTokenException.class, () -> authService.validateToken(session.token()));
+    }
+
+    @Test
+    void GivenAlreadyLoggedOutToken_WhenLogoutAgain_ThenNoError() {
+        // Idempotency: repeating logout with the same (already-revoked) token must not throw.
+        authService.register(new RegisterRequestDTO("grace", "grace@example.com", "Password1"));
+        AuthTokenDTO session = authService.login(new LoginRequestDTO("grace", "Password1"));
+        authService.logout(new LogoutRequestDTO(session.token()));
+
+        // Second call should silently succeed.
+        authService.logout(new LogoutRequestDTO(session.token()));
+    }
+
+    @Test @Disabled("UC-14 (II.3.0.1): order remains linked to member on logout — needs ActiveOrder")
+    void GivenLoggedInWithOrder_WhenLogout_ThenOrderStaysLinked() {}
 }
