@@ -15,5 +15,13 @@ public class MemberProfile {
             this.companyRole = CompanyRole.None;
         }
     }
+
+    public int getCompanyId() {
+        return this.companyId;
+    }
+
+    public CompanyRole getCompanyRole() {
+        return this.companyRole;
+    }
     
 }

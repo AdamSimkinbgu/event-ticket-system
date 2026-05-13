@@ -20,6 +20,9 @@ public interface IUserRepository {
     // UC-11 — fast existence check used during registration validation.
     boolean existsByUsername(String username);
 
+    // UC-11 — mint a fresh userId before constructing a User aggregate.
+    int nextId();
+
     // UC-11 — persist newly-registered User (User aggregate creation).
     void save(User user);
 
