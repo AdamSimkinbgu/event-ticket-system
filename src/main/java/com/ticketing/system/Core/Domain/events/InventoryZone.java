@@ -1,13 +1,13 @@
 package com.ticketing.system.Core.Domain.events;
 
 public class InventoryZone {
-    private final String id;
+    private final int id;
     private final String name;
-    private final int capacity;
+    private  int capacity;
     private int reservedAmount;
     private  int price;
 
-    public InventoryZone(String id, String name, int capacity, int price) {
+    public InventoryZone(int id, String name, int capacity, int price) {
         this.id = id;
         this.name = name;
         this.capacity = capacity;
@@ -38,7 +38,7 @@ public class InventoryZone {
          throw new IllegalStateException("Not enough tickets available");
     }
 
-    public String getId() {
+    public int getId() {
         return id;
     }
 public int getprice() {
@@ -51,6 +51,13 @@ public boolean release(int quantity) {
 
     reservedAmount = reservedAmount - quantity;
     return true;
+}
+
+public void setCapacity(int newCapacity) {
+    if (newCapacity < reservedAmount) {
+        throw new IllegalArgumentException("New capacity cannot be less than the number of reserved tickets");
+}
+    this.capacity = newCapacity;
 }
 
 }

@@ -5,8 +5,7 @@ import java.util.List;
 // Output of CheckoutService.checkout() (UC-10).
 // Returned only on success; failures throw domain exceptions.
 public record CheckoutResultDTO(
-    String orderReceiptId,
     double totalCharged,
-    String paymentTransactionId,
-    List<String> issuedTicketIds
+    int paymentTransactionId,
+    List<Integer> issuedTicketIds
 ) {}

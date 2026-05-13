@@ -6,6 +6,8 @@ import java.util.List;
 
 import com.ticketing.system.Core.Domain.users.Permission;
 
+import io.jsonwebtoken.security.Jwks.HASH;
+
 
 public class ProductionCompany {
     private CompanyStatus companyStatus;
@@ -138,5 +140,21 @@ public class ProductionCompany {
     // if the proposed appointment would create a cycle.
     public boolean canAppoint(int appointerUserId, int appointeeUserId) {
         throw new UnsupportedOperationException("UC-23 / II.4.8.3: not implemented");
+    }
+
+    public void ValidateManagerOrOwner(int userId) {
+        if (userId == ownerId) {
+            return; 
+        }
+
+        List<Permission> userPermissions = managers.get(userId);
+        if (userPermissions == null || !userPermissions.contains(Permission.CONFIGURE_VENUE)) {
+            throw new RuntimeException("User is not authorized to configure venue");
+        }
+    }
+
+    public HashMap<Integer, List<Permission>> getPendingManagers() {
+
+        return this.pendingManagers;
     }
 }

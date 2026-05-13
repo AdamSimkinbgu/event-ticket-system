@@ -6,7 +6,7 @@ import java.util.Optional;
 // Aggregate-root entry point for the ActiveOrder aggregate.
 public interface IActiveOrderRepository {
 
-    ActiveOrder getByUserId(String userId);
+    ActiveOrder getByUserId(int userId);
 
     void save(ActiveOrder activeOrder);
 

@@ -20,5 +20,5 @@ public interface IPaymentGateway {
     PaymentResultDTO charge(PaymentRequestDTO request);
 
     // UC-4 / I.3.3 — refund an existing charge. Throws RefundFailedException on failure.
-    RefundResultDTO refund(String orderReceiptId, double amount);
+    RefundResultDTO refund(int orderReceiptId, double amount);
 }
