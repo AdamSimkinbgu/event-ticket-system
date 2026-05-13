@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 // Failure = a PaymentGatewayException is thrown by the gateway adapter; this DTO
 // only represents successful charges.
 public record PaymentResultDTO(
-    String paymentTransactionId,
+    int paymentTransactionId,
     String gatewayName,
     double chargedAmount,
     String currency,

@@ -4,19 +4,19 @@ import java.util.List;
 import java.util.Map;
 
 public class VenueMap {
-    private String id;
+    private int id;
     private List<InventoryZone> inventoryZones;
 
-    public VenueMap(String id, List<InventoryZone> inventoryZones) {
+    public VenueMap(int id, List<InventoryZone> inventoryZones) {
         this.id = id;
         this.inventoryZones = inventoryZones;
     }
 
-    public String getId() {
+    public int getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(int id) {
         this.id = id;
     }
 
@@ -29,28 +29,40 @@ public class VenueMap {
     }
 
 
-      public InventoryZone getZone(String zoneId) {
+      public InventoryZone getZone(int zoneId) {
     for (InventoryZone zone : inventoryZones) {
-        if (zone.getId().equals(zoneId)) {
+        if (zone.getId()==zoneId) {
             return zone;
         }
     }
 
     throw new IllegalArgumentException("Zone not found");
 }
-public boolean checkAvailability(String zoneId, int quantity) {
+public boolean checkAvailability(int zoneId, int quantity) {
     InventoryZone zone = getZone(zoneId);
      return zone.CheckAvailability(quantity);
 }
 
 
-public void releaseTicketsToInventory(Map<String, Integer> ticketsByZone) {
-    for (Map.Entry<String, Integer> entry : ticketsByZone.entrySet()) {
-        String zoneId = entry.getKey();
+public void releaseTicketsToInventory(Map<Integer, Integer> ticketsByZone) {
+    for (Map.Entry<Integer, Integer> entry : ticketsByZone.entrySet()) {
+        int zoneId = entry.getKey();
         int quantity = entry.getValue();
 
         InventoryZone zone = getZone(zoneId);
         zone.release(quantity);
+    }
+}
+
+public void updateZone(InventoryZone zone) {
+    if (!this.inventoryZones.contains(zone)) {
+        throw new IllegalArgumentException("Zone not found in venue map");
+    }
+    for (int i = 0; i < inventoryZones.size(); i++) {
+        if (inventoryZones.get(i).getId()==(zone.getId())) {
+            inventoryZones.set(i, zone);
+            return;
+        }
     }
 }
 

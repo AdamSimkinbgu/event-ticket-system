@@ -7,12 +7,12 @@ import java.util.List;
 
 
 public class ActiveOrder {
-
-    private String userId;
+ 
+    private int userId;
     private String status;
     private List<CartLineItem> items;
 
-public ActiveOrder(String userId) {
+public ActiveOrder(int userId) {
         this.userId = userId;
         this.items = new ArrayList<>();
        
@@ -20,7 +20,7 @@ public ActiveOrder(String userId) {
     }
 
     
-public void addReservation(String eventId,String zoneId ,int quantity,double price, LocalDateTime addedAt) {
+public  void addReservation(int eventId,int zoneId ,int quantity,double price, LocalDateTime addedAt) {
     for (int i=1; i <=quantity; i=i+1){
         CartLineItem newItem = new CartLineItem(eventId, zoneId,price, addedAt);
           this.items.add(newItem);
@@ -53,7 +53,7 @@ public List<CartLineItem> getItems() {
         return false;
     }
 
-    public String getUserId() { return userId; }
+    public int getUserId() { return userId; }
     public String getStatus() { return status; }
 
 public boolean validateCanCheckout() {
@@ -74,10 +74,6 @@ public boolean validateCanCheckout() {
          if (isEmpty()) {
         throw new IllegalStateException("Cannot buy an empty order");
          }
-
-        if (hasExpiredItem()) {
-        throw new IllegalStateException("Cannot sell order: one or more tickets expired");
-        }
          ticketToBUY.addAll(items);
           clear();
          return ticketToBUY;
@@ -113,9 +109,7 @@ public boolean validateCanCheckout() {
     }
 
     // Identifier accessors (in case ActiveOrder gains its own id beyond userId).
-    public String getOrderId() {
-        throw new UnsupportedOperationException("not implemented (add orderId field)");
-    }
+ 
 
     public String getSessionId() {
         throw new UnsupportedOperationException("not implemented (add sessionId field for Guest carts)");

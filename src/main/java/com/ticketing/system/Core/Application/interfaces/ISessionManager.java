@@ -2,34 +2,49 @@ package com.ticketing.system.Core.Application.interfaces;
 
 import java.util.Optional;
 
-// Port for session / token management. Implemented in Infrastructure by JwtSessionManager.
-// Used by AuthenticationService (UC-12/14) and NotificationDispatchService (UC-35/36 — online check).
+/**
+ * Port for session / token management. Implemented in Infrastructure by
+ * {@code JwtSessionManager}. Used by {@code AuthenticationService} (UC-12/14)
+ * and {@code NotificationDispatchService} (UC-35/36 — online check).
+ */
 public interface ISessionManager {
 
-    // UC-12 — issue a token after successful login.
+    /** Issues a token after successful login. UC-12. */
     String generateToken(int userId, String username);
 
-    // Token validation — true if token is well-formed, signature valid, and not expired.
-    // Throws InvalidTokenException for malformed; SessionExpiredException for expired.
+    /**
+     * Validates a token's signature and expiry. UC-12.
+     *
+     * @return {@code true} for a well-formed, signed, unexpired token; {@code false}
+     *     only for {@code null} / blank input
+     * @throws com.ticketing.system.Core.Domain.exceptions.InvalidTokenException
+     *     malformed, bad signature, or revoked
+     * @throws com.ticketing.system.Core.Domain.exceptions.SessionExpiredException
+     *     past the {@code exp} claim
+     */
     boolean validateToken(String token);
 
-    // Returns the user ID encoded in the token.
+    /** Returns the user id encoded in the token. */
     int extractUserId(String token);
 
-    // Returns the username encoded in the token.
+    /** Returns the username encoded in the token. */
     String extractUsername(String token);
 
-    // Quick expiry check without throwing.
+    /** Quick expiry check; returns {@code true} for expired, revoked, or malformed tokens. */
     boolean isExpired(String token);
 
-    // UC-14 — invalidate a token explicitly (server-side denylist or stateful session end).
+    /** Epoch millis at which the token expires (read from the {@code exp} claim). UC-12. */
+    long extractExpiration(String token);
+
+    /** Invalidates a token explicitly via the denylist. Idempotent. UC-14. */
     void invalidate(String token);
 
-    // UC-35/36 — used by NotificationDispatchService to route live vs. PENDING storage.
-    // Returns true if the user has a currently-active session.
+    /** Whether the given user has a currently-active session. UC-35/36. */
     boolean isOnline(int userId);
 
-    // Optional — returns the userId if the token is valid, empty otherwise.
-    // Convenience for handlers that don't want to throw on bad tokens.
+    /**
+     * Returns the userId if the token is valid, {@code Optional.empty()} otherwise.
+     * Convenience wrapper for callers that prefer not to handle exceptions.
+     */
     Optional<Integer> tryExtractUserId(String token);
 }

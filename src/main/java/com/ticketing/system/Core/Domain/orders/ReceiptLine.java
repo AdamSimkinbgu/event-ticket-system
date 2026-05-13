@@ -4,8 +4,16 @@ import java.time.LocalDateTime;
 
 public class ReceiptLine {
 
-    public ReceiptLine(String ticketId, double price, String seatInfo, LocalDateTime addedAt) {
-        //TODO Auto-generated constructor stub
+    private final int ticketId;
+    private final double price;
+    private final int eventid;
+    private final LocalDateTime addedAt;
+
+      public ReceiptLine(int ticketId, double price, int eventid, LocalDateTime addedAt) {
+        this.ticketId = ticketId;
+        this.price = price;
+        this.eventid = eventid;
+        this.addedAt = addedAt;
     }
 
     public boolean isExpired() {
@@ -13,9 +21,8 @@ public class ReceiptLine {
         throw new UnsupportedOperationException("Unimplemented method 'isExpired'");
     }
 
-    public String getTicketId() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getTicketId'");
+    public int getTicketId() {
+        return ticketId;
     }
     
 }

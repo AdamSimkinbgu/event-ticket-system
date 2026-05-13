@@ -7,6 +7,5 @@ public record PaymentRequestDTO(
     double amount,
     String currency,
     String paymentMethodToken,           // tokenized card ref — never raw PAN
-    int buyerUserId,
-    String orderReceiptId
+    int buyerUserId
 ) {}

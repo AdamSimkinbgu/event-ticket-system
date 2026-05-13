@@ -5,8 +5,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class OrderReceipt {
+import org.hibernate.query.spi.Limit;
 
+public class OrderReceipt {
+    private int userid;
+    List<ReceiptLine> ReceiptLine;
     private String receiptId;
     private String eventId;
     private String zoneId;
@@ -14,12 +17,11 @@ public class OrderReceipt {
     private LocalDateTime purchaseTime;
      
 
-    public OrderReceipt(String eventId,String zoneId, double priceAtReservation) {
-        this.eventId = eventId;
-        this.zoneId = zoneId;
+    public OrderReceipt(int _userid, double priceAtReservation, List<ReceiptLine> receiptLines) {
+        this.userid= _userid;
         this.priceAtoneticketReservation = priceAtReservation;
-            this.purchaseTime = LocalDateTime.now();
-      
+        this.ReceiptLine=receiptLines;
+        this.purchaseTime = LocalDateTime.now();
     }
 
     public String geteventId() {
