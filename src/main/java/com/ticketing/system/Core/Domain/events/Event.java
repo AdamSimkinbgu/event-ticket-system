@@ -5,6 +5,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+import jakarta.persistence.criteria.CriteriaBuilder.In;
+
 
 
 
@@ -71,6 +73,25 @@ public boolean releaseTickets(int zoneId, int quantity) {
 public double calculatePrice(Map<Integer, Double> tickets,LocalDateTime now) {
     return discountPolicy.calculate(tickets,now);
 }
+
+    public void updateZoneCapacity(int zoneId, int newCapacity, int incomingCompanyId) {
+        
+        
+        if (comapnyid != incomingCompanyId) {
+            throw new RuntimeException("Unauthorized to update zone capacity");
+        }
+       
+        if (this.venueMap == null) {
+            throw new RuntimeException("Venue map must be initialized first");
+        }
+
+        InventoryZone zone = this.venueMap.getZone(zoneId);
+        
+
+        zone.setCapacity(newCapacity); 
+    }
+
+    
 
     // ---------------------------------------------------------------------------
     // Skeleton additions — EventStatus lifecycle + missing getters.

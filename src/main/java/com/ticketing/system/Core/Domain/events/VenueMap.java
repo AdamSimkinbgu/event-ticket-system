@@ -54,4 +54,16 @@ public void releaseTicketsToInventory(Map<Integer, Integer> ticketsByZone) {
     }
 }
 
+public void updateZone(InventoryZone zone) {
+    if (!this.inventoryZones.contains(zone)) {
+        throw new IllegalArgumentException("Zone not found in venue map");
+    }
+    for (int i = 0; i < inventoryZones.size(); i++) {
+        if (inventoryZones.get(i).getId()==(zone.getId())) {
+            inventoryZones.set(i, zone);
+            return;
+        }
+    }
+}
+
 }
