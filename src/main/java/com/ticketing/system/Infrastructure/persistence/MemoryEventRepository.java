@@ -10,6 +10,8 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.eventCategory;
+import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
+import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 
 public class MemoryEventRepository implements IEventRepository {
 
@@ -17,7 +19,11 @@ public class MemoryEventRepository implements IEventRepository {
 
     @Override
     public Event findById(int eventId) {
-        return events.get(eventId);
+        Event event = events.get(eventId);
+        if (event == null) {
+            throw new EventNotFoundException(eventId);
+        }
+        return event;
     }
 
     @Override
