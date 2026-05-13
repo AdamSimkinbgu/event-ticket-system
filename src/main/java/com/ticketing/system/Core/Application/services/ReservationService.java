@@ -2,11 +2,12 @@ package com.ticketing.system.Core.Application.services;
 
 import java.time.LocalDateTime;
 
+import com.ticketing.system.Core.Application.dto.ReservationResultDTO;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
-import com.ticketing.system.Core.Domain.events.IEventRepository;
-
 import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventoryZone;
 
 public class ReservationService {
 
@@ -19,25 +20,59 @@ public class ReservationService {
     }
 
 
-    public boolean reserveTickets(String buyerId, String eventId,String zoneId,int quantity){
+    public ReservationResultDTO reserveTickets(int buyerId, int eventId, int zoneId, int quantity){
 
-        Event event = (Event) eventRepository.findById(eventId);
-        double priceoerticket= event.getZone(zoneId).getprice();
+    if (buyerId <= 0) {
+        throw new IllegalArgumentException("Invalid buyer id");
+    }
 
-            if(!activeOrderRepository.getByUserId(buyerId).equals(null)){
+   
+    if (quantity <= 0) {
+        throw new IllegalArgumentException("Quantity must be positive");
+    }
 
-               activeOrderRepository.getByUserId(buyerId).addReservation(eventId,zoneId , quantity, priceoerticket,LocalDateTime.now());
-           return true;
-            }
+    Event event = eventRepository.findById(eventId);
+    if (event == null) {
+        throw new IllegalArgumentException("Event not found: " + eventId);
+    }
 
-            else{
+    InventoryZone zone = event.getZone(zoneId);
+    if (zone == null) {
+        throw new IllegalArgumentException("Zone not found: " + zoneId);
+    }
+double pricePerTicket;
+   synchronized (zone) {
+    if (zone.getAvailableAmount() < quantity) {
+        throw new IllegalArgumentException(
+            "Only " + zone.getAvailableAmount() + " tickets left"
+        );
+    }
+     pricePerTicket = zone.getprice();
+    zone.reserve(quantity);
+      
+}
 
-              ActiveOrder newact =new ActiveOrder(buyerId);
-              newact.addReservation(eventId,zoneId , quantity, priceoerticket,LocalDateTime.now());
-              activeOrderRepository.save(newact);
-              return true;
-            }
-        }
+    ActiveOrder activeOrdert = activeOrderRepository.getByUserId(buyerId);
+
+    if (activeOrdert == null) {
+        activeOrdert = new ActiveOrder(buyerId);
+    }
+
+    activeOrdert.addReservation(eventId, zoneId, quantity, pricePerTicket, LocalDateTime.now());
+
+    activeOrderRepository.save(activeOrdert);
+
+   return new ReservationResultDTO(
+        eventId,
+        zoneId,
+        quantity,
+        LocalDateTime.now(),
+        pricePerTicket * quantity
+        
+);
+}
+
+            
 
     // UC-13 — restore a Member's pending ActiveOrder on login (listener of MemberLoggedIn).
     public com.ticketing.system.Core.Application.dto.ActiveOrderDTO restoreActiveOrder(String userId) {

@@ -17,5 +17,5 @@ public enum NotificationType {
     MANAGER_REVOKED,
 
     // General member (I.5.3)
-    DIRECT_MESSAGE
+    DIRECT_MESSAGE, PURCHASE_FAILED
 }
