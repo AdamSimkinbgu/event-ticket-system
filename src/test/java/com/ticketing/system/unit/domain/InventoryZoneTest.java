@@ -15,7 +15,7 @@ public class InventoryZoneTest{
 
      @BeforeEach
     public void setUp() {
-        zone = new InventoryZone("5", "VIP", 10, 100);
+        zone = new InventoryZone(5, "VIP", 10, 100);
     }
 
     @Test

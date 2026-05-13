@@ -26,17 +26,17 @@ class EventTest {
 
     @BeforeEach
     public void setUp() {
-        zone = new InventoryZone(String.valueOf(ZONE_ID), "VIP", 10, 100);
+        zone = new InventoryZone(ZONE_ID, "VIP", 10, 100);
 
         VenueMap venueMap = new VenueMap(
-                "map1",
+                1,
                 List.of(zone)
         );
 
         event = new Event(
-                String.valueOf(EVENT_ID),
+                EVENT_ID,
                 "Concert",
-                String.valueOf(COMPANY_ID),
+                COMPANY_ID,
                 venueMap,
                 List.of(),
                 null,

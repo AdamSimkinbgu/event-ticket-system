@@ -77,7 +77,7 @@ public double calculatePrice(Map<Integer, Double> tickets,LocalDateTime now) {
     public void updateZoneCapacity(int zoneId, int newCapacity, int incomingCompanyId) {
         
         
-        if (companyId != incomingCompanyId) {
+        if (comapnyid != incomingCompanyId) {
             throw new RuntimeException("Unauthorized to update zone capacity");
         }
        

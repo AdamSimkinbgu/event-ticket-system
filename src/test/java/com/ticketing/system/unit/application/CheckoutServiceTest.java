@@ -1,7 +1,37 @@
 package com.ticketing.system.unit.application;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+
+import com.ticketing.system.Core.Application.dto.BarcodeDTO;
+import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
+import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
+import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
+import com.ticketing.system.Core.Application.dto.PaymentRequestDTO;
+import com.ticketing.system.Core.Application.dto.PaymentResultDTO;
+import com.ticketing.system.Core.Application.interfaces.INotificationService;
+import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
+import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
+import com.ticketing.system.Core.Application.services.AuthenticationService;
+import com.ticketing.system.Core.Application.services.CheckoutService;
+import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
+import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
+import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
+import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
+import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 
 class CheckoutServiceTest {
 

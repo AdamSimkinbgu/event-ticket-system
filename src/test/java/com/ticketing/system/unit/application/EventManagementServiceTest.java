@@ -64,12 +64,12 @@ class EventManagementServiceTest {
         );
 
         company = new ProductionCompany(COMPANY_ID, OWNER_ID);
-        zone = new InventoryZone(String.valueOf(ZONE_ID), "VIP", 10, 100);
-        venueMap = new VenueMap("map1", List.of(zone));
+        zone = new InventoryZone(ZONE_ID, "VIP", 10, 100);
+        venueMap = new VenueMap(1, List.of(zone));
         event = new Event(
-                String.valueOf(EVENT_ID),
+                EVENT_ID,
                 "Concert",
-                String.valueOf(COMPANY_ID),
+                COMPANY_ID,
                 venueMap,
                 List.of(),
                 null,
