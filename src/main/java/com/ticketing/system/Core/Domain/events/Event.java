@@ -11,15 +11,15 @@ import jakarta.persistence.criteria.CriteriaBuilder.In;
 
 
 public class Event {
-    private final String id;
+    private final int id;
     private final String name;
-     private final String comapnyid;
-    private  VenueMap venueMap;
+     private final int comapnyid;
+    private final VenueMap venueMap;
     private final List<ShowDate> showDates;
     private final PurchasePolicy purchasePolicy;
     private final DiscountPolicy discountPolicy;
 
-    public Event( String id, String name, String comapnyid,VenueMap venueMap,List<ShowDate> showDates, PurchasePolicy purchasePolicy, DiscountPolicy discountPolicy
+    public Event( int id, String name, int comapnyid,VenueMap venueMap,List<ShowDate> showDates, PurchasePolicy purchasePolicy, DiscountPolicy discountPolicy
     ) {
         this.id = id;
         this.name = name;
@@ -30,9 +30,9 @@ public class Event {
         this.discountPolicy = discountPolicy;
     }
 
-    public InventoryZone getZone(String zoneId) {
+    public InventoryZone getZone(int zoneId) {
     for (InventoryZone zone : venueMap.getInventoryZones()) {
-        if (zoneId != null && zoneId.equals(zone.getId())) {
+        if ( zoneId == (zone.getId())) {
             return zone;
         }
     }
@@ -41,7 +41,7 @@ public class Event {
 }
 
 
-    public boolean checkAvailability(String zoneId, int quantity) {
+    public boolean checkAvailability(int zoneId, int quantity) {
     
       if( venueMap.checkAvailability(zoneId, quantity)){
        return true;
@@ -49,7 +49,7 @@ public class Event {
     return false;
     }
 
-    public boolean reserveTickets(String zoneId, int quantity) {
+    public boolean reserveTickets(int zoneId, int quantity) {
       
      if (checkAvailability(zoneId, quantity)&& purchasePolicy.validate(quantity)){
       InventoryZone zone = getZone(zoneId);
@@ -60,12 +60,12 @@ public class Event {
   
     }
 
-    public String getId() {
+    public int getId() {
         return id;
     }
 
 
-public boolean releaseTickets(String zoneId, int quantity) {
+public boolean releaseTickets(int zoneId, int quantity) {
     InventoryZone zone = getZone(zoneId);
     return zone.release(quantity);
 }
@@ -131,7 +131,7 @@ public double calculatePrice(Map<Integer, Double> tickets,LocalDateTime now) {
         return name;
     }
 
-    public String getCompanyId() {
+    public int getCompanyId() {
         return comapnyid;
     }
 

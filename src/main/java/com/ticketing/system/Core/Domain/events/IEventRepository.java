@@ -7,7 +7,7 @@ import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 // Aggregate-root entry point for the Event aggregate.
 public interface IEventRepository {
 
-    Event findById(String eventId);
+    Event findById(int eventId);
 
     boolean save(Event event);
 

@@ -5,35 +5,29 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class OrderReceipt {
+import org.hibernate.query.spi.Limit;
 
-    private String eventId;
-    private String zoneId;
+public class OrderReceipt {
+      private int userid;
     private double priceAtoneticketReservation;
+    List<ReceiptLine> ReceiptLine;
      
 
-    public OrderReceipt(String eventId,String zoneId, double priceAtReservation) {
-        this.eventId = eventId;
-        this.zoneId = zoneId;
+    public OrderReceipt(int _userid, double priceAtReservation, List<ReceiptLine> receiptLines) {
+           this.userid= _userid;
         this.priceAtoneticketReservation = priceAtReservation;
+        this.ReceiptLine=receiptLines;
       
     }
 
-    public String geteventId() {
-        return eventId;
-    }
-
-    public String getzoneId() {
-        return zoneId;
-    }
 
     // ---------------------------------------------------------------------------
     // Skeleton additions for OrderReceipt aggregate.
     // ---------------------------------------------------------------------------
 
-    public String getId() {
-        throw new UnsupportedOperationException("not implemented (add id field)");
-    }
+    // public String getId() {
+    //     throw new UnsupportedOperationException("not implemented (add id field)");
+    // }
 
     public int getHolderUserId() {
         throw new UnsupportedOperationException("not implemented (add holderUserId field)");

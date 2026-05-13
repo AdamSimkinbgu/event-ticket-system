@@ -26,7 +26,7 @@ public class StubPaymentGateway implements IPaymentGateway {
     }
 
     @Override
-    public RefundResultDTO refund(String orderReceiptId, double amount) {
+    public RefundResultDTO refund(int orderReceiptId, double amount) {
         throw new UnsupportedOperationException("UC-4: stub refund not implemented");
     }
 }
