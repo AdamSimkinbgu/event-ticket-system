@@ -6,8 +6,9 @@ import java.util.List;
 // Output of ReservationService.reserve() (UC-5/9).
 // Returns the lock outcome plus the resulting cart state so the UI doesn't need a second roundtrip.
 public record ReservationResultDTO(
-    String orderId,
-    List<String> reservedTicketIds,
+    int eventId,
+     int zoneId,
+     int quantity,
     LocalDateTime reservationExpiresAt,
     double currentCartTotal
 ) {}

@@ -1,7 +1,13 @@
 package com.ticketing.system.Infrastructure.external;
 
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Domain.notifications.Notification;
+import com.ticketing.system.Core.Domain.notifications.NotificationStatus;
+import com.ticketing.system.Core.Domain.notifications.NotificationType;
 
 // V1 stub for INotificationService — push channel adapter.
 // V1: collects notifications in memory so tests can assert on them.
@@ -18,4 +24,32 @@ public class InMemoryNotificationService implements INotificationService {
     public boolean isReachable(int recipientUserId) {
         throw new UnsupportedOperationException("UC-35: not implemented");
     }
+    @Override
+public void notifyPurchaseCompleted(int userId, double totalPrice, List<Integer> ticketIds) {
+    Notification notification = new Notification(
+            UUID.randomUUID().toString(),
+            userId,
+            NotificationType.PURCHASE_CONFIRMED,
+            NotificationStatus.PENDING,
+            "Purchase completed successfully. Total price: " + totalPrice,
+            LocalDateTime.now()
+    );
+
+    send(userId, notification);
+}
+@Override
+public void notifyPurchaseFailed(int userId, String message) {
+    Notification notification = new Notification(
+            UUID.randomUUID().toString(),
+            userId,
+            NotificationType.PURCHASE_FAILED,
+            NotificationStatus.PENDING,
+            message,
+            LocalDateTime.now()
+    );
+
+    send(userId, notification);
+}
+
+
 }

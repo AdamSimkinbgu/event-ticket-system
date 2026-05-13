@@ -5,20 +5,25 @@ package com.ticketing.system.Core.Domain.Tickets;
 
 public class Ticket {
   
-    private String zoneid;
-    private String eventId;
+    private int zoneid;
+    private int eventId;
     private double price;
+    private int ticketId;
+   private String barcodeValue;
 
 
-    public Ticket(String eventId,String zoneid ,double price) {
+    public Ticket(int eventId,int zoneid ,double price,int ticketId,String barcodeValue) {
         this.eventId = eventId;
-         this.zoneid=zoneid;
+        this.zoneid=zoneid;
         this.price = price;
+        this.ticketId=ticketId;
+        this.barcodeValue=barcodeValue; 
+
     }
 
     
 
-    public String getEventId() {
+    public int getEventId() {
         return eventId;
     }
 
@@ -84,7 +89,7 @@ public class Ticket {
     }
 
     // Missing getters per the unified-Ticket model.
-    public String getZoneId() {
+    public int getZoneId() {
         return zoneid;
     }
 
@@ -106,5 +111,19 @@ public class Ticket {
 
     public TicketStatus getStatus() {
         throw new UnsupportedOperationException("not implemented (add status field)");
+    }
+
+
+
+    public void setTicketId(int ticketId) {
+       
+       this.ticketId = ticketId;
+         
+    }
+
+
+
+    public void setBarcodeValue(String barcodeValue) {
+       this.barcodeValue=barcodeValue;
     }
 }
