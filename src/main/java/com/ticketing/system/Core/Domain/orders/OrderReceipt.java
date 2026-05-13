@@ -5,11 +5,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import org.hibernate.query.spi.Limit;
 
 public class OrderReceipt {
     private int userid;
-    private List<ReceiptLine> ReceiptLine;
+    List<ReceiptLine> ReceiptLine;
     private int receiptId;
     private int eventId;
     private int zoneId;
@@ -68,4 +69,5 @@ public class OrderReceipt {
     public boolean wasRefunded() {
         throw new UnsupportedOperationException("not implemented");
     }
+
 }

@@ -12,6 +12,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.users.Permission;
 
@@ -21,12 +22,16 @@ class ProductionCompanyTest {
     private final int OWNER_ID = 1;
     private final int MANAGER_ID = 2;
     private final int TARGET_USER_ID = 3;
+    private final String COMPANY_1_NAME = "Company1";
+    private final String COMPANY_1_DESCRIPTION = "A test production company1";
+    private final double COMPANY_1_RATING = 4.5;
+    
     private ProductionCompany company;
     private List<Permission> defaultPermissions;
 
     @BeforeEach
     public void setUp() {
-        company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, COMPANY_1_RATING);
 
         defaultPermissions = new ArrayList<>();
         defaultPermissions.add(Permission.APPOINT_MANAGER);

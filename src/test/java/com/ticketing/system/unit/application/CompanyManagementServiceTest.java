@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
+import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
@@ -31,6 +32,9 @@ public class CompanyManagementServiceTest {
 
     private final int COMPANY_ID = 100;
     private final int OWNER_ID = 1;
+    private final String COMPANY_1_NAME = "Company1";
+    private final String COMPANY_1_DESCRIPTION = "A test production company1";
+
     private final int TARGET_USER_ID = 2;
     private List<Permission> defaultPermissions;
 
@@ -55,7 +59,7 @@ public class CompanyManagementServiceTest {
     
     @Test
     public void GivenOwnerAndTargetUser_WhenInviteManager_ThenTargetHasOneInvitation() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser", "","password");
 
         when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
@@ -76,7 +80,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenPendingManagerInvitation_WhenTargetAccepts_ThenTargetIsCompanyManager() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
         when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
@@ -102,7 +106,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenPendingManagerInvitation_WhenTargetRejects_ThenTargetHasNoInvitations() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser", "","password");
 
         when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
@@ -128,7 +132,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenAcceptedManager_WhenOwnerModifiesPermissions_ThenCompanyPermissionsAreUpdated() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
@@ -168,7 +172,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenAcceptedManager_WhenOwnerRevokesManager_ThenCompanyDoesNotContainManager() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
@@ -237,7 +241,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenUserIsNotOwner_WhenInviteManager_ThenThrowException() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
 
         when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(3);
@@ -255,7 +259,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenTargetUserDoesNotExist_WhenInviteManager_ThenThrowException() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
 
         when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
@@ -274,7 +278,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenEmptyPermissions_WhenInviteManager_ThenThrowException() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
         when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
@@ -337,7 +341,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenNoPendingInvitation_WhenAcceptManagerInvitation_ThenThrowException() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
         when(mockAuthService.validateToken(TARGET_TOKEN)).thenReturn(true);
@@ -367,7 +371,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenNoPendingInvitation_WhenRejectManagerInvitation_ThenThrowException() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
         when(mockAuthService.validateToken(TARGET_TOKEN)).thenReturn(true);
@@ -398,7 +402,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenUserIsNotOwner_WhenRevokeManager_ThenThrowException() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
 
         when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(3);
@@ -415,7 +419,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenTargetIsNotManager_WhenRevokeManager_ThenThrowException() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
         when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
@@ -448,7 +452,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenUserIsNotOwner_WhenModifyManagerPermissions_ThenThrowException() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
 
         when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(3);
@@ -466,7 +470,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenTargetIsNotManager_WhenModifyManagerPermissions_ThenThrowException() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
         when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
@@ -486,7 +490,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenEmptyPermissions_WhenModifyManagerPermissions_ThenThrowException() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
@@ -526,7 +530,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenAlreadyPendingInvitation_WhenInviteManagerAgain_ThenThrowException() {
-        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
         when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
@@ -554,7 +558,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenTargetAlreadyManager_WhenInviteManagerAgain_ThenThrowException() {
-    ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+    ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
     User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
     when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);

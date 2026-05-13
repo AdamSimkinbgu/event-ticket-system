@@ -51,25 +51,7 @@ public class MemberAccountService {
             List<PurchaseRecordDTO> purchaseRecords = new ArrayList<>();
 
             for (OrderReceipt receipt : receipts) {
-                List<PurchaseHistoryDTO.TicketRecordDTO> ticketRecords = new ArrayList<>();
-                Event event = eventRepository.findById(receipt.geteventId());
-                for (var ticket : ticketRepository.findByOrderReceiptId(receipt.getId())) {
-                    ticketRecords.add(new PurchaseHistoryDTO.TicketRecordDTO(
-                            ticket.getId(),
-                            ticket.getZoneId(),
-                            ticket.getSeatNumber(),
-                            ticket.getPrice(),
-                            ticket.getStatus()
-                    ));
-                }
-                purchaseRecords.add(new PurchaseRecordDTO(
-                        receipt.getId(),
-                        receipt.geteventId(),
-                        event.getName(), // Would need to query event details for the name.
-                        receipt.getPurchaseTime(), // Assuming first transaction is purchase time.
-                        receipt.getTotalAmount(),
-                        ticketRecords
-                ));
+                purchaseRecords.add(mapToPurchaseRecordDTO(receipt));
             }
 
             // TODO: Log successful retrieval.
@@ -86,4 +68,19 @@ public class MemberAccountService {
         return new PurchaseHistoryDTO(new ArrayList<>()); // Return empty history on failure.
     }
 
+    private PurchaseRecordDTO mapToPurchaseRecordDTO(OrderReceipt receipt) {
+        List<PurchaseHistoryDTO.TicketRecordDTO> ticketRecords = new ArrayList<>();
+        Event event = eventRepository.findById(receipt.geteventId());
+        for (var ticket : ticketRepository.findByOrderReceiptId(receipt.getId())) {
+            ticketRecords.add(ticket.toTicketRecordDTO());
+        }
+        return new PurchaseRecordDTO(
+                receipt.getId(),
+                receipt.geteventId(),
+                event.getName(), // Would need to query event details for the name.
+                receipt.getPurchaseTime(), // Assuming first transaction is purchase time.
+                receipt.getTotalAmount(),
+                ticketRecords
+        );
+    }
 }

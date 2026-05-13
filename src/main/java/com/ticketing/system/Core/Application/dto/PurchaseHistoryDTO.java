@@ -23,7 +23,7 @@ public record PurchaseHistoryDTO(
     public record TicketRecordDTO(
         int ticketId,
         int zoneId,
-        int seatNumber,
+        String seatNumber,
         double pricePaid,
         TicketStatus currentStatus
     ) {}
