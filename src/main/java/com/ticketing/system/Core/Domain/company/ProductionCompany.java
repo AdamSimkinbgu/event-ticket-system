@@ -6,7 +6,6 @@ import java.util.List;
 
 import com.ticketing.system.Core.Domain.users.Permission;
 
-import io.jsonwebtoken.security.Jwks.HASH;
 
 
 public class ProductionCompany {
@@ -156,5 +155,11 @@ public class ProductionCompany {
     public HashMap<Integer, List<Permission>> getPendingManagers() {
 
         return this.pendingManagers;
+    }
+
+    public void checkowner(int ownerId2) {
+        if (this.ownerId != ownerId2) {
+            throw new RuntimeException("Only the owner can perform this action");
+        }
     }
 }

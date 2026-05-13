@@ -8,6 +8,7 @@ import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
+import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
@@ -23,19 +24,19 @@ public class EventManagementService {
     private final IEventRepository eventRepository;
     private final IProductionCompanyRepository companyRepository;
     private final ITicketRepository ticketRepository;
-    private final AuthenticationService authenticationService;
+    private final ISessionManager sessionManager;
     private final Logger   logger = Logger.getLogger(EventManagementService.class.getName());
 
     public EventManagementService(
             IEventRepository eventRepository,
             IProductionCompanyRepository companyRepository,
             ITicketRepository ticketRepository,
-            AuthenticationService authenticationService
+            ISessionManager sessionManager
     ) {
         this.eventRepository = eventRepository;
         this.companyRepository = companyRepository;
         this.ticketRepository = ticketRepository;
-        this.authenticationService = authenticationService;
+        this.sessionManager = sessionManager;
     }
 
     // UC-19 — Owner adds an Event in DRAFT state.
@@ -56,11 +57,11 @@ public class EventManagementService {
     // UC-20 — Owner/Manager configures venue map and inventory zones.
     public void addCapacitoesToVenueMapZone(String token, int company_id,int event_id, int zone_id, int newCapacity) {
        
-          if (!authenticationService.validateToken(token)) {
+          if (!sessionManager.validateToken(token)) {
             logger.warning("Invalid token provided for updating zone capacity");
             throw new RuntimeException("Invalid token");
         }
-        int userId = authenticationService.extractUserId(token);
+        int userId = sessionManager.extractUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(company_id);
         if (company == null) {
             logger.warning("Company not found");
