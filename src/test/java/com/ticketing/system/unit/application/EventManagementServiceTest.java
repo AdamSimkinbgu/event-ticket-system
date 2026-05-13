@@ -20,6 +20,7 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.VenueMap;
+import com.ticketing.system.Core.Domain.users.Permission;
 
 class EventManagementServiceTest {
 
