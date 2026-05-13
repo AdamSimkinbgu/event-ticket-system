@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.*;
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.PurchaseRecordDTO;
+import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.TicketRecordDTO;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.MemberAccountService;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
@@ -56,7 +57,7 @@ class MemberAccountServiceTest {
     void givenAuthenticatedMember_whenViewMyHistory_thenOwnHistoryReturned() {
         // Arrange
         String receiptId = "1";
-        String eventId   = "10";
+        int eventId = 10;
         LocalDateTime purchaseTime = LocalDateTime.of(2024, 1, 15, 14, 30);
         AuthTokenDTO validAuth = new AuthTokenDTO(VALID_TOKEN, 1000, USER_ID, "member42");
         List<Ticket> tickets = List.of(ticket);
@@ -72,11 +73,9 @@ class MemberAccountServiceTest {
         Mockito.when(receipt.getPurchaseTime()).thenReturn(purchaseTime);
         Mockito.when(receipt.getTotalAmount()).thenReturn(150.00);
         Mockito.when(event.getName()).thenReturn("Rock Concert");
-        Mockito.when(ticket.getId()).thenReturn("101");
-        Mockito.when(ticket.getZoneId()).thenReturn("A");
-        Mockito.when(ticket.getSeatNumber()).thenReturn("15");
-        Mockito.when(ticket.getPrice()).thenReturn(150.00);
-        Mockito.when(ticket.getStatus()).thenReturn(TicketStatus.AVAILABLE);
+        Mockito.when(ticket.toTicketRecordDTO()).thenReturn(new TicketRecordDTO(
+                101, 1, "15", 150.00, TicketStatus.AVAILABLE
+        ));
 
 
         // Act
@@ -92,7 +91,7 @@ class MemberAccountServiceTest {
         assertThat(record.totalPaid()).isEqualByComparingTo(150.00);
 
         assertThat(record.tickets()).hasSize(1);
-        assertThat(record.tickets().getFirst().ticketId()).isEqualTo("101");
+        assertThat(record.tickets().getFirst().ticketId()).isEqualTo(101);
         assertThat(record.tickets().getFirst().currentStatus()).isEqualTo(TicketStatus.AVAILABLE);
     }
 
@@ -109,7 +108,7 @@ class MemberAccountServiceTest {
         Mockito.verify(authenticationService).validateToken(INVALID_TOKEN);
         Mockito.verify(orderReceiptRepository, Mockito.never()).findByHolderUserId(Mockito.anyInt());
         Mockito.verify(ticketRepository, Mockito.never()).findByOrderReceiptId(Mockito.anyString());
-        Mockito.verify(eventRepository, Mockito.never()).findById(Mockito.anyString());
+        Mockito.verify(eventRepository, Mockito.never()).findById(Mockito.anyInt());
     }
 
     @Test @Disabled("UC-16 + II.3.5.2: history reflects price-at-purchase, not current price")
