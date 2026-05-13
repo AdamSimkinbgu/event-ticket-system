@@ -1,6 +1,7 @@
 package com.ticketing.system.Core.Application.services;
 
 import java.util.List;
+import java.util.logging.Logger;
 
 import com.ticketing.system.Core.Application.dto.EventCreationDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
@@ -23,6 +24,7 @@ public class EventManagementService {
     private final IProductionCompanyRepository companyRepository;
     private final ITicketRepository ticketRepository;
     private final AuthenticationService authenticationService;
+    private final Logger   logger = Logger.getLogger(EventManagementService.class.getName());
 
     public EventManagementService(
             IEventRepository eventRepository,
@@ -55,11 +57,13 @@ public class EventManagementService {
     public void addCapacitoesToVenueMapZone(String token, int company_id,int event_id, int zone_id, int newCapacity) {
        
           if (!authenticationService.validateToken(token)) {
+            logger.warning("Invalid token provided for updating zone capacity");
             throw new RuntimeException("Invalid token");
         }
         int userId = authenticationService.extractUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(company_id);
         if (company == null) {
+            logger.warning("Company not found");
             throw new RuntimeException("Company not found");
         }
 
@@ -68,12 +72,14 @@ public class EventManagementService {
         Event event = eventRepository.findById(event_id);
 
         if (event == null) {
+            logger.warning("Event not found");
             throw new RuntimeException("Event not found");
         }
 
         event.updateZoneCapacity(zone_id, newCapacity, company_id);
 
         eventRepository.save(event);
+        logger.info("Zone capacity updated successfully");
 
     }
 
