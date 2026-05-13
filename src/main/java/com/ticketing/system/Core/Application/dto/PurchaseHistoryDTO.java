@@ -13,7 +13,7 @@ public record PurchaseHistoryDTO(
 ) {
     public record PurchaseRecordDTO(
         String orderReceiptId,
-        String eventId,
+        int eventId,
         String eventName,
         LocalDateTime purchasedAt,
         double totalPaid,
@@ -21,8 +21,8 @@ public record PurchaseHistoryDTO(
     ) {}
 
     public record TicketRecordDTO(
-        String ticketId,
-        String zoneId,
+        int ticketId,
+        int zoneId,
         String seatNumber,
         double pricePaid,
         TicketStatus currentStatus
