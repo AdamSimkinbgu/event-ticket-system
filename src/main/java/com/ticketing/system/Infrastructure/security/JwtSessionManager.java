@@ -8,6 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.crypto.SecretKey;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -21,8 +23,21 @@ import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 
+/**
+ * jjwt-backed implementation of {@link ISessionManager}. UC-12 / UC-14.
+ *
+ * <p>Tokens are HS256-signed using {@code jwt.secret} from configuration and
+ * expire after {@code jwt.expiration-minutes}. Revocation (UC-14) is tracked
+ * in an in-memory denylist; revoked tokens fail every reader because the
+ * denylist check lives inside the central {@link #parseClaims} helper.
+ *
+ * <p>The denylist grows for the JVM's lifetime — fine for V1; a real
+ * deployment should sweep entries whose natural {@code exp} has passed.
+ */
 @Component
 public class JwtSessionManager implements ISessionManager {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtSessionManager.class);
 
     private static final String CLAIM_USERNAME = "username";
 
@@ -88,7 +103,9 @@ public class JwtSessionManager implements ISessionManager {
     @Override
     public void invalidate(String token) {
         if (token == null || token.isBlank()) return;
-        revokedTokens.add(token);
+        if (revokedTokens.add(token)) {
+            log.debug("token revoked");
+        }
     }
 
     @Override
@@ -107,6 +124,7 @@ public class JwtSessionManager implements ISessionManager {
 
     private Claims parseClaims(String token) {
         if (revokedTokens.contains(token)) {
+            log.debug("rejected revoked token");
             throw new InvalidTokenException("token has been revoked");
         }
         try {
