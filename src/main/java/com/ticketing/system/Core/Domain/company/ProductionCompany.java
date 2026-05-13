@@ -10,27 +10,30 @@ import io.jsonwebtoken.security.Jwks.HASH;
 
 
 public class ProductionCompany {
-    private CompanyStatus companyStatus;
-    private List<DiscountPolicy> discountPolicies;
-    private List<PurchasePolicy> purchasePolicies;
     private final int companyId;
     private final int ownerId;
+    private CompanyStatus companyStatus;
+    private String name;
+    private String description;
+    private Double rating;
+    private List<DiscountPolicy> discountPolicies;
+    private List<PurchasePolicy> purchasePolicies;
     private HashMap <Integer, List<Permission>> pendingManagers; 
     private HashMap <Integer, List<Permission>> managers; 
 
-    public ProductionCompany(int companyId, int ownerId) {
+    public ProductionCompany(int companyId, int ownerId, String name, CompanyStatus companyStatus, String description, Double rating) {
         this.companyId = companyId;
         this.ownerId = ownerId;
-        this.companyStatus = new CompanyStatus();
+        this.name = name;
+        this.description = "";
+        this.rating = rating;
+        this.companyStatus = companyStatus;
         this.discountPolicies = new ArrayList<>();
         this.purchasePolicies = new ArrayList<>();
         this.managers = new HashMap<>();
         this.pendingManagers = new HashMap<>();
     }
 
-    public int getOwnerId() {
-        return this.ownerId;
-    }
 
     public void validateManagerInvitation(int companyId, int targetId, int ownerId, List<Permission> permissions) {
    
@@ -100,13 +103,16 @@ public class ProductionCompany {
         return this.managers;
     }
 
+    public int getOwnerId() {
+        return this.ownerId;
+    }
 
     public CompanyStatus getStatus() {
-        throw new UnsupportedOperationException("not implemented (add status enum field)");
+        return this.companyStatus;
     }
 
     public boolean isActive() {
-        throw new UnsupportedOperationException("not implemented");
+        return this.companyStatus == CompanyStatus.ACTIVE;
     }
 
     // II.4.13.x (Cancelled v0; defensive).
@@ -120,11 +126,27 @@ public class ProductionCompany {
     }
 
     public String getName() {
-        throw new UnsupportedOperationException("not implemented (add name field)");
+        return this.name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public String getDescription() {
-        throw new UnsupportedOperationException("not implemented (add description field)");
+        return this.description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public Double getRating() {
+        return this.rating;
+    }
+
+    public void setRating(Double rating) {
+        this.rating = rating;
     }
 
     // UC-18 — Founder is the original creator (currently aliased to ownerId; see open Q).

@@ -9,10 +9,10 @@ import org.hibernate.query.spi.Limit;
 
 public class OrderReceipt {
     private int userid;
-    List<ReceiptLine> ReceiptLine;
-    private String receiptId;
-    private String eventId;
-    private String zoneId;
+    private List<ReceiptLine> ReceiptLine;
+    private int receiptId;
+    private int eventId;
+    private int zoneId;
     private double priceAtoneticketReservation;
     private LocalDateTime purchaseTime;
      
@@ -24,11 +24,11 @@ public class OrderReceipt {
         this.purchaseTime = LocalDateTime.now();
     }
 
-    public String geteventId() {
+    public int geteventId() {
         return eventId;
     }
 
-    public String getZoneId() {
+    public int getZoneId() {
         return zoneId;
     }
 
@@ -36,7 +36,7 @@ public class OrderReceipt {
     // Skeleton additions for OrderReceipt aggregate.
     // ---------------------------------------------------------------------------
 
-    public String getId() {
+    public int getId() {
         return receiptId;
     }
 

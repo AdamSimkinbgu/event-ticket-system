@@ -7,7 +7,6 @@ public class Ticket {
 
     private int zoneid;
     private int eventId;
-    private String ticketId;
     private double price;
     private int ticketId;
    private String barcodeValue;
@@ -24,7 +23,7 @@ public class Ticket {
 
 
 
-    public String getId() {
+    public int getId() {
         return ticketId;
     }
 
@@ -98,7 +97,7 @@ public class Ticket {
         return zoneid;
     }
 
-    public String getSeatNumber() {
+    public int getSeatNumber() {
         throw new UnsupportedOperationException("not implemented (add seatNumber field)");
     }
 

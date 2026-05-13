@@ -1,5 +1,7 @@
 package com.ticketing.system.Core.Domain.company;
 
-public class CompanyStatus {
-
+public enum CompanyStatus {
+    ACTIVE,
+    INACTIVE,
+    SUSPENDED
 }

@@ -7,23 +7,26 @@ import java.util.Map;
 
 import jakarta.persistence.criteria.CriteriaBuilder.In;
 
-
-
-
 public class Event {
     private final int id;
     private final String name;
-     private final int comapnyid;
+    private List<String> artistsNames;
+    private eventCategory category;
+    private final int comapnyid;
+    private final EventStatus status; 
     private final VenueMap venueMap;
     private final List<ShowDate> showDates;
     private final PurchasePolicy purchasePolicy;
     private final DiscountPolicy discountPolicy;
 
-    public Event( int id, String name, int comapnyid,VenueMap venueMap,List<ShowDate> showDates, PurchasePolicy purchasePolicy, DiscountPolicy discountPolicy
+    public Event( int id, String name, List<String> artistsNames, eventCategory category, int comapnyid, EventStatus status, VenueMap venueMap, List<ShowDate> showDates, PurchasePolicy purchasePolicy, DiscountPolicy discountPolicy
     ) {
         this.id = id;
         this.name = name;
+        this.artistsNames = artistsNames;
+        this.category = category;
         this.comapnyid=comapnyid;
+        this.status = status;
         this.venueMap = venueMap;
         this.showDates = showDates;
         this.purchasePolicy = purchasePolicy;
@@ -31,32 +34,32 @@ public class Event {
     }
 
     public InventoryZone getZone(int zoneId) {
-    for (InventoryZone zone : venueMap.getInventoryZones()) {
-        if ( zoneId == (zone.getId())) {
-            return zone;
+        for (InventoryZone zone : venueMap.getInventoryZones()) {
+            if ( zoneId == (zone.getId())) {
+                return zone;
+            }
         }
-    }
 
-    throw new IllegalArgumentException("Zone not found");
-}
+        throw new IllegalArgumentException("Zone not found");
+    }
 
 
     public boolean checkAvailability(int zoneId, int quantity) {
     
-      if( venueMap.checkAvailability(zoneId, quantity)){
-       return true;
-    }
-    return false;
+        if( venueMap.checkAvailability(zoneId, quantity)){
+        return true;
+        }
+        return false;
     }
 
     public boolean reserveTickets(int zoneId, int quantity) {
       
-     if (checkAvailability(zoneId, quantity)&& purchasePolicy.validate(quantity)){
-      InventoryZone zone = getZone(zoneId);
-        zone.reserve(quantity);
-        return true;
-     }
-      return false;  
+        if (checkAvailability(zoneId, quantity)&& purchasePolicy.validate(quantity)){
+        InventoryZone zone = getZone(zoneId);
+            zone.reserve(quantity);
+            return true;
+        }
+        return false;  
   
     }
 
@@ -65,14 +68,14 @@ public class Event {
     }
 
 
-public boolean releaseTickets(int zoneId, int quantity) {
-    InventoryZone zone = getZone(zoneId);
-    return zone.release(quantity);
-}
+    public boolean releaseTickets(int zoneId, int quantity) {
+        InventoryZone zone = getZone(zoneId);
+        return zone.release(quantity);
+    }
 
-public double calculatePrice(Map<Integer, Double> tickets,LocalDateTime now) {
-    return discountPolicy.calculate(tickets,now);
-}
+    public double calculatePrice(Map<Integer, Double> tickets,LocalDateTime now) {
+        return discountPolicy.calculate(tickets,now);
+    }
 
     public void updateZoneCapacity(int zoneId, int newCapacity, int incomingCompanyId) {
         
@@ -92,14 +95,9 @@ public double calculatePrice(Map<Integer, Double> tickets,LocalDateTime now) {
     }
 
     
+    
 
-    // ---------------------------------------------------------------------------
-    // Skeleton additions — EventStatus lifecycle + missing getters.
-    // ---------------------------------------------------------------------------
 
-    public EventStatus getStatus() {
-        throw new UnsupportedOperationException("not implemented (add status field)");
-    }
 
     // UC-19 / UC-32 — DRAFT/SCHEDULED -> ON_SALE when admin opens or owner publishes.
     public void transitionToOnSale() {
@@ -126,6 +124,7 @@ public double calculatePrice(Map<Integer, Double> tickets,LocalDateTime now) {
         throw new UnsupportedOperationException("UC-19: not implemented");
     }
 
+
     // Missing getters.
     public String getName() {
         return name;
@@ -133,6 +132,18 @@ public double calculatePrice(Map<Integer, Double> tickets,LocalDateTime now) {
 
     public int getCompanyId() {
         return comapnyid;
+    }
+
+    public EventStatus getStatus() {
+        return status;
+    }
+
+    public eventCategory getCategory() {
+        return category;
+    }
+
+    public List<String> getArtistsNames() {
+        return artistsNames;
     }
 
     public List<ShowDate> getShowDates() {
