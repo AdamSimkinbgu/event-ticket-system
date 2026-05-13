@@ -4,9 +4,10 @@ package com.ticketing.system.Core.Domain.Tickets;
 
 
 public class Ticket {
-  
+
     private int zoneid;
     private int eventId;
+    private String ticketId;
     private double price;
     private int ticketId;
    private String barcodeValue;
@@ -21,7 +22,11 @@ public class Ticket {
 
     }
 
-    
+
+
+    public String getId() {
+        return ticketId;
+    }
 
     public int getEventId() {
         return eventId;

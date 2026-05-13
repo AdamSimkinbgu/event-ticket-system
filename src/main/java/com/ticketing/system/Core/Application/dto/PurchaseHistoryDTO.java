@@ -1,5 +1,7 @@
 package com.ticketing.system.Core.Application.dto;
 
+import com.ticketing.system.Core.Domain.Tickets.TicketStatus;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -23,6 +25,6 @@ public record PurchaseHistoryDTO(
         String zoneId,
         String seatNumber,
         double pricePaid,
-        String currentStatus
+        TicketStatus currentStatus
     ) {}
 }

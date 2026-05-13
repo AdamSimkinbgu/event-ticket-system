@@ -8,26 +8,41 @@ import java.util.List;
 import org.hibernate.query.spi.Limit;
 
 public class OrderReceipt {
-      private int userid;
-    private double priceAtoneticketReservation;
+    private int userid;
     List<ReceiptLine> ReceiptLine;
+    private String receiptId;
+    private String eventId;
+    private String zoneId;
+    private double priceAtoneticketReservation;
+    private LocalDateTime purchaseTime;
      
 
     public OrderReceipt(int _userid, double priceAtReservation, List<ReceiptLine> receiptLines) {
-           this.userid= _userid;
+        this.userid= _userid;
         this.priceAtoneticketReservation = priceAtReservation;
         this.ReceiptLine=receiptLines;
-      
+        this.purchaseTime = LocalDateTime.now();
     }
 
+    public String geteventId() {
+        return eventId;
+    }
+
+    public String getZoneId() {
+        return zoneId;
+    }
 
     // ---------------------------------------------------------------------------
     // Skeleton additions for OrderReceipt aggregate.
     // ---------------------------------------------------------------------------
 
-    // public String getId() {
-    //     throw new UnsupportedOperationException("not implemented (add id field)");
-    // }
+    public String getId() {
+        return receiptId;
+    }
+
+    public LocalDateTime getPurchaseTime() {
+        return purchaseTime;
+    }
 
     public int getHolderUserId() {
         throw new UnsupportedOperationException("not implemented (add holderUserId field)");
