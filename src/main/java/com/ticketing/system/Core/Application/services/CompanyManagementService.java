@@ -1,7 +1,9 @@
 package com.ticketing.system.Core.Application.services;
 
 import java.util.List;
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
@@ -15,7 +17,7 @@ public class CompanyManagementService {
     private final IProductionCompanyRepository companyRepository;
     private final IUserRepository userRepository;
     private final ISessionManager sessionManager;
-    private final Logger logger = Logger.getLogger(CompanyManagementService.class.getName());
+    private final Logger logger = LoggerFactory.getLogger(CompanyManagementService.class);
 
 
     public CompanyManagementService(IProductionCompanyRepository companyRepository, IUserRepository userRepository, ISessionManager sessionManager) {
@@ -26,19 +28,19 @@ public class CompanyManagementService {
 
     public void inviteManager(String token, int companyId, int targetId, List<Permission> permissions) {
         if (!sessionManager.validateToken(token)) {
-            logger.warning("Invalid token provided for inviting manager");
+            logger.warn("Invalid token provided for inviting manager");
             throw new RuntimeException("Invalid token");
         }
         int ownerId = sessionManager.extractUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            logger.warning("Company not found");    
+            logger.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
         company.checkowner(ownerId);
         User targetUser = userRepository.getUserById(targetId);
         if (targetUser == null) {
-            logger.warning("Target user not found");
+            logger.warn("Target user {} not found", targetId);
             throw new RuntimeException("Target user not found");
         }
 
@@ -55,19 +57,19 @@ public class CompanyManagementService {
 
     public void acceptManagerInvitation(String token, int companyId) {
         if (!sessionManager.validateToken(token)) {
-                logger.warning("Invalid token provided for accepting manager invitation");
+                logger.warn("Invalid token provided for accepting manager invitation");
             throw new RuntimeException("Invalid token");
         }
         int targetId = sessionManager.extractUserId(token);
         User targetUser = userRepository.getUserById(targetId);
         if (targetUser == null) {
-            logger.warning("Target user not found");
+            logger.warn("Target user {} not found", targetId);
             throw new RuntimeException("Target user not found");
         }
 
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            logger.warning("Company not found");
+            logger.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
 
@@ -80,19 +82,19 @@ public class CompanyManagementService {
 
     public void rejectManagerInvitation(String token, int companyId) {
         if (!sessionManager.validateToken(token)) {
-            logger.warning("Invalid token provided for rejecting manager invitation");
+            logger.warn("Invalid token provided for rejecting manager invitation");
             throw new RuntimeException("Invalid token");
         }
         int targetId = sessionManager.extractUserId(token);
         User targetUser = userRepository.getUserById(targetId);
         if (targetUser == null) {
-            logger.warning("Target user not found");
+            logger.warn("Target user {} not found", targetId);
             throw new RuntimeException("Target user not found");
         }
 
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            logger.warning("Company not found");
+            logger.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
 
@@ -105,20 +107,20 @@ public class CompanyManagementService {
 
     public void RevokeManager(String token, int companyId, int targetId) {
         if (!sessionManager.validateToken(token)) {
-            logger.warning("Invalid token provided for revoking manager");
+            logger.warn("Invalid token provided for revoking manager");
             throw new RuntimeException("Invalid token");
         }
         int ownerId = sessionManager.extractUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            logger.warning("Company not found");
+            logger.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
         company.checkowner(ownerId);
 
         User targetUser = userRepository.getUserById(targetId);
         if (targetUser == null) {
-            logger.warning("Target user not found");
+            logger.warn("Target user {} not found", targetId);
             throw new RuntimeException("Target user not found");
         }
 
@@ -134,19 +136,19 @@ public class CompanyManagementService {
 
     public void ModifyManagerPermissions(String token, int companyId, int targetId, List<Permission> newPermissions) {
         if (!sessionManager.validateToken(token)) {
-            logger.warning("Invalid token provided for modifying manager permissions");
+            logger.warn("Invalid token provided for modifying manager permissions");
             throw new RuntimeException("Invalid token");
         }
         int ownerId = sessionManager.extractUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            logger.warning("Company not found");
+            logger.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
         company.checkowner(ownerId);
         User targetUser = userRepository.getUserById(targetId);
         if (targetUser == null) {
-            logger.warning("Target user not found");
+            logger.warn("Target user {} not found", targetId);
             throw new RuntimeException("Target user not found");
         }
 

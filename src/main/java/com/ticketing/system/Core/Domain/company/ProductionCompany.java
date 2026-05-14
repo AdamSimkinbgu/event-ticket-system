@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.users.Permission;
 
 
@@ -159,7 +160,7 @@ public class ProductionCompany {
 
     public void checkowner(int ownerId2) {
         if (this.ownerId != ownerId2) {
-            throw new RuntimeException("Only the owner can perform this action");
+            throw new UnauthorizedActionException ("Only the owner can perform this action");
         }
     }
 }
