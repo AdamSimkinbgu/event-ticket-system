@@ -51,5 +51,83 @@ public void notifyPurchaseFailed(int userId, String message) {
     send(userId, notification);
 }
 
+@Override
+public void notifyTicketReservationSuccess(int userId, int eventId, int zoneId, int quantity) {
+    String message = "Ticket reservation completed successfully. " +
+            "eventId=" + eventId +
+            ", zoneId=" + zoneId +
+            ", quantity=" + quantity;
+
+    Notification notification = new Notification(
+            java.util.UUID.randomUUID().toString(),
+            userId,
+            NotificationType.TICKET_RESERVATION_SUCCESS,
+            NotificationStatus.PENDING,
+            message,
+            java.time.LocalDateTime.now()
+    );
+
+send(userId, notification);
+}
+
+@Override
+public void notifyTicketReservationFailure(int userId, int eventId, int zoneId, String reason) {
+    String message = "Ticket reservation failed. " +
+            "eventId=" + eventId +
+            ", zoneId=" + zoneId +
+            ", reason=" + reason;
+
+    Notification notification = new Notification(
+            java.util.UUID.randomUUID().toString(),
+            userId,
+            NotificationType.TICKET_RESERVATION_FAILURE,
+            NotificationStatus.PENDING,
+            message,
+            java.time.LocalDateTime.now()
+    );
+
+  send(userId, notification);
+}
+
+@Override
+public void notifyRemoveTicketReservationFailure(int userId, int eventId, int zoneId, String reason) {
+    String message = " remove Ticket reservation failed. " +
+            "eventId=" + eventId +
+            ", zoneId=" + zoneId +
+            ", reason=" + reason;
+
+    Notification notification = new Notification(
+            java.util.UUID.randomUUID().toString(),
+            userId,
+            NotificationType.REMOVE_TICKET_RESERVATION_FAILURE,
+            NotificationStatus.PENDING,
+            message,
+            java.time.LocalDateTime.now()
+    );
+
+  send(userId, notification);
+}
+
+
+@Override
+public void notifyRemoveTicketReservationSuccess(int userId, int eventId, int zoneId, int reason) {
+   String message = " remove Ticket reservation completed successfully. " +
+            "eventId=" + eventId +
+            ", zoneId=" + zoneId +
+            ", reason=" + reason;
+
+    Notification notification = new Notification(
+            java.util.UUID.randomUUID().toString(),
+            userId,
+            NotificationType.REMOVE_TICKET_RESERVATION_SUCCESS,
+            NotificationStatus.PENDING,
+            message,
+            java.time.LocalDateTime.now()
+    );
+
+  send(userId, notification);
+}
+
+
 
 }

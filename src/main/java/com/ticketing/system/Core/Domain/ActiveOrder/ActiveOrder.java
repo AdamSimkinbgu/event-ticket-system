@@ -83,7 +83,14 @@ public boolean validateCanCheckout() {
  public void clear() {
      items.clear();
 }
-
+public boolean hasReservationForEvent(int eventId) {
+    for (CartLineItem item : items) {
+        if (item.geteventId() == eventId && !item.isExpired()) {
+            return true;
+        }
+    }
+    return false;
+}
     // ---------------------------------------------------------------------------
     // Skeleton additions for ActiveOrder.
     // ---------------------------------------------------------------------------
@@ -98,23 +105,19 @@ public boolean validateCanCheckout() {
         throw new UnsupportedOperationException("UC-5/9: not implemented");
     }
 
-    // UC-9 — remove a single ticket from the cart; releases its lock.
-    public void removeReservation(String ticketId) {
-        throw new UnsupportedOperationException("UC-9: not implemented");
+   public void removeOneTicket(int eventId, int zoneId) {
+    for (int i = 0 ; i<= items.size() - 1; i=i+1) {
+        CartLineItem item = items.get(i);
+
+        if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
+            items.remove(i);
+            return;
+        }
     }
 
-    // UC-9 — adjust quantity-mode reservation in a standing zone.
-    public void updateQuantity(String zoneId, int newQuantity) {
-        throw new UnsupportedOperationException("UC-9: not implemented");
-    }
-
-    // Identifier accessors (in case ActiveOrder gains its own id beyond userId).
- 
-
-    public String getSessionId() {
-        throw new UnsupportedOperationException("not implemented (add sessionId field for Guest carts)");
-    }
-
+    throw new IllegalArgumentException("No reservation found for this event and zone");
+}
+  
     public java.time.LocalDateTime getCreatedAt() {
         throw new UnsupportedOperationException("not implemented (add createdAt field)");
     }

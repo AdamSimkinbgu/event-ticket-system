@@ -9,6 +9,5 @@ public record ReservationResultDTO(
     int eventId,
      int zoneId,
      int quantity,
-    LocalDateTime reservationExpiresAt,
-    double currentCartTotal
+    LocalDateTime reservationExpiresAt
 ) {}
