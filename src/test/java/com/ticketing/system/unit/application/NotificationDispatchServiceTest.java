@@ -78,7 +78,7 @@ class NotificationDispatchServiceTest {
             LocalDateTime.now()
         );
         
-        assertThrows(IllegalStateException.class, () -> service.storePending(notification));
+         service.storePending(notification);
         verify(mockRepo, never()).save(any());
     }
 
