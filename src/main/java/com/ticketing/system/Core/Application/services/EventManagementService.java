@@ -76,6 +76,10 @@ public class EventManagementService {
             log.warn("Event {} not found", eventId);
             throw new RuntimeException("Event not found");
         }
+        if (event.isCancelled()) {
+            log.warn("Event {} is already canceled", eventId);
+            return;
+        }
 
         ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
         if (company == null) {
@@ -89,25 +93,25 @@ public class EventManagementService {
         for(OrderReceipt receipt : orderReceipts){
             for(ReceiptLine line : receipt.getReceiptLines()){
                 if(line.getEventId() == eventId){
-                    receipt.addTransaction(new TransactionRecord(
-                        "Refund for canceled event: " + event.getId(),
-                        line.getPriceAtReservation(),
-                        LocalDateTime.now()
-                    ));
+                    if (!receipt.wasRefunded()) {
+                        paymentGateway.refund(receipt.getHolderUserId(),line.getPriceAtReservation(), "Refund for canceled event: " + event.getId());
+                        receipt.markRefunded();
+                        orderReceiptRepository.save(receipt);
+                        }
 
-                    orderReceiptRepository.save(receipt);
-                    paymentGateway.refund(receipt.getHolderUserId(),line.getPriceAtReservation(), "Refund for canceled event: " + event.getId());
-                }
             }
         }
         for(Ticket ticket : tickets){
-            if(ticket.getEventId() == eventId && (ticket.getStatus() == TicketStatus.RESERVED || ticket.getStatus() == TicketStatus.PAID || ticket.getStatus() == TicketStatus.ISSUED)){
+            if(ticket.getEventId() == eventId &&  (ticket.getStatus() == TicketStatus.PAID || ticket.getStatus() == TicketStatus.ISSUED)){
                 ticket.markRefunded();
                 ticketRepository.save(ticket);
             }
         }
 
-        eventRepository.cancelEvent(eventId);
+
+        event.setCanceled(true);
+        eventRepository.save(event);
+
         log.info("Event {} canceled successfully", eventId);
         
     }
