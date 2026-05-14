@@ -5,10 +5,12 @@ import java.util.Map;
 
 public class VenueMap {
     private int id;
+    private Location location;
     private List<InventoryZone> inventoryZones;
 
-    public VenueMap(int id, List<InventoryZone> inventoryZones) {
+    public VenueMap(int id, Location location, List<InventoryZone> inventoryZones) {
         this.id = id;
+        this.location = location;
         this.inventoryZones = inventoryZones;
     }
 
@@ -28,6 +30,13 @@ public class VenueMap {
         this.inventoryZones = inventoryZones;
     }
 
+    public Location getLocation() {
+        return location;
+    }
+
+    public void setLocation(Location location) {
+        this.location = location;
+    }
 
     public InventoryZone getZone(int zoneId) {
         for (InventoryZone zone : inventoryZones) {

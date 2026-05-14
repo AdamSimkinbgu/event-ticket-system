@@ -79,8 +79,9 @@ public class MemoryEventRepository implements IEventRepository {
 
 
 
-
-
+    /* 
+    A helper method to apply the various search filters to an event; used in the search() implementation above.
+    */
     private boolean matchesSearch(Event event, CatalogSearchFiltersDTO filters) {
         // eventName — case-insensitive substring match on event name.
         if (filters.eventName() != null &&
@@ -155,8 +156,17 @@ public class MemoryEventRepository implements IEventRepository {
             return false;
         }
 
-
-        //TODO: location, minCompanyRating, maxCompanyRating — not modelled on Event; not filtered here.
+        
+        // location — event venue city or country must match (case-insensitive substring).
+        if (filters.location() != null) {
+            if (event.getVenueMap() == null || event.getVenueMap().getLocation() == null) return false;
+            String locFilter = filters.location().toLowerCase();
+            boolean cityMatch = event.getVenueMap().getLocation().city().toLowerCase().contains(locFilter);
+            boolean countryMatch = event.getVenueMap().getLocation().country().toLowerCase().contains(locFilter);
+            if (!cityMatch && !countryMatch) {
+                return false;
+            }
+        }
 
         return true;  // if the event passed into all the filters, it got to here and we'll return true
     }

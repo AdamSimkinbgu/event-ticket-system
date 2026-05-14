@@ -1,5 +1,6 @@
 package com.ticketing.system.Core.Application.services;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -9,10 +10,11 @@ import org.springframework.boot.web.servlet.server.Session;
 import com.ticketing.system.Core.Domain.exceptions.*;
 
 import com.ticketing.system.Core.Domain.events.Event;
-
+import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
 import com.ticketing.system.Core.Application.dto.PageDTO;
+import com.ticketing.system.Core.Application.dto.ShowDateDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapDTO;
 import com.ticketing.system.Core.Application.dtoMappers.VenueMapMapper;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
@@ -58,22 +60,71 @@ public class CatalogService {
 
 
     // UC-7: Global search with filters (price/date/location/rating, plus name/artist/category/keywords).
-    public PageDTO<EventSummaryDTO> searchGlobal(CatalogSearchFiltersDTO filters, int pageNumber, int pageSize) {
-        //Note: location, minCompanyRating, maxCompanyRating — not modelled on Event; not filtered here in the IEventRepository search implementation.
-        // Would require additional implementation to implement filter properly.
-        throw new UnsupportedOperationException("UC-7: searchGlobal not implemented");
+    public List<EventSummaryDTO> searchGlobal(String token, CatalogSearchFiltersDTO filters) {
+        if (!this.sessionManager.validateToken(token)) {
+            throw new InvalidTokenException();
+        }
+        ArrayList<EventSummaryDTO> results = new ArrayList<>();
+        List<Event> eventFilteration = eventRepository.search(filters);
+
+        for (Event event : eventFilteration) {
+            // company rating filter
+            if (filters.minCompanyRating() != null && productionCompanyRepository.getCompanyById(event.getCompanyId())
+                    .getRating() < filters.minCompanyRating()) {
+                continue;
+            }
+            if (filters.maxCompanyRating() != null && productionCompanyRepository.getCompanyById(event.getCompanyId())
+                    .getRating() > filters.maxCompanyRating()) {
+                continue;
+            }
+            results.add(convertEventToEventSummaryDTO(event));
+        }
+        
+        return results;
     }
 
 
 
 
     // UC-7: Company-scoped search (no rating filter per II.2.3.2).
-    public PageDTO<EventSummaryDTO> searchByCompany(int companyId, CatalogSearchFiltersDTO filters, int pageNumber, int pageSize) {
-        //Note: location, minCompanyRating, maxCompanyRating — not modelled on Event; not filtered here in the IEventRepository search implementation.
-        // Would require additional implementation to implement filter properly.
-        throw new UnsupportedOperationException("UC-7: searchByCompany not implemented");
+    public List<EventSummaryDTO> searchByCompany(String token, int companyId, CatalogSearchFiltersDTO filters) {
+        if (!this.sessionManager.validateToken(token)) {
+            throw new InvalidTokenException();
+        }
+        List<EventSummaryDTO> results = new ArrayList<>();
+        List<Event> eventFilteration = eventRepository.search(filters);
+        for (Event event : eventFilteration) {
+            // only include this current company's events
+            if (event.getCompanyId() != companyId) {
+                continue;
+            }
+            results.add(convertEventToEventSummaryDTO(event));
+        }
+        return results;
     }
+    
 
+    // HELPER METHOD to convert Event to EventSummaryDTO; used in both search methods above.
+    private EventSummaryDTO convertEventToEventSummaryDTO(Event event) {
+        double minPrice = (event.getVenueMap() != null && !event.getVenueMap().getInventoryZones().isEmpty())
+                ? event.getVenueMap().getInventoryZones().stream().mapToInt(z -> z.getprice()).min().getAsInt()
+                : 0;
+        double maxPrice = (event.getVenueMap() != null && !event.getVenueMap().getInventoryZones().isEmpty())
+                ? event.getVenueMap().getInventoryZones().stream().mapToInt(z -> z.getprice()).max().getAsInt()
+                : 0;
+        return new EventSummaryDTO(
+                event.getId(),
+                event.getName(),
+                event.getStatus().toString(),
+                event.getRating(),
+                productionCompanyRepository.getCompanyById(event.getCompanyId()).getName(),
+                event.getCategory().toString(),
+                event.getVenueMap().getLocation().toString(),
+                event.getShowDates().stream().map(sd -> new ShowDateDTO(sd.getStartTime(), sd.getEndTime())).toList(),
+                minPrice,
+                maxPrice,
+                event.getStatus() == EventStatus.SOLD_OUT);
+    }
 
 
 
@@ -81,46 +132,33 @@ public class CatalogService {
     // UC-8: Render venue map with per-seat / per-zone availability.
     public VenueMapDTO getEventVenueMap(String token, int eventId) {
         logger.info("Fetching venue map for eventId: {}", eventId);
-        try {
+        
             if (!this.sessionManager.validateToken(token)) {
+                logger.warn("Invalid Token provided while getting venue map for eventId: {}", eventId);
                 throw new InvalidTokenException();
             }
             
             // see that event exists and has a venue map
             Event event = this.eventRepository.findById(eventId);
             if (event == null) {
+                logger.warn("Event not found while getting venue map: {}", eventId);
                 throw new EventNotFoundException("Event with ID " + eventId + " not found while getting venue map");
             }
 
             // Additional check to enforce company status is ACTIVE.
             if (productionCompanyRepository.getCompanyById(event.getCompanyId()).getStatus() != CompanyStatus.ACTIVE) {
+                logger.warn("Attempt to access venue map for eventId: {} from inactive company", eventId);
                 throw new CompanyClosedException("Event with ID " + eventId + " not found while getting venue map");
             }
             
             // see that event has a venue map
             if (event.getVenueMap() == null) {
+                logger.warn("Null venue map for event while getting venue map: {}", eventId);
                 throw new NullVenueMapException(eventId);
             }
 
             logger.info("Venue map found for eventId: {} while getting venue map and being returned", eventId);
             return new VenueMapMapper().venueMapToVenueMapDTO(event.getVenueMap());
-
-        } catch (InvalidTokenException e) {
-            logger.warn("Invalid Token provided while getting venue map for eventId: {}", eventId);
-            throw e; // rethrowing for now to avoid swallowing exceptions during development
-        } catch (EventNotFoundException e) {
-            logger.warn("Event not found while getting venue map: {}", eventId);
-            throw e; // rethrowing for now to avoid swallowing exceptions during development
-        } catch (CompanyClosedException e) {
-            logger.warn("Attempt to access venue map for eventId: {} from inactive company", eventId);
-            throw e; // rethrowing for now to avoid swallowing exceptions during development
-        } catch (NullVenueMapException e) {
-            logger.warn("Null venue map for event while getting venue map: {}", eventId);
-            throw e; // rethrowing for now to avoid swallowing exceptions during development
-        } catch (Exception e) {
-            logger.error("Unexpected error while fetching venue map for event: {}", eventId, e);
-            throw e; // rethrowing for now to avoid swallowing exceptions during development
-        }
         
     }
 }
