@@ -87,23 +87,23 @@ public class CatalogService {
             
             Event event = this.eventRepository.findById(eventId);
             if (event == null) {
-                throw new EventNotFoundException("Event with ID " + eventId + " not found");
+                throw new EventNotFoundException("Event with ID " + eventId + " not found while getting venue map");
             }
             
             if (event.getVenueMap() == null) {
                 throw new NullVenueMapException(eventId);
             }
-            logger.info("Venue map found for eventId: {} and being returned", eventId);
+            logger.info("Venue map found for eventId: {} while getting venue map and being returned", eventId);
             return new VenueMapMapper().venueMapToVenueMapDTO(event.getVenueMap());
 
         } catch (SessionExpiredException e) {
             logger.warn("Session expired for token: {}", token);
             throw e; // rethrowing for now to avoid swallowing exceptions during development
         } catch (EventNotFoundException e) {
-            logger.warn("Event not found: {}", eventId);
+            logger.warn("Event not found while getting venue map: {}", eventId);
             throw e; // rethrowing for now to avoid swallowing exceptions during development
         } catch (NullVenueMapException e) {
-            logger.warn("Null venue map for event: {}", eventId);
+            logger.warn("Null venue map for event while getting venue map: {}", eventId);
             throw e; // rethrowing for now to avoid swallowing exceptions during development
         } catch (Exception e) {
             logger.error("Unexpected error while fetching venue map for event: {}", eventId, e);
