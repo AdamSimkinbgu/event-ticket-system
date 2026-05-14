@@ -25,4 +25,6 @@ public interface IEventRepository {
 
     // UC-7 — search across all events (filters from DTO; pagination handled in service).
     List<Event> search(CatalogSearchFiltersDTO filters);
+
+    void cancelEvent(int eventId);
 }

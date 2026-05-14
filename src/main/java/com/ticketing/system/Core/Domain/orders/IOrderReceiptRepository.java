@@ -16,7 +16,7 @@ public interface IOrderReceiptRepository {
     List<OrderReceipt> findByHolderUserId(int holderUserId);
 
     // UC-22 — company-scoped sales (filtered down to the company's events).
-    List<OrderReceipt> findByEventIds(List<String> eventIds);
+    List<OrderReceipt> findByEventIds(String eventId);
 
     // UC-31 — global view with filters (admin only).
     List<OrderReceipt> findGlobal(GlobalHistoryFiltersDTO filters, int page, int size);

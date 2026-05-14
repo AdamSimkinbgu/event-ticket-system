@@ -150,4 +150,5 @@ public double calculatePrice(Map<Integer, Double> tickets,LocalDateTime now) {
     public DiscountPolicy getDiscountPolicy() {
         return discountPolicy;
     }
+
 }

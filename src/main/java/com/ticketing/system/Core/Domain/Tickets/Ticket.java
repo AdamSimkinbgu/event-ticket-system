@@ -66,7 +66,7 @@ public class Ticket {
 
     // UC-4 — PAID/ISSUED -> REFUNDED via auto-refund pipeline.
     public void markRefunded() {
-        throw new UnsupportedOperationException("UC-4: not implemented");
+        this.status = TicketStatus.REFUNDED;
     }
 
     // Admin / ops action — any state -> VOIDED.

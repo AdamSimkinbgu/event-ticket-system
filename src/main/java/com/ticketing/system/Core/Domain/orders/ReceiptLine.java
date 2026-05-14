@@ -24,5 +24,13 @@ public class ReceiptLine {
     public int getTicketId() {
         return ticketId;
     }
+
+    public int getEventId() {
+        return eventid;
+    }
+
+    public double getPriceAtReservation() {
+        return price;
+    }
     
 }

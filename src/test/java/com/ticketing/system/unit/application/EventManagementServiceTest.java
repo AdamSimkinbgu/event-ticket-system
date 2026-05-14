@@ -32,6 +32,7 @@ class EventManagementServiceTest {
     private ITicketRepository mockTicketRepo;
     private ISessionManager sessionManager;
     private EventManagementService eventService;
+    
 
     private final String OWNER_TOKEN = "owner-token";
     private final String MANAGER_TOKEN = "manager-token";
