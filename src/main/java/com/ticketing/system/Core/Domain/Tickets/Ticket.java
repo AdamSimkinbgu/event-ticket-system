@@ -1,27 +1,35 @@
 package com.ticketing.system.Core.Domain.Tickets;
 
 
-
+import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
+import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.TicketRecordDTO;
 
 public class Ticket {
-  
+
     private int zoneid;
     private int eventId;
+    private String seatNumber;
     private double price;
     private int ticketId;
-   private String barcodeValue;
+    private String barcodeValue;
+    private TicketStatus status;
 
-
+    //TODO: change the seat number so it will get a proper seat
     public Ticket(int eventId,int zoneid ,double price,int ticketId,String barcodeValue) {
         this.eventId = eventId;
         this.zoneid=zoneid;
+        this.seatNumber="seatNumber";
         this.price = price;
         this.ticketId=ticketId;
         this.barcodeValue=barcodeValue; 
-
+        this.status = TicketStatus.AVAILABLE; // Default initial status
     }
 
-    
+
+
+    public int getId() {
+        return ticketId;
+    }
 
     public int getEventId() {
         return eventId;
@@ -94,7 +102,7 @@ public class Ticket {
     }
 
     public String getSeatNumber() {
-        throw new UnsupportedOperationException("not implemented (add seatNumber field)");
+        return seatNumber;
     }
 
     public Integer getHolderUserId() {
@@ -110,7 +118,7 @@ public class Ticket {
     }
 
     public TicketStatus getStatus() {
-        throw new UnsupportedOperationException("not implemented (add status field)");
+        return status;
     }
 
 
@@ -125,5 +133,16 @@ public class Ticket {
 
     public void setBarcodeValue(String barcodeValue) {
        this.barcodeValue=barcodeValue;
+    }
+
+    public TicketRecordDTO toTicketRecordDTO(){
+        TicketRecordDTO dto = new TicketRecordDTO(
+            this.getId(),
+            this.getZoneId(),
+            this.getSeatNumber(),
+            this.getPrice(),
+            this.getStatus()
+        );
+        return dto;
     }
 }
