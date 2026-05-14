@@ -20,4 +20,12 @@ public interface INotificationService {
     void notifyPurchaseCompleted(int userId, double totalPrice, List<Integer> list);
 
     void notifyPurchaseFailed(int userId, String string);
+
+    void notifyTicketReservationSuccess(int userId, int eventId, int zoneId, int quantity);
+
+    void notifyTicketReservationFailure(int userId, int eventId, int zoneId, String reason);
+
+    void notifyRemoveTicketReservationFailure(int userId, int eventId, int zoneId, String string);
+
+    void notifyRemoveTicketReservationSuccess(int userId, int eventId, int zoneId, int i);
 }

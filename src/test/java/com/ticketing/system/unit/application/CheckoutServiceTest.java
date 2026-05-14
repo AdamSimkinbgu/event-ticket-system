@@ -22,6 +22,7 @@ import com.ticketing.system.Core.Application.dto.PaymentRequestDTO;
 import com.ticketing.system.Core.Application.dto.PaymentResultDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
+import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.CheckoutService;
@@ -42,7 +43,7 @@ class CheckoutServiceTest {
     private ITicketIssuer mockTicketIssuer;
     private IPaymentGateway mockPaymentGateway;
     private INotificationService mockNotificationService;
-    private AuthenticationService mockAuthService;
+    private ISessionManager iSessionManager;
 
     private CheckoutService checkoutService;
 
@@ -83,7 +84,7 @@ class CheckoutServiceTest {
         mockTicketIssuer = mock(ITicketIssuer.class);
         mockPaymentGateway = mock(IPaymentGateway.class);
         mockNotificationService = mock(INotificationService.class);
-        mockAuthService = mock(AuthenticationService.class);
+       // mockiSessionManager= mock(iSessionManager.class);
 
         checkoutService = new CheckoutService(
                 mockActiveOrderRepo,
@@ -93,7 +94,7 @@ class CheckoutServiceTest {
                 mockTicketIssuer,
                 mockPaymentGateway,
                 mockNotificationService,
-                mockAuthService
+                iSessionManager
         );
 
         paymentRequest = new PaymentRequestDTO(
@@ -113,8 +114,8 @@ class CheckoutServiceTest {
         event1 = mock(Event.class);
         event2 = mock(Event.class);
 
-        when(mockAuthService.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        when(iSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(iSessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
         when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(mockOrder);
 
         when(itemEvent1Zone1.geteventId()).thenReturn(EVENT_ID_1);
@@ -152,7 +153,7 @@ class CheckoutServiceTest {
 
     @Test
     void GivenInvalidToken_WhenCheckout_ThenThrowException() {
-        when(mockAuthService.validateToken(INVALID_TOKEN)).thenReturn(false);
+        when(iSessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
 
         assertThrows(RuntimeException.class, () ->
                 checkoutService.checkout(INVALID_TOKEN, paymentRequest)

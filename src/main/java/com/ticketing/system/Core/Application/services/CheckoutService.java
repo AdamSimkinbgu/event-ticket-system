@@ -5,10 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
@@ -16,6 +14,7 @@ import com.ticketing.system.Core.Application.dto.PaymentRequestDTO;
 import com.ticketing.system.Core.Application.dto.PaymentResultDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
+import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
@@ -37,7 +36,7 @@ public class CheckoutService {
     private final ITicketIssuer ticketIssuer;
     private final IPaymentGateway paymentGateway;
     private final INotificationService notificationService;
-    private final AuthenticationService authenticationService;
+    private final ISessionManager iSessionManager;
      private static final Logger eventLogger = LoggerFactory.getLogger("EVENT_LOG");
 
 private static final Logger errorLogger = LoggerFactory.getLogger("ERROR_LOG");
@@ -51,7 +50,7 @@ private static final Logger errorLogger = LoggerFactory.getLogger("ERROR_LOG");
             ITicketIssuer ticketIssuer,
             IPaymentGateway paymentGateway,
             INotificationService notificationService,
-             AuthenticationService authenticationService
+             ISessionManager iSessionManager
             
     ) {
         this.activeOrderRepository = activeOrderRepository;
@@ -61,7 +60,7 @@ private static final Logger errorLogger = LoggerFactory.getLogger("ERROR_LOG");
         this.ticketIssuer = ticketIssuer;
         this.paymentGateway = paymentGateway;
         this.notificationService=notificationService;
-         this.authenticationService = authenticationService;
+         this.iSessionManager =iSessionManager;
     }
 
     public CheckoutResultDTO checkout(String token, PaymentRequestDTO paymentRequest) {
@@ -71,12 +70,12 @@ private static final Logger errorLogger = LoggerFactory.getLogger("ERROR_LOG");
     throw new IllegalArgumentException("Missing authentication token");
 }
 
-if (!authenticationService.validateToken(token)) {
+if (!iSessionManager.validateToken(token)) {
      eventLogger.warn("Checkout rejected: invalid or expired token");
     throw new IllegalStateException("Invalid or expired authentication token");
 }
 
-         int userId = authenticationService.extractUserId(token);
+         int userId = iSessionManager.extractUserId(token);
         ActiveOrder order = activeOrderRepository.getByUserId(userId);
          eventLogger.info("Active order fetched. userId={}, orderExists={}", userId, order != null);
         PaymentResultDTO paymentResult = null;
