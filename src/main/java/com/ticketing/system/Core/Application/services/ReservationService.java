@@ -160,9 +160,99 @@ if (activeOrdert.hasReservationForEvent(eventId)) {
     }
 
 
-    public ReservationResultDTO removeOneReservedTicket(String token, int eventId, int zoneId) {
+//     public ReservationResultDTO removeOneReservedTicket(String token, int eventId, int zoneId) {
+//     eventLogger.info("Entered removeOneReservedTicket function: eventId={}, zoneId={}",
+//             eventId, zoneId);
+
+//     try {
+//         if (token == null || token.isBlank()) {
+//             eventLogger.warn("removeOneReservedTicket rejected: missing authentication token");
+//             throw new IllegalArgumentException("Missing authentication token");
+//         }
+
+//         if (!iSessionManager.validateToken(token)) {
+//             eventLogger.warn("removeOneReservedTicket rejected: invalid or expired token");
+//             throw new IllegalStateException("Invalid or expired authentication token");
+//         }
+
+//         int userId = iSessionManager.extractUserId(token);
+
+//         if (userId <= 0) {
+//             eventLogger.warn("removeOneReservedTicket rejected: invalid buyer id={}", userId);
+//             throw new IllegalArgumentException("Invalid buyer id");
+//         }
+
+//         Event event = eventRepository.findById(eventId);
+//         if (event == null) {
+//             notificationService.notifyRemoveTicketReservationFailure(userId, eventId, zoneId,
+//                     "Remove reservation failed: event not found");
+//             eventLogger.warn("removeOneReservedTicket rejected: event not found. eventId={}", eventId);
+//             throw new IllegalArgumentException("Event not found: " + eventId);
+//         }
+
+//         InventoryZone zone = event.getZone(zoneId);
+//         if (zone == null) {
+//             notificationService.notifyRemoveTicketReservationFailure(userId, eventId, zoneId,
+//                     "Remove reservation failed: zone not found");
+//             eventLogger.warn("removeOneReservedTicket rejected: zone not found. eventId={}, zoneId={}",
+//                     eventId, zoneId);
+//             throw new IllegalArgumentException("Zone not found: " + zoneId);
+//         }
+
+//         ActiveOrder activeOrder = activeOrderRepository.getByUserId(userId);
+
+//         if (activeOrder == null) {
+//             notificationService.notifyRemoveTicketReservationFailure(userId, eventId, zoneId,
+//                     "Remove reservation failed: active order not found");
+//             eventLogger.warn("removeOneReservedTicket rejected: active order not found. userId={}", userId);
+//             throw new IllegalArgumentException("Active order not found");
+//         }
+
+//         activeOrder.removeOneTicket(eventId, zoneId);
+
+//         synchronized (zone) {
+//             zone.release(1);
+//         }
+
+//         activeOrderRepository.save(activeOrder);
+
+//         notificationService.notifyRemoveTicketReservationSuccess(
+//                 userId,
+//                 eventId,
+//                 zoneId,
+//                 1
+//         );
+
+//         eventLogger.info("removeOneReservedTicket completed successfully: userId={}, eventId={}, zoneId={}",
+//                 userId, eventId, zoneId);
+
+//         return new ReservationResultDTO(
+//                 eventId,
+//                 zoneId,
+//                 1,
+//                 LocalDateTime.now()
+//         );
+
+//     } catch (IllegalArgumentException | IllegalStateException e) {
+//         eventLogger.warn(
+//                 "removeOneReservedTicket failed: eventId={}, zoneId={}, reason={}",
+//                 eventId, zoneId, e.getMessage()
+//         );
+//         throw e;
+
+//     } catch (Exception e) {
+//         eventLogger.error(
+//                 "Unexpected error in removeOneReservedTicket: eventId={}, zoneId={}",
+//                 eventId, zoneId, e
+//         );
+//         throw new RuntimeException("Failed to remove reserved ticket", e);
+//     }
+// }
+public ReservationResultDTO removeOneReservedTicket(String token, int eventId, int zoneId) {
     eventLogger.info("Entered removeOneReservedTicket function: eventId={}, zoneId={}",
             eventId, zoneId);
+
+    int userId = -1;
 
     try {
         if (token == null || token.isBlank()) {
@@ -175,7 +265,7 @@ if (activeOrdert.hasReservationForEvent(eventId)) {
             throw new IllegalStateException("Invalid or expired authentication token");
         }
 
-        int userId = iSessionManager.extractUserId(token);
+        userId = iSessionManager.extractUserId(token);
 
         if (userId <= 0) {
             eventLogger.warn("removeOneReservedTicket rejected: invalid buyer id={}", userId);
@@ -200,7 +290,6 @@ if (activeOrdert.hasReservationForEvent(eventId)) {
         }
 
         ActiveOrder activeOrder = activeOrderRepository.getByUserId(userId);
-
         if (activeOrder == null) {
             notificationService.notifyRemoveTicketReservationFailure(userId, eventId, zoneId,
                     "Remove reservation failed: active order not found");
@@ -208,13 +297,26 @@ if (activeOrdert.hasReservationForEvent(eventId)) {
             throw new IllegalArgumentException("Active order not found");
         }
 
-        activeOrder.removeOneTicket(eventId, zoneId);
+        synchronized (activeOrder) {
+            synchronized (zone) {
 
-        synchronized (zone) {
-            zone.release(1);
+                if (!activeOrder.hasReservationForEvent(eventId)) {
+                    eventLogger.warn("removeOneReservedTicket rejected: active order does not contain event. userId={}, eventId={}",
+                            userId, eventId);
+                    throw new IllegalArgumentException("Active order does not contain this event");
+                }
+
+                if (!activeOrder.hasTicket(eventId, zoneId)) {
+                    eventLogger.warn("removeOneReservedTicket rejected: no reserved ticket to remove. userId={}, eventId={}, zoneId={}",
+                            userId, eventId, zoneId);
+                    throw new IllegalArgumentException("No reserved ticket to remove");
+                }
+
+                activeOrder.removeOneTicket(eventId, zoneId);
+                zone.release(1);
+                activeOrderRepository.save(activeOrder);
+            }
         }
-
-        activeOrderRepository.save(activeOrder);
 
         notificationService.notifyRemoveTicketReservationSuccess(
                 userId,
@@ -234,16 +336,34 @@ if (activeOrdert.hasReservationForEvent(eventId)) {
         );
 
     } catch (IllegalArgumentException | IllegalStateException e) {
+        if (userId > 0) {
+            notificationService.notifyRemoveTicketReservationFailure(
+                    userId,
+                    eventId,
+                    zoneId,
+                    "Remove reservation failed: " + e.getMessage()
+            );
+        }
+
         eventLogger.warn(
-                "removeOneReservedTicket failed: eventId={}, zoneId={}, reason={}",
-                eventId, zoneId, e.getMessage()
+                "removeOneReservedTicket failed: userId={}, eventId={}, zoneId={}, reason={}",
+                userId, eventId, zoneId, e.getMessage()
         );
         throw e;
 
     } catch (Exception e) {
+        if (userId > 0) {
+            notificationService.notifyRemoveTicketReservationFailure(
+                    userId,
+                    eventId,
+                    zoneId,
+                    "Remove reservation failed due to unexpected error"
+            );
+        }
+
         eventLogger.error(
-                "Unexpected error in removeOneReservedTicket: eventId={}, zoneId={}",
-                eventId, zoneId, e
+                "Unexpected error in removeOneReservedTicket: userId={}, eventId={}, zoneId={}",
+                userId, eventId, zoneId, e
         );
         throw new RuntimeException("Failed to remove reserved ticket", e);
     }
