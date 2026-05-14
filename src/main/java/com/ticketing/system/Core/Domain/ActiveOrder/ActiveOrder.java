@@ -126,4 +126,16 @@ public boolean hasReservationForEvent(int eventId) {
     public void expire() {
         throw new UnsupportedOperationException("UC-2: not implemented");
     }
+
+
+    public boolean hasTicket(int eventId, int zoneId) {
+        for (CartLineItem item : items) {
+        if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+   
 }
