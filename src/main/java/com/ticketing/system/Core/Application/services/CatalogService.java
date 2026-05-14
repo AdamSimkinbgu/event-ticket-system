@@ -17,6 +17,7 @@ import com.ticketing.system.Core.Application.dto.PageDTO;
 import com.ticketing.system.Core.Application.dto.ShowDateDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapDTO;
 import com.ticketing.system.Core.Application.dtoMappers.VenueMapMapper;
+import com.ticketing.system.Core.Application.dtoMappers.EventMapper;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
@@ -59,11 +60,16 @@ public class CatalogService {
 
 
 
+
+
+
+
     // UC-7: Global search with filters (price/date/location/rating, plus name/artist/category/keywords).
     public List<EventSummaryDTO> searchGlobal(String token, CatalogSearchFiltersDTO filters) {
         if (!this.sessionManager.validateToken(token)) {
             throw new InvalidTokenException();
         }
+
         ArrayList<EventSummaryDTO> results = new ArrayList<>();
         List<Event> eventFilteration = eventRepository.search(filters);
 
@@ -77,7 +83,7 @@ public class CatalogService {
                     .getRating() > filters.maxCompanyRating()) {
                 continue;
             }
-            results.add(convertEventToEventSummaryDTO(event));
+            results.add(new EventMapper().convertEventToEventSummaryDTO(event, productionCompanyRepository));
         }
         
         return results;
@@ -91,6 +97,7 @@ public class CatalogService {
         if (!this.sessionManager.validateToken(token)) {
             throw new InvalidTokenException();
         }
+
         List<EventSummaryDTO> results = new ArrayList<>();
         List<Event> eventFilteration = eventRepository.search(filters);
         for (Event event : eventFilteration) {
@@ -98,33 +105,14 @@ public class CatalogService {
             if (event.getCompanyId() != companyId) {
                 continue;
             }
-            results.add(convertEventToEventSummaryDTO(event));
+            results.add(new EventMapper().convertEventToEventSummaryDTO(event, productionCompanyRepository));
         }
         return results;
     }
-    
 
-    // HELPER METHOD to convert Event to EventSummaryDTO; used in both search methods above.
-    private EventSummaryDTO convertEventToEventSummaryDTO(Event event) {
-        double minPrice = (event.getVenueMap() != null && !event.getVenueMap().getInventoryZones().isEmpty())
-                ? event.getVenueMap().getInventoryZones().stream().mapToInt(z -> z.getprice()).min().getAsInt()
-                : 0;
-        double maxPrice = (event.getVenueMap() != null && !event.getVenueMap().getInventoryZones().isEmpty())
-                ? event.getVenueMap().getInventoryZones().stream().mapToInt(z -> z.getprice()).max().getAsInt()
-                : 0;
-        return new EventSummaryDTO(
-                event.getId(),
-                event.getName(),
-                event.getStatus().toString(),
-                event.getRating(),
-                productionCompanyRepository.getCompanyById(event.getCompanyId()).getName(),
-                event.getCategory().toString(),
-                event.getVenueMap().getLocation().toString(),
-                event.getShowDates().stream().map(sd -> new ShowDateDTO(sd.getStartTime(), sd.getEndTime())).toList(),
-                minPrice,
-                maxPrice,
-                event.getStatus() == EventStatus.SOLD_OUT);
-    }
+
+
+
 
 
 

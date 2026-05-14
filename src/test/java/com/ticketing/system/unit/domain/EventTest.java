@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 
@@ -22,6 +23,7 @@ class EventTest {
     private final int COMPANY_ID = 100;
     private final int EVENT_ID = 10;
     private final int ZONE_ID = 5;
+    private final Location LOCATION = new Location("Belgium", "Brussels");
 
     private final List<String> ARTISTS = List.of("Artist 1", "Artist 2");
 
@@ -32,7 +34,7 @@ class EventTest {
     public void setUp() {
         zone = new InventoryZone(ZONE_ID, "VIP", 10, 100);
 
-        VenueMap venueMap = new VenueMap(1, List.of(zone));
+        VenueMap venueMap = new VenueMap(1, LOCATION, List.of(zone));
         
         event = new Event(
                 EVENT_ID,
