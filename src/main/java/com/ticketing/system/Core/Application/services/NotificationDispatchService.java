@@ -47,20 +47,15 @@ public class NotificationDispatchService {
     public void storePending(Notification notification) {
 
         logger.info("Storing pending notification for userId={}, type={}", notification.getRecipientUserId(), notification.getType());
-        try {
-            // Check if the recipient is actually offline before storing, to avoid duplicates.
-            if (sessionManager.isOnline(notification.getRecipientUserId())) {
-                throw new IllegalStateException("Recipient is online; should push live instead of storing pending."+ " userId=" + notification.getRecipientUserId());
-            }
-            if(notification.getStatus() != NotificationStatus.PENDING) {
-                throw new IllegalArgumentException("Only notifications with PENDING status can be stored. Provided status: " + notification.getStatus());
-            }
-            notificationRepository.save(notification);
-        } catch (Exception e) {
-            // Handle any exceptions from sessionManager (e.g. connectivity issues) as needed.
-            // For now, we'll just log and proceed to store the notification.
-            logger.error(e.getMessage());
+        
+        // Check if the recipient is actually offline before storing, to avoid duplicates.
+        if (sessionManager.isOnline(notification.getRecipientUserId())) {
+            logger.error("Recipient is online; should push live instead of storing pending."+ " userId=" + notification.getRecipientUserId());
         }
+        if(notification.getStatus() != NotificationStatus.PENDING) {
+           logger.error("Only notifications with PENDING status can be stored. Provided status: " + notification.getStatus());
+        }
+        notificationRepository.save(notification);
     }
 
     // UC-37: triggered by MemberLoggedIn event. Pushes all PENDING notifications for the user
