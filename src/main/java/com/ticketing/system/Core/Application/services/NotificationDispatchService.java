@@ -52,10 +52,12 @@ public class NotificationDispatchService {
         if (sessionManager.isOnline(notification.getRecipientUserId())) {
             logger.error("Recipient is online; should push live instead of storing pending."+ " userId=" + notification.getRecipientUserId());
         }
-        if(notification.getStatus() != NotificationStatus.PENDING) {
+        else if(notification.getStatus() != NotificationStatus.PENDING) {
            logger.error("Only notifications with PENDING status can be stored. Provided status: " + notification.getStatus());
         }
-        notificationRepository.save(notification);
+        else {
+            notificationRepository.save(notification);
+        }
     }
 
     // UC-37: triggered by MemberLoggedIn event. Pushes all PENDING notifications for the user
