@@ -19,13 +19,13 @@ public class ProductionCompany {
     private List<DiscountPolicy> discountPolicies;
     private List<PurchasePolicy> purchasePolicies;
     private HashMap <Integer, List<Permission>> pendingManagers; 
-    private HashMap <Integer, List<Permission>> managers; 
+    private HashMap<Integer, List<Permission>> managers;
 
     public ProductionCompany(int companyId, int ownerId, String name, CompanyStatus companyStatus, String description, Double rating) {
         this.companyId = companyId;
         this.ownerId = ownerId;
         this.name = name;
-        this.description = "";
+        this.description = description;
         this.rating = rating;
         this.companyStatus = companyStatus;
         this.discountPolicies = new ArrayList<>();

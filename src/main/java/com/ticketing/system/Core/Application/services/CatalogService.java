@@ -17,6 +17,7 @@ import com.ticketing.system.Core.Application.dto.VenueMapDTO;
 import com.ticketing.system.Core.Application.dtoMappers.VenueMapMapper;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
+import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 
@@ -82,25 +83,36 @@ public class CatalogService {
         logger.info("Fetching venue map for eventId: {}", eventId);
         try {
             if (!this.sessionManager.validateToken(token)) {
-                throw new SessionExpiredException();
+                throw new InvalidTokenException();
             }
             
+            // see that event exists and has a venue map
             Event event = this.eventRepository.findById(eventId);
             if (event == null) {
                 throw new EventNotFoundException("Event with ID " + eventId + " not found while getting venue map");
             }
+
+            // Additional check to enforce company status is ACTIVE.
+            if (productionCompanyRepository.getCompanyById(event.getCompanyId()).getStatus() != CompanyStatus.ACTIVE) {
+                throw new CompanyClosedException("Event with ID " + eventId + " not found while getting venue map");
+            }
             
+            // see that event has a venue map
             if (event.getVenueMap() == null) {
                 throw new NullVenueMapException(eventId);
             }
+
             logger.info("Venue map found for eventId: {} while getting venue map and being returned", eventId);
             return new VenueMapMapper().venueMapToVenueMapDTO(event.getVenueMap());
 
-        } catch (SessionExpiredException e) {
-            logger.warn("Session expired for token: {}", token);
+        } catch (InvalidTokenException e) {
+            logger.warn("Invalid Token provided while getting venue map for eventId: {}", eventId);
             throw e; // rethrowing for now to avoid swallowing exceptions during development
         } catch (EventNotFoundException e) {
             logger.warn("Event not found while getting venue map: {}", eventId);
+            throw e; // rethrowing for now to avoid swallowing exceptions during development
+        } catch (CompanyClosedException e) {
+            logger.warn("Attempt to access venue map for eventId: {} from inactive company", eventId);
             throw e; // rethrowing for now to avoid swallowing exceptions during development
         } catch (NullVenueMapException e) {
             logger.warn("Null venue map for event while getting venue map: {}", eventId);

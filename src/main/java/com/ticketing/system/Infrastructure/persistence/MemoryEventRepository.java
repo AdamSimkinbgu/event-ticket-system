@@ -9,7 +9,7 @@ import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
-import com.ticketing.system.Core.Domain.events.eventCategory;
+import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 
@@ -19,11 +19,7 @@ public class MemoryEventRepository implements IEventRepository {
 
     @Override
     public Event findById(int eventId) {
-        Event event = events.get(eventId);
-        if (event == null) {
-            throw new EventNotFoundException(eventId);
-        }
-        return event;
+        return events.get(eventId);  // so returns null if not found, which is what the service layer expects; no need to throw exception here
     }
 
     @Override
@@ -87,31 +83,31 @@ public class MemoryEventRepository implements IEventRepository {
 
     private boolean matchesSearch(Event event, CatalogSearchFiltersDTO filters) {
         // eventName — case-insensitive substring match on event name.
-        if (filters.eventName() != null &&
-                event.getName().toLowerCase().contains(filters.eventName().toLowerCase())) {
-            return true;
+        if (filters.eventName() == null ||
+                !event.getName().toLowerCase().contains(filters.eventName().toLowerCase())) {
+            return false;
         }
 
         // artistName — at least one artist must match (case-insensitive substring).
-        if (filters.artistName() != null) {
-            List<String> artists = event.getArtistsNames();
-            if (artists != null && artists.stream().anyMatch(
-                    a -> a.toLowerCase().contains(filters.artistName().toLowerCase()))) {
-                return true;
-            }
+        if (filters.artistName() == null || event.getArtistsNames() == null ||
+                !event.getArtistsNames().stream().anyMatch(
+                        a -> a.toLowerCase().contains(filters.artistName().toLowerCase()))) {
+            return false;
         }
+        
 
         // category — exact enum match by name (case-insensitive).
         if (filters.category() != null) {
             try {
-                eventCategory filterCategory = eventCategory.valueOf(filters.category().toUpperCase());
-                if (event.getCategory() == filterCategory) {
-                    return true;
+                EventCategory filterCategory = EventCategory.valueOf(filters.category().toUpperCase());
+                if (event.getCategory() != filterCategory) {
+                    return false;
                 }
             } catch (IllegalArgumentException e) {
-                return false; // unknown category value — no event can match.
+                return false;   // unknown category value — no event can match.
             }
         }
+                
 
         // keywords — case-insensitive substring match on event name or any artist name.
         if (filters.keywords() != null) {
@@ -119,22 +115,21 @@ public class MemoryEventRepository implements IEventRepository {
             boolean nameMatch = event.getName() != null && event.getName().toLowerCase().contains(kw);
             boolean artistMatch = event.getArtistsNames() != null &&
                     event.getArtistsNames().stream().anyMatch(a -> a.toLowerCase().contains(kw));
-            if (nameMatch || artistMatch) {
-                return true;
+            if (!nameMatch && !artistMatch) {
+                return false;
             }
         }
 
         // fromDate / toDate — at least one ShowDate must fall within the range.
         if (filters.fromDate() != null || filters.toDate() != null) {
-            boolean hasMatchingDate = event.getShowDates() != null &&
-                    event.getShowDates().stream().anyMatch(sd -> {
+            boolean hasMatchingDate = event.getShowDates() != null && event.getShowDates().stream().anyMatch(sd -> {
                         LocalDate date = sd.getStartTime().toLocalDate();
                         if (filters.fromDate() != null && date.isBefore(filters.fromDate())) return false;
                         if (filters.toDate() != null && date.isAfter(filters.toDate())) return false;
                         return true;
                     });
-            if (hasMatchingDate)
-                return true;
+            if (!hasMatchingDate)
+                return false;
         }
         
         // minPrice / maxPrice — at least one zone must be priced within the range.
@@ -146,13 +141,13 @@ public class MemoryEventRepository implements IEventRepository {
                 if (filters.maxPrice() != null && price > filters.maxPrice()) return false;
                 return true;
             });
-            if (hasMatchingZone)
-                return true;
+            if (!hasMatchingZone)
+                return false;
         }
 
         //TODO: location, minRating, maxRating — not modelled on Event; not filtered here.   <<============================
 
-        return false; // if any filter was set but didn't match, exclude the event.
+        return true;  // if the event passed into all the filters, it got to here and we'll return true
     }
     
 }

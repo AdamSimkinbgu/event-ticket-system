@@ -22,7 +22,7 @@ import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.VenueMap;
-import com.ticketing.system.Core.Domain.events.eventCategory;
+import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.users.Permission;
 
 class EventManagementServiceTest {
@@ -73,7 +73,7 @@ class EventManagementServiceTest {
                 EVENT_ID,
                 "Concert",
                 List.of("Artist1"),
-                eventCategory.CONCERT,
+                EventCategory.CONCERT,
                 COMPANY_ID,
                 EventStatus.SCHEDULED,
                 venueMap,

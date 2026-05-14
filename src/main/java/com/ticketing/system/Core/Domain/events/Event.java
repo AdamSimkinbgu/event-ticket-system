@@ -10,8 +10,8 @@ import jakarta.persistence.criteria.CriteriaBuilder.In;
 public class Event {
     private final int id;
     private final String name;
-    private List<String> artistsNames;
-    private eventCategory category;
+    private final List<String> artistsNames;
+    private final EventCategory category;
     private final int comapnyid;
     private final EventStatus status; 
     private final VenueMap venueMap;
@@ -19,7 +19,7 @@ public class Event {
     private final PurchasePolicy purchasePolicy;
     private final DiscountPolicy discountPolicy;
 
-    public Event( int id, String name, List<String> artistsNames, eventCategory category, int comapnyid, EventStatus status, VenueMap venueMap, List<ShowDate> showDates, PurchasePolicy purchasePolicy, DiscountPolicy discountPolicy
+    public Event( int id, String name, List<String> artistsNames, EventCategory category, int comapnyid, EventStatus status, VenueMap venueMap, List<ShowDate> showDates, PurchasePolicy purchasePolicy, DiscountPolicy discountPolicy
     ) {
         this.id = id;
         this.name = name;
@@ -138,16 +138,17 @@ public class Event {
         return status;
     }
 
-    public eventCategory getCategory() {
+    public EventCategory getCategory() {
         return category;
     }
 
     public List<String> getArtistsNames() {
-        return artistsNames;
+        // create a new list to prevent external modification of the internal artistsNames list
+        return List.copyOf(artistsNames);
     }
 
     public List<ShowDate> getShowDates() {
-        return showDates;
+        return List.copyOf(showDates);
     }
 
     public VenueMap getVenueMap() {

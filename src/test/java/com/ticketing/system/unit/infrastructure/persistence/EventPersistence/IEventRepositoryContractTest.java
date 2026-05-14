@@ -21,7 +21,7 @@ import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.PurchasePolicy;
 import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.events.VenueMap;
-import com.ticketing.system.Core.Domain.events.eventCategory;
+import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 
 // Contract tests every IEventRepository implementation must satisfy. Future JPA-backed
@@ -45,7 +45,7 @@ public abstract class IEventRepositoryContractTest {
     private Event buildEvent(int id, String name, int companyId, EventStatus status) {
         VenueMap venueMap = new VenueMap(id, List.of(new InventoryZone(1, "Floor", 100, 50)));
         ShowDate showDate = new ShowDate(FUTURE_START, FUTURE_END);
-        return new Event(id, name, List.of("Artist A"), eventCategory.MUSIC, companyId, status,
+        return new Event(id, name, List.of("Artist A"), EventCategory.MUSIC, companyId, status,
                 venueMap, List.of(showDate), new PurchasePolicy(), new DiscountPolicy(0));
     }
 
@@ -181,7 +181,7 @@ public abstract class IEventRepositoryContractTest {
     void givenMatchingArtistName_whenSearch_thenReturnsMatchingEvent() {
         VenueMap vm = new VenueMap(1, List.of(new InventoryZone(1, "Floor", 100, 50)));
         Event event = new Event(1, "Concert", List.of("John Doe", "Jane Smith"),
-                eventCategory.CONCERT, 10, EventStatus.ON_SALE, vm,
+                EventCategory.CONCERT, 10, EventStatus.ON_SALE, vm,
                 List.of(new ShowDate(FUTURE_START, FUTURE_END)),
                 new PurchasePolicy(), new DiscountPolicy(0));
         eventRepo.save(event);
@@ -200,7 +200,7 @@ public abstract class IEventRepositoryContractTest {
         eventRepo.save(buildEvent(1, "Music Gig", 10, EventStatus.ON_SALE)); // MUSIC
         VenueMap vm = new VenueMap(2, List.of(new InventoryZone(1, "Stalls", 100, 60)));
         Event theaterEvent = new Event(2, "Hamlet", List.of("Actor B"),
-                eventCategory.THEATER, 10, EventStatus.ON_SALE, vm,
+                EventCategory.THEATER, 10, EventStatus.ON_SALE, vm,
                 List.of(new ShowDate(FUTURE_START, FUTURE_END)),
                 new PurchasePolicy(), new DiscountPolicy(0));
         eventRepo.save(theaterEvent);
@@ -240,7 +240,7 @@ public abstract class IEventRepositoryContractTest {
     void givenMatchingKeywordInArtistName_whenSearch_thenReturnsMatchingEvent() {
         VenueMap vm = new VenueMap(1, List.of(new InventoryZone(1, "Floor", 100, 50)));
         Event event = new Event(1, "Night Out", List.of("Coldplay"),
-                eventCategory.CONCERT, 10, EventStatus.ON_SALE, vm,
+                EventCategory.CONCERT, 10, EventStatus.ON_SALE, vm,
                 List.of(new ShowDate(FUTURE_START, FUTURE_END)),
                 new PurchasePolicy(), new DiscountPolicy(0));
         eventRepo.save(event);

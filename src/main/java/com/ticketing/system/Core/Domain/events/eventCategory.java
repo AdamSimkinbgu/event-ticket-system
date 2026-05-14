@@ -1,6 +1,6 @@
 package com.ticketing.system.Core.Domain.events;
 
-public enum eventCategory {
+public enum EventCategory {
     MUSIC,
     THEATER,
     SPORTS,
