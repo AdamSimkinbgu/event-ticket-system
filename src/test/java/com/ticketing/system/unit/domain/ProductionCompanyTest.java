@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
+import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.users.Permission;
 
 class ProductionCompanyTest {
@@ -36,10 +37,10 @@ class ProductionCompanyTest {
         defaultPermissions = new ArrayList<>();
         defaultPermissions.add(Permission.APPOINT_MANAGER);
         defaultPermissions.add(Permission.MANAGE_INVENTORY);
-    }
+        }
 
-    @Test
-    public void GivenValidOwnerAndTarget_WhenValidateManagerInvitation_ThenPendingManagerCreated() {
+        @Test
+        public void GivenValidOwnerAndTarget_WhenValidateManagerInvitation_ThenPendingManagerCreated() {
         company.validateManagerInvitation(
                 COMPANY_ID,
                 TARGET_USER_ID,
@@ -48,10 +49,10 @@ class ProductionCompanyTest {
         );
 
         assertTrue(company.getPendingManagers().containsKey(TARGET_USER_ID));
-    }
+        }
 
-    @Test
-    public void GivenPendingManager_WhenAcceptManagerInvitation_ThenManagerCreated() {
+        @Test
+        public void GivenPendingManager_WhenAcceptManagerInvitation_ThenManagerCreated() {
         company.validateManagerInvitation(
                 COMPANY_ID,
                 TARGET_USER_ID,
@@ -62,10 +63,10 @@ class ProductionCompanyTest {
         company.acceptManagerInvitation(TARGET_USER_ID);
 
         assertTrue(company.getManagers().containsKey(TARGET_USER_ID));
-    }
+        }
 
-    @Test
-    public void GivenPendingManager_WhenAcceptManagerInvitation_ThenPendingManagerRemoved() {
+        @Test
+        public void GivenPendingManager_WhenAcceptManagerInvitation_ThenPendingManagerRemoved() {
         company.validateManagerInvitation(
                 COMPANY_ID,
                 TARGET_USER_ID,
@@ -76,10 +77,10 @@ class ProductionCompanyTest {
         company.acceptManagerInvitation(TARGET_USER_ID);
 
         assertFalse(company.getPendingManagers().containsKey(TARGET_USER_ID));
-    }
+        }
 
-    @Test
-    public void GivenPendingManager_WhenRejectManagerInvitation_ThenPendingManagerRemoved() {
+        @Test
+        public void GivenPendingManager_WhenRejectManagerInvitation_ThenPendingManagerRemoved() {
         company.validateManagerInvitation(
                 COMPANY_ID,
                 TARGET_USER_ID,
@@ -90,10 +91,10 @@ class ProductionCompanyTest {
         company.rejectManagerInvitation(TARGET_USER_ID);
 
         assertFalse(company.getPendingManagers().containsKey(TARGET_USER_ID));
-    }
+        }
 
-    @Test
-    public void GivenManager_WhenRevokeManager_ThenManagerRemoved() {
+        @Test
+        public void GivenManager_WhenRevokeManager_ThenManagerRemoved() {
         company.validateManagerInvitation(
                 COMPANY_ID,
                 TARGET_USER_ID,
@@ -106,10 +107,10 @@ class ProductionCompanyTest {
         company.RevokeManager(TARGET_USER_ID);
 
         assertFalse(company.getManagers().containsKey(TARGET_USER_ID));
-    }
+        }
 
-    @Test
-    public void GivenManager_WhenModifyManagerPermissions_ThenPermissionsUpdated() {
+        @Test
+        public void GivenManager_WhenModifyManagerPermissions_ThenPermissionsUpdated() {
         company.validateManagerInvitation(
                 COMPANY_ID,
                 TARGET_USER_ID,
@@ -130,20 +131,20 @@ class ProductionCompanyTest {
         );
 
         assertEquals(newPermissions, company.getManagers().get(TARGET_USER_ID));
-    }
+        }
 
-    @Test
-    public void GivenNullPermissions_WhenModifyManagerPermissions_ThenThrowException() {
+        @Test
+        public void GivenNullPermissions_WhenModifyManagerPermissions_ThenThrowException() {
         company.validateManagerInvitation(COMPANY_ID, TARGET_USER_ID, OWNER_ID, defaultPermissions);
         company.acceptManagerInvitation(TARGET_USER_ID);
 
         assertThrows(RuntimeException.class, () ->
                 company.ModifyManagerPermissions(COMPANY_ID, TARGET_USER_ID, null)
         );
-    }
+        }
 
-    @Test
-    public void GivenInvalidCompanyId_WhenValidateManagerInvitation_ThenThrowException() {
+        @Test
+        public void GivenInvalidCompanyId_WhenValidateManagerInvitation_ThenThrowException() {
         assertThrows(RuntimeException.class, () ->
                 company.validateManagerInvitation(
                         999,
@@ -152,10 +153,10 @@ class ProductionCompanyTest {
                         defaultPermissions
                 )
         );
-    }
+        }
 
-    @Test
-    public void GivenTargetIsOwner_WhenValidateManagerInvitation_ThenThrowException() {
+        @Test
+        public void GivenTargetIsOwner_WhenValidateManagerInvitation_ThenThrowException() {
         assertThrows(RuntimeException.class, () ->
                 company.validateManagerInvitation(
                         COMPANY_ID,
@@ -164,10 +165,10 @@ class ProductionCompanyTest {
                         defaultPermissions
                 )
         );
-    }
+        }
 
-    @Test
-    public void GivenEmptyPermissions_WhenValidateManagerInvitation_ThenThrowException() {
+        @Test
+        public void GivenEmptyPermissions_WhenValidateManagerInvitation_ThenThrowException() {
         assertThrows(RuntimeException.class, () ->
                 company.validateManagerInvitation(
                         COMPANY_ID,
@@ -176,10 +177,10 @@ class ProductionCompanyTest {
                         new ArrayList<>()
                 )
         );
-    }
+        }
 
-    @Test
-    public void GivenNullPermissions_WhenValidateManagerInvitation_ThenThrowException() {
+        @Test
+        public void GivenNullPermissions_WhenValidateManagerInvitation_ThenThrowException() {
         assertThrows(RuntimeException.class, () ->
                 company.validateManagerInvitation(
                         COMPANY_ID,
@@ -188,10 +189,10 @@ class ProductionCompanyTest {
                         null
                 )
         );
-    }
+        }
 
-    @Test
-    public void GivenPendingInvitationAlreadyExists_WhenValidateManagerInvitation_ThenThrowException() {
+        @Test
+        public void GivenPendingInvitationAlreadyExists_WhenValidateManagerInvitation_ThenThrowException() {
         company.validateManagerInvitation(
                 COMPANY_ID,
                 TARGET_USER_ID,
@@ -207,10 +208,10 @@ class ProductionCompanyTest {
                         defaultPermissions
                 )
         );
-    }
+        }
 
-    @Test
-    public void GivenTargetAlreadyManager_WhenValidateManagerInvitation_ThenThrowException() {
+        @Test
+        public void GivenTargetAlreadyManager_WhenValidateManagerInvitation_ThenThrowException() {
         company.validateManagerInvitation(
                 COMPANY_ID,
                 TARGET_USER_ID,
@@ -228,31 +229,31 @@ class ProductionCompanyTest {
                         defaultPermissions
                 )
         );
-    }
+        }
 
-    @Test
-    public void GivenNoPendingInvitation_WhenAcceptManagerInvitation_ThenThrowException() {
+        @Test
+        public void GivenNoPendingInvitation_WhenAcceptManagerInvitation_ThenThrowException() {
         assertThrows(RuntimeException.class, () ->
                 company.acceptManagerInvitation(TARGET_USER_ID)
         );
-    }
+        }
 
-    @Test
-    public void GivenNoPendingInvitation_WhenRejectManagerInvitation_ThenThrowException() {
+        @Test
+        public void GivenNoPendingInvitation_WhenRejectManagerInvitation_ThenThrowException() {
         assertThrows(RuntimeException.class, () ->
                 company.rejectManagerInvitation(TARGET_USER_ID)
         );
-    }
+        }
 
-    @Test
-    public void GivenTargetIsNotManager_WhenRevokeManager_ThenThrowException() {
+        @Test
+        public void GivenTargetIsNotManager_WhenRevokeManager_ThenThrowException() {
         assertThrows(RuntimeException.class, () ->
                 company.RevokeManager(TARGET_USER_ID)
         );
-    }
+        }
 
-    @Test
-    public void GivenTargetIsNotManager_WhenModifyManagerPermissions_ThenThrowException() {
+        @Test
+        public void GivenTargetIsNotManager_WhenModifyManagerPermissions_ThenThrowException() {
         List<Permission> newPermissions = new ArrayList<>();
         newPermissions.add(Permission.EDIT_POLICIES);
 
@@ -263,10 +264,10 @@ class ProductionCompanyTest {
                         newPermissions
                 )
         );
-    }
+        }
 
-    @Test
-    public void GivenEmptyPermissions_WhenModifyManagerPermissions_ThenThrowException() {
+        @Test
+        public void GivenEmptyPermissions_WhenModifyManagerPermissions_ThenThrowException() {
         company.validateManagerInvitation(
                 COMPANY_ID,
                 TARGET_USER_ID,
@@ -283,10 +284,10 @@ class ProductionCompanyTest {
                         new ArrayList<>()
                 )
         );
-    }
+        }
 
-    @Test
-    public void GivenInvalidCompanyId_WhenModifyManagerPermissions_ThenThrowException() {
+        @Test
+        public void GivenInvalidCompanyId_WhenModifyManagerPermissions_ThenThrowException() {
         company.validateManagerInvitation(
                 COMPANY_ID,
                 TARGET_USER_ID,
@@ -306,48 +307,53 @@ class ProductionCompanyTest {
                         newPermissions
                 )
         );
-    }
+        }
 
-    //////////////////////////////////////////////////////////////////UC-20Tests
-    
+        //////////////////////////////////////////////////////////////////UC-20Tests
 
-    @Test
-    public void GivenManagerWithConfigureVenuePermission_WhenValidateManagerOrOwner_ThenDoesNotThrow() {
+
+        @Test
+        public void GivenManagerWithConfigureVenuePermission_WhenValidateManagerOrOwner_ThenDoesNotThrow() {
         company.validateManagerInvitation(COMPANY_ID, MANAGER_ID, OWNER_ID, List.of(Permission.CONFIGURE_VENUE));
         company.acceptManagerInvitation(MANAGER_ID);
         assertTrue(company.getManagers().get(MANAGER_ID).contains(Permission.CONFIGURE_VENUE));
-    }
+        }
 
-    @Test
-    public void GivenOwner_WhenValidateManagerOrOwner_ThenDoesNotThrow() {
+        @Test
+        public void GivenOwner_WhenValidateManagerOrOwner_ThenDoesNotThrow() {
         assertTrue(company.getOwnerId() == OWNER_ID);
-    }
+        }
 
 
-    @Test
+        @Test
 
-    public void GivenUserWithoutConfigureVenuePermission_WhenValidateManagerOrOwner_ThenThrowException() {
-       
-       
-        company.validateManagerInvitation(COMPANY_ID, MANAGER_ID, OWNER_ID, List.of(Permission.MANAGE_INVENTORY));
-        company.acceptManagerInvitation(MANAGER_ID);
-        assertThrows(RuntimeException.class, () ->
-        company.ValidateManagerOrOwner(MANAGER_ID)
-        );
-    }  
+        public void GivenUserWithoutConfigureVenuePermission_WhenValidateManagerOrOwner_ThenThrowException() {
+
+                company.validateManagerInvitation(COMPANY_ID, MANAGER_ID, OWNER_ID, List.of(Permission.MANAGE_INVENTORY));
+                company.acceptManagerInvitation(MANAGER_ID);
+                assertThrows(RuntimeException.class, () ->
+                company.ValidateManagerOrOwner(MANAGER_ID)
+                );
+        }  
     
-    @Test
+        @Test
         public void GivenUserIsNotManagerOrOwner_WhenValidateManagerOrOwner_ThenThrowException() {
                 assertThrows(RuntimeException.class, () ->
                 company.ValidateManagerOrOwner(TARGET_USER_ID)
                 );
         }
 
-        
+        @Test
+        public void GivenUserIsOwner_WhenCheckOwner_ThenSucceeds() {
+                assertTrue(company.getOwnerId() == OWNER_ID);
+        }    
+        @Test
+        public void GivenUserIsNotOwner_WhenCheckOwner_ThenThrowException() {
+                assertThrows(UnauthorizedActionException.class, () ->
+                company.checkowner(TARGET_USER_ID)
+                );
+        }
 
         
-
-
-
 
 }

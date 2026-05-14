@@ -10,7 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.system.Core.Application.services.AuthenticationService;
+import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
@@ -23,7 +23,7 @@ public class CompanyManagementServiceTest {
 
     private IProductionCompanyRepository mockCompanyRepo;
     private IUserRepository mockUserRepo;
-    private AuthenticationService mockAuthService;
+    private ISessionManager sessionManager;
     private CompanyManagementService companyService;
 
     private final String OWNER_TOKEN = "owner-token";
@@ -42,12 +42,12 @@ public class CompanyManagementServiceTest {
    public void setUp() {
         mockCompanyRepo = mock(IProductionCompanyRepository.class);
         mockUserRepo = mock(IUserRepository.class);
-        mockAuthService = mock(AuthenticationService.class);
+        sessionManager = mock(ISessionManager.class);
 
         companyService = new CompanyManagementService(
                 mockCompanyRepo,
                 mockUserRepo,
-                mockAuthService
+                sessionManager
         );
 
         defaultPermissions = new ArrayList<>();
@@ -62,8 +62,8 @@ public class CompanyManagementServiceTest {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser", "","password");
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
@@ -83,8 +83,8 @@ public class CompanyManagementServiceTest {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
@@ -96,8 +96,8 @@ public class CompanyManagementServiceTest {
                 defaultPermissions
         );
 
-        when(mockAuthService.validateToken(TARGET_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+        when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
 
         companyService.acceptManagerInvitation(TARGET_TOKEN, COMPANY_ID);
 
@@ -109,8 +109,8 @@ public class CompanyManagementServiceTest {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser", "","password");
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
@@ -122,8 +122,8 @@ public class CompanyManagementServiceTest {
                 defaultPermissions
         );
 
-        when(mockAuthService.validateToken(TARGET_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+        when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
 
         companyService.rejectManagerInvitation(TARGET_TOKEN, COMPANY_ID);
 
@@ -138,8 +138,8 @@ public class CompanyManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
         companyService.inviteManager(
                 OWNER_TOKEN,
@@ -148,8 +148,8 @@ public class CompanyManagementServiceTest {
                 defaultPermissions
         );
 
-        when(mockAuthService.validateToken(TARGET_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+        when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
 
         companyService.acceptManagerInvitation(TARGET_TOKEN, COMPANY_ID);
 
@@ -157,8 +157,8 @@ public class CompanyManagementServiceTest {
         newPermissions.add(Permission.APPOINT_MANAGER);
         newPermissions.add(Permission.EDIT_POLICIES);
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
         companyService.ModifyManagerPermissions(
                 OWNER_TOKEN,
@@ -178,8 +178,8 @@ public class CompanyManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
         companyService.inviteManager(
                 OWNER_TOKEN,
@@ -188,13 +188,13 @@ public class CompanyManagementServiceTest {
                 defaultPermissions
         );
 
-        when(mockAuthService.validateToken(TARGET_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+        when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
 
         companyService.acceptManagerInvitation(TARGET_TOKEN, COMPANY_ID);
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
         companyService.RevokeManager(
                 OWNER_TOKEN,
@@ -211,7 +211,7 @@ public class CompanyManagementServiceTest {
         
     @Test
     public void GivenInvalidToken_WhenInviteManager_ThenThrowException() {
-        when(mockAuthService.validateToken("invalid-token")).thenReturn(false);
+        when(sessionManager.validateToken("invalid-token")).thenReturn(false);
 
         assertThrows(RuntimeException.class, () ->
                 companyService.inviteManager(
@@ -225,8 +225,8 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenCompanyDoesNotExist_WhenInviteManager_ThenThrowException() {
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
 
         assertThrows(RuntimeException.class, () ->
@@ -243,8 +243,8 @@ public class CompanyManagementServiceTest {
     public void GivenUserIsNotOwner_WhenInviteManager_ThenThrowException() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(3);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(3);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
         assertThrows(RuntimeException.class, () ->
@@ -261,8 +261,8 @@ public class CompanyManagementServiceTest {
     public void GivenTargetUserDoesNotExist_WhenInviteManager_ThenThrowException() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(null);
 
@@ -281,8 +281,8 @@ public class CompanyManagementServiceTest {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
@@ -298,7 +298,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenInvalidToken_WhenAcceptManagerInvitation_ThenThrowException() {
-        when(mockAuthService.validateToken("invalid-token")).thenReturn(false);
+        when(sessionManager.validateToken("invalid-token")).thenReturn(false);
 
         assertThrows(RuntimeException.class, () ->
                 companyService.acceptManagerInvitation(
@@ -310,8 +310,8 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenTargetUserDoesNotExist_WhenAcceptManagerInvitation_ThenThrowException() {
-        when(mockAuthService.validateToken(TARGET_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+        when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(null);
 
         assertThrows(RuntimeException.class, () ->
@@ -326,8 +326,8 @@ public class CompanyManagementServiceTest {
     public void GivenCompanyDoesNotExist_WhenAcceptManagerInvitation_ThenThrowException() {
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
-        when(mockAuthService.validateToken(TARGET_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+        when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
 
@@ -344,8 +344,8 @@ public class CompanyManagementServiceTest {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
-        when(mockAuthService.validateToken(TARGET_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+        when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
@@ -359,7 +359,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenInvalidToken_WhenRejectManagerInvitation_ThenThrowException() {
-        when(mockAuthService.validateToken("invalid-token")).thenReturn(false);
+        when(sessionManager.validateToken("invalid-token")).thenReturn(false);
 
         assertThrows(RuntimeException.class, () ->
                 companyService.rejectManagerInvitation(
@@ -374,8 +374,8 @@ public class CompanyManagementServiceTest {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
-        when(mockAuthService.validateToken(TARGET_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+        when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
@@ -389,7 +389,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenInvalidToken_WhenRevokeManager_ThenThrowException() {
-        when(mockAuthService.validateToken("invalid-token")).thenReturn(false);
+        when(sessionManager.validateToken("invalid-token")).thenReturn(false);
 
         assertThrows(RuntimeException.class, () ->
                 companyService.RevokeManager(
@@ -404,8 +404,8 @@ public class CompanyManagementServiceTest {
     public void GivenUserIsNotOwner_WhenRevokeManager_ThenThrowException() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(3);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(3);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
         assertThrows(RuntimeException.class, () ->
@@ -422,8 +422,8 @@ public class CompanyManagementServiceTest {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
@@ -438,7 +438,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenInvalidToken_WhenModifyManagerPermissions_ThenThrowException() {
-        when(mockAuthService.validateToken("invalid-token")).thenReturn(false);
+        when(sessionManager.validateToken("invalid-token")).thenReturn(false);
 
         assertThrows(RuntimeException.class, () ->
                 companyService.ModifyManagerPermissions(
@@ -454,8 +454,8 @@ public class CompanyManagementServiceTest {
     public void GivenUserIsNotOwner_WhenModifyManagerPermissions_ThenThrowException() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(3);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(3);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
         assertThrows(RuntimeException.class, () ->
@@ -473,8 +473,8 @@ public class CompanyManagementServiceTest {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
@@ -496,8 +496,8 @@ public class CompanyManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
         companyService.inviteManager(
                 OWNER_TOKEN,
@@ -506,16 +506,16 @@ public class CompanyManagementServiceTest {
                 defaultPermissions
         );
 
-        when(mockAuthService.validateToken(TARGET_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+        when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
 
         companyService.acceptManagerInvitation(
                 TARGET_TOKEN,
                 COMPANY_ID
         );
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
         assertThrows(RuntimeException.class, () ->
                 companyService.ModifyManagerPermissions(
@@ -533,8 +533,8 @@ public class CompanyManagementServiceTest {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
@@ -564,8 +564,8 @@ public class CompanyManagementServiceTest {
     when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
     when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
-    when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-    when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+    when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+    when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
     companyService.inviteManager(
             OWNER_TOKEN,
@@ -574,13 +574,13 @@ public class CompanyManagementServiceTest {
             defaultPermissions
     );
 
-    when(mockAuthService.validateToken(TARGET_TOKEN)).thenReturn(true);
-    when(mockAuthService.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+    when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+    when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
 
     companyService.acceptManagerInvitation(TARGET_TOKEN, COMPANY_ID);
 
-    when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-    when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+    when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+    when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
     assertThrows(RuntimeException.class, () ->
             companyService.inviteManager(
