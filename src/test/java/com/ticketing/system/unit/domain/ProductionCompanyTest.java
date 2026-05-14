@@ -24,6 +24,7 @@ class ProductionCompanyTest {
         private final int TARGET_USER_ID = 3;
         private ProductionCompany company;
         private List<Permission> defaultPermissions;
+        
 
         @BeforeEach
         public void setUp() {
