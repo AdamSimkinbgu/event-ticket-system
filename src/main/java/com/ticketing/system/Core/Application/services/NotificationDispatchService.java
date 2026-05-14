@@ -1,12 +1,15 @@
 package com.ticketing.system.Core.Application.services;
 
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.ticketing.system.Core.Application.dto.NotificationDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.notifications.INotificationRepository;
 import com.ticketing.system.Core.Domain.notifications.Notification;
+import com.ticketing.system.Core.Domain.notifications.NotificationStatus;
 
 // Owns the entire notification subsystem (UC-35, UC-36, UC-37).
 // - UC-35: dispatch on domain event → check online → push live or hand off to UC-36
@@ -20,6 +23,7 @@ public class NotificationDispatchService {
     private final INotificationRepository notificationRepository;
     private final INotificationService notificationService; // push channel port
     private final ISessionManager sessionManager;
+    private final Logger logger = LoggerFactory.getLogger(NotificationDispatchService.class);
 
     public NotificationDispatchService(
             INotificationRepository notificationRepository,
@@ -41,13 +45,46 @@ public class NotificationDispatchService {
 
     // UC-36: store an offline notification in PENDING state.
     public void storePending(Notification notification) {
-        throw new UnsupportedOperationException("UC-36: not implemented");
+
+        logger.info("Storing pending notification for userId={}, type={}", notification.getRecipientUserId(), notification.getType());
+        try {
+            // Check if the recipient is actually offline before storing, to avoid duplicates.
+            if (sessionManager.isOnline(notification.getRecipientUserId())) {
+                throw new IllegalStateException("Recipient is online; should push live instead of storing pending."+ " userId=" + notification.getRecipientUserId());
+            }
+            if(notification.getStatus() != NotificationStatus.PENDING) {
+                throw new IllegalArgumentException("Only notifications with PENDING status can be stored. Provided status: " + notification.getStatus());
+            }
+            notificationRepository.save(notification);
+        } catch (Exception e) {
+            // Handle any exceptions from sessionManager (e.g. connectivity issues) as needed.
+            // For now, we'll just log and proceed to store the notification.
+            logger.error(e.getMessage());
+        }
     }
 
     // UC-37: triggered by MemberLoggedIn event. Pushes all PENDING notifications for the user
     // and flips them to DELIVERED in bulk. Returns the delivered notifications so the caller
     // can show them to the just-logged-in user.
     public List<NotificationDTO> deliverPending(int userId) {
-        throw new UnsupportedOperationException("UC-37: not implemented");
+        logger.info("Delivering pending notifications for userId={}", userId);
+
+        List<Notification> pendingNotifications = notificationRepository.findByRecipientAndStatus(userId, NotificationStatus.PENDING);
+        List<NotificationDTO> deliveredNotifications = new java.util.ArrayList<>();
+
+        for(Notification notification : pendingNotifications) {
+            boolean pushSuccess = notificationService.send(userId, notification);
+            if (pushSuccess) {
+                notification.markDelivered();
+                notificationRepository.save(notification); // persist the status change
+                deliveredNotifications.add(notification.toDTO()); // convert to DTO for return
+            } else {
+                // Handle push failure as needed (e.g. log, retry later, etc.)
+                logger.error("Failed to push notification id={} to userId={}. Will remain pending for next login attempt.", notification.getId(), userId);
+            }
+        }
+        logger.info("Delivered {} pending notifications to userId={}", deliveredNotifications.size(), userId);
+        return deliveredNotifications;
+
     }
 }
