@@ -11,7 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.system.Core.Application.services.AuthenticationService;
+import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
@@ -30,7 +30,7 @@ class EventManagementServiceTest {
     private IEventRepository mockEventRepo;
     private IProductionCompanyRepository mockCompanyRepo;
     private ITicketRepository mockTicketRepo;
-    private AuthenticationService mockAuthService;
+    private ISessionManager sessionManager;
     private EventManagementService eventService;
 
     private final String OWNER_TOKEN = "owner-token";
@@ -54,13 +54,13 @@ class EventManagementServiceTest {
         mockEventRepo = mock(IEventRepository.class);
         mockCompanyRepo = mock(IProductionCompanyRepository.class);
         mockTicketRepo = mock(ITicketRepository.class);
-        mockAuthService = mock(AuthenticationService.class);
+        sessionManager = mock(ISessionManager.class);
 
         eventService = new EventManagementService(
                 mockEventRepo,
                 mockCompanyRepo,
                 mockTicketRepo,
-                mockAuthService
+                sessionManager
         );
 
         company = new ProductionCompany(COMPANY_ID, OWNER_ID);
@@ -80,8 +80,8 @@ class EventManagementServiceTest {
 
     @Test
     public void GivenOwner_WhenUpdateZoneCapacity_ThenZoneCapacityUpdated() {
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
@@ -106,8 +106,8 @@ class EventManagementServiceTest {
         );
         company.acceptManagerInvitation(MANAGER_ID);
 
-        when(mockAuthService.validateToken(MANAGER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
+        when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
@@ -124,7 +124,7 @@ class EventManagementServiceTest {
 
     @Test
     public void GivenInvalidToken_WhenUpdateZoneCapacity_ThenThrowException() {
-        when(mockAuthService.validateToken(INVALID_TOKEN)).thenReturn(false);
+        when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
 
         assertThrows(RuntimeException.class, () ->
                 eventService.addCapacitoesToVenueMapZone(
@@ -139,8 +139,8 @@ class EventManagementServiceTest {
 
     @Test
     public void GivenCompanyDoesNotExist_WhenUpdateZoneCapacity_ThenThrowException() {
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
 
         assertThrows(RuntimeException.class, () ->
@@ -156,8 +156,8 @@ class EventManagementServiceTest {
 
     @Test
     public void GivenEventDoesNotExist_WhenUpdateZoneCapacity_ThenThrowException() {
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(null);
 
@@ -174,8 +174,8 @@ class EventManagementServiceTest {
 
     @Test
     public void GivenUserIsNotOwnerOrManager_WhenUpdateZoneCapacity_ThenThrowException() {
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(99);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(99);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
         assertThrows(RuntimeException.class, () ->
@@ -199,8 +199,8 @@ class EventManagementServiceTest {
         );
         company.acceptManagerInvitation(MANAGER_ID);
 
-        when(mockAuthService.validateToken(MANAGER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
+        when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
         assertThrows(RuntimeException.class, () ->
@@ -216,8 +216,8 @@ class EventManagementServiceTest {
 
     @Test
     public void GivenZoneDoesNotExist_WhenUpdateZoneCapacity_ThenThrowException() {
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
@@ -236,8 +236,8 @@ class EventManagementServiceTest {
     public void GivenReservedTicketsMoreThanNewCapacity_WhenUpdateZoneCapacity_ThenThrowException() {
         zone.reserve(8);
 
-        when(mockAuthService.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(mockAuthService.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
