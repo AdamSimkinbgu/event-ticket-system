@@ -83,16 +83,18 @@ public class MemoryEventRepository implements IEventRepository {
 
     private boolean matchesSearch(Event event, CatalogSearchFiltersDTO filters) {
         // eventName — case-insensitive substring match on event name.
-        if (filters.eventName() == null ||
+        if (filters.eventName() != null &&
                 !event.getName().toLowerCase().contains(filters.eventName().toLowerCase())) {
             return false;
         }
 
         // artistName — at least one artist must match (case-insensitive substring).
-        if (filters.artistName() == null || event.getArtistsNames() == null ||
-                !event.getArtistsNames().stream().anyMatch(
-                        a -> a.toLowerCase().contains(filters.artistName().toLowerCase()))) {
-            return false;
+        if (filters.artistName() != null) {
+            if (event.getArtistsNames() == null ||
+                    !event.getArtistsNames().stream().anyMatch(
+                            a -> a.toLowerCase().contains(filters.artistName().toLowerCase()))) {
+                return false;
+            }
         }
         
 
@@ -145,7 +147,16 @@ public class MemoryEventRepository implements IEventRepository {
                 return false;
         }
 
-        //TODO: location, minRating, maxRating — not modelled on Event; not filtered here.   <<============================
+        // minEventRating / maxEventRating — event rating must fall within the range.
+        if (filters.minEventRating() != null && (event.getRating() == null || event.getRating() < filters.minEventRating())) {
+            return false;
+        }
+        if (filters.maxEventRating() != null && (event.getRating() == null || event.getRating() > filters.maxEventRating())) {
+            return false;
+        }
+
+
+        //TODO: location, minCompanyRating, maxCompanyRating — not modelled on Event; not filtered here.
 
         return true;  // if the event passed into all the filters, it got to here and we'll return true
     }

@@ -10,6 +10,7 @@ import jakarta.persistence.criteria.CriteriaBuilder.In;
 public class Event {
     private final int id;
     private final String name;
+    private final Double rating;
     private final List<String> artistsNames;
     private final EventCategory category;
     private final int comapnyid;
@@ -19,10 +20,11 @@ public class Event {
     private final PurchasePolicy purchasePolicy;
     private final DiscountPolicy discountPolicy;
 
-    public Event( int id, String name, List<String> artistsNames, EventCategory category, int comapnyid, EventStatus status, VenueMap venueMap, List<ShowDate> showDates, PurchasePolicy purchasePolicy, DiscountPolicy discountPolicy
+    public Event( int id, String name, Double rating, List<String> artistsNames, EventCategory category, int comapnyid, EventStatus status, VenueMap venueMap, List<ShowDate> showDates, PurchasePolicy purchasePolicy, DiscountPolicy discountPolicy
     ) {
         this.id = id;
         this.name = name;
+        this.rating = rating;
         this.artistsNames = artistsNames;
         this.category = category;
         this.comapnyid=comapnyid;
@@ -128,6 +130,10 @@ public class Event {
     // Missing getters.
     public String getName() {
         return name;
+    }
+
+    public Double getRating() {
+        return rating;
     }
 
     public int getCompanyId() {

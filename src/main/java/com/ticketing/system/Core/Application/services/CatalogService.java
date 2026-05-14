@@ -59,7 +59,7 @@ public class CatalogService {
 
     // UC-7: Global search with filters (price/date/location/rating, plus name/artist/category/keywords).
     public PageDTO<EventSummaryDTO> searchGlobal(CatalogSearchFiltersDTO filters, int pageNumber, int pageSize) {
-        //Note: location, minRating, maxRating — not modelled on Event; not filtered here in the IEventRepository search implementation.
+        //Note: location, minCompanyRating, maxCompanyRating — not modelled on Event; not filtered here in the IEventRepository search implementation.
         // Would require additional implementation to implement filter properly.
         throw new UnsupportedOperationException("UC-7: searchGlobal not implemented");
     }
@@ -69,7 +69,7 @@ public class CatalogService {
 
     // UC-7: Company-scoped search (no rating filter per II.2.3.2).
     public PageDTO<EventSummaryDTO> searchByCompany(int companyId, CatalogSearchFiltersDTO filters, int pageNumber, int pageSize) {
-        //Note: location, minRating, maxRating — not modelled on Event; not filtered here in the IEventRepository search implementation.
+        //Note: location, minCompanyRating, maxCompanyRating — not modelled on Event; not filtered here in the IEventRepository search implementation.
         // Would require additional implementation to implement filter properly.
         throw new UnsupportedOperationException("UC-7: searchByCompany not implemented");
     }

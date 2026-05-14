@@ -37,6 +37,7 @@ class EventTest {
         event = new Event(
                 EVENT_ID,
                 "Concert",
+                4.5,
                 ARTISTS,
                 EventCategory.CONCERT,
                 COMPANY_ID,

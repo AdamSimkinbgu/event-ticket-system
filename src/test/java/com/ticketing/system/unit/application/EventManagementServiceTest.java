@@ -72,6 +72,7 @@ class EventManagementServiceTest {
         event = new Event(
                 EVENT_ID,
                 "Concert",
+                4.5,
                 List.of("Artist1"),
                 EventCategory.CONCERT,
                 COMPANY_ID,

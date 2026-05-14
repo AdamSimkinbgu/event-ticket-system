@@ -15,6 +15,8 @@ public record CatalogSearchFiltersDTO(
     LocalDate fromDate,
     LocalDate toDate,
     String location,
-    Double minRating, 
-    Double maxRating
+    Double minEventRating,
+    Double maxEventRating,
+    Double minCompanyRating,
+    Double maxCompanyRating
 ) {}
