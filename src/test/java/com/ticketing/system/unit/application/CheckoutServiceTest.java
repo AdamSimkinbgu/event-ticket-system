@@ -43,7 +43,7 @@ class CheckoutServiceTest {
     private ITicketIssuer mockTicketIssuer;
     private IPaymentGateway mockPaymentGateway;
     private INotificationService mockNotificationService;
-    private ISessionManager iSessionManager;
+    private ISessionManager mockiSessionManager;
 
     private CheckoutService checkoutService;
 
@@ -84,7 +84,8 @@ class CheckoutServiceTest {
         mockTicketIssuer = mock(ITicketIssuer.class);
         mockPaymentGateway = mock(IPaymentGateway.class);
         mockNotificationService = mock(INotificationService.class);
-       // mockiSessionManager= mock(iSessionManager.class);
+        mockiSessionManager = mock(ISessionManager.class);
+       
 
         checkoutService = new CheckoutService(
                 mockActiveOrderRepo,
@@ -94,7 +95,7 @@ class CheckoutServiceTest {
                 mockTicketIssuer,
                 mockPaymentGateway,
                 mockNotificationService,
-                iSessionManager
+                mockiSessionManager
         );
 
         paymentRequest = new PaymentRequestDTO(
@@ -114,8 +115,8 @@ class CheckoutServiceTest {
         event1 = mock(Event.class);
         event2 = mock(Event.class);
 
-        when(iSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(iSessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        when(mockiSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(mockiSessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
         when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(mockOrder);
 
         when(itemEvent1Zone1.geteventId()).thenReturn(EVENT_ID_1);
@@ -153,7 +154,7 @@ class CheckoutServiceTest {
 
     @Test
     void GivenInvalidToken_WhenCheckout_ThenThrowException() {
-        when(iSessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
+        when(mockiSessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
 
         assertThrows(RuntimeException.class, () ->
                 checkoutService.checkout(INVALID_TOKEN, paymentRequest)
