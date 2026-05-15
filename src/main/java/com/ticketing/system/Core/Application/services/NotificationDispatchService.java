@@ -47,16 +47,12 @@ public class NotificationDispatchService {
     public void storePending(Notification notification) {
 
         logger.info("Storing pending notification for userId={}, type={}", notification.getRecipientUserId(), notification.getType());
-        
-        // Check if the recipient is actually offline before storing, to avoid duplicates.
-        if (sessionManager.isOnline(notification.getRecipientUserId())) {
-            logger.error("Recipient is online; should push live instead of storing pending."+ " userId=" + notification.getRecipientUserId());
+        try{
+        notificationRepository.save(notification);
         }
-        else if(notification.getStatus() != NotificationStatus.PENDING) {
-           logger.error("Only notifications with PENDING status can be stored. Provided status: " + notification.getStatus());
-        }
-        else {
-            notificationRepository.save(notification);
+        catch(Exception e){
+            logger.error("Failed to store pending notification for userId={}, type={}. Error: {}", notification.getRecipientUserId(), notification.getType(), e.getMessage());
+            throw e; // rethrow or handle as needed
         }
     }
 
