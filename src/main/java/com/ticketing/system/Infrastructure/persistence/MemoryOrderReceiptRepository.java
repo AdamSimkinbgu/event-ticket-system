@@ -60,4 +60,28 @@ public class MemoryOrderReceiptRepository implements IOrderReceiptRepository {
         throw new UnsupportedOperationException(
                 "UC-31 admin global history requires real filter logic — not yet implemented");
     }
+
+    @Override
+    public int nextId() {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'nextId'");
+    }
+
+    @Override
+    public Optional<OrderReceipt> findByOrderReceiptId(int orderReceiptId) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'findByOrderReceiptId'");
+    }
+
+    @Override
+    public List<OrderReceipt> findByCompanyId(int companyId) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'findByCompanyId'");
+    }
+
+    @Override
+    public List<OrderReceipt> findGlobal(GlobalHistoryFiltersDTO filters) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'findGlobal'");
+    }
 }

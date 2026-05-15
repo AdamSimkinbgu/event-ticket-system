@@ -290,14 +290,14 @@ public class CompanyManagementService {
             logger.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
-        if (!company.hasPermission(requesterId, Permission.VIEW_SALES)) {   //TODO: just take from the user id if he has permissions
+        if (!company.hasPermission(requesterId, Permission.VIEW_SALES)) {   //TODO .2. : just take from the user id if he has permissions
             logger.warn("User {} does not have permission to view sales history for company {}", requesterId, companyId);
             throw new RuntimeException("Insufficient permissions");
         }
 
         // get all sales for the company, transform to List<PurchaseHistoryDTO>, and return
         List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByCompanyId(companyId).stream()
-                .map(sale -> new PurchaseHistoryDTO(List.of(
+                .map(sale -> new PurchaseHistoryDTO(List.of(          //TODO .1. : do this accordingly to the actual OrderReceipt structure
                         new PurchaseHistoryDTO.PurchaseRecordDTO(
                                 sale.getId(),
                                 sale.geteventId,
