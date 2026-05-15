@@ -8,6 +8,7 @@ import java.util.List;
 public record EventDetailDTO(
     String eventId,
     String name,
+    Double rating,
     String description,
     String category,
     String location,
