@@ -9,17 +9,26 @@ import java.util.List;
 public class ActiveOrder {
  
     private int userId;
+    private String sessionId;
     private String status;
     private List<CartLineItem> items;
 
-public ActiveOrder(int userId) {
+    public ActiveOrder(int userId) {
         this.userId = userId;
+        this.sessionId = null;
         this.items = new ArrayList<>();
-       
-
     }
 
-    
+    public ActiveOrder(String sessionId) {
+        this.userId = 0;
+        this.sessionId = sessionId;
+        this.items = new ArrayList<>();
+    }
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
 public  void addReservation(int eventId,int zoneId ,int quantity,double price, LocalDateTime addedAt) {
     for (int i=1; i <=quantity; i=i+1){
         CartLineItem newItem = new CartLineItem(eventId, zoneId,price, addedAt);

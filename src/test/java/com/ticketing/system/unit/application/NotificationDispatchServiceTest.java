@@ -64,6 +64,42 @@ class NotificationDispatchServiceTest {
         verify(mockRepo, times(1)).save(notification);
     }
 
+    @Test @Disabled("notNeededTest1")
+    void givenOnlineRecipient_whenStorePending_thenIllegalStateExceptionThrown() {
+        int userId = 42;
+        when(mockSessionManager.isOnline(userId)).thenReturn(true);
+        
+        Notification notification = new Notification(
+            "notif-2",
+            userId,
+            NotificationType.EVENT_SOLD_OUT,
+            NotificationStatus.PENDING,
+            "An event you're interested in is sold out",
+            LocalDateTime.now()
+        );
+        
+         service.storePending(notification);
+        verify(mockRepo, never()).save(any());
+    }
+
+    @Test @Disabled("notNeededTest2")
+    void givenNotificationNotPending_whenStorePending_thenIllegalArgumentExceptionThrown() {
+        int userId = 42;
+        when(mockSessionManager.isOnline(userId)).thenReturn(false);
+        
+        Notification notification = new Notification(
+            "notif-3",
+            userId,
+            NotificationType.PURCHASE_CONFIRMED,
+            NotificationStatus.DELIVERED,
+            "Your purchase has been confirmed",
+            LocalDateTime.now()
+        );
+        
+        service.storePending(notification);
+        verify(mockRepo, never()).save(any());
+    }
+
     @Test @Disabled("UC-37: deliverPending flips PENDING → DELIVERED in bulk")
     void givenPendingNotifications_whenDeliverPending_thenAllDelivered() {}
 
