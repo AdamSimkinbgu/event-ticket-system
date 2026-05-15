@@ -203,6 +203,8 @@ for (int i = 0; i < boughtItems.size(); i++) {
             barcode.ticketId(),
             barcode.barcodeValue()
     );
+    // D7: Member purchase — assign ticket to the buyer for fast UC-16 lookup.
+    ticket.setHolderUserId(userId);
 
     ticketRepository.save(ticket);
  eventLogger.info("Ticket saved. userId={}, ticketId={}, eventId={}, zoneId={}",

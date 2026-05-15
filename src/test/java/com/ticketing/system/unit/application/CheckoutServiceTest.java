@@ -523,6 +523,14 @@ class CheckoutServiceTest {
 
         assertEquals(300.0, result.totalCharged());
         assertEquals(List.of(TICKET_ID_1, TICKET_ID_3), result.issuedTicketIds());
+
+        // D7: Member tickets carry the buyer's userId for UC-16 fast lookup.
+        org.mockito.ArgumentCaptor<com.ticketing.system.Core.Domain.Tickets.Ticket> savedTickets =
+                org.mockito.ArgumentCaptor.forClass(com.ticketing.system.Core.Domain.Tickets.Ticket.class);
+        org.mockito.Mockito.verify(mockTicketRepo, org.mockito.Mockito.times(2)).save(savedTickets.capture());
+        for (com.ticketing.system.Core.Domain.Tickets.Ticket t : savedTickets.getAllValues()) {
+            assertEquals(Integer.valueOf(USER_ID), t.getHolderUserId());
+        }
     }
 
     // ---------------------------------------------------------------------
