@@ -2,6 +2,8 @@ package com.ticketing.system.Core.Application.interfaces;
 
 import java.util.Optional;
 
+import com.ticketing.system.Core.Domain.users.Session;
+
 /**
  * Port for session / token management. Implemented in Infrastructure by
  * {@code JwtSessionManager}. Used by {@code AuthenticationService} (UC-12/14)
@@ -11,6 +13,16 @@ public interface ISessionManager {
 
     /** Issues a token after successful login. UC-12. */
     String generateToken(int userId, String username);
+
+    /**
+     * Issues a JWT bound to an existing Session row. Used by promote-on-login
+     * (Phase 3 of the unified-session rework) so the Guest's sessionId is
+     * preserved into the Member flow and any attached cart survives.
+     *
+     * @throws IllegalArgumentException if {@code session} is null
+     * @throws IllegalStateException if {@code session.isGuest()}
+     */
+    String generateTokenForSession(Session session, String username);
 
     /**
      * Validates a token's signature and expiry. UC-12.

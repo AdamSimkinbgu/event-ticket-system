@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Instant;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +14,9 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.SessionExpiredException;
+import com.ticketing.system.Core.Domain.users.ISessionRepository;
+import com.ticketing.system.Core.Domain.users.Session;
+import com.ticketing.system.Infrastructure.persistence.MemorySessionRepository;
 import com.ticketing.system.Infrastructure.security.JwtSessionManager;
 
 class JwtSessionManagerTest {
@@ -20,11 +24,13 @@ class JwtSessionManagerTest {
     private static final String SECRET =
         "unit-test-secret-must-be-long-enough-for-hmac-sha-256-please-ignore-me";
 
+    private ISessionRepository sessions;
     private JwtSessionManager manager;
 
     @BeforeEach
     void setUp() {
-        manager = new JwtSessionManager(SECRET, 60);
+        sessions = new MemorySessionRepository();
+        manager = new JwtSessionManager(SECRET, 60, sessions);
     }
 
     @Test
@@ -66,7 +72,8 @@ class JwtSessionManagerTest {
     @Test
     void validateToken_throwsSessionExpiredForExpiredToken() {
         // Negative expiration → token is issued already past its exp claim.
-        JwtSessionManager expiredManager = new JwtSessionManager(SECRET, -1);
+        ISessionRepository expiredSessions = new MemorySessionRepository();
+        JwtSessionManager expiredManager = new JwtSessionManager(SECRET, -1, expiredSessions);
         String token = expiredManager.generateToken(42, "alice");
         assertThrows(SessionExpiredException.class, () -> expiredManager.validateToken(token));
     }
@@ -170,5 +177,126 @@ class JwtSessionManagerTest {
         // tokenB is untouched.
         assertTrue(manager.validateToken(tokenB));
         assertEquals(2, manager.extractUserId(tokenB));
+    }
+
+    // ---------------------------------------------------------------------
+    // Phase 2 — Session-row backed behavior
+    // ---------------------------------------------------------------------
+
+    @Test
+    void generateToken_createsSessionRow() {
+        manager.generateToken(42, "alice");
+        // Exactly one row should now exist for userId 42.
+        assertTrue(sessions.existsByUserId(42));
+    }
+
+    @Test
+    void generateToken_eachCallProducesDistinctSessionId() {
+        String a = manager.generateToken(42, "alice");
+        String b = manager.generateToken(42, "alice");
+        // Different JWTs → different sid claims → both rows exist (Q4 multi-device).
+        assertEquals(2, countSessionsForUser(42));
+        // Sanity: tokens differ.
+        assertTrue(!a.equals(b));
+    }
+
+    @Test
+    void invalidate_deletesOnlyThatTokensSessionRow() {
+        String tokenA = manager.generateToken(42, "alice");
+        String tokenB = manager.generateToken(42, "alice");   // second device per Q4
+
+        manager.invalidate(tokenA);
+
+        // The other session for the same user survives.
+        assertTrue(sessions.existsByUserId(42));
+        assertTrue(manager.validateToken(tokenB));
+        assertThrows(InvalidTokenException.class, () -> manager.validateToken(tokenA));
+    }
+
+    @Test
+    void isOnline_falseWhenNoSession() {
+        assertFalse(manager.isOnline(99));
+    }
+
+    @Test
+    void isOnline_trueAfterGenerateToken() {
+        manager.generateToken(7, "carol");
+        assertTrue(manager.isOnline(7));
+    }
+
+    @Test
+    void isOnline_falseAfterInvalidate() {
+        String token = manager.generateToken(7, "carol");
+        manager.invalidate(token);
+        assertFalse(manager.isOnline(7));
+    }
+
+    @Test
+    void isOnline_trueAcrossMultipleDevices() {
+        // Q4 — allow-multiple Member sessions per userId.
+        manager.generateToken(7, "carol");
+        manager.generateToken(7, "carol");
+        assertTrue(manager.isOnline(7));
+    }
+
+    @Test
+    void generateTokenForSession_reusesSessionId() {
+        // Promote-on-login scenario: an existing Session row gains a JWT.
+        Instant now = Instant.now();
+        Session preexisting = new Session(
+                "preserved-sid",
+                9,
+                now,
+                now.plusSeconds(3600)
+        );
+        sessions.save(preexisting);
+
+        String token = manager.generateTokenForSession(preexisting, "dave");
+
+        // The JWT validates (signature ok, exp ok, Session row exists).
+        assertTrue(manager.validateToken(token));
+        assertEquals(9, manager.extractUserId(token));
+        assertEquals("dave", manager.extractUsername(token));
+    }
+
+    @Test
+    void generateTokenForSession_rejectsNull() {
+        assertThrows(IllegalArgumentException.class,
+                () -> manager.generateTokenForSession(null, "dave"));
+    }
+
+    @Test
+    void generateTokenForSession_rejectsGuestSession() {
+        Instant now = Instant.now();
+        Session guest = new Session("guest-sid", null, now, now.plusSeconds(3600));
+        sessions.save(guest);
+
+        assertThrows(IllegalStateException.class,
+                () -> manager.generateTokenForSession(guest, "guest"));
+    }
+
+    @Test
+    void validateToken_throwsWhenSessionRowDeletedExternally() {
+        String token = manager.generateToken(11, "ed");
+        // Simulate sweeper deleting the only session for user 11 directly.
+        sessionsForUser(11).forEach(s -> sessions.delete(s.getSessionId()));
+
+        assertThrows(InvalidTokenException.class, () -> manager.validateToken(token));
+    }
+
+    // ---- helpers ----
+
+    private int countSessionsForUser(int userId) {
+        return sessionsForUser(userId).size();
+    }
+
+    private java.util.List<Session> sessionsForUser(int userId) {
+        // findExpiredBefore(Instant.MAX) returns every row — enough for tests
+        // that need a full repository scan without exposing extra repo methods.
+        java.util.List<Session> result = new java.util.ArrayList<>();
+        for (Session s : sessions.findExpiredBefore(Instant.MAX)) {
+            if (s.getUserId() != null && s.getUserId() == userId) result.add(s);
+        }
+        return result;
     }
 }

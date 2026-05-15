@@ -1,10 +1,10 @@
 package com.ticketing.system.Infrastructure.security;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Date;
 import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.UUID;
 
 import javax.crypto.SecretKey;
 
@@ -16,6 +16,8 @@ import org.springframework.stereotype.Component;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.SessionExpiredException;
+import com.ticketing.system.Core.Domain.users.ISessionRepository;
+import com.ticketing.system.Core.Domain.users.Session;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -27,12 +29,16 @@ import io.jsonwebtoken.security.Keys;
  * jjwt-backed implementation of {@link ISessionManager}. UC-12 / UC-14.
  *
  * <p>Tokens are HS256-signed using {@code jwt.secret} from configuration and
- * expire after {@code jwt.expiration-minutes}. Revocation (UC-14) is tracked
- * in an in-memory denylist; revoked tokens fail every reader because the
- * denylist check lives inside the central {@link #parseClaims} helper.
+ * expire after {@code jwt.expiration-minutes}. Revocation (UC-14) is recorded
+ * by deleting the corresponding {@link Session} row through
+ * {@link ISessionRepository}; revoked tokens fail every reader because the
+ * Session existence check lives inside the central {@link #parseClaims}
+ * helper.
  *
- * <p>The denylist grows for the JVM's lifetime — fine for V1; a real
- * deployment should sweep entries whose natural {@code exp} has passed.
+ * <p>Each issued JWT carries a {@code sid} claim that identifies the matching
+ * Session row. {@code subject} is still the userId so callers that only need
+ * identity (not validity) can decode the JWT cheaply without touching the
+ * repository.
  */
 @Component
 public class JwtSessionManager implements ISessionManager {
@@ -40,29 +46,40 @@ public class JwtSessionManager implements ISessionManager {
     private static final Logger log = LoggerFactory.getLogger(JwtSessionManager.class);
 
     private static final String CLAIM_USERNAME = "username";
+    private static final String CLAIM_SID = "sid";
 
     private final SecretKey signingKey;
     private final long expirationMillis;
-    private final Set<String> revokedTokens = ConcurrentHashMap.newKeySet();
+    private final ISessionRepository sessions;
 
     public JwtSessionManager(
             @Value("${jwt.secret}") String secret,
-            @Value("${jwt.expiration-minutes}") long expirationMinutes) {
+            @Value("${jwt.expiration-minutes}") long expirationMinutes,
+            ISessionRepository sessions) {
         this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.expirationMillis = expirationMinutes * 60 * 1000;
+        this.sessions = sessions;
     }
 
     @Override
     public String generateToken(int userId, String username) {
-        Date now = new Date();
-        Date expiry = new Date(now.getTime() + expirationMillis);
-        return Jwts.builder()
-                .subject(String.valueOf(userId))
-                .claim(CLAIM_USERNAME, username)
-                .issuedAt(now)
-                .expiration(expiry)
-                .signWith(signingKey)
-                .compact();
+        Instant now = Instant.now();
+        Instant expiry = now.plusMillis(expirationMillis);
+        String sid = UUID.randomUUID().toString();
+        sessions.save(new Session(sid, userId, now, expiry));
+        return buildJwt(userId, username, sid, now, expiry);
+    }
+
+    @Override
+    public String generateTokenForSession(Session session, String username) {
+        if (session == null) {
+            throw new IllegalArgumentException("session must not be null");
+        }
+        if (!session.isMember()) {
+            throw new IllegalStateException("cannot issue JWT for a guest session");
+        }
+        Instant now = Instant.now();
+        return buildJwt(session.getUserId(), username, session.getSessionId(), now, session.getExpiresAt());
     }
 
     @Override
@@ -95,7 +112,7 @@ public class JwtSessionManager implements ISessionManager {
         } catch (SessionExpiredException e) {
             return true;
         } catch (InvalidTokenException e) {
-            // Malformed token cannot be checked for expiry; treat as unusable.
+            // Malformed / revoked tokens cannot be checked for expiry; treat as unusable.
             return true;
         }
     }
@@ -103,14 +120,23 @@ public class JwtSessionManager implements ISessionManager {
     @Override
     public void invalidate(String token) {
         if (token == null || token.isBlank()) return;
-        if (revokedTokens.add(token)) {
-            log.debug("token revoked");
+        try {
+            // Use raw parsing — we want to delete the session even if the JWT is
+            // signature-invalid or already-expired (idempotent revocation).
+            Claims claims = parseJwtUnchecked(token);
+            String sid = claims.get(CLAIM_SID, String.class);
+            if (sid != null && !sid.isBlank()) {
+                sessions.delete(sid);
+                log.debug("session deleted sid={}", sid);
+            }
+        } catch (Exception e) {
+            // Malformed input — nothing to invalidate. Idempotent.
         }
     }
 
     @Override
     public boolean isOnline(int userId) {
-        throw new UnsupportedOperationException("UC-35/36: not implemented");
+        return sessions.existsByUserId(userId);
     }
 
     @Override
@@ -122,13 +148,15 @@ public class JwtSessionManager implements ISessionManager {
         }
     }
 
+    /**
+     * Decodes + verifies a JWT and also enforces that the corresponding Session
+     * row still exists. Every reader (validate, extract*, isExpired) routes
+     * through here so revocation is uniformly respected.
+     */
     private Claims parseClaims(String token) {
-        if (revokedTokens.contains(token)) {
-            log.debug("rejected revoked token");
-            throw new InvalidTokenException("token has been revoked");
-        }
+        Claims claims;
         try {
-            return Jwts.parser()
+            claims = Jwts.parser()
                     .verifyWith(signingKey)
                     .build()
                     .parseSignedClaims(token)
@@ -138,5 +166,45 @@ public class JwtSessionManager implements ISessionManager {
         } catch (JwtException | IllegalArgumentException e) {
             throw new InvalidTokenException("token validation failed");
         }
+
+        String sid = claims.get(CLAIM_SID, String.class);
+        if (sid == null || sid.isBlank()) {
+            log.debug("rejected token without session id");
+            throw new InvalidTokenException("token missing session id");
+        }
+        if (sessions.findById(sid).isEmpty()) {
+            log.debug("rejected revoked token sid={}", sid);
+            throw new InvalidTokenException("session not found");
+        }
+        return claims;
+    }
+
+    /**
+     * Decodes a JWT without enforcing signature or expiry semantics — only
+     * used by {@link #invalidate(String)} to recover the session id from
+     * tokens that may already be expired but should still be revoked
+     * idempotently.
+     */
+    private Claims parseJwtUnchecked(String token) {
+        try {
+            return Jwts.parser()
+                    .verifyWith(signingKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+        } catch (ExpiredJwtException e) {
+            return e.getClaims();
+        }
+    }
+
+    private String buildJwt(int userId, String username, String sid, Instant issuedAt, Instant expiresAt) {
+        return Jwts.builder()
+                .subject(String.valueOf(userId))
+                .claim(CLAIM_USERNAME, username)
+                .claim(CLAIM_SID, sid)
+                .issuedAt(Date.from(issuedAt))
+                .expiration(Date.from(expiresAt))
+                .signWith(signingKey)
+                .compact();
     }
 }
