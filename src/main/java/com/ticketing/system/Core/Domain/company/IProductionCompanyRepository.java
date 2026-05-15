@@ -24,5 +24,6 @@ public interface IProductionCompanyRepository {
     // UC-18 — persist newly-registered company.
     void save(ProductionCompany company);
 
+    // UC-18- genrate company id
     int nextId();
 }

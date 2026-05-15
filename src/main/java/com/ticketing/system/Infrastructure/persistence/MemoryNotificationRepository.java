@@ -10,6 +10,10 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import org.springframework.stereotype.Repository;
+
+
+@Repository
 public class MemoryNotificationRepository implements INotificationRepository {
     private final Map<String, Notification> storage = new HashMap<>();
     private final AtomicInteger idSequence = new AtomicInteger(1);

@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
@@ -15,13 +16,21 @@ import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.ManagementInvitation;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
+import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
+import java.util.regex.Pattern;
 
+import org.springframework.stereotype.Service;
+
+@Service
 public class CompanyManagementService {
     private final IProductionCompanyRepository companyRepository;
     private final IUserRepository userRepository;
     private final IOrderReceiptRepository orderReceiptRepository;
     private final ISessionManager sessionManager;
     private final Logger logger = LoggerFactory.getLogger(CompanyManagementService.class);
+    private static final String EMAIL_PATTERN = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
+    private static final String PHONE_PATTERN = "^\\+?[0-9\\-\\s]{9,15}$";
 
 
     public CompanyManagementService(IProductionCompanyRepository companyRepository, IUserRepository userRepository, IOrderReceiptRepository orderReceiptRepository, ISessionManager sessionManager) {
@@ -172,10 +181,54 @@ public class CompanyManagementService {
     // ---------------------------------------------------------------------------
 
     // UC-18 — register a new Production Company; appoints Founder/Owner in same transaction.
-    public com.ticketing.system.Core.Application.dto.CompanyDTO registerCompany(
-            String token,
-            com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO request) {
-        throw new UnsupportedOperationException("UC-18: not implemented");
+    public ProductionCompanyDTO registerCompany(String token, CompanyRegistrationDTO request) {
+        if (!sessionManager.validateToken(token)) {
+            logger.warn("Invalid token provided for registering a company");
+            throw new RuntimeException("Invalid token");
+        }
+        int userId = sessionManager.extractUserId(token);
+
+        // CompanyRegistrationDTO is a class with get* accessors, not a record.
+        if (request.getName() == null || request.getName().trim().isEmpty() ||
+            request.getDescription() == null || request.getDescription().trim().isEmpty()) {
+
+            logger.warn("Company registration failed: Missing required fields by user {}", userId);
+            throw new IllegalArgumentException("All company fields (name, description) must be provided");
+        }
+
+        // Call on the injected instance, not the interface.
+        if (companyRepository.existsByName(request.getName().trim())) {
+            logger.warn("Company registration failed: Company name '{}' already exists", request.getName());
+            throw new IllegalStateException("A company with this name already exists");
+        }
+
+        try {
+            int companyId = companyRepository.nextId();
+            ProductionCompany newProductionCompany = new ProductionCompany(
+                companyId,
+                userId,
+                request.getName().trim(),
+                CompanyStatus.ACTIVE,
+                request.getDescription().trim(),
+                null
+            );
+
+            // IProductionCompanyRepository.save returns void; the new instance IS the saved one.
+            companyRepository.save(newProductionCompany);
+            logger.info("Successfully registered new company: '{}' by userId: {}", newProductionCompany.getName(), userId);
+
+            return new ProductionCompanyDTO(
+                newProductionCompany.getCompanyId(),
+                newProductionCompany.getName(),
+                newProductionCompany.getDescription(),
+                newProductionCompany.getStatus().name(),   // DTO field is String
+                newProductionCompany.getFounderId()        // DTO field is founderId
+            );
+
+        } catch (Exception e) {
+            logger.error("Error occurred while saving company '{}': {}", request.getName(), e.getMessage());
+            throw new RuntimeException("Failed to register company due to a server error", e);
+        }
     }
 
     // UC-23 — Owner appoints another Member as co-Owner (PENDING).
@@ -237,13 +290,13 @@ public class CompanyManagementService {
             logger.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
-        if (!company.hasPermission(requesterId, Permission.VIEW_SALES)) {
+        if (!company.hasPermission(requesterId, Permission.VIEW_SALES)) {   //TODO: just take from the user id if he has permissions
             logger.warn("User {} does not have permission to view sales history for company {}", requesterId, companyId);
             throw new RuntimeException("Insufficient permissions");
         }
 
         // get all sales for the company, transform to List<PurchaseHistoryDTO>, and return
-        List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByCompanyId(companyId).stream()  //TODO: get from orders
+        List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByCompanyId(companyId).stream()
                 .map(sale -> new PurchaseHistoryDTO(List.of(
                         new PurchaseHistoryDTO.PurchaseRecordDTO(
                                 sale.getId(),

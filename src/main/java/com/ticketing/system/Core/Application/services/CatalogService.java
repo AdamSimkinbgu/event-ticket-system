@@ -29,6 +29,9 @@ import com.ticketing.system.Core.Domain.events.IEventRepository;
 // Owns UC-3 (Browse Events as Guest), UC-7 (Browse + Search Catalogs), UC-8 (View Venue Map + Inventory).
 // Separated from EventManagementService (which is owner-side / write-heavy) so the two audiences
 // don't share an API surface — see design_walkthrough_summary.md §6.
+import org.springframework.stereotype.Service;
+
+@Service
 public class CatalogService {
 
     private static final Logger logger = LoggerFactory.getLogger(CatalogService.class);
@@ -126,11 +129,14 @@ public class CatalogService {
 
 
     // UC-8: Render venue map with per-seat / per-zone availability.
-    public VenueMapDTO getEventVenueMap(String token, int eventId) {
+    // Accepts either a JWT (Member) or a raw sessionId (Guest) — venue map
+    // viewing is open to anyone with an active session per UC-3 / UC-8
+    // (auth rework #181 / Phase 4.3).
+    public VenueMapDTO getEventVenueMap(String credential, int eventId) {
         logger.info("Fetching venue map for eventId: {}", eventId);
-        
-            if (!this.sessionManager.validateToken(token)) {
-                logger.warn("Invalid Token provided while getting venue map for eventId: {}", eventId);
+
+            if (!this.sessionManager.validateCredential(credential)) {
+                logger.warn("Invalid credential provided while getting venue map for eventId: {}", eventId);
                 throw new InvalidTokenException();
             }
             

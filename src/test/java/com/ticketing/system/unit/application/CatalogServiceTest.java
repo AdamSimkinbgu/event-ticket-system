@@ -253,7 +253,7 @@ class CatalogServiceTest {
         when(mockCompany.getStatus()).thenReturn(CompanyStatus.ACTIVE);
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(mockCompany);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
         when(mockEventRepository.findById(EVENT_ID)).thenReturn(mockEvent);
 
         VenueMapDTO result = catalogService.getEventVenueMap(VALID_TOKEN, EVENT_ID);
@@ -267,19 +267,23 @@ class CatalogServiceTest {
         assertEquals(50, result.inventoryZones().get(0).getPrice());
     }
 
-    // UC-8: getEventVenueMap throws SessionExpiredException when token is expired
+    // UC-8: getEventVenueMap throws InvalidTokenException when credential is invalid
+    // (including expired). Phase 4.3 of the auth rework unified the rejection path —
+    // validateCredential collapses "expired" and "invalid" into a single false return,
+    // so Catalog can no longer distinguish the two. Callers who need that distinction
+    // should call AuthenticationService directly.
     @Test
-    void givenExpiredToken_whenGetEventVenueMap_thenThrowsSessionExpiredException() {
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenThrow(new SessionExpiredException());
+    void givenInvalidOrExpiredCredential_whenGetEventVenueMap_thenThrowsInvalidTokenException() {
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(false);
 
-        assertThrows(SessionExpiredException.class,
+        assertThrows(InvalidTokenException.class,
                 () -> catalogService.getEventVenueMap(VALID_TOKEN, EVENT_ID));
     }
 
     // UC-8: getEventVenueMap throws EventNotFoundException when event does not exist
     @Test
     void givenValidTokenAndNonExistentEvent_whenGetEventVenueMap_thenThrowsEventNotFoundException() {
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
         when(mockEventRepository.findById(EVENT_ID)).thenReturn(null);
 
         assertThrows(EventNotFoundException.class,
@@ -297,7 +301,7 @@ class CatalogServiceTest {
         when(mockCompany.getStatus()).thenReturn(CompanyStatus.ACTIVE);
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(mockCompany);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
         when(mockEventRepository.findById(EVENT_ID)).thenReturn(mockEvent);
 
         assertThrows(NullVenueMapException.class,
@@ -320,7 +324,7 @@ class CatalogServiceTest {
         when(mockCompany.getStatus()).thenReturn(CompanyStatus.ACTIVE);
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(mockCompany);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
         when(mockEventRepository.findById(EVENT_ID)).thenReturn(mockEvent);
 
         VenueMapDTO result = catalogService.getEventVenueMap(VALID_TOKEN, EVENT_ID);
@@ -344,7 +348,7 @@ class CatalogServiceTest {
         when(mockCompany.getStatus()).thenReturn(CompanyStatus.ACTIVE);
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(mockCompany);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
         when(mockEventRepository.findById(EVENT_ID)).thenReturn(mockEvent);
 
         VenueMapDTO result = catalogService.getEventVenueMap(VALID_TOKEN, EVENT_ID);
@@ -357,7 +361,7 @@ class CatalogServiceTest {
     // UC-8: null or blank token must raise InvalidTokenException, not SessionExpiredException
     @Test
     void givenNullToken_whenGetEventVenueMap_thenThrowsInvalidTokenException() {
-        when(mockSessionManager.validateToken(null)).thenReturn(false);
+        when(mockSessionManager.validateCredential(null)).thenReturn(false);
 
         assertThrows(InvalidTokenException.class,
                 () -> catalogService.getEventVenueMap(null, EVENT_ID));
@@ -365,7 +369,7 @@ class CatalogServiceTest {
 
     @Test
     void givenBlankToken_whenGetEventVenueMap_thenThrowsInvalidTokenException() {
-        when(mockSessionManager.validateToken("")).thenReturn(false);
+        when(mockSessionManager.validateCredential("")).thenReturn(false);
 
         assertThrows(InvalidTokenException.class,
                 () -> catalogService.getEventVenueMap("", EVENT_ID));
