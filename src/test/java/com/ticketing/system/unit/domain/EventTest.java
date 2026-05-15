@@ -10,16 +10,20 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.VenueMap;
+import com.ticketing.system.Core.Domain.events.EventCategory;
 
 // Unit tests for the Event aggregate (Event + VenueMap + InventoryZone + ShowDate + policies).
 class EventTest {
 
 
-        private final int COMPANY_ID = 100;
+    private final int COMPANY_ID = 100;
     private final int EVENT_ID = 10;
     private final int ZONE_ID = 5;
+
+    private final List<String> ARTISTS = List.of("Artist 1", "Artist 2");
 
     private InventoryZone zone;
     private Event event;
@@ -28,15 +32,16 @@ class EventTest {
     public void setUp() {
         zone = new InventoryZone(ZONE_ID, "VIP", 10, 100);
 
-        VenueMap venueMap = new VenueMap(
-                1,
-                List.of(zone)
-        );
-
+        VenueMap venueMap = new VenueMap(1, List.of(zone));
+        
         event = new Event(
                 EVENT_ID,
                 "Concert",
+                4.5,
+                ARTISTS,
+                EventCategory.CONCERT,
                 COMPANY_ID,
+                EventStatus.SCHEDULED,
                 venueMap,
                 List.of(),
                 null,
