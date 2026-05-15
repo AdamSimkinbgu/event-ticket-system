@@ -84,7 +84,7 @@ class ReservationServiceTest {
 
         Event mockEvent = mock(Event.class);
         InventoryZone mockZone = mock(InventoryZone.class);
-        ActiveOrder existingOrder = new ActiveOrder(sessionId); 
+        ActiveOrder existingOrder = ActiveOrder.forGuest(sessionId);
 
         when(mockEventRepo.findById(eventId)).thenReturn(mockEvent);
         when(mockEvent.getZone(zoneId)).thenReturn(mockZone);
