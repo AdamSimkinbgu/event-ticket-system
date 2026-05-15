@@ -13,12 +13,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.time.LocalDateTime;
+
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Application.dto.GuestSessionDTO;
 import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.dto.LogoutRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
+import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
+import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateUsernameException;
 import com.ticketing.system.Core.Domain.exceptions.GuestSessionRequiredException;
@@ -35,6 +39,7 @@ class AuthAcceptanceTest {
     @Autowired private AuthenticationService authService;
     @Autowired private IUserRepository userRepository;
     @Autowired private ISessionRepository sessionRepository;
+    @Autowired private IActiveOrderRepository activeOrderRepository;
 
     // ------------------------------------------------------------------
     // Guest session lifecycle
@@ -177,10 +182,35 @@ class AuthAcceptanceTest {
         );
     }
 
-    // UC-13
-    @Test @Disabled("UC-13 main: pending order restored on login (Phase 4/5 work)")
-    void GivenMemberWithPendingOrder_WhenLogin_ThenOrderRestored() {}
-    @Test @Disabled("UC-13 alt: expired order is not restored")
+    // UC-13 / D9a — Member cart restored on next login
+    @Test
+    void GivenMemberWithPendingOrder_WhenLogin_ThenOrderRestored() {
+        // Set up: a Member with a cart attached to an old (now-gone) session.
+        // Simulates: user logged in once, added items, logged out, comes back later.
+        String firstSid = authService.startGuestSession().sessionId();
+        authService.register(new RegisterRequestDTO("rest1", "rest1@example.com", "Password1", firstSid));
+        AuthTokenDTO first = authService.login(new LoginRequestDTO("rest1", "Password1", firstSid));
+
+        // Simulate an active cart on the first session.
+        ActiveOrder cart = ActiveOrder.forMember(first.userId(), firstSid);
+        cart.addReservation(1, 10, 1, 50.0, LocalDateTime.now());
+        activeOrderRepository.save(cart);
+
+        // Logout — D8 (L1) deletes the Session row; D9a preserves the cart.
+        authService.logout(new LogoutRequestDTO(first.token()));
+
+        // New visit: fresh Guest session, then login.
+        String secondSid = authService.startGuestSession().sessionId();
+        AuthTokenDTO second = authService.login(new LoginRequestDTO("rest1", "Password1", secondSid));
+
+        // The cart was restored: its sessionId now points to the new session.
+        ActiveOrder restored = activeOrderRepository.getByUserId(second.userId());
+        assertNotNull(restored);
+        assertEquals(secondSid, restored.getSessionId());
+        assertEquals(1, restored.getItems().size());
+    }
+
+    @Test @Disabled("UC-13 alt: expired order is not restored (Phase 5 sweeper)")
     void GivenExpiredOrder_WhenLogin_ThenNoRestoration() {}
 
     // ------------------------------------------------------------------
@@ -221,6 +251,24 @@ class AuthAcceptanceTest {
         assertNotEquals(sidA, sidB);
     }
 
-    @Test @Disabled("UC-14 (II.3.0.1): cart-on-logout persistence — D9a, Phase 4/5 work")
-    void GivenLoggedInWithOrder_WhenLogout_ThenOrderStaysLinked() {}
+    @Test
+    void GivenLoggedInWithOrder_WhenLogout_ThenOrderStaysLinked() {
+        // II.3.0.1 / D9a: logout deletes the Session row but the cart with
+        // userId set survives.
+        String sid = authService.startGuestSession().sessionId();
+        authService.register(new RegisterRequestDTO("link1", "link1@example.com", "Password1", sid));
+        AuthTokenDTO session = authService.login(new LoginRequestDTO("link1", "Password1", sid));
+
+        ActiveOrder cart = ActiveOrder.forMember(session.userId(), sid);
+        cart.addReservation(2, 20, 2, 30.0, LocalDateTime.now());
+        activeOrderRepository.save(cart);
+
+        authService.logout(new LogoutRequestDTO(session.token()));
+
+        // Session row gone; cart row preserved with its userId.
+        assertFalse(sessionRepository.findById(sid).isPresent());
+        ActiveOrder preserved = activeOrderRepository.getByUserId(session.userId());
+        assertNotNull(preserved);
+        assertEquals(2, preserved.getItems().size());
+    }
 }

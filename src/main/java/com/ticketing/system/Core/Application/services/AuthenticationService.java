@@ -20,6 +20,8 @@ import com.ticketing.system.Core.Application.dto.RefreshTokenRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
+import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateEmailException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateUsernameException;
@@ -30,6 +32,8 @@ import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Session;
 import com.ticketing.system.Core.Domain.users.User;
+
+import java.util.Optional;
 
 /**
  * Application service for the auth slice — registration (UC-11), login
@@ -52,6 +56,7 @@ public class AuthenticationService {
     private final IPasswordHasher passwordHasher;
     private final ISessionManager sessionManager;
     private final ISessionRepository sessionRepository;
+    private final IActiveOrderRepository activeOrderRepository;
     private final Clock clock;
     private final long guestIdleMinutes;
     private final long memberTtlMinutes;
@@ -61,6 +66,7 @@ public class AuthenticationService {
             IPasswordHasher passwordHasher,
             ISessionManager sessionManager,
             ISessionRepository sessionRepository,
+            IActiveOrderRepository activeOrderRepository,
             Clock clock,
             @Value("${session.guest-idle-timeout-minutes}") long guestIdleMinutes,
             @Value("${session.member-ttl-minutes}") long memberTtlMinutes) {
@@ -68,6 +74,7 @@ public class AuthenticationService {
         this.passwordHasher = passwordHasher;
         this.sessionManager = sessionManager;
         this.sessionRepository = sessionRepository;
+        this.activeOrderRepository = activeOrderRepository;
         this.clock = clock;
         this.guestIdleMinutes = guestIdleMinutes;
         this.memberTtlMinutes = memberTtlMinutes;
@@ -211,7 +218,10 @@ public class AuthenticationService {
         session.promoteTo(user.getUserId(), memberExpiry);
         sessionRepository.save(session);
 
-        // 4. Issue a JWT bound to the existing (now-Member) session.
+        // 4. D9a — cart handling on promotion.
+        handleCartOnPromotion(session, user);
+
+        // 5. Issue a JWT bound to the existing (now-Member) session.
         String token = sessionManager.generateTokenForSession(session, user.getUsername());
         long expiresAt = sessionManager.extractExpiration(token);
 
@@ -219,6 +229,36 @@ public class AuthenticationService {
                 user.getUsername(), user.getUserId(), session.getSessionId());
 
         return new AuthTokenDTO(token, expiresAt, user.getUserId(), user.getUsername());
+    }
+
+    /**
+     * D9a cart wiring at promotion time. Two cases:
+     * <ol>
+     *   <li>A Guest cart was bound to this session (user filled it while
+     *       browsing) → claim it for the now-authenticated user.</li>
+     *   <li>No Guest cart this session, but an orphaned Member cart exists
+     *       from a previous logout → re-attach it to the new session.</li>
+     * </ol>
+     * If both happen to exist, the Guest cart wins (most recent intent);
+     * the {@link MemoryActiveOrderRepository}'s save() collapses identity
+     * by userId, so the stale Member cart is replaced automatically.
+     */
+    private void handleCartOnPromotion(Session session, User user) {
+        Optional<ActiveOrder> guestCart = activeOrderRepository.getBySessionId(session.getSessionId());
+        if (guestCart.isPresent() && guestCart.get().isGuest()) {
+            guestCart.get().attachToUser(user.getUserId());
+            activeOrderRepository.save(guestCart.get());
+            log.debug("cart promoted to member userId={} sid={}",
+                    user.getUserId(), session.getSessionId());
+            return;
+        }
+        ActiveOrder priorMemberCart = activeOrderRepository.getByUserId(user.getUserId());
+        if (priorMemberCart != null) {
+            priorMemberCart.attachToSession(session.getSessionId());
+            activeOrderRepository.save(priorMemberCart);
+            log.debug("member cart restored userId={} sid={}",
+                    user.getUserId(), session.getSessionId());
+        }
     }
 
     // ------------------------------------------------------------------

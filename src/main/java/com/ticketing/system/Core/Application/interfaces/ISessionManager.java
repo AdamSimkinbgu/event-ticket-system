@@ -42,6 +42,12 @@ public interface ISessionManager {
     /** Returns the username encoded in the token. */
     String extractUsername(String token);
 
+    /**
+     * Returns the sessionId (sid claim) encoded in the token. Used by the
+     * cart-binding logic on Guest→Member promotion (D9a / Phase 4.1b).
+     */
+    String extractSessionId(String token);
+
     /** Quick expiry check; returns {@code true} for expired, revoked, or malformed tokens. */
     boolean isExpired(String token);
 

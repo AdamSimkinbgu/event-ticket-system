@@ -32,6 +32,8 @@ import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
+import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
+import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateEmailException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateUsernameException;
@@ -53,6 +55,7 @@ class AuthenticationServiceTest {
     private IPasswordHasher mockHasher;
     private ISessionManager mockSessionManager;
     private ISessionRepository mockSessionRepo;
+    private IActiveOrderRepository mockActiveOrderRepo;
     private Clock fixedClock;
     private AuthenticationService service;
 
@@ -62,10 +65,15 @@ class AuthenticationServiceTest {
         mockHasher = mock(IPasswordHasher.class);
         mockSessionManager = mock(ISessionManager.class);
         mockSessionRepo = mock(ISessionRepository.class);
+        mockActiveOrderRepo = mock(IActiveOrderRepository.class);
         fixedClock = Clock.fixed(T0, ZoneOffset.UTC);
         service = new AuthenticationService(
                 mockUserRepo, mockHasher, mockSessionManager,
-                mockSessionRepo, fixedClock, GUEST_IDLE_MINUTES, MEMBER_TTL_MINUTES);
+                mockSessionRepo, mockActiveOrderRepo,
+                fixedClock, GUEST_IDLE_MINUTES, MEMBER_TTL_MINUTES);
+        // Default mocks: no cart for anyone. Individual D9a tests override.
+        when(mockActiveOrderRepo.getBySessionId(any())).thenReturn(Optional.empty());
+        when(mockActiveOrderRepo.getByUserId(anyInt())).thenReturn(null);
     }
 
     /** Returns a valid Guest session and mocks sessionRepo.findById(sid) to return it. */
@@ -448,5 +456,77 @@ class AuthenticationServiceTest {
     void logout_idempotent_doesNotThrowForGarbageToken() {
         service.logout(new LogoutRequestDTO("not-a-real-token"));
         verify(mockSessionManager).invalidate("not-a-real-token");
+    }
+
+    // ----------------------------------------------------------------------
+    // D9a — cart handling on login promotion
+    // ----------------------------------------------------------------------
+
+    @Test
+    void login_whenGuestCartExists_promotesItToMember() {
+        Session guestSession = mockValidGuestSession("preserved-sid");
+        ActiveOrder guestCart = ActiveOrder.forGuest("preserved-sid");
+        when(mockActiveOrderRepo.getBySessionId("preserved-sid")).thenReturn(Optional.of(guestCart));
+
+        User user = new User(7, "alice", "alice@example.com", "STORED_HASH");
+        when(mockUserRepo.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(mockHasher.matches("Password1", "STORED_HASH")).thenReturn(true);
+        when(mockSessionManager.generateTokenForSession(any(), any())).thenReturn("TOK");
+
+        service.login(new LoginRequestDTO("alice", "Password1", "preserved-sid"));
+
+        // Cart was promoted in place — userId now set, sessionId preserved.
+        assertTrue(guestCart.isMember());
+        assertEquals(7, guestCart.getUserId());
+        assertEquals("preserved-sid", guestCart.getSessionId());
+        verify(mockActiveOrderRepo, times(1)).save(guestCart);
+        // The orphan-member-cart restoration path NOT taken.
+        verify(mockActiveOrderRepo, never()).getByUserId(anyInt());
+    }
+
+    @Test
+    void login_whenNoGuestCartButOrphanedMemberCartExists_restoresIt() {
+        mockValidGuestSession("new-sid");
+        // No Guest cart this session.
+        when(mockActiveOrderRepo.getBySessionId("new-sid")).thenReturn(Optional.empty());
+        // Prior Member cart from previous logout (sessionId is stale).
+        ActiveOrder priorCart = ActiveOrder.forMember(7, "old-stale-sid");
+        when(mockActiveOrderRepo.getByUserId(7)).thenReturn(priorCart);
+
+        User user = new User(7, "alice", "alice@example.com", "STORED_HASH");
+        when(mockUserRepo.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(mockHasher.matches("Password1", "STORED_HASH")).thenReturn(true);
+        when(mockSessionManager.generateTokenForSession(any(), any())).thenReturn("TOK");
+
+        service.login(new LoginRequestDTO("alice", "Password1", "new-sid"));
+
+        // Prior cart's sessionId rebound to the new session.
+        assertEquals("new-sid", priorCart.getSessionId());
+        assertEquals(7, priorCart.getUserId());
+        verify(mockActiveOrderRepo, times(1)).save(priorCart);
+    }
+
+    @Test
+    void login_whenNoCartAtAll_isNoOpOnCartRepo() {
+        mockValidGuestSession("sid-1");
+        // Default mocks return no cart on either lookup.
+
+        User user = new User(7, "alice", "alice@example.com", "STORED_HASH");
+        when(mockUserRepo.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(mockHasher.matches("Password1", "STORED_HASH")).thenReturn(true);
+        when(mockSessionManager.generateTokenForSession(any(), any())).thenReturn("TOK");
+
+        service.login(new LoginRequestDTO("alice", "Password1", "sid-1"));
+
+        // No cart-save happened.
+        verify(mockActiveOrderRepo, never()).save(any());
+    }
+
+    @Test
+    void logout_doesNotTouchCart() {
+        // D9a: Member cart must survive logout, restored on next login.
+        service.logout(new LogoutRequestDTO("SOME_TOKEN"));
+        verify(mockActiveOrderRepo, never()).delete(any());
+        verify(mockActiveOrderRepo, never()).save(any());
     }
 }

@@ -104,6 +104,11 @@ public class JwtSessionManager implements ISessionManager {
     }
 
     @Override
+    public String extractSessionId(String token) {
+        return parseClaims(token).get(CLAIM_SID, String.class);
+    }
+
+    @Override
     public long extractExpiration(String token) {
         return parseClaims(token).getExpiration().getTime();
     }
