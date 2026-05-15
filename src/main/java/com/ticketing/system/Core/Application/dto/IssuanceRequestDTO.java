@@ -3,8 +3,11 @@ package com.ticketing.system.Core.Application.dto;
 import java.util.List;
 
 // Input to ITicketIssuer.issue() (UC-34).
+//
+// buyerUserId is null for Guest issuances (D5 reversed — Guests get tickets
+// via email). buyerEmail is required for Guest, optional for Member.
 public record IssuanceRequestDTO(
-    int buyerUserId,
+    Integer buyerUserId,
     String buyerEmail,
     List<TicketIssuanceItemDTO> items
 ) {
