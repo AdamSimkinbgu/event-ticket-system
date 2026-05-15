@@ -288,6 +288,59 @@ class JwtSessionManagerTest {
         assertThrows(InvalidTokenException.class, () -> manager.validateToken(token));
     }
 
+    // ---------------------------------------------------------------------
+    // validateCredential — accepts either JWT or raw sessionId
+    // ---------------------------------------------------------------------
+
+    @Test
+    void validateCredential_trueForFreshJwt() {
+        String token = manager.generateToken(42, "alice");
+        assertTrue(manager.validateCredential(token));
+    }
+
+    @Test
+    void validateCredential_trueForRawGuestSessionId() {
+        Instant now = Instant.now();
+        Session guest = new Session("guest-sid-xyz", null, now, now.plusSeconds(3600));
+        sessions.save(guest);
+
+        assertTrue(manager.validateCredential("guest-sid-xyz"));
+    }
+
+    @Test
+    void validateCredential_falseForUnknownSessionId() {
+        assertFalse(manager.validateCredential("ghost-sid"));
+    }
+
+    @Test
+    void validateCredential_falseForExpiredSession() {
+        Instant past = Instant.now().minusSeconds(3600);
+        Session expired = new Session("expired-sid", null, past, past.plusSeconds(60));
+        sessions.save(expired);
+
+        assertFalse(manager.validateCredential("expired-sid"));
+    }
+
+    @Test
+    void validateCredential_falseForNullAndBlank() {
+        assertFalse(manager.validateCredential(null));
+        assertFalse(manager.validateCredential(""));
+        assertFalse(manager.validateCredential("   "));
+    }
+
+    @Test
+    void validateCredential_falseForRevokedJwt() {
+        String token = manager.generateToken(42, "alice");
+        manager.invalidate(token);
+        assertFalse(manager.validateCredential(token));
+    }
+
+    @Test
+    void validateCredential_falseForGarbageString() {
+        // Not a JWT (no dots) and not a known sessionId → false, not throw.
+        assertFalse(manager.validateCredential("just-some-random-string"));
+    }
+
     // ---- helpers ----
 
     private int countSessionsForUser(int userId) {

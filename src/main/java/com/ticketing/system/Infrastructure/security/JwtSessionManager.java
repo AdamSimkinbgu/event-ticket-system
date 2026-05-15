@@ -94,6 +94,30 @@ public class JwtSessionManager implements ISessionManager {
     }
 
     @Override
+    public boolean validateCredential(String credential) {
+        if (credential == null || credential.isBlank()) return false;
+        if (looksLikeJwt(credential)) {
+            try {
+                return validateToken(credential);
+            } catch (Exception e) {
+                return false;
+            }
+        }
+        // Raw sessionId path — direct repository lookup.
+        return sessions.findById(credential)
+                .filter(s -> !s.isExpiredAt(clock.instant()))
+                .isPresent();
+    }
+
+    /** Cheap structural check: JWTs are {@code header.payload.signature} (two dots). */
+    private static boolean looksLikeJwt(String s) {
+        int firstDot = s.indexOf('.');
+        if (firstDot <= 0) return false;
+        int secondDot = s.indexOf('.', firstDot + 1);
+        return secondDot > firstDot;
+    }
+
+    @Override
     public int extractUserId(String token) {
         return Integer.parseInt(parseClaims(token).getSubject());
     }

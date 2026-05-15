@@ -36,6 +36,17 @@ public interface ISessionManager {
      */
     boolean validateToken(String token);
 
+    /**
+     * Validates a credential that may be either a JWT (Member) or a raw
+     * sessionId (Guest). Returns {@code true} iff the credential corresponds
+     * to a live, non-expired Session row.
+     *
+     * <p>Used by guest-friendly endpoints (UC-3 / UC-8 catalog browse) where
+     * the caller may not have a JWT. Never throws — converts any internal
+     * validation failure to {@code false}.
+     */
+    boolean validateCredential(String credential);
+
     /** Returns the user id encoded in the token. */
     int extractUserId(String token);
 
