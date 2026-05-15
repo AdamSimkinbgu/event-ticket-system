@@ -22,6 +22,7 @@ import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
+import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 
 // Read-side service for guest- and visitor-facing catalog queries.
@@ -66,15 +67,18 @@ public class CatalogService {
 
     // UC-7: Global search with filters (price/date/location/rating, plus name/artist/category/keywords).
     public List<EventSummaryDTO> searchGlobal(String token, CatalogSearchFiltersDTO filters) {
+        logger.info("Starting global search with filters: {}", filters);
         if (!this.sessionManager.validateToken(token)) {
+            logger.warn("Invalid Token provided while performing global search with filters: {}", filters);
             throw new InvalidTokenException();
         }
 
         ArrayList<EventSummaryDTO> results = new ArrayList<>();
+        // get all events matching the search criteria
         List<Event> eventFilteration = eventRepository.search(filters);
 
         for (Event event : eventFilteration) {
-            // company rating filter
+            // company rating filter that is added in the global search but not the company-scoped search
             if (filters.minCompanyRating() != null && productionCompanyRepository.getCompanyById(event.getCompanyId())
                     .getRating() < filters.minCompanyRating()) {
                 continue;
@@ -85,7 +89,7 @@ public class CatalogService {
             }
             results.add(new EventMapper().convertEventToEventSummaryDTO(event, productionCompanyRepository));
         }
-        
+        logger.info("Global search with filters: {} returning {} results", filters, results.size());
         return results;
     }
 
@@ -94,12 +98,15 @@ public class CatalogService {
 
     // UC-7: Company-scoped search (no rating filter per II.2.3.2).
     public List<EventSummaryDTO> searchByCompany(String token, int companyId, CatalogSearchFiltersDTO filters) {
+        logger.info("Starting company-scoped search for companyId: {} with filters: {}", companyId, filters);
         if (!this.sessionManager.validateToken(token)) {
+            logger.warn("Invalid Token provided while performing company-scoped search for companyId: {} with filters: {}", companyId, filters);
             throw new InvalidTokenException();
         }
 
         List<EventSummaryDTO> results = new ArrayList<>();
         List<Event> eventFilteration = eventRepository.search(filters);
+
         for (Event event : eventFilteration) {
             // only include this current company's events
             if (event.getCompanyId() != companyId) {
@@ -107,6 +114,7 @@ public class CatalogService {
             }
             results.add(new EventMapper().convertEventToEventSummaryDTO(event, productionCompanyRepository));
         }
+        logger.info("Company-scoped search for companyId: {} with filters: {} returning {} results", companyId, filters, results.size());
         return results;
     }
 
@@ -134,7 +142,8 @@ public class CatalogService {
             }
 
             // Additional check to enforce company status is ACTIVE.
-            if (productionCompanyRepository.getCompanyById(event.getCompanyId()).getStatus() != CompanyStatus.ACTIVE) {
+            ProductionCompany company = productionCompanyRepository.getCompanyById(event.getCompanyId());
+            if (company == null || company.getStatus() != CompanyStatus.ACTIVE) {
                 logger.warn("Attempt to access venue map for eventId: {} from inactive company", eventId);
                 throw new CompanyClosedException("Event with ID " + eventId + " not found while getting venue map");
             }

@@ -26,6 +26,8 @@ public class MemoryEventRepository implements IEventRepository {
     public boolean save(Event event) {
         events.put(event.getId(), event);
         return true;
+        // In a real implementation, we might return false if the save failed for some reason (e.g. DB error);
+        // here we'll just assume it always works.
     }
 
 
