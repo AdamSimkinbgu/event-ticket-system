@@ -13,6 +13,10 @@ import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 
+import org.springframework.stereotype.Repository;
+
+
+@Repository
 public class MemoryEventRepository implements IEventRepository {
 
     private final ConcurrentHashMap<Integer, Event> events = new ConcurrentHashMap<>();

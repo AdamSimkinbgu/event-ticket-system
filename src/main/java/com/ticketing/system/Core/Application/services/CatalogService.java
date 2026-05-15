@@ -29,6 +29,9 @@ import com.ticketing.system.Core.Domain.events.IEventRepository;
 // Owns UC-3 (Browse Events as Guest), UC-7 (Browse + Search Catalogs), UC-8 (View Venue Map + Inventory).
 // Separated from EventManagementService (which is owner-side / write-heavy) so the two audiences
 // don't share an API surface — see design_walkthrough_summary.md §6.
+import org.springframework.stereotype.Service;
+
+@Service
 public class CatalogService {
 
     private static final Logger logger = LoggerFactory.getLogger(CatalogService.class);

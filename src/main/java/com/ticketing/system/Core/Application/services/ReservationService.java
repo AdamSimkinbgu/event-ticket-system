@@ -15,6 +15,9 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 
+import org.springframework.stereotype.Service;
+
+@Service
 public class ReservationService {
 
     private final IEventRepository eventRepository;

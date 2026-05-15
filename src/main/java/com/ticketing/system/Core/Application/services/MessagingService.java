@@ -14,6 +14,9 @@ import com.ticketing.system.Core.Domain.messaging.IConversationRepository;
 // Replaces per-User MessageInbox, per-Company Inbox, and the standalone Complaint flow.
 // Covers requirements II.3.3 (complaint), II.3.10 (contact company), II.4.4 (company support
 // inbox), II.6.3.1 (admin complaint queue), II.6.3.2 (admin announcements).
+import org.springframework.stereotype.Service;
+
+@Service
 public class MessagingService {
 
     private final IConversationRepository conversationRepository;
