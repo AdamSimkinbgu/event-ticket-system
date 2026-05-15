@@ -200,7 +200,9 @@ if (activeOrdert.hasReservationForEvent(eventId)) {
                 activeOrdert = existingOrderOpt.get();
             } else {
                 eventLogger.info("No active order found for sessionId={}, creating new ActiveOrder", sessionId);
-                activeOrdert = new ActiveOrder(sessionId);
+                // Auth rework #181 / Phase 4.1a: Guest carts use the forGuest factory
+                // so the dual-identity invariant (userId xor sessionId) holds.
+                activeOrdert = ActiveOrder.forGuest(sessionId);
             }
 
             if (activeOrdert.hasReservationForEvent(eventId)) {
