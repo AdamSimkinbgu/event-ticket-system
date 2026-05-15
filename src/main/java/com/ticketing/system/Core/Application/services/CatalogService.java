@@ -158,4 +158,5 @@ public class CatalogService {
             return new VenueMapMapper().venueMapToVenueMapDTO(event.getVenueMap());
         
     }
+    
 }
