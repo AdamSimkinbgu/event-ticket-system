@@ -6,11 +6,13 @@ import static org.mockito.Mockito.*;
 
 import java.util.Optional;
 
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
@@ -25,6 +27,7 @@ class ReservationServiceTest {
     private IEventRepository mockEventRepo;
     private IActiveOrderRepository mockOrderRepo;
     private ISessionManager mockSessionManager;
+    private INotificationService mockNotification;
     private ReservationService service;
 
     @BeforeEach
@@ -32,9 +35,9 @@ class ReservationServiceTest {
         mockEventRepo = mock(IEventRepository.class);
         mockOrderRepo = mock(IActiveOrderRepository.class);
         mockSessionManager = mock(ISessionManager.class);
-        mocKnotification = mock(INotificationService.class)
+        mockNotification = mock(INotificationService.class);
         
-        service = new ReservationService(mockEventRepo, mockOrderRepo, mockSessionManager, mocKnotification);
+        service = new ReservationService(mockEventRepo, mockOrderRepo, mockSessionManager, mockNotification);
     }
 
     @Test
