@@ -14,6 +14,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
+import com.ticketing.system.Core.Application.dto.LoginDTO;
 import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.dto.LogoutRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
@@ -28,8 +29,10 @@ import com.ticketing.system.Core.Domain.users.User;
 @ActiveProfiles("test")
 class AuthAcceptanceTest {
 
-    @Autowired private AuthenticationService authService;
-    @Autowired private IUserRepository userRepository;
+    @Autowired
+    private AuthenticationService authService;
+    @Autowired
+    private IUserRepository userRepository;
 
     // UC-11
     @Test
@@ -46,16 +49,16 @@ class AuthAcceptanceTest {
     void GivenDuplicateUsername_WhenRegister_ThenRejected() {
         authService.register(new RegisterRequestDTO("bob", "bob@example.com", "Password1"));
 
-        assertThrows(DuplicateUsernameException.class, () ->
-            authService.register(new RegisterRequestDTO("bob", "bob2@example.com", "Password1"))
-        );
+        assertThrows(DuplicateUsernameException.class,
+                () -> authService.register(new RegisterRequestDTO("bob", "bob2@example.com", "Password1")));
     }
 
     @Test
     void GivenSuccessfulRegistration_WhenCheckSession_ThenStillGuest() {
         authService.register(new RegisterRequestDTO("carol", "carol@example.com", "Password1"));
 
-        // II.1.4: register is void — no AuthTokenDTO is produced. The user exists in the
+        // II.1.4: register is void — no AuthTokenDTO is produced. The user exists in
+        // the
         // repository but no session was established. UC-12 login is required to upgrade
         // a Guest session to Member-Visitor.
         User stored = userRepository.findByUsername("carol").orElseThrow();
@@ -67,35 +70,39 @@ class AuthAcceptanceTest {
     @Test
     void GivenValidCredentials_WhenLogin_ThenTokenIssued() {
         authService.register(new RegisterRequestDTO("dave", "dave@example.com", "Password1"));
+        LoginDTO result = authService.login(new LoginRequestDTO("dave", "Password1"));
+        AuthTokenDTO tokenResult = result.authToken();
 
-        AuthTokenDTO result = authService.login(new LoginRequestDTO("dave", "Password1"));
-
-        assertNotNull(result.token());
-        assertFalse(result.token().isBlank());
-        assertEquals("dave", result.username());
-        assertTrue(authService.validateToken(result.token()));
-        assertEquals(result.userId(), authService.extractUserId(result.token()));
-        assertTrue(result.expiresAtEpochMillis() > System.currentTimeMillis());
+        assertNotNull(tokenResult.token());
+        assertFalse(tokenResult.token().isBlank());
+        assertEquals("dave", tokenResult.username());
+        assertTrue(authService.validateToken(tokenResult.token()));
+        assertEquals(tokenResult.userId(), authService.extractUserId(tokenResult.token()));
+        assertTrue(tokenResult.expiresAtEpochMillis() > System.currentTimeMillis());
     }
 
     @Test
     void GivenInvalidCredentials_WhenLogin_ThenGenericReject() {
         authService.register(new RegisterRequestDTO("eve", "eve@example.com", "Password1"));
 
-        // Wrong password and unknown user yield the SAME exception — no enumeration leak.
-        assertThrows(AuthenticationFailedException.class, () ->
-            authService.login(new LoginRequestDTO("eve", "wrongpass"))
-        );
-        assertThrows(AuthenticationFailedException.class, () ->
-            authService.login(new LoginRequestDTO("nosuchuser", "anything1"))
-        );
+        // Wrong password and unknown user yield the SAME exception — no enumeration
+        // leak.
+        assertThrows(AuthenticationFailedException.class,
+                () -> authService.login(new LoginRequestDTO("eve", "wrongpass")));
+        assertThrows(AuthenticationFailedException.class,
+                () -> authService.login(new LoginRequestDTO("nosuchuser", "anything1")));
     }
 
     // UC-13
-    @Test @Disabled("UC-13 main: pending order restored on login")
-    void GivenMemberWithPendingOrder_WhenLogin_ThenOrderRestored() {}
-    @Test @Disabled("UC-13 alt: expired order is not restored")
-    void GivenExpiredOrder_WhenLogin_ThenNoRestoration() {}
+    @Test
+    @Disabled("UC-13 main: pending order restored on login")
+    void GivenMemberWithPendingOrder_WhenLogin_ThenOrderRestored() {
+    }
+
+    @Test
+    @Disabled("UC-13 alt: expired order is not restored")
+    void GivenExpiredOrder_WhenLogin_ThenNoRestoration() {
+    }
 
     // UC-14
     @Test
@@ -104,7 +111,8 @@ class AuthAcceptanceTest {
         // back to Guest-Visitor. We verify the downgrade by asserting the issued token
         // is no longer valid after logout.
         authService.register(new RegisterRequestDTO("frank", "frank@example.com", "Password1"));
-        AuthTokenDTO session = authService.login(new LoginRequestDTO("frank", "Password1"));
+        LoginDTO result = authService.login(new LoginRequestDTO("frank", "Password1"));
+        AuthTokenDTO session = result.authToken();
         assertTrue(authService.validateToken(session.token()));
 
         authService.logout(new LogoutRequestDTO(session.token()));
@@ -114,15 +122,19 @@ class AuthAcceptanceTest {
 
     @Test
     void GivenAlreadyLoggedOutToken_WhenLogoutAgain_ThenNoError() {
-        // Idempotency: repeating logout with the same (already-revoked) token must not throw.
+        // Idempotency: repeating logout with the same (already-revoked) token must not
+        // throw.
         authService.register(new RegisterRequestDTO("grace", "grace@example.com", "Password1"));
-        AuthTokenDTO session = authService.login(new LoginRequestDTO("grace", "Password1"));
+        LoginDTO result = authService.login(new LoginRequestDTO("grace", "Password1"));
+        AuthTokenDTO session = result.authToken();
         authService.logout(new LogoutRequestDTO(session.token()));
 
         // Second call should silently succeed.
         authService.logout(new LogoutRequestDTO(session.token()));
     }
 
-    @Test @Disabled("UC-14 (II.3.0.1): order remains linked to member on logout — needs ActiveOrder")
-    void GivenLoggedInWithOrder_WhenLogout_ThenOrderStaysLinked() {}
+    @Test
+    @Disabled("UC-14 (II.3.0.1): order remains linked to member on logout — needs ActiveOrder")
+    void GivenLoggedInWithOrder_WhenLogout_ThenOrderStaysLinked() {
+    }
 }

@@ -20,12 +20,15 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
+import com.ticketing.system.Core.Application.dto.LoginDTO;
 import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.dto.LogoutRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
+import com.ticketing.system.Core.Application.services.NotificationDispatchService;
+import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateEmailException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateUsernameException;
@@ -40,13 +43,18 @@ class AuthenticationServiceTest {
     private IPasswordHasher mockHasher;
     private ISessionManager mockSessionManager;
     private AuthenticationService service;
+    private NotificationDispatchService mockNotification;
+    private ReservationService mockReservation;
 
     @BeforeEach
     void setUp() {
         mockUserRepo = mock(IUserRepository.class);
         mockHasher = mock(IPasswordHasher.class);
         mockSessionManager = mock(ISessionManager.class);
-        service = new AuthenticationService(mockUserRepo, mockHasher, mockSessionManager);
+        mockNotification = mock(NotificationDispatchService.class);
+        mockReservation = mock(ReservationService.class);
+        service = new AuthenticationService(mockUserRepo, mockHasher, mockSessionManager, mockReservation,
+                mockNotification);
     }
 
     @Test
@@ -85,57 +93,50 @@ class AuthenticationServiceTest {
 
     @Test
     void givenMalformedEmail_whenRegister_thenInvalidEmailFormatExceptionThrown() {
-        assertThrows(InvalidEmailFormatException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "not-an-email", "Password1"))
-        );
+        assertThrows(InvalidEmailFormatException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "not-an-email", "Password1")));
         verifyNoInteractions(mockHasher);
         verify(mockUserRepo, never()).save(any(User.class));
     }
 
     @Test
     void givenNullEmail_whenRegister_thenInvalidEmailFormatExceptionThrown() {
-        assertThrows(InvalidEmailFormatException.class, () ->
-            service.register(new RegisterRequestDTO("alice", null, "Password1"))
-        );
+        assertThrows(InvalidEmailFormatException.class,
+                () -> service.register(new RegisterRequestDTO("alice", null, "Password1")));
     }
 
     @Test
     void givenShortPassword_whenRegister_thenWeakPasswordExceptionThrown() {
-        assertThrows(WeakPasswordException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "Pw1"))
-        );
+        assertThrows(WeakPasswordException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Pw1")));
         verifyNoInteractions(mockHasher);
         verify(mockUserRepo, never()).save(any(User.class));
     }
 
     @Test
     void givenPasswordWithoutDigit_whenRegister_thenWeakPasswordExceptionThrown() {
-        assertThrows(WeakPasswordException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "Passwords"))
-        );
+        assertThrows(WeakPasswordException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Passwords")));
     }
 
     @Test
     void givenPasswordWithoutLetter_whenRegister_thenWeakPasswordExceptionThrown() {
-        assertThrows(WeakPasswordException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "12345678"))
-        );
+        assertThrows(WeakPasswordException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "12345678")));
     }
 
     @Test
     void givenNullPassword_whenRegister_thenWeakPasswordExceptionThrown() {
-        assertThrows(WeakPasswordException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", null))
-        );
+        assertThrows(WeakPasswordException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", null)));
     }
 
     @Test
     void givenTakenUsername_whenRegister_thenDuplicateUsernameExceptionThrown() {
         when(mockUserRepo.existsByUsername("alice")).thenReturn(true);
 
-        assertThrows(DuplicateUsernameException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1"))
-        );
+        assertThrows(DuplicateUsernameException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1")));
         verifyNoInteractions(mockHasher);
         verify(mockUserRepo, never()).save(any(User.class));
     }
@@ -144,11 +145,10 @@ class AuthenticationServiceTest {
     void givenTakenEmail_whenRegister_thenDuplicateEmailExceptionThrown() {
         when(mockUserRepo.existsByUsername("alice")).thenReturn(false);
         when(mockUserRepo.findByEmail("alice@example.com"))
-            .thenReturn(Optional.of(new User(1, "other", "alice@example.com", "HASH")));
+                .thenReturn(Optional.of(new User(1, "other", "alice@example.com", "HASH")));
 
-        assertThrows(DuplicateEmailException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1"))
-        );
+        assertThrows(DuplicateEmailException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1")));
         verifyNoInteractions(mockHasher);
         verify(mockUserRepo, never()).save(any(User.class));
     }
@@ -158,9 +158,8 @@ class AuthenticationServiceTest {
         // Ordering check: format validators run before any repo lookup.
         when(mockUserRepo.existsByUsername(any())).thenReturn(true);
 
-        assertThrows(InvalidEmailFormatException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "not-an-email", "Password1"))
-        );
+        assertThrows(InvalidEmailFormatException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "not-an-email", "Password1")));
         verify(mockUserRepo, never()).existsByUsername(any());
     }
 
@@ -171,8 +170,11 @@ class AuthenticationServiceTest {
         when(mockHasher.matches("Password1", "STORED_HASH")).thenReturn(true);
         when(mockSessionManager.generateToken(7, "alice")).thenReturn("ISSUED_TOKEN");
         when(mockSessionManager.extractExpiration("ISSUED_TOKEN")).thenReturn(9999L);
+        when(mockReservation.restoreActiveOrder(7)).thenReturn(null);
+        when(mockNotification.deliverPending(7)).thenReturn(null);
 
-        AuthTokenDTO result = service.login(new LoginRequestDTO("alice", "Password1"));
+        LoginDTO loginResult = service.login(new LoginRequestDTO("alice", "Password1"));
+        AuthTokenDTO result = loginResult.authToken();
 
         assertEquals("ISSUED_TOKEN", result.token());
         assertEquals(9999L, result.expiresAtEpochMillis());
@@ -185,10 +187,10 @@ class AuthenticationServiceTest {
         User user = new User(7, "alice", "alice@example.com", "STORED_HASH");
         when(mockUserRepo.findByUsername("alice")).thenReturn(Optional.of(user));
         when(mockHasher.matches("wrong", "STORED_HASH")).thenReturn(false);
+        when(mockReservation.restoreActiveOrder(7)).thenReturn(null);
+        when(mockNotification.deliverPending(7)).thenReturn(null);
 
-        assertThrows(AuthenticationFailedException.class, () ->
-            service.login(new LoginRequestDTO("alice", "wrong"))
-        );
+        assertThrows(AuthenticationFailedException.class, () -> service.login(new LoginRequestDTO("alice", "wrong")));
         verify(mockSessionManager, never()).generateToken(anyInt(), any());
     }
 
@@ -197,9 +199,8 @@ class AuthenticationServiceTest {
         when(mockUserRepo.findByUsername("ghost")).thenReturn(Optional.empty());
 
         // Same exception type as wrong-password — no enumeration leak.
-        assertThrows(AuthenticationFailedException.class, () ->
-            service.login(new LoginRequestDTO("ghost", "whatever"))
-        );
+        assertThrows(AuthenticationFailedException.class,
+                () -> service.login(new LoginRequestDTO("ghost", "whatever")));
         verifyNoInteractions(mockHasher);
         verify(mockSessionManager, never()).generateToken(anyInt(), any());
     }
@@ -211,9 +212,7 @@ class AuthenticationServiceTest {
         when(mockUserRepo.findByUsername("alice")).thenReturn(Optional.of(user));
         when(mockHasher.matches("badpass", "STORED_HASH")).thenReturn(false);
 
-        assertThrows(AuthenticationFailedException.class, () ->
-            service.login(new LoginRequestDTO("alice", "badpass"))
-        );
+        assertThrows(AuthenticationFailedException.class, () -> service.login(new LoginRequestDTO("alice", "badpass")));
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.ticketing.system.Core.Application.services;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
@@ -7,9 +8,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
+import com.ticketing.system.Core.Application.dto.LoginDTO;
 import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.dto.LogoutRequestDTO;
+import com.ticketing.system.Core.Application.dto.NotificationDTO;
 import com.ticketing.system.Core.Application.dto.RefreshTokenRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
@@ -26,7 +30,8 @@ import com.ticketing.system.Core.Domain.users.User;
  * Application service for the auth slice — registration (UC-11), login (UC-12),
  * and logout (UC-14).
  *
- * <p>Orchestrates the User repository, password hasher, and session manager.
+ * <p>
+ * Orchestrates the User repository, password hasher, and session manager.
  * Cross-service effects (e.g. UC-13 order restoration on login, UC-37
  * notification flush) are integrated via direct service calls when those UCs
  * are implemented.
@@ -41,14 +46,20 @@ public class AuthenticationService {
     private final IUserRepository userRepository;
     private final IPasswordHasher passwordHasher;
     private final ISessionManager sessionManager;
+    private final ReservationService reservationService; // for UC-13 order restoration
+    private final NotificationDispatchService notificationDispatchService; // for UC-37 notification flush
 
     public AuthenticationService(
             IUserRepository userRepository,
             IPasswordHasher passwordHasher,
-            ISessionManager sessionManager) {
+            ISessionManager sessionManager,
+            ReservationService reservationService,
+            NotificationDispatchService notificationDispatchService) {
         this.userRepository = userRepository;
         this.passwordHasher = passwordHasher;
         this.sessionManager = sessionManager;
+        this.reservationService = reservationService;
+        this.notificationDispatchService = notificationDispatchService;
     }
 
     /** Delegates to {@link ISessionManager#extractUserId}. */
@@ -64,13 +75,14 @@ public class AuthenticationService {
     /**
      * Registers a new Member. UC-11.
      *
-     * <p>Session intentionally remains Guest per II.1.4 — caller must explicitly
+     * <p>
+     * Session intentionally remains Guest per II.1.4 — caller must explicitly
      * log in to upgrade to Member-Visitor.
      *
      * @throws InvalidEmailFormatException email fails format check
-     * @throws WeakPasswordException password fails strength rules
-     * @throws DuplicateUsernameException username already taken
-     * @throws DuplicateEmailException email already registered
+     * @throws WeakPasswordException       password fails strength rules
+     * @throws DuplicateUsernameException  username already taken
+     * @throws DuplicateEmailException     email already registered
      */
     public void register(RegisterRequestDTO request) {
         validateEmail(request.email());
@@ -104,8 +116,10 @@ public class AuthenticationService {
         boolean hasDigit = false;
         for (int i = 0; i < rawPassword.length(); i++) {
             char c = rawPassword.charAt(i);
-            if (Character.isLetter(c)) hasLetter = true;
-            else if (Character.isDigit(c)) hasDigit = true;
+            if (Character.isLetter(c))
+                hasLetter = true;
+            else if (Character.isDigit(c))
+                hasDigit = true;
         }
         if (!hasLetter || !hasDigit) {
             throw new WeakPasswordException("must contain at least one letter and one digit");
@@ -115,12 +129,13 @@ public class AuthenticationService {
     /**
      * Authenticates a Member and issues a JWT. UC-12.
      *
-     * <p>"Unknown username" and "wrong password" raise the same exception to
+     * <p>
+     * "Unknown username" and "wrong password" raise the same exception to
      * avoid username enumeration via the response.
      *
      * @throws AuthenticationFailedException invalid credentials
      */
-    public AuthTokenDTO login(LoginRequestDTO request) {
+    public LoginDTO login(LoginRequestDTO request) {
         User user;
         try {
             user = userRepository.findByUsername(request.username())
@@ -139,13 +154,17 @@ public class AuthenticationService {
 
         log.info("member logged in: username={} id={}", user.getUsername(), user.getUserId());
 
-        return new AuthTokenDTO(token, expiresAt, user.getUserId(), user.getUsername());
+        AuthTokenDTO authTokenDTO = new AuthTokenDTO(token, expiresAt, user.getUserId(), user.getUsername());
+        ActiveOrderDTO activeOrderDTO = reservationService.restoreActiveOrder(user.getUserId());
+        List<NotificationDTO> notifications = notificationDispatchService.deliverPending(user.getUserId());
+        return new LoginDTO(authTokenDTO, activeOrderDTO, notifications);
     }
 
     /**
      * Terminates the authenticated session by revoking the token. UC-14.
      *
-     * <p>Per II.3.1 the session state downgrades back to Guest-Visitor. Cart
+     * <p>
+     * Per II.3.1 the session state downgrades back to Guest-Visitor. Cart
      * state is not touched here (II.3.0.1 / II.3.0.3 govern Active Orders
      * separately). Idempotent: logout with a {@code null} / blank /
      * already-revoked token is a no-op.

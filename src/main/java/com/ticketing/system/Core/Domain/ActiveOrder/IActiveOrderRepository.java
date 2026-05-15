@@ -13,7 +13,7 @@ public interface IActiveOrderRepository {
     void delete(String userId);
 
     // UC-5 / UC-13 — guest carts are session-bound (II.1.2 / II.1.3).
-    Optional<ActiveOrder> getBySessionId(String sessionId);
+    ActiveOrder getBySessionId(String sessionId);
 
     // UC-2 — sweep query for the expiration job.
     List<ActiveOrder> findExpired();
