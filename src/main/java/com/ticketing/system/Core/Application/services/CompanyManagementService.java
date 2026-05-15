@@ -4,10 +4,13 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
+import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
+import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
+import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.ManagementInvitation;
 import com.ticketing.system.Core.Domain.users.Permission;
@@ -16,13 +19,15 @@ import com.ticketing.system.Core.Domain.users.User;
 public class CompanyManagementService {
     private final IProductionCompanyRepository companyRepository;
     private final IUserRepository userRepository;
+    private final IOrderReceiptRepository orderReceiptRepository;
     private final ISessionManager sessionManager;
     private final Logger logger = LoggerFactory.getLogger(CompanyManagementService.class);
 
 
-    public CompanyManagementService(IProductionCompanyRepository companyRepository, IUserRepository userRepository, ISessionManager sessionManager) {
+    public CompanyManagementService(IProductionCompanyRepository companyRepository, IUserRepository userRepository, IOrderReceiptRepository orderReceiptRepository, ISessionManager sessionManager) {
         this.companyRepository = companyRepository;
         this.userRepository = userRepository;
+        this.orderReceiptRepository = orderReceiptRepository;
         this.sessionManager = sessionManager;
     }
 
@@ -208,16 +213,69 @@ public class CompanyManagementService {
         throw new UnsupportedOperationException("UC-21: not implemented");
     }
 
+
+
+
+
+
+    
+
+
     // UC-22 — Owner-side flat list of company sales.
-    public com.ticketing.system.Core.Application.dto.PageDTO<
-            com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO>
-            viewSalesHistory(String token, int companyId, int pageNumber, int pageSize) {
-        throw new UnsupportedOperationException("UC-22: not implemented");
+    public List<PurchaseHistoryDTO> viewSalesHistory(String token, int companyId) {
+        this.logger.info("Attempting to view sales history for company {}", companyId);
+
+        if (!sessionManager.validateToken(token)) {
+            logger.warn("Invalid token provided for viewing sales history");
+            throw new InvalidTokenException("Invalid token");
+        }
+
+        // check via token that requester has Owner or Manager permissions for the company; if not, log and throw an exception
+        int requesterId = sessionManager.extractUserId(token);
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null) {
+            logger.warn("Company {} not found", companyId);
+            throw new RuntimeException("Company not found");
+        }
+        if (!company.hasPermission(requesterId, Permission.VIEW_SALES)) {
+            logger.warn("User {} does not have permission to view sales history for company {}", requesterId, companyId);
+            throw new RuntimeException("Insufficient permissions");
+        }
+
+        // get all sales for the company, transform to List<PurchaseHistoryDTO>, and return
+        List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByCompanyId(companyId).stream()  //TODO: get from orders
+                .map(sale -> new PurchaseHistoryDTO(List.of(
+                        new PurchaseHistoryDTO.PurchaseRecordDTO(
+                                sale.getId(),
+                                sale.geteventId,
+                                sale.getEventName(),
+                                sale.getPurchaseTime(),
+                                sale.getTotalAmount(),
+                                sale.getReceiptLines().stream()
+                                        .map(ticket -> new PurchaseHistoryDTO.TicketRecordDTO(
+                                                ticket.getTicketId(),
+                                                ticket.getZoneId(),
+                                                ticket.getSeatNumber(),
+                                                ticket.getPricePaid(),
+                                                ticket.getCurrentStatus()
+                                        ))
+                                        .toList()
+                        )
+                ))).toList();
+
+        logger.info("Successfully retrieved sales history for company {}", companyId);
+        return salesHistory;
     }
 
+
+
+
+
+
+
+
     // UC-25 — recursive organizational tree (Owners only per II.4.15).
-    public com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO
-            viewOrganizationalTree(String token, int companyId) {
+    public OrganizationalTreeNodeDTO viewOrganizationalTree(String token, int companyId) {
         throw new UnsupportedOperationException("UC-25: not implemented");
     }
 
