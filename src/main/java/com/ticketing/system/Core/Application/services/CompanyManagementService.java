@@ -13,6 +13,7 @@ import com.ticketing.system.Core.Domain.users.ManagementInvitation;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
 import java.util.regex.Pattern;
 
 public class CompanyManagementService {
