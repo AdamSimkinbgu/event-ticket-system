@@ -14,7 +14,7 @@ public class Event {
     private final List<String> artistsNames;
     private final EventCategory category;
     private final int comapnyid;
-    private final EventStatus status; 
+    private final EventStatus status;
     private final VenueMap venueMap;
     private final List<ShowDate> showDates;
     private final PurchasePolicy purchasePolicy;
