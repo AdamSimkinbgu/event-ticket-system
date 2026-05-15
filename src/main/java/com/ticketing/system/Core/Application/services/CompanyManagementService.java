@@ -179,7 +179,7 @@ public class CompanyManagementService {
         int userId = sessionManager.extractUserId(token);
 
         if (request.name() == null || request.name().trim().isEmpty() ||
-            request.description() == null || request.description().trim().isEmpty() ||) {
+            request.description() == null || request.description().trim().isEmpty()) {
             
             logger.warn("Company registration failed: Missing required fields by user {}", userId);
             throw new IllegalArgumentException("All company fields (name, description, email, phone) must be provided");
@@ -191,7 +191,7 @@ public class CompanyManagementService {
         }
         
         try {
-            int CompanyId = IProductionCompanyRepository.nextId()
+            int CompanyId = IProductionCompanyRepository.nextId();
             ProductionCompany newProductionCompany = new ProductionCompany(
                 CompanyId,
                 userId,

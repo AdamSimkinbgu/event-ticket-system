@@ -8,5 +8,5 @@ public record ProductionCompanyDTO(
     String name,
     String description,
     String status,                  // CompanyStatus value as string
-    int founderId,
+    int founderId
 ) {}
