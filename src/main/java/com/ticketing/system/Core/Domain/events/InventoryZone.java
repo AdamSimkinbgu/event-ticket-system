@@ -5,7 +5,7 @@ public class InventoryZone {
     private final String name;
     private  int capacity;
     private int reservedAmount;
-    private  int price;
+    private int price;
 
     public InventoryZone(int id, String name, int capacity, int price) {
         this.id = id;
@@ -41,23 +41,36 @@ public class InventoryZone {
     public int getId() {
         return id;
     }
-public int getprice() {
+
+    public String getName() {
+        return name;
+    }
+
+    public int getCapacity() {
+        return capacity;
+    }
+
+    public int getprice() {
         return price;
     }
-public boolean release(int quantity) {
-    if (quantity <= 0) {
-        throw new IllegalArgumentException("Quantity must be positive");
+
+    public boolean release(int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be positive");
+        }
+        reservedAmount = reservedAmount - quantity;
+        return true;
     }
 
-    reservedAmount = reservedAmount - quantity;
-    return true;
-}
+    public void setCapacity(int newCapacity) {
+        if (newCapacity < reservedAmount) {
+            throw new IllegalArgumentException("New capacity cannot be less than the number of reserved tickets");
+    }
+        this.capacity = newCapacity;
+    }
 
-public void setCapacity(int newCapacity) {
-    if (newCapacity < reservedAmount) {
-        throw new IllegalArgumentException("New capacity cannot be less than the number of reserved tickets");
-}
-    this.capacity = newCapacity;
-}
+    public int getReservedAmount() {
+        return reservedAmount;
+    }
 
 }

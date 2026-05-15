@@ -56,7 +56,7 @@ class MemberAccountServiceTest {
     @Test @Disabled("UC-16: viewMyHistory returns own purchase history")
     void givenAuthenticatedMember_whenViewMyHistory_thenOwnHistoryReturned() {
         // Arrange
-        String receiptId = "1";
+        int receiptId = 1;
         int eventId = 10;
         LocalDateTime purchaseTime = LocalDateTime.of(2024, 1, 15, 14, 30);
         AuthTokenDTO validAuth = new AuthTokenDTO(VALID_TOKEN, 1000, USER_ID, "member42");
@@ -107,7 +107,7 @@ class MemberAccountServiceTest {
         // ensure auth was checked and no data access occurred
         Mockito.verify(authenticationService).validateToken(INVALID_TOKEN);
         Mockito.verify(orderReceiptRepository, Mockito.never()).findByHolderUserId(Mockito.anyInt());
-        Mockito.verify(ticketRepository, Mockito.never()).findByOrderReceiptId(Mockito.anyString());
+        Mockito.verify(ticketRepository, Mockito.never()).findByOrderReceiptId(Mockito.anyInt());
         Mockito.verify(eventRepository, Mockito.never()).findById(Mockito.anyInt());
     }
 

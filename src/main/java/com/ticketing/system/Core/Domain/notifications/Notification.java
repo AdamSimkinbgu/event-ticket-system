@@ -1,5 +1,7 @@
 package com.ticketing.system.Core.Domain.notifications;
 
+import com.ticketing.system.Core.Application.dto.NotificationDTO;
+
 import java.time.LocalDateTime;
 
 // Aggregate root for the Notification aggregate (UC-35 / UC-36 / UC-37 design walkthrough).
@@ -41,7 +43,10 @@ public class Notification {
 
     // Lifecycle transition: invoked by NotificationDispatchService.deliverPending (UC-37).
     public void markDelivered() {
-        throw new UnsupportedOperationException("UC-37: not implemented");
+        if (status != NotificationStatus.PENDING) {
+            throw new IllegalStateException("Cannot mark as delivered a notification that is not PENDING. Current status: " + status);
+        }
+        this.status = NotificationStatus.DELIVERED;
     }
 
     // Lifecycle transition: invoked when the user opens the notification in the UI.
@@ -60,5 +65,15 @@ public class Notification {
 
     public boolean isRead() {
         return status == NotificationStatus.READ;
+    }
+
+    public NotificationDTO toDTO() {
+        return new NotificationDTO(
+            id,
+            type.name(),
+            status.name(),
+            message,
+            createdAt
+        );
     }
 }

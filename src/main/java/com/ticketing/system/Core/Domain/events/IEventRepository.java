@@ -15,7 +15,7 @@ public interface IEventRepository {
     List<Event> findByCompanyId(int companyId);
 
     // UC-3 / UC-22 — fast id-only projection (avoids loading full Event aggregates).
-    List<String> findIdsByCompany(int companyId);
+    List<Integer> findIdsByCompany(int companyId);
 
     // UC-3 / UC-7 — public catalog uses ON_SALE + active company filter.
     List<Event> findActiveByCompany(int companyId);

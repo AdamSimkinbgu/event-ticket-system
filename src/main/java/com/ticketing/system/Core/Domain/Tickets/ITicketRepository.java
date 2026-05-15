@@ -19,7 +19,7 @@ public interface ITicketRepository {
     int countAvailableInZone(String eventId, String zoneId);
 
     // UC-10 / UC-22 / UC-16 — tickets that belong to one OrderReceipt.
-    List<Ticket> findByOrderReceiptId(String orderReceiptId);
+    List<Ticket> findByOrderReceiptId(int orderReceiptId);
 
     // UC-16 / UC-22 / UC-31 — purchase history per buyer.
     List<Ticket> findByHolderUserId(int holderUserId);
