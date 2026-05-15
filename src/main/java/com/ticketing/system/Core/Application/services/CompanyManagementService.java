@@ -12,12 +12,16 @@ import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.ManagementInvitation;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
+import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import java.util.regex.Pattern;
 
 public class CompanyManagementService {
     private final IProductionCompanyRepository companyRepository;
     private final IUserRepository userRepository;
     private final ISessionManager sessionManager;
     private final Logger logger = LoggerFactory.getLogger(CompanyManagementService.class);
+    private static final String EMAIL_PATTERN = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
+    private static final String PHONE_PATTERN = "^\\+?[0-9\\-\\s]{9,15}$";
 
 
     public CompanyManagementService(IProductionCompanyRepository companyRepository, IUserRepository userRepository, ISessionManager sessionManager) {
@@ -167,10 +171,51 @@ public class CompanyManagementService {
     // ---------------------------------------------------------------------------
 
     // UC-18 — register a new Production Company; appoints Founder/Owner in same transaction.
-    public com.ticketing.system.Core.Application.dto.CompanyDTO registerCompany(
-            String token,
-            com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO request) {
-        throw new UnsupportedOperationException("UC-18: not implemented");
+    public ProductionCompanyDTO registerCompany(String token, CompanyRegistrationDTO request) {
+        if (!sessionManager.validateToken(token)) {
+            logger.warn("Invalid token provided for registering a company");
+            throw new RuntimeException("Invalid token"); 
+        }
+        int userId = sessionManager.extractUserId(token);
+
+        if (request.name() == null || request.name().trim().isEmpty() ||
+            request.description() == null || request.description().trim().isEmpty() ||) {
+            
+            logger.warn("Company registration failed: Missing required fields by user {}", userId);
+            throw new IllegalArgumentException("All company fields (name, description, email, phone) must be provided");
+        }
+
+        if (IProductionCompanyRepository.existsByName(request.name().trim())) {
+            logger.warn("Company registration failed: Company name '{}' already exists", request.name());
+            throw new IllegalStateException("A company with this name already exists");
+        }
+        
+        try {
+            int CompanyId = IProductionCompanyRepository.nextId()
+            ProductionCompany newProductionCompany = new ProductionCompany(
+                CompanyId,
+                userId,
+                request.name().trim(),
+                ACTIVE,
+                request.description().trim(),
+                null
+            );
+
+            Company savedCompany = IProductionCompanyRepository.save(newProductionCompany);
+            logger.info("Successfully registered new company: '{}' by userId: {}", savedCompany.getName(), userId);
+
+            return new ProductionCompanyDTO(
+                savedCompany.getId(),
+                savedCompany.getName(),
+                savedCompany.getDescription(),
+                savedCompany.getStatus(),
+                savedCompany.getOwnerId()
+            );
+
+        } catch (Exception e) {
+            logger.error("Error occurred while saving company '{}': {}", request.name(), e.getMessage());
+            throw new RuntimeException("Failed to register company due to a server error", e);
+        }
     }
 
     // UC-23 — Owner appoints another Member as co-Owner (PENDING).
