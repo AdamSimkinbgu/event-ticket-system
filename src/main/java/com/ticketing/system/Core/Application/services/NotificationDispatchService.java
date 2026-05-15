@@ -18,6 +18,9 @@ import com.ticketing.system.Core.Domain.notifications.NotificationStatus;
 //
 // The Domain-Events pattern was committed at UC-35 (see design_walkthrough_summary.md §6).
 // Listener wiring (which domain events trigger dispatchFromEvent) lives in code, off-diagram.
+import org.springframework.stereotype.Service;
+
+@Service
 public class NotificationDispatchService {
 
     private final INotificationRepository notificationRepository;

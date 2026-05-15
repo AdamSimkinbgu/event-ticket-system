@@ -14,6 +14,9 @@ import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 
 // Owns platform-bootstrap, market-lifecycle, and global admin queries.
 // UC-1 (Initialize), UC-31 (Global History), UC-32 (Open/Close Market).
+import org.springframework.stereotype.Service;
+
+@Service
 public class SystemAdminService {
 
     private final IAdminRepository adminRepository;
