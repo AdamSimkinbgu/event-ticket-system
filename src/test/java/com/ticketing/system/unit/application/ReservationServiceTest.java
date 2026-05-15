@@ -32,8 +32,9 @@ class ReservationServiceTest {
         mockEventRepo = mock(IEventRepository.class);
         mockOrderRepo = mock(IActiveOrderRepository.class);
         mockSessionManager = mock(ISessionManager.class);
+        mocKnotification = mock(INotificationService.class)
         
-        service = new ReservationService(mockEventRepo, mockOrderRepo, mockSessionManager);
+        service = new ReservationService(mockEventRepo, mockOrderRepo, mockSessionManager, mocKnotification);
     }
 
     @Test
@@ -49,7 +50,7 @@ class ReservationServiceTest {
         when(mockEventRepo.findById(eventId)).thenReturn(mockEvent);
         when(mockEvent.getZone(zoneId)).thenReturn(mockZone);
         when(mockZone.getAvailableAmount()).thenReturn(10);
-        when(mockZone.getprice()).thenReturn(50.0);
+        when(mockZone.getprice()).thenReturn(50);
 
         when(mockOrderRepo.getBySessionId(sessionId)).thenReturn(Optional.empty());
 
@@ -85,7 +86,7 @@ class ReservationServiceTest {
         when(mockEventRepo.findById(eventId)).thenReturn(mockEvent);
         when(mockEvent.getZone(zoneId)).thenReturn(mockZone);
         when(mockZone.getAvailableAmount()).thenReturn(10);
-        when(mockZone.getprice()).thenReturn(50.0);
+        when(mockZone.getprice()).thenReturn(50);
 
         when(mockOrderRepo.getBySessionId(sessionId)).thenReturn(Optional.of(existingOrder));
 
