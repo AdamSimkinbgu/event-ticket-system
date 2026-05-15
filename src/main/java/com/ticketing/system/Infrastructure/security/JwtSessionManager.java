@@ -30,11 +30,12 @@ import io.jsonwebtoken.security.Keys;
  * jjwt-backed implementation of {@link ISessionManager}. UC-12 / UC-14.
  *
  * <p>Tokens are HS256-signed using {@code jwt.secret} from configuration and
- * expire after {@code jwt.expiration-minutes}. Revocation (UC-14) is recorded
- * by deleting the corresponding {@link Session} row through
- * {@link ISessionRepository}; revoked tokens fail every reader because the
- * Session existence check lives inside the central {@link #parseClaims}
- * helper.
+ * expire after {@code session.member-ttl-minutes} (the JWT's exp claim and
+ * the Session row's expiresAt are always kept in sync by construction).
+ * Revocation (UC-14) is recorded by deleting the corresponding {@link Session}
+ * row through {@link ISessionRepository}; revoked tokens fail every reader
+ * because the Session existence check lives inside the central
+ * {@link #parseClaims} helper.
  *
  * <p>Each issued JWT carries a {@code sid} claim that identifies the matching
  * Session row. {@code subject} is still the userId so callers that only need
@@ -56,7 +57,7 @@ public class JwtSessionManager implements ISessionManager {
 
     public JwtSessionManager(
             @Value("${jwt.secret}") String secret,
-            @Value("${jwt.expiration-minutes}") long expirationMinutes,
+            @Value("${session.member-ttl-minutes}") long expirationMinutes,
             ISessionRepository sessions,
             Clock clock) {
         this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
