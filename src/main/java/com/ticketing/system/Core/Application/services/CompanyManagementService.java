@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 
 
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
@@ -175,46 +176,49 @@ public class CompanyManagementService {
     public ProductionCompanyDTO registerCompany(String token, CompanyRegistrationDTO request) {
         if (!sessionManager.validateToken(token)) {
             logger.warn("Invalid token provided for registering a company");
-            throw new RuntimeException("Invalid token"); 
+            throw new RuntimeException("Invalid token");
         }
         int userId = sessionManager.extractUserId(token);
 
-        if (request.name() == null || request.name().trim().isEmpty() ||
-            request.description() == null || request.description().trim().isEmpty()) {
-            
+        // CompanyRegistrationDTO is a class with get* accessors, not a record.
+        if (request.getName() == null || request.getName().trim().isEmpty() ||
+            request.getDescription() == null || request.getDescription().trim().isEmpty()) {
+
             logger.warn("Company registration failed: Missing required fields by user {}", userId);
-            throw new IllegalArgumentException("All company fields (name, description, email, phone) must be provided");
+            throw new IllegalArgumentException("All company fields (name, description) must be provided");
         }
 
-        if (IProductionCompanyRepository.existsByName(request.name().trim())) {
-            logger.warn("Company registration failed: Company name '{}' already exists", request.name());
+        // Call on the injected instance, not the interface.
+        if (companyRepository.existsByName(request.getName().trim())) {
+            logger.warn("Company registration failed: Company name '{}' already exists", request.getName());
             throw new IllegalStateException("A company with this name already exists");
         }
-        
+
         try {
-            int CompanyId = IProductionCompanyRepository.nextId();
+            int companyId = companyRepository.nextId();
             ProductionCompany newProductionCompany = new ProductionCompany(
-                CompanyId,
+                companyId,
                 userId,
-                request.name().trim(),
-                ACTIVE,
-                request.description().trim(),
+                request.getName().trim(),
+                CompanyStatus.ACTIVE,
+                request.getDescription().trim(),
                 null
             );
 
-            Company savedCompany = IProductionCompanyRepository.save(newProductionCompany);
-            logger.info("Successfully registered new company: '{}' by userId: {}", savedCompany.getName(), userId);
+            // IProductionCompanyRepository.save returns void; the new instance IS the saved one.
+            companyRepository.save(newProductionCompany);
+            logger.info("Successfully registered new company: '{}' by userId: {}", newProductionCompany.getName(), userId);
 
             return new ProductionCompanyDTO(
-                savedCompany.getId(),
-                savedCompany.getName(),
-                savedCompany.getDescription(),
-                savedCompany.getStatus(),
-                savedCompany.getOwnerId()
+                newProductionCompany.getCompanyId(),
+                newProductionCompany.getName(),
+                newProductionCompany.getDescription(),
+                newProductionCompany.getStatus().name(),   // DTO field is String
+                newProductionCompany.getFounderId()        // DTO field is founderId
             );
 
         } catch (Exception e) {
-            logger.error("Error occurred while saving company '{}': {}", request.name(), e.getMessage());
+            logger.error("Error occurred while saving company '{}': {}", request.getName(), e.getMessage());
             throw new RuntimeException("Failed to register company due to a server error", e);
         }
     }

@@ -597,28 +597,23 @@ public class CompanyManagementServiceTest {
         String token = "valid-token";
         int userId = 10;
         int expectedCompanyId = 100;
-        CompanyRegistrationDTO request = new CompanyRegistrationDTO("Epic Productions", "Great movies", "email@test.com", "0501234567");
+        CompanyRegistrationDTO request = new CompanyRegistrationDTO("Epic Productions", "Great movies");
         
         when(sessionManager.validateToken(token)).thenReturn(true);
         when(sessionManager.extractUserId(token)).thenReturn(userId);
         
         when(mockCompanyRepo.existsByName("Epic Productions")).thenReturn(false);
         when(mockCompanyRepo.nextId()).thenReturn(expectedCompanyId);
-        
-        ProductionCompany savedCompany = mock(ProductionCompany.class);
-        when(savedCompany.getId()).thenReturn(expectedCompanyId);
-        when(savedCompany.getName()).thenReturn("Epic Productions");
-        when(savedCompany.getDescription()).thenReturn("Great movies");
-        when(savedCompany.getStatus()).thenReturn(CompanyStatus.ACTIVE); 
-        when(savedCompany.getOwnerId()).thenReturn(userId);
-        
-        when(mockCompanyRepo.save(any(ProductionCompany.class))).thenReturn(savedCompany);
+
+        // save() is void per IProductionCompanyRepository — no return-value mock needed.
+        // The service builds the DTO from the locally-constructed ProductionCompany,
+        // so the test verifies via the captured argument below + the returned DTO.
 
         ProductionCompanyDTO result = companyService.registerCompany(token, request);
 
         assertNotNull(result);
-        assertEquals(expectedCompanyId, result.getId());
-        assertEquals("Epic Productions", result.getName());
+        assertEquals(expectedCompanyId, result.companyId());
+        assertEquals("Epic Productions", result.name());
         
         ArgumentCaptor<ProductionCompany> companyCaptor = ArgumentCaptor.forClass(ProductionCompany.class);
         verify(mockCompanyRepo, times(1)).save(companyCaptor.capture());
@@ -631,7 +626,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenInvalidToken_WhenRegisterCompany_ThenThrowException() {
         String token = "invalid-token";
-        CompanyRegistrationDTO request = new CompanyRegistrationDTO("Name", "Desc", "email", "phone");
+        CompanyRegistrationDTO request = new CompanyRegistrationDTO("Name", "Desc");
         
         when(sessionManager.validateToken(token)).thenReturn(false);
 
@@ -646,7 +641,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenEmptyCompanyName_WhenRegisterCompany_ThenThrowException() {
         String token = "valid-token";
-        CompanyRegistrationDTO request = new CompanyRegistrationDTO("   ", "Valid Description", "email", "phone");
+        CompanyRegistrationDTO request = new CompanyRegistrationDTO("   ", "Valid Description");
         
         when(sessionManager.validateToken(token)).thenReturn(true);
         when(sessionManager.extractUserId(token)).thenReturn(1);
@@ -662,7 +657,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenExistingCompanyName_WhenRegisterCompany_ThenThrowException() {
         String token = "valid-token";
-        CompanyRegistrationDTO request = new CompanyRegistrationDTO("Existing Name", "Desc", "email", "phone");
+        CompanyRegistrationDTO request = new CompanyRegistrationDTO("Existing Name", "Desc");
         
         when(sessionManager.validateToken(token)).thenReturn(true);
         when(sessionManager.extractUserId(token)).thenReturn(1);
@@ -680,14 +675,16 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenDatabaseError_WhenRegisterCompany_ThenThrowException() {
         String token = "valid-token";
-        CompanyRegistrationDTO request = new CompanyRegistrationDTO("New Co", "Desc", "email", "phone");
+        CompanyRegistrationDTO request = new CompanyRegistrationDTO("New Co", "Desc");
         
         when(sessionManager.validateToken(token)).thenReturn(true);
         when(sessionManager.extractUserId(token)).thenReturn(1);
         when(mockCompanyRepo.existsByName(anyString())).thenReturn(false);
         when(mockCompanyRepo.nextId()).thenReturn(100);
         
-        when(mockCompanyRepo.save(any(ProductionCompany.class))).thenThrow(new RuntimeException("Database connection lost"));
+        // save() returns void; use Mockito's doThrow().when() pattern for void methods.
+        doThrow(new RuntimeException("Database connection lost"))
+                .when(mockCompanyRepo).save(any(ProductionCompany.class));
 
         RuntimeException exception = assertThrows(RuntimeException.class, () -> {
             companyService.registerCompany(token, request);
