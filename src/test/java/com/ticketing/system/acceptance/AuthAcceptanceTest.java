@@ -14,14 +14,18 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
+import com.ticketing.system.Core.Application.dto.GuestSessionDTO;
 import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.dto.LogoutRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateUsernameException;
+import com.ticketing.system.Core.Domain.exceptions.GuestSessionRequiredException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
+import com.ticketing.system.Core.Domain.users.Session;
 import com.ticketing.system.Core.Domain.users.User;
 
 @SpringBootTest
@@ -30,11 +34,41 @@ class AuthAcceptanceTest {
 
     @Autowired private AuthenticationService authService;
     @Autowired private IUserRepository userRepository;
+    @Autowired private ISessionRepository sessionRepository;
 
-    // UC-11
+    // ------------------------------------------------------------------
+    // Guest session lifecycle
+    // ------------------------------------------------------------------
+
+    @Test
+    void GuestSession_StartsAndGetsRowPersisted() {
+        GuestSessionDTO dto = authService.startGuestSession();
+
+        assertNotNull(dto.sessionId());
+        assertFalse(dto.sessionId().isBlank());
+        Session row = sessionRepository.findById(dto.sessionId()).orElseThrow();
+        assertTrue(row.isGuest());
+    }
+
+    @Test
+    void GuestSession_EndDeletesRow() {
+        GuestSessionDTO dto = authService.startGuestSession();
+        assertTrue(sessionRepository.findById(dto.sessionId()).isPresent());
+
+        authService.endGuestSession(dto.sessionId());
+
+        assertFalse(sessionRepository.findById(dto.sessionId()).isPresent());
+    }
+
+    // ------------------------------------------------------------------
+    // UC-11 — Register requires Guest session (D10a)
+    // ------------------------------------------------------------------
+
     @Test
     void GivenUniqueDetails_WhenRegister_ThenMemberCreated() {
-        authService.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1"));
+        String sid = authService.startGuestSession().sessionId();
+
+        authService.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", sid));
 
         assertTrue(userRepository.existsByUsername("alice"));
         User stored = userRepository.findByUsername("alice").orElseThrow();
@@ -43,32 +77,47 @@ class AuthAcceptanceTest {
     }
 
     @Test
-    void GivenDuplicateUsername_WhenRegister_ThenRejected() {
-        authService.register(new RegisterRequestDTO("bob", "bob@example.com", "Password1"));
+    void GivenSuccessfulRegistration_WhenCheckSession_ThenStillGuest() {
+        String sid = authService.startGuestSession().sessionId();
 
+        authService.register(new RegisterRequestDTO("carol", "carol@example.com", "Password1", sid));
+
+        // II.1.4 / D10a: session must still be Guest after register.
+        Session row = sessionRepository.findById(sid).orElseThrow();
+        assertTrue(row.isGuest());
+        // User was actually created.
+        assertTrue(userRepository.existsByUsername("carol"));
+    }
+
+    @Test
+    void GivenDuplicateUsername_WhenRegister_ThenRejected() {
+        String sid1 = authService.startGuestSession().sessionId();
+        authService.register(new RegisterRequestDTO("bob", "bob@example.com", "Password1", sid1));
+
+        String sid2 = authService.startGuestSession().sessionId();
         assertThrows(DuplicateUsernameException.class, () ->
-            authService.register(new RegisterRequestDTO("bob", "bob2@example.com", "Password1"))
+            authService.register(new RegisterRequestDTO("bob", "bob2@example.com", "Password1", sid2))
         );
     }
 
     @Test
-    void GivenSuccessfulRegistration_WhenCheckSession_ThenStillGuest() {
-        authService.register(new RegisterRequestDTO("carol", "carol@example.com", "Password1"));
-
-        // II.1.4: register is void — no AuthTokenDTO is produced. The user exists in the
-        // repository but no session was established. UC-12 login is required to upgrade
-        // a Guest session to Member-Visitor.
-        User stored = userRepository.findByUsername("carol").orElseThrow();
-        assertNotEquals("Password1", stored.getEmail()); // sanity: fields wired correctly
-        assertTrue(userRepository.existsByUsername("carol"));
+    void GivenNoGuestSession_WhenRegister_ThenGuestSessionRequired() {
+        assertThrows(GuestSessionRequiredException.class, () ->
+            authService.register(new RegisterRequestDTO("nobody", "nobody@example.com", "Password1", null))
+        );
+        assertFalse(userRepository.existsByUsername("nobody"));
     }
 
-    // UC-12
+    // ------------------------------------------------------------------
+    // UC-12 — Login promotes Guest session in place
+    // ------------------------------------------------------------------
+
     @Test
     void GivenValidCredentials_WhenLogin_ThenTokenIssued() {
-        authService.register(new RegisterRequestDTO("dave", "dave@example.com", "Password1"));
+        String sid = authService.startGuestSession().sessionId();
+        authService.register(new RegisterRequestDTO("dave", "dave@example.com", "Password1", sid));
 
-        AuthTokenDTO result = authService.login(new LoginRequestDTO("dave", "Password1"));
+        AuthTokenDTO result = authService.login(new LoginRequestDTO("dave", "Password1", sid));
 
         assertNotNull(result.token());
         assertFalse(result.token().isBlank());
@@ -79,50 +128,99 @@ class AuthAcceptanceTest {
     }
 
     @Test
+    void GivenLogin_ThenGuestSessionPromotedInPlace_SidPreserved() {
+        String sid = authService.startGuestSession().sessionId();
+        authService.register(new RegisterRequestDTO("hank", "hank@example.com", "Password1", sid));
+
+        AuthTokenDTO result = authService.login(new LoginRequestDTO("hank", "Password1", sid));
+
+        // Same Session row — userId is now set, sessionId preserved.
+        Session row = sessionRepository.findById(sid).orElseThrow();
+        assertTrue(row.isMember());
+        assertEquals(result.userId(), row.getUserId());
+        assertEquals(sid, row.getSessionId());
+    }
+
+    @Test
     void GivenInvalidCredentials_WhenLogin_ThenGenericReject() {
-        authService.register(new RegisterRequestDTO("eve", "eve@example.com", "Password1"));
+        String sid = authService.startGuestSession().sessionId();
+        authService.register(new RegisterRequestDTO("eve", "eve@example.com", "Password1", sid));
 
         // Wrong password and unknown user yield the SAME exception — no enumeration leak.
+        // Need a fresh guest session each time because the previous would be promoted on success.
+        String sidA = authService.startGuestSession().sessionId();
         assertThrows(AuthenticationFailedException.class, () ->
-            authService.login(new LoginRequestDTO("eve", "wrongpass"))
+            authService.login(new LoginRequestDTO("eve", "wrongpass", sidA))
         );
+        String sidB = authService.startGuestSession().sessionId();
         assertThrows(AuthenticationFailedException.class, () ->
-            authService.login(new LoginRequestDTO("nosuchuser", "anything1"))
+            authService.login(new LoginRequestDTO("nosuchuser", "anything1", sidB))
+        );
+    }
+
+    @Test
+    void GivenNoGuestSession_WhenLogin_ThenGuestSessionRequired() {
+        assertThrows(GuestSessionRequiredException.class, () ->
+            authService.login(new LoginRequestDTO("alice", "Password1", null))
+        );
+    }
+
+    @Test
+    void GivenLoginWithMemberSessionId_WhenLogin_ThenGuestSessionRequired() {
+        // Promoting twice on the same sid should be rejected — second login must use a fresh Guest.
+        String sid = authService.startGuestSession().sessionId();
+        authService.register(new RegisterRequestDTO("ivy", "ivy@example.com", "Password1", sid));
+        authService.login(new LoginRequestDTO("ivy", "Password1", sid));   // first promotion succeeds
+
+        assertThrows(GuestSessionRequiredException.class, () ->
+            authService.login(new LoginRequestDTO("ivy", "Password1", sid))
         );
     }
 
     // UC-13
-    @Test @Disabled("UC-13 main: pending order restored on login")
+    @Test @Disabled("UC-13 main: pending order restored on login (Phase 4/5 work)")
     void GivenMemberWithPendingOrder_WhenLogin_ThenOrderRestored() {}
     @Test @Disabled("UC-13 alt: expired order is not restored")
     void GivenExpiredOrder_WhenLogin_ThenNoRestoration() {}
 
-    // UC-14
+    // ------------------------------------------------------------------
+    // UC-14 — Logout (D8 = L1: session row deleted)
+    // ------------------------------------------------------------------
+
     @Test
     void GivenLoggedInMember_WhenLogout_ThenStateGuest() {
-        // II.3.1: logout terminates the authenticated session and downgrades the state
-        // back to Guest-Visitor. We verify the downgrade by asserting the issued token
-        // is no longer valid after logout.
-        authService.register(new RegisterRequestDTO("frank", "frank@example.com", "Password1"));
-        AuthTokenDTO session = authService.login(new LoginRequestDTO("frank", "Password1"));
+        // II.3.1 / D8: logout deletes the Session row entirely.
+        String sid = authService.startGuestSession().sessionId();
+        authService.register(new RegisterRequestDTO("frank", "frank@example.com", "Password1", sid));
+        AuthTokenDTO session = authService.login(new LoginRequestDTO("frank", "Password1", sid));
         assertTrue(authService.validateToken(session.token()));
 
         authService.logout(new LogoutRequestDTO(session.token()));
 
         assertThrows(InvalidTokenException.class, () -> authService.validateToken(session.token()));
+        // Session row gone — user must startGuestSession() to act again (D8 = L1).
+        assertFalse(sessionRepository.findById(sid).isPresent());
     }
 
     @Test
     void GivenAlreadyLoggedOutToken_WhenLogoutAgain_ThenNoError() {
         // Idempotency: repeating logout with the same (already-revoked) token must not throw.
-        authService.register(new RegisterRequestDTO("grace", "grace@example.com", "Password1"));
-        AuthTokenDTO session = authService.login(new LoginRequestDTO("grace", "Password1"));
+        String sid = authService.startGuestSession().sessionId();
+        authService.register(new RegisterRequestDTO("grace", "grace@example.com", "Password1", sid));
+        AuthTokenDTO session = authService.login(new LoginRequestDTO("grace", "Password1", sid));
         authService.logout(new LogoutRequestDTO(session.token()));
 
         // Second call should silently succeed.
         authService.logout(new LogoutRequestDTO(session.token()));
     }
 
-    @Test @Disabled("UC-14 (II.3.0.1): order remains linked to member on logout — needs ActiveOrder")
+    @Test
+    void DifferentGuestSessionsHaveDifferentIds() {
+        String sidA = authService.startGuestSession().sessionId();
+        String sidB = authService.startGuestSession().sessionId();
+        assertNotEquals(sidA, sidB);
+    }
+
+    @Test @Disabled("UC-14 (II.3.0.1): cart-on-logout persistence — D9a, Phase 4/5 work")
     void GivenLoggedInWithOrder_WhenLogout_ThenOrderStaysLinked() {}
 }

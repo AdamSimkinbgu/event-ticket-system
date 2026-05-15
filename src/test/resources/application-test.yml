@@ -16,3 +16,8 @@ spring:
 jwt:
   secret: test-only-secret-do-not-use-anywhere-else-must-be-at-least-256-bits-long
   expiration-minutes: 60
+
+# Session TTLs — test values keep absolute time short for fast tests.
+session:
+  member-ttl-minutes: 60
+  guest-idle-timeout-minutes: 10
