@@ -1,6 +1,7 @@
 package com.ticketing.system.Infrastructure.security;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Date;
 import java.util.Optional;
@@ -51,19 +52,22 @@ public class JwtSessionManager implements ISessionManager {
     private final SecretKey signingKey;
     private final long expirationMillis;
     private final ISessionRepository sessions;
+    private final Clock clock;
 
     public JwtSessionManager(
             @Value("${jwt.secret}") String secret,
             @Value("${jwt.expiration-minutes}") long expirationMinutes,
-            ISessionRepository sessions) {
+            ISessionRepository sessions,
+            Clock clock) {
         this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.expirationMillis = expirationMinutes * 60 * 1000;
         this.sessions = sessions;
+        this.clock = clock;
     }
 
     @Override
     public String generateToken(int userId, String username) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Instant expiry = now.plusMillis(expirationMillis);
         String sid = UUID.randomUUID().toString();
         sessions.save(new Session(sid, userId, now, expiry));
@@ -78,7 +82,7 @@ public class JwtSessionManager implements ISessionManager {
         if (!session.isMember()) {
             throw new IllegalStateException("cannot issue JWT for a guest session");
         }
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         return buildJwt(session.getUserId(), username, session.getSessionId(), now, session.getExpiresAt());
     }
 

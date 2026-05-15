@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -24,13 +25,15 @@ class JwtSessionManagerTest {
     private static final String SECRET =
         "unit-test-secret-must-be-long-enough-for-hmac-sha-256-please-ignore-me";
 
+    private Clock clock;
     private ISessionRepository sessions;
     private JwtSessionManager manager;
 
     @BeforeEach
     void setUp() {
-        sessions = new MemorySessionRepository();
-        manager = new JwtSessionManager(SECRET, 60, sessions);
+        clock = Clock.systemUTC();
+        sessions = new MemorySessionRepository(clock);
+        manager = new JwtSessionManager(SECRET, 60, sessions, clock);
     }
 
     @Test
@@ -72,8 +75,9 @@ class JwtSessionManagerTest {
     @Test
     void validateToken_throwsSessionExpiredForExpiredToken() {
         // Negative expiration → token is issued already past its exp claim.
-        ISessionRepository expiredSessions = new MemorySessionRepository();
-        JwtSessionManager expiredManager = new JwtSessionManager(SECRET, -1, expiredSessions);
+        Clock expiredClock = Clock.systemUTC();
+        ISessionRepository expiredSessions = new MemorySessionRepository(expiredClock);
+        JwtSessionManager expiredManager = new JwtSessionManager(SECRET, -1, expiredSessions, expiredClock);
         String token = expiredManager.generateToken(42, "alice");
         assertThrows(SessionExpiredException.class, () -> expiredManager.validateToken(token));
     }

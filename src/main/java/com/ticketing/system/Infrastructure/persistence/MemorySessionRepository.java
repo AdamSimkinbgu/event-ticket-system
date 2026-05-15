@@ -1,5 +1,6 @@
 package com.ticketing.system.Infrastructure.persistence;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,11 +19,19 @@ import com.ticketing.system.Core.Domain.users.Session;
  * <p>Storage is a thread-safe {@code ConcurrentHashMap} keyed by sessionId.
  * Mirrors {@code MemoryUserRepository}'s shape. A future JPA-backed adapter
  * will replace this class without touching the application layer.
+ *
+ * <p>{@link Clock} is injected so tests can supply a fixed clock for
+ * deterministic expiry behavior.
  */
 @Repository
 public class MemorySessionRepository implements ISessionRepository {
 
     private final Map<String, Session> sessionsById = new ConcurrentHashMap<>();
+    private final Clock clock;
+
+    public MemorySessionRepository(Clock clock) {
+        this.clock = clock;
+    }
 
     @Override
     public void save(Session session) {
@@ -39,7 +48,7 @@ public class MemorySessionRepository implements ISessionRepository {
 
     @Override
     public boolean existsByUserId(int userId) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Integer target = userId;
         for (Session s : sessionsById.values()) {
             if (target.equals(s.getUserId()) && !s.isExpiredAt(now)) {
