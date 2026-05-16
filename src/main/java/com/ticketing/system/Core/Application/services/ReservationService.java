@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.dto.ReservationResultDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
@@ -459,8 +460,25 @@ private void validateActiveOrderContainsEnoughTickets(
 
 
     public com.ticketing.system.Core.Application.dto.ActiveOrderDTO restoreActiveOrder(int userId) {
-        throw new UnsupportedOperationException("UC-13: not implemented");
-    }
+ ActiveOrder activeOrder = activeOrderRepository.getByUserId(userId);
+        if (activeOrder == null) {
+            eventLogger.info("No active order found for userId={}, returning null", userId);
+            return null;
+        }
+        eventLogger.info("Active order found for userId={}, restoring ActiveOrderDTO", userId);
+        ActiveOrderDTO activeOrderDTO = activeOrder.toDTO();
+        for (ActiveOrderDTO.CartLineDTO line : activeOrderDTO.lines()) {
+            String eventName = eventRepository.findById(line.eventId()).getName();
+            line = new ActiveOrderDTO.CartLineDTO(
+                    line.eventId(),
+                    eventName,
+                    line.zoneId(),
+                    line.seatNumber(),
+                    line.pricePerTicket(),
+                    line.addedAt());
+        }
+        return activeOrderDTO;   
+     }
 
     public void abandonActiveOrder(String userId) {
         throw new UnsupportedOperationException("UC-14: not implemented");
