@@ -6,12 +6,14 @@ import java.util.List;
 // Lightweight Event projection for listings — UC-3 (browse), UC-7 (search results).
 // Use EventDetailDTO for the per-event detail page.
 public record EventSummaryDTO(
-    String eventId,
+    int eventId,
     String name,
+    String status,
+    Double rating,
     String companyName,
     String category,
     String location,
-    List<LocalDateTime> showDates,
+    List<ShowDateDTO> showDates,
     double minPrice,
     double maxPrice,
     boolean soldOut

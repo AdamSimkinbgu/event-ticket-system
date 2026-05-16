@@ -7,6 +7,12 @@ import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
 // V1 stub for ITicketIssuer. Lets V1 tests run without a real ticket-issuance provider.
 // V2/V3 will replace with real adapters per I.4.2 (multiple provider support).
 // All bodies are stubs — owned by the team member assigned to UC-34.
+import org.springframework.stereotype.Component;
+
+
+import org.springframework.stereotype.Component;
+
+@Component
 public class StubTicketIssuer implements ITicketIssuer {
 
     @Override

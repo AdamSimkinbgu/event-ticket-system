@@ -5,6 +5,6 @@ package com.ticketing.system.Core.Domain.exceptions;
 public class EventNotFoundException extends EntityNotFoundException {
 
     public EventNotFoundException(Object eventId) {
-        super("Event", eventId);
+        super("Event not found: ", eventId);
     }
 }

@@ -14,18 +14,19 @@ import org.junit.jupiter.api.Test;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
+import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.VenueMap;
+import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.users.Permission;
 
 class EventManagementServiceTest {
-
-
-
 
     private IEventRepository mockEventRepo;
     private IProductionCompanyRepository mockCompanyRepo;
@@ -43,6 +44,10 @@ class EventManagementServiceTest {
     private final int OWNER_ID = 1;
     private final int MANAGER_ID = 2;
     private final int ZONE_ID = 5;
+    private final String COMPANY_1_NAME = "Company1";
+    private final String COMPANY_1_DESCRIPTION = "A test production company1";
+    private final Location LOCATION = new Location("Belgium", "Brussels");
+
 
     private ProductionCompany company;
     private InventoryZone zone;
@@ -63,13 +68,17 @@ class EventManagementServiceTest {
                 sessionManager
         );
 
-        company = new ProductionCompany(COMPANY_ID, OWNER_ID);
+        company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         zone = new InventoryZone(ZONE_ID, "VIP", 10, 100);
-        venueMap = new VenueMap(1, List.of(zone));
+        venueMap = new VenueMap(1, LOCATION, List.of(zone));
         event = new Event(
                 EVENT_ID,
                 "Concert",
+                4.5,
+                List.of("Artist1"),
+                EventCategory.CONCERT,
                 COMPANY_ID,
+                EventStatus.SCHEDULED,
                 venueMap,
                 List.of(),
                 null,

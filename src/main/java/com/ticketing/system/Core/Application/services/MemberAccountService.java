@@ -18,6 +18,9 @@ import java.util.List;
 // Reserved for additional member-side reads (UC-15 if it returns from Cancelled, profile views, etc.).
 // Separated from AuthenticationService (which is auth-flow only) so personal-data reads don't
 // stretch the auth boundary — see design_walkthrough_summary.md §6.
+import org.springframework.stereotype.Service;
+
+@Service
 public class MemberAccountService {
 
     private final AuthenticationService authenticationService; // For user identity verification, if needed for future methods.

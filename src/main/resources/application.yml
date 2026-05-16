@@ -13,11 +13,17 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
-# JWT (consumed by Infrastructure/security/JwtSessionManager — UC-12).
+# JWT signing secret (consumed by Infrastructure/security/JwtSessionManager — UC-12).
 # In production the secret MUST be supplied via environment variable, never committed.
 jwt:
   secret: ${JWT_SECRET:dev-only-secret-please-override-in-prod-must-be-at-least-256-bits-long}
-  expiration-minutes: ${JWT_EXPIRATION_MINUTES:1440}
+
+# Session TTLs (auth rework / unified Session aggregate).
+# Member sessions are absolute; Guest sessions are idle-bounded. The JWT's exp
+# claim and the Session row's expiresAt are kept in sync by JwtSessionManager.
+session:
+  member-ttl-minutes: ${SESSION_MEMBER_TTL_MINUTES:1440}
+  guest-idle-timeout-minutes: ${SESSION_GUEST_IDLE_TIMEOUT_MINUTES:30}
 
 # Actuator (SLR.8.1 telemetry / SLR.8.2 logging visibility).
 # Restrict in production by listing only the endpoints you actually want exposed.

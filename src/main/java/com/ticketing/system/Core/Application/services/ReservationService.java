@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.Optional;
 
 import com.ticketing.system.Core.Application.dto.ReservationResultDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
@@ -14,11 +15,14 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 
+import org.springframework.stereotype.Service;
+
+@Service
 public class ReservationService {
 
     private final IEventRepository eventRepository;
     private final IActiveOrderRepository activeOrderRepository;
-      private final ISessionManager iSessionManager;
+    private final ISessionManager iSessionManager;
     private static final Logger eventLogger = LoggerFactory.getLogger("EVENT_LOG");
     private final INotificationService notificationService;
 
@@ -158,6 +162,111 @@ if (activeOrdert.hasReservationForEvent(eventId)) {
         } 
 
     }
+
+    public ReservationResultDTO reserveTicketsForGuest(String sessionId, int eventId, int zoneId, int quantity) {
+        eventLogger.info("Entered reserveTicketsForGuest function: sessionId={}, eventId={}, zoneId={}, quantity={}",
+                sessionId, eventId, zoneId, quantity);
+
+        InventoryZone reservedZone = null;
+        boolean stockReserved = false;
+        
+        try {
+            if (sessionId == null || sessionId.isBlank()) {
+                eventLogger.warn("Checkout rejected: missing session ID");
+                throw new IllegalArgumentException("Missing session ID");
+            }
+
+            if (quantity <= 0) {
+                eventLogger.warn("reserveTicketsForGuest rejected: quantity must be positive. quantity={}", quantity);
+                throw new IllegalArgumentException("Quantity must be positive");
+            }
+
+            Event event = eventRepository.findById(eventId);
+            if (event == null) {
+                eventLogger.warn("reserveTicketsForGuest rejected: event not found. eventId={}", eventId);
+                throw new IllegalArgumentException("Event not found: " + eventId);
+            }
+
+            InventoryZone zone = event.getZone(zoneId);
+            if (zone == null) {
+                eventLogger.warn("reserveTicketsForGuest rejected: zone not found. eventId={}, zoneId={}",
+                        eventId, zoneId);
+                throw new IllegalArgumentException("Zone not found: " + zoneId);
+            }
+
+            double pricePerTicket;
+            ActiveOrder activeOrdert;
+            
+            Optional<ActiveOrder> existingOrderOpt = activeOrderRepository.getBySessionId(sessionId);
+
+            if (existingOrderOpt.isPresent()) {
+                activeOrdert = existingOrderOpt.get();
+            } else {
+                eventLogger.info("No active order found for sessionId={}, creating new ActiveOrder", sessionId);
+                // Auth rework #181 / Phase 4.1a: Guest carts use the forGuest factory
+                // so the dual-identity invariant (userId xor sessionId) holds.
+                activeOrdert = ActiveOrder.forGuest(sessionId);
+            }
+
+            if (activeOrdert.hasReservationForEvent(eventId)) {
+                eventLogger.warn("Reservation failed: guest already has an active order for this event. sessionId={}", sessionId);
+                throw new IllegalStateException("User already has an active order for this event");
+            }
+
+            synchronized (zone) {
+                if (zone.getAvailableAmount() < quantity) {
+                    eventLogger.warn(
+                            "reserveTicketsForGuest rejected: not enough tickets. eventId={}, zoneId={}, requested={}, available={}",
+                            eventId, zoneId, quantity, zone.getAvailableAmount()
+                    );
+                    throw new IllegalArgumentException(
+                            "Only " + zone.getAvailableAmount() + " tickets left"
+                    );
+                }
+
+                pricePerTicket = zone.getprice();
+                zone.reserve(quantity);
+
+                eventLogger.info(
+                        "Tickets reserved in zone stock: eventId={}, zoneId={}, quantity={}, pricePerTicket={}",
+                        eventId, zoneId, quantity, pricePerTicket
+                );
+            }
+            
+            reservedZone = zone;
+            stockReserved = true;
+
+            activeOrdert.addReservation(eventId, zoneId, quantity, pricePerTicket, LocalDateTime.now());
+            activeOrderRepository.save(activeOrdert);
+
+            eventLogger.info("Reservation successful for guest session {}", sessionId);
+
+            return new ReservationResultDTO(
+                    eventId,
+                    zoneId,
+                    quantity,
+                    LocalDateTime.now()
+            );
+
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            if (stockReserved && reservedZone != null) {
+                synchronized (reservedZone) {
+                    reservedZone.release(quantity);
+                }
+
+                eventLogger.warn("Rollback completed: released {} tickets for eventId={}, zoneId={}",
+                        quantity, eventId, zoneId);
+            }
+
+            eventLogger.warn(
+                    "reserveTicketsForGuest failed: eventId={}, zoneId={}, quantity={}, reason={}",
+                    eventId, zoneId, quantity, e.getMessage()
+            );
+
+            throw e;
+        }
+    }
+
 
 
 //     public ReservationResultDTO removeOneReservedTicket(String token, int eventId, int zoneId) {
