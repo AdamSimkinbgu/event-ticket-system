@@ -24,11 +24,14 @@ public class DiscountPolicy {
 
 
 
-    public double calculate(Map<Integer, Double> tickets,LocalDateTime now) {
-    double total = 0;
-
+    public double calculate(int quantity, Double priceAtoneticketReservation,LocalDateTime now) {
+  
    // TODO Auto-generated method stub
     throw new UnsupportedOperationException("Unimplemented method 'calculatePrice'");
-}  
+}
+
+    public double calculatePriceforoneticket(int quantity, Double priceAtoneticketReservation, LocalDateTime now) {
+       return calculate(quantity, priceAtoneticketReservation, now) / quantity;
+    }  
    
 }
