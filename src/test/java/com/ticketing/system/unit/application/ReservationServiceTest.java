@@ -209,13 +209,13 @@ class ReservationServiceTest {
                                 java.time.LocalDateTime.now().plusMinutes(5)))));
 
         when(mockOrder.getUserId()).thenReturn(123);
-        when(mockActiveOrderRepo.getByUserId(123)).thenReturn(mockOrder);
+        when(mockOrderRepo.getByUserId(123)).thenReturn(mockOrder);
         when(mockEventRepo.findById(1)).thenReturn(mockEvent);
         when(mockEvent.getName()).thenReturn("Event 1");
 
         ActiveOrderDTO result = service.restoreActiveOrder(123);
 
-        verify(mockActiveOrderRepo, times(1)).getByUserId(123);
+        verify(mockOrderRepo, times(1)).getByUserId(123);
         verify(mockEventRepo, times(2)).findById(1);
         assert result != null;
         assert result.userId() == 123;
