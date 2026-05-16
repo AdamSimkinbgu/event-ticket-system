@@ -12,6 +12,7 @@ import com.ticketing.system.Core.Application.dto.EventCreationDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
+import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
@@ -32,7 +33,7 @@ public class EventManagementService {
     private final ITicketRepository ticketRepository;
     private final ISessionManager sessionManager;
     private final IOrderReceiptRepository orderReceiptRepository;
-    private final PaymentGateway paymentGateway;
+    private final IPaymentGateway paymentGateway;
     private static final Logger log = LoggerFactory.getLogger(EventManagementService.class);
     public EventManagementService(
             IEventRepository eventRepository,
@@ -40,7 +41,7 @@ public class EventManagementService {
             ITicketRepository ticketRepository,
             ISessionManager sessionManager,
             IOrderReceiptRepository orderReceiptRepository,
-            PaymentGateway paymentGateway
+            IPaymentGateway paymentGateway
     ) {
         this.eventRepository = eventRepository;
         this.companyRepository = companyRepository;
@@ -86,7 +87,7 @@ public class EventManagementService {
         company.checkowner(ownerId);
         
         List<Ticket> tickets = ticketRepository.findByEventId(String.valueOf(eventId));
-        List<OrderReceipt> orderReceipts = orderReceiptRepository.findByEventIds(String.valueOf(eventId));
+        List<OrderReceipt> orderReceipts = orderReceiptRepository.findByEventId(String.valueOf(eventId));
         for (OrderReceipt receipt : orderReceipts) {
             if (receipt.wasRefunded()) {
                 continue;
@@ -105,8 +106,8 @@ public class EventManagementService {
             if (requiresRefund && totalRefundForReceipt > 0) {
                 paymentGateway.refund(
                     receipt.getHolderUserId(), 
-                    totalRefundForReceipt, 
-                    "Refund for canceled event: " + event.getId()
+                     totalRefundForReceipt 
+                    // "Refund for canceled event: " + event.getId()
                 );
                 
                 receipt.markRefunded();

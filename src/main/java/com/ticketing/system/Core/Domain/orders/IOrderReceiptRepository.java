@@ -24,4 +24,7 @@ public interface IOrderReceiptRepository {
 
     // UC-31 — global view with filters (admin only).
     List<OrderReceipt> findGlobal(GlobalHistoryFiltersDTO filters);
+
+    List<OrderReceipt> findByEventId(String eventId);
+    ;
 }

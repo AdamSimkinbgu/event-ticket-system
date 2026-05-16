@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Application.services.PaymentGateway;
@@ -41,7 +42,7 @@ class EventManagementServiceTest {
     private ISessionManager sessionManager;
     private EventManagementService eventService;
     private IOrderReceiptRepository orderReceiptRepository;
-    private PaymentGateway paymentGateway;
+    private IPaymentGateway paymentGateway;
 
     private final String OWNER_TOKEN = "owner-token";
     private final String MANAGER_TOKEN = "manager-token";
@@ -70,7 +71,7 @@ class EventManagementServiceTest {
         mockTicketRepo = mock(ITicketRepository.class);
         sessionManager = mock(ISessionManager.class);
         orderReceiptRepository = mock(IOrderReceiptRepository.class);
-        paymentGateway = mock(PaymentGateway.class);
+        paymentGateway = mock(IPaymentGateway.class);
 
         eventService = new EventManagementService(
                 mockEventRepo,
@@ -284,7 +285,7 @@ class EventManagementServiceTest {
         ReceiptLine line = new ReceiptLine(1, 100.0, EVENT_ID, java.time.LocalDateTime.now());
         OrderReceipt realReceipt = OrderReceipt.forMember(99, 100.0, List.of(line));
         
-        when(orderReceiptRepository.findByEventIds(String.valueOf(EVENT_ID)))
+        when(orderReceiptRepository.findByEventId(String.valueOf(EVENT_ID)))
             .thenReturn(List.of(realReceipt));
             
        
@@ -359,7 +360,7 @@ class EventManagementServiceTest {
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-        when(orderReceiptRepository.findByEventIds(String.valueOf(EVENT_ID))).thenReturn(List.of());
+        when(orderReceiptRepository.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of());
 
         Ticket paidTicket = new Ticket(EVENT_ID, ZONE_ID, 100.0, 1, "BARCODE123");
         
@@ -377,7 +378,7 @@ class EventManagementServiceTest {
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-        when(orderReceiptRepository.findByEventIds(String.valueOf(EVENT_ID))).thenReturn(List.of());
+        when(orderReceiptRepository.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of());
 
         Ticket issuedTicket = new Ticket(EVENT_ID, ZONE_ID, 100.0, 1, "BARCODE123");
         
@@ -396,7 +397,7 @@ class EventManagementServiceTest {
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-        when(orderReceiptRepository.findByEventIds(String.valueOf(EVENT_ID))).thenReturn(List.of());
+        when(orderReceiptRepository.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of());
 
         Ticket availableTicket = 
             new Ticket(EVENT_ID, ZONE_ID, 100.0, 1, "BARCODE123");
