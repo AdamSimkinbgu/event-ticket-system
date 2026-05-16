@@ -1,54 +1,91 @@
 package com.ticketing.system.Infrastructure.persistence;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+import org.springframework.stereotype.Repository;
 
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 
+/**
+ * In-memory {@link IActiveOrderRepository} for V1.
+ *
+ * <p>
+ * Storage is a single {@link CopyOnWriteArrayList} of carts; lookups scan.
+ * Identity collapse for {@code save()} matches by userId for Member carts and
+ * by sessionId for Guest carts, so re-saving a promoted cart replaces any
+ * stale Member-cart row with the same userId (D9a edge: prefer current
+ * Guest-turned-Member cart over a prior orphaned Member cart).
+ */
+@Repository
 public class MemoryActiveOrderRepository implements IActiveOrderRepository {
 
-    List<ActiveOrder> activeOrders;
+    private final List<ActiveOrder> carts = new CopyOnWriteArrayList<>();
 
-    public MemoryActiveOrderRepository() {
-        this.activeOrders = new java.util.ArrayList<>();
+    @Override
+    public void save(ActiveOrder activeOrder) {
+        // Remove any existing cart with the same identity, then add.
+        carts.removeIf(existing -> sameIdentity(existing, activeOrder));
+        carts.add(activeOrder);
     }
 
     @Override
     public ActiveOrder getByUserId(int userId) {
-        return activeOrders.stream()
-                .filter(order -> order.getUserId() == userId)
-                .findFirst()
-                .orElse(null);
+        Integer target = userId;
+        for (ActiveOrder cart : carts) {
+            if (target.equals(cart.userIdOrNull())) {
+                return cart;
+            }
+        }
+        return null;
     }
 
     @Override
-    public void save(ActiveOrder activeOrder) {
-        delete(String.valueOf(activeOrder.getUserId())); // Ensure no duplicates for the same user.
-        activeOrders.add(activeOrder);
+    public Optional<ActiveOrder> getBySessionId(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return Optional.empty();
+        }
+        for (ActiveOrder cart : carts) {
+            if (sessionId.equals(cart.getSessionId())) {
+                return Optional.of(cart);
+            }
+        }
+        return Optional.empty();
     }
 
     @Override
-    public void delete(String userId) {
-        activeOrders.removeIf(order -> String.valueOf(order.getUserId()).equals(userId));
-    }
-
-    @Override
-    public ActiveOrder getBySessionId(String sessionId) {
-        throw new UnsupportedOperationException(
-                "Session-based retrieval not implemented in MemoryActiveOrderRepository");
+    public void delete(ActiveOrder activeOrder) {
+        if (activeOrder == null)
+            return;
+        carts.remove(activeOrder);
     }
 
     @Override
     public List<ActiveOrder> findExpired() {
-        return activeOrders.stream()
-                .filter(ActiveOrder::isExpired)
-                .collect(java.util.stream.Collectors.toList());
+
+        List<ActiveOrder> result = new ArrayList<>();
+        for (ActiveOrder cart : carts) {
+            if (cart.hasExpiredItem()) {
+                result.add(cart);
+            }
+        }
+        return result;
     }
 
-    @Override
-    public boolean existsForUser(String userId) {
-        return activeOrders.stream()
-                .anyMatch(order -> String.valueOf(order.getUserId()).equals(userId));
+    private boolean sameIdentity(ActiveOrder a, ActiveOrder b) {
+        // Member identity collapses on userId.
+        if (a.userIdOrNull() != null && a.userIdOrNull().equals(b.userIdOrNull())) {
+            return true;
+        }
+        // Pure-Guest identity collapses on sessionId.
+        if (a.userIdOrNull() == null && b.userIdOrNull() == null
+                && a.getSessionId() != null
+                && a.getSessionId().equals(b.getSessionId())) {
+            return true;
+        }
+        return false;
     }
-
 }

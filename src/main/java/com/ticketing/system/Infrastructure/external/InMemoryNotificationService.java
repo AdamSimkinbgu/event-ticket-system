@@ -13,6 +13,12 @@ import com.ticketing.system.Core.Domain.notifications.NotificationType;
 // V1: collects notifications in memory so tests can assert on them.
 // V2/V3: replace with WebSocket / SSE / email when real-time push is in scope.
 // All bodies are stubs — owned by the team member assigned to UC-35.
+import org.springframework.stereotype.Component;
+
+
+import org.springframework.stereotype.Component;
+
+@Component
 public class InMemoryNotificationService implements INotificationService {
 
     @Override

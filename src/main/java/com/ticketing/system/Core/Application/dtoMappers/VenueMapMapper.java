@@ -1,6 +1,7 @@
 package com.ticketing.system.Core.Application.dtoMappers;
 
 import com.ticketing.system.Core.Application.dto.InventoryZoneDTO;
+import com.ticketing.system.Core.Application.dto.LocationDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapDTO;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 
@@ -14,8 +15,8 @@ public class VenueMapMapper {
         List<InventoryZoneDTO> inventoryZoneDTOs = venueMap.getInventoryZones().stream()
             .map(zone -> new InventoryZoneDTO(zone.getId(), zone.getName(), zone.getCapacity(), zone.getReservedAmount(), zone.getprice()))
             .collect(Collectors.toList());
-
-        return new VenueMapDTO(venueMap.getId(), inventoryZoneDTOs);
+        LocationDTO location = new LocationDTO(venueMap.getLocation().country(), venueMap.getLocation().city());
+        return new VenueMapDTO(venueMap.getId(), location, inventoryZoneDTOs);
     }
 
 }

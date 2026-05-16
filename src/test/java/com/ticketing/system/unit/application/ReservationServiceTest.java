@@ -5,10 +5,26 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
+import com.ticketing.system.Core.Application.interfaces.INotificationService;
+import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Application.services.ReservationService;
+import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
+import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
+import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Application.dto.ReservationResultDTO;
 
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
@@ -20,25 +36,137 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 
 class ReservationServiceTest {
-    ReservationService service;
-    IEventRepository mockEventRepo;
-    IActiveOrderRepository mockActiveOrderRepo;
-    ISessionManager mockSessionManager;
-    INotificationService mockNotificationService;
+
+    private IEventRepository mockEventRepo;
+    private IActiveOrderRepository mockOrderRepo;
+    private ISessionManager mockSessionManager;
+    private INotificationService mockNotification;
+    private IActiveOrderRepository mockActiveOrderRepo;
+    private ReservationService service;
 
     @BeforeEach
     void setUp() {
         mockEventRepo = mock(IEventRepository.class);
-        mockActiveOrderRepo = mock(IActiveOrderRepository.class);
+        mockOrderRepo = mock(IActiveOrderRepository.class);
         mockSessionManager = mock(ISessionManager.class);
-        mockNotificationService = mock(INotificationService.class);
-        service = new ReservationService(mockEventRepo, mockActiveOrderRepo, mockSessionManager,
-                mockNotificationService);
+        mockNotification = mock(INotificationService.class);
+        mockActiveOrderRepo = mock(IActiveOrderRepository.class);
+        service = new ReservationService(mockEventRepo, mockOrderRepo, mockSessionManager, mockNotification);
     }
 
     @Test
-    @Disabled("UC-5: first selection creates ActiveOrder + locks first ticket")
-    void givenNoActiveOrder_whenReserve_thenOrderCreatedAndTicketLocked() {
+    void givenNoActiveOrder_whenReserveForGuest_thenOrderCreatedAndTicketLocked() {
+        String sessionId = "session123";
+        int eventId = 1;
+        int zoneId = 1;
+        int quantity = 2;
+
+        Event mockEvent = mock(Event.class);
+        InventoryZone mockZone = mock(InventoryZone.class);
+
+        when(mockEventRepo.findById(eventId)).thenReturn(mockEvent);
+        when(mockEvent.getZone(zoneId)).thenReturn(mockZone);
+        when(mockZone.getAvailableAmount()).thenReturn(10);
+        when(mockZone.getprice()).thenReturn(50);
+
+        when(mockOrderRepo.getBySessionId(sessionId)).thenReturn(Optional.empty());
+
+        ReservationResultDTO result = service.reserveTicketsForGuest(sessionId, eventId, zoneId, quantity);
+
+        assertNotNull(result, "Reservation should succeed and return DTO");
+        assertEquals(eventId, result.getEventId());
+        assertEquals(zoneId, result.getZoneId());
+        assertEquals(quantity, result.getQuantity());
+
+        verify(mockZone, times(1)).reserve(quantity);
+
+        ArgumentCaptor<ActiveOrder> orderCaptor = ArgumentCaptor.forClass(ActiveOrder.class);
+        verify(mockOrderRepo, times(1)).save(orderCaptor.capture());
+
+        ActiveOrder savedOrder = orderCaptor.getValue();
+        assertNotNull(savedOrder);
+        assertEquals(sessionId, savedOrder.getSessionId());
+        assertEquals(2, savedOrder.getItems().size());
+    }
+
+    @Test
+    void givenExistingActiveOrder_whenReserveForGuest_thenTicketsAppended() {
+        String sessionId = "session123";
+        int eventId = 1;
+        int zoneId = 1;
+        int quantity = 1;
+
+        Event mockEvent = mock(Event.class);
+        InventoryZone mockZone = mock(InventoryZone.class);
+        ActiveOrder existingOrder = ActiveOrder.forGuest(sessionId);
+
+        when(mockEventRepo.findById(eventId)).thenReturn(mockEvent);
+        when(mockEvent.getZone(zoneId)).thenReturn(mockZone);
+        when(mockZone.getAvailableAmount()).thenReturn(10);
+        when(mockZone.getprice()).thenReturn(50);
+
+        when(mockOrderRepo.getBySessionId(sessionId)).thenReturn(Optional.of(existingOrder));
+
+        ReservationResultDTO result = service.reserveTicketsForGuest(sessionId, eventId, zoneId, quantity);
+
+        assertNotNull(result, "Reservation should succeed");
+
+        verify(mockZone, times(1)).reserve(quantity);
+        verify(mockOrderRepo, times(1)).save(existingOrder);
+        assertEquals(1, existingOrder.getItems().size());
+    }
+
+    @Test
+    void givenTicketsUnavailable_whenReserveForGuest_thenExceptionThrown() {
+        String sessionId = "session123";
+        int eventId = 1;
+        int zoneId = 1;
+        int quantity = 5;
+
+        Event mockEvent = mock(Event.class);
+        InventoryZone mockZone = mock(InventoryZone.class);
+
+        when(mockEventRepo.findById(eventId)).thenReturn(mockEvent);
+        when(mockEvent.getZone(zoneId)).thenReturn(mockZone);
+        when(mockZone.getAvailableAmount()).thenReturn(2);
+        when(mockOrderRepo.getBySessionId(sessionId)).thenReturn(Optional.empty());
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            service.reserveTicketsForGuest(sessionId, eventId, zoneId, quantity);
+        });
+
+        assertTrue(exception.getMessage().contains("Only 2 tickets left"));
+
+        verify(mockOrderRepo, never()).save(any());
+        verify(mockZone, never()).reserve(anyInt());
+    }
+
+    @Test
+    void givenUserAlreadyHasOrderForEvent_whenReserveForGuest_thenExceptionThrown() {
+        String sessionId = "session123";
+        int eventId = 1;
+        int zoneId = 1;
+        int quantity = 2;
+
+        Event mockEvent = mock(Event.class);
+        InventoryZone mockZone = mock(InventoryZone.class);
+        ActiveOrder existingOrder = mock(ActiveOrder.class);
+
+        when(mockEventRepo.findById(eventId)).thenReturn(mockEvent);
+        when(mockEvent.getZone(zoneId)).thenReturn(mockZone);
+
+        when(mockOrderRepo.getBySessionId(sessionId)).thenReturn(Optional.of(existingOrder));
+
+        when(existingOrder.hasReservationForEvent(eventId)).thenReturn(true);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
+            service.reserveTicketsForGuest(sessionId, eventId, zoneId, quantity);
+        });
+
+        assertEquals("User already has an active order for this event", exception.getMessage());
+
+        verify(mockZone, never()).reserve(anyInt());
+        verify(mockOrderRepo, never()).save(any());
     }
 
     @Test
@@ -75,9 +203,10 @@ class ReservationServiceTest {
                 300,
                 100.0,
                 java.util.Arrays.asList(
-            new ActiveOrderDTO.CartLineDTO(1, "Event 1", 2, null, 50.0, java.time.LocalDateTime.now().plusMinutes(5)),
-            new ActiveOrderDTO.CartLineDTO(1, "Event 1", 3, null, 50.0, java.time.LocalDateTime.now().plusMinutes(5))
-        )));
+                        new ActiveOrderDTO.CartLineDTO(1, "Event 1", 2, null, 50.0,
+                                java.time.LocalDateTime.now().plusMinutes(5)),
+                        new ActiveOrderDTO.CartLineDTO(1, "Event 1", 3, null, 50.0,
+                                java.time.LocalDateTime.now().plusMinutes(5)))));
 
         when(mockOrder.getUserId()).thenReturn(123);
         when(mockActiveOrderRepo.getByUserId(123)).thenReturn(mockOrder);

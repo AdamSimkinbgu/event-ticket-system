@@ -9,6 +9,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.stereotype.Repository;
+
+
+@Repository
 public class MemoryNotificationRepository implements INotificationRepository {
     private final Map<String, Notification> storage = new HashMap<>();
     
