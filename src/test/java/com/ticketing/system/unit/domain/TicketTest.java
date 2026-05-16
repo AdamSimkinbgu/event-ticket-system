@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
+import com.ticketing.system.Core.Domain.Tickets.TicketStatus;
 
 // Unit tests for the Ticket aggregate (the unified inventory + post-purchase record).
 // State machine: AVAILABLE -> RESERVED -> PAID -> ISSUED -> USED | REFUNDED | VOIDED
@@ -52,5 +53,12 @@ class TicketTest {
         t.setHolderUserId(42);
         t.setHolderUserId(null);
         assertNull(t.getHolderUserId());
+    }
+
+    @Test
+    void testMarkRefundedChangesStatusToRefunded() {
+        Ticket ticket = new Ticket(10, 1, 50.0, 100, "BARCODE123");
+        ticket.markRefunded();
+        assertEquals(TicketStatus.REFUNDED, ticket.getStatus());
     }
 }
