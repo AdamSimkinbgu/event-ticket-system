@@ -8,9 +8,7 @@ import java.util.List;
 // Output of MemberAccountService.viewMyHistory() (UC-16).
 // Shape is reusable for UC-22 (company sales) and UC-31 (admin global) views.
 // Immutable per II.3.5.2 — fields reflect the data at time of purchase, not current.
-public record PurchaseHistoryDTO(
-    List<PurchaseRecordDTO> records
-) {
+public record PurchaseHistoryDTO(List<PurchaseRecordDTO> records) {
     public record PurchaseRecordDTO(
         int orderReceiptId,
         int eventId,

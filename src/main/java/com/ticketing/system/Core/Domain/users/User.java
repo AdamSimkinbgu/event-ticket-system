@@ -130,13 +130,35 @@ public List<ManagementInvitation> getManagementInvitations() {
         throw new UnsupportedOperationException("UC-11: not implemented");
     }
 
+
     // Helper for permission-checking flows (UC-19/21/22/24).
-    public boolean hasAppointmentInCompany(int companyId) {
-        throw new UnsupportedOperationException("not implemented");
+    public boolean isOwnerInCompany(int companyId) {
+        for (CompanyAppointment appointment : companyAppointments) {
+            if (this.memberProfile != null && this.memberProfile.getCompanyId() == companyId
+                    && this.memberProfile.getCompanyRole() == CompanyRole.Owner) {
+                // if he is an owner
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean hasPermissionInCompany(int companyId, Permission permission) {
+        for (CompanyAppointment appointment : companyAppointments) {
+            if (appointment.getCompanyId() == companyId && appointment.hasPermission(permission)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Returns the User's appointment in the given company, or null if absent.
     public CompanyAppointment getAppointmentForCompany(int companyId) {
-        throw new UnsupportedOperationException("not implemented");
+        for (CompanyAppointment appointment : companyAppointments) {
+            if (appointment.getCompanyId() == companyId) {
+                return appointment;
+            }
+        }
+        return null;
     }
 }

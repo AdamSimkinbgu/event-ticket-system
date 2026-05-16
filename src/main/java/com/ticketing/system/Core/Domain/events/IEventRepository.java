@@ -27,4 +27,6 @@ public interface IEventRepository {
     List<Event> search(CatalogSearchFiltersDTO filters);
 
     void cancelEvent(int eventId);
+
+    int nextId();
 }
