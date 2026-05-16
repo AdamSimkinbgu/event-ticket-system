@@ -155,11 +155,11 @@ public class ActiveOrder {
             lineDTOs.add(item.toDTO());
         }
         return new ActiveOrderDTO(
-                userId,
+                getUserId(),
                 null, // sessionId is null for Member active orders
-                createdAt,
-                getRemainingTime().getSeconds(),
-                getTotalPrice(),
+                getCreatedAt(),
+                this.getRemainingTime().getSeconds(),
+                this.getTotalPrice(),
                 lineDTOs);
     }
 
