@@ -198,16 +198,32 @@ public class ActiveOrder {
         throw new UnsupportedOperationException("UC-5/9: not implemented");
     }
 
-    public void removeOneTicket(int eventId, int zoneId) {
-        for (int i = 0; i <= items.size() - 1; i = i + 1) {
-            CartLineItem item = items.get(i);
-            if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
-                items.remove(i);
-                return;
-            }
-        }
-        throw new IllegalArgumentException("No reservation found for this event and zone");
+
+
+public void removeTickets(int eventId, int zoneId, int quantity) {
+    if (quantity <= 0) {
+        throw new IllegalArgumentException("Quantity must be positive");
     }
+
+    int existingTickets = countTickets(eventId, zoneId);
+
+    if (existingTickets < quantity) {
+        throw new IllegalArgumentException("Not enough reserved tickets to remove");
+    }
+
+    int removedTickets = 0;
+
+    for (int i =0 ; i <=items.size() - 1 && removedTickets < quantity; i = i + 1) {
+        CartLineItem item = items.get(i);
+
+        if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
+            items.remove(i);
+            removedTickets = removedTickets + 1;
+        }
+    }
+}
+
+
 
     public java.time.LocalDateTime getCreatedAt() {
         throw new UnsupportedOperationException("not implemented (add createdAt field)");
@@ -225,4 +241,15 @@ public class ActiveOrder {
         }
         return false;
     }
+  public int countTickets(int eventId, int zoneId) {
+    int count = 0;
+
+    for (CartLineItem item : items) {
+        if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
+            count = count + 1;
+        }
+    }
+
+    return count;
+}
 }
