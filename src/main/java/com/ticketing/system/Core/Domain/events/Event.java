@@ -175,8 +175,7 @@ public class Event {
     }
 
     public boolean isCancelled() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'isCancelled'");
+        return this.isCanceled;
     }
 
 }

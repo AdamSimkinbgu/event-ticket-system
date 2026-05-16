@@ -1,15 +1,18 @@
 package com.ticketing.system.Core.Application.services;
 
-import java.time.LocalDateTime;
 import java.util.List;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+// Owner / Manager-side write service for the Event aggregate and its lifecycle.
+// UC-19 (Manage Event Catalog), UC-20 (Configure Venue Map & Inventory), UC-21 (Configure Policies).
+import org.springframework.stereotype.Service;
 
 import com.ticketing.system.Core.Application.dto.EventCreationDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
-import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
-import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.Tickets.TicketStatus;
@@ -20,15 +23,6 @@ import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
-import com.ticketing.system.Core.Domain.orders.TransactionRecord;
-
-import org.aspectj.weaver.ast.Or;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-// Owner / Manager-side write service for the Event aggregate and its lifecycle.
-// UC-19 (Manage Event Catalog), UC-20 (Configure Venue Map & Inventory), UC-21 (Configure Policies).
-import org.springframework.stereotype.Service;
 
 @Service
 public class EventManagementService {
@@ -93,20 +87,39 @@ public class EventManagementService {
         
         List<Ticket> tickets = ticketRepository.findByEventId(String.valueOf(eventId));
         List<OrderReceipt> orderReceipts = orderReceiptRepository.findByEventIds(String.valueOf(eventId));
-        for(OrderReceipt receipt : orderReceipts){
-            for(ReceiptLine line : receipt.getReceiptLines()){
-                if(line.getEventId() == eventId){
-                    if (!receipt.wasRefunded()) {
-                        paymentGateway.refund(receipt.getHolderUserId(),line.getPriceAtReservation(), "Refund for canceled event: " + event.getId());
-                        receipt.markRefunded();
-                        orderReceiptRepository.save(receipt);
-                        }
+        for (OrderReceipt receipt : orderReceipts) {
+            if (receipt.wasRefunded()) {
+                continue;
+            }
 
+            double totalRefundForReceipt = 0.0;
+            boolean requiresRefund = false;
+
+            for (ReceiptLine line : receipt.getReceiptLines()) {
+                if (line.getEventId() == eventId) {
+                    totalRefundForReceipt += line.getPriceAtReservation();
+                    requiresRefund = true;
+                }
+            }
+
+            if (requiresRefund && totalRefundForReceipt > 0) {
+                paymentGateway.refund(
+                    receipt.getHolderUserId(), 
+                    totalRefundForReceipt, 
+                    "Refund for canceled event: " + event.getId()
+                );
+                
+                receipt.markRefunded();
+                orderReceiptRepository.save(receipt);
             }
         }
+
         for(Ticket ticket : tickets){
             if(ticket.getEventId() == eventId &&  (ticket.getStatus() == TicketStatus.PAID || ticket.getStatus() == TicketStatus.ISSUED)){
                 ticket.markRefunded();
+                ticketRepository.save(ticket);
+            }else{
+                ticket.markVoided();
                 ticketRepository.save(ticket);
             }
         }
@@ -116,6 +129,7 @@ public class EventManagementService {
         eventRepository.save(event);
 
         log.info("Event {} canceled successfully", eventId);
+    
         
     }
 
