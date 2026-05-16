@@ -28,6 +28,9 @@ import org.slf4j.LoggerFactory;
 
 // Owner / Manager-side write service for the Event aggregate and its lifecycle.
 // UC-19 (Manage Event Catalog), UC-20 (Configure Venue Map & Inventory), UC-21 (Configure Policies).
+import org.springframework.stereotype.Service;
+
+@Service
 public class EventManagementService {
 
     private final IEventRepository eventRepository;

@@ -12,7 +12,7 @@ public record PurchaseHistoryDTO(
     List<PurchaseRecordDTO> records
 ) {
     public record PurchaseRecordDTO(
-        String orderReceiptId,
+        int orderReceiptId,
         int eventId,
         String eventName,
         LocalDateTime purchasedAt,

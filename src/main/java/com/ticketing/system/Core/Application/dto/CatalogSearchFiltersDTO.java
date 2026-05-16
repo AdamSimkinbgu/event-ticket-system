@@ -6,7 +6,8 @@ import java.time.LocalDate;
 // All fields nullable — represents an absent filter.
 // 'minRating' is excluded from company-scoped search per II.2.3.2.
 public record CatalogSearchFiltersDTO(
-    String nameOrArtist,
+    String eventName,
+    String artistName,
     String category,
     String keywords,
     Double minPrice,
@@ -14,5 +15,8 @@ public record CatalogSearchFiltersDTO(
     LocalDate fromDate,
     LocalDate toDate,
     String location,
-    Double minRating
+    Double minEventRating,
+    Double maxEventRating,
+    Double minCompanyRating,
+    Double maxCompanyRating
 ) {}

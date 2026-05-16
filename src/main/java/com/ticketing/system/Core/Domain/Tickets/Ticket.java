@@ -13,6 +13,10 @@ public class Ticket {
     private int ticketId;
     private String barcodeValue;
     private TicketStatus status;
+    // D7 (auth rework #181): nullable. Set on the Member path of CheckoutService;
+    // stays null for Guest purchases. Lets UC-16 view-my-history go through
+    // ITicketRepository.findByHolderUserId(int) in a single hop.
+    private Integer holderUserId;
 
     //TODO: change the seat number so it will get a proper seat
     public Ticket(int eventId,int zoneid ,double price,int ticketId,String barcodeValue) {
@@ -21,8 +25,9 @@ public class Ticket {
         this.seatNumber="seatNumber";
         this.price = price;
         this.ticketId=ticketId;
-        this.barcodeValue=barcodeValue; 
+        this.barcodeValue=barcodeValue;
         this.status = TicketStatus.AVAILABLE; // Default initial status
+        this.holderUserId = null;
     }
 
 
@@ -106,7 +111,16 @@ public class Ticket {
     }
 
     public Integer getHolderUserId() {
-        throw new UnsupportedOperationException("not implemented (add holderUserId field)");
+        return holderUserId;
+    }
+
+    /**
+     * Assigns this ticket to a Member at checkout (D7). Called once from the
+     * Member path of {@code CheckoutService.checkout}. Guest tickets stay
+     * unassigned (holderUserId remains null).
+     */
+    public void setHolderUserId(Integer userId) {
+        this.holderUserId = userId;
     }
 
     public String getOrderReceiptId() {

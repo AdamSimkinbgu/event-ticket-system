@@ -7,7 +7,12 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.time.Clock;
+import java.util.Optional;
+import java.util.regex.Pattern;
+
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
+import com.ticketing.system.Core.Application.dto.GuestCheckoutContactDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
 import com.ticketing.system.Core.Application.dto.PaymentRequestDTO;
@@ -23,11 +28,21 @@ import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.exceptions.GuestCheckoutMissingContactException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.exceptions.SessionExpiredException;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
+import com.ticketing.system.Core.Domain.users.ISessionRepository;
+import com.ticketing.system.Core.Domain.users.Session;
 
+import org.springframework.stereotype.Service;
+
+@Service
 public class CheckoutService {
+
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     private final IActiveOrderRepository activeOrderRepository;
     private final IEventRepository eventRepository;
@@ -37,6 +52,8 @@ public class CheckoutService {
     private final IPaymentGateway paymentGateway;
     private final INotificationService notificationService;
     private final ISessionManager iSessionManager;
+    private final ISessionRepository sessionRepository;
+    private final Clock clock;
      private static final Logger eventLogger = LoggerFactory.getLogger("EVENT_LOG");
 
 private static final Logger errorLogger = LoggerFactory.getLogger("ERROR_LOG");
@@ -50,8 +67,9 @@ private static final Logger errorLogger = LoggerFactory.getLogger("ERROR_LOG");
             ITicketIssuer ticketIssuer,
             IPaymentGateway paymentGateway,
             INotificationService notificationService,
-             ISessionManager iSessionManager
-            
+             ISessionManager iSessionManager,
+             ISessionRepository sessionRepository,
+             Clock clock
     ) {
         this.activeOrderRepository = activeOrderRepository;
         this.eventRepository = eventRepository;
@@ -61,6 +79,8 @@ private static final Logger errorLogger = LoggerFactory.getLogger("ERROR_LOG");
         this.paymentGateway = paymentGateway;
         this.notificationService=notificationService;
          this.iSessionManager =iSessionManager;
+        this.sessionRepository = sessionRepository;
+        this.clock = clock;
     }
 
     public CheckoutResultDTO checkout(String token, PaymentRequestDTO paymentRequest) {
@@ -105,7 +125,8 @@ if (!iSessionManager.validateToken(token)) {
                     totalPrice,
                     paymentRequest.currency(),
                     paymentRequest.paymentMethodToken(),
-                    userId
+                    Integer.valueOf(userId),
+                    paymentRequest.buyerEmail()
             );
 
             
@@ -186,6 +207,8 @@ for (int i = 0; i < boughtItems.size(); i++) {
             barcode.ticketId(),
             barcode.barcodeValue()
     );
+    // D7: Member purchase — assign ticket to the buyer for fast UC-16 lookup.
+    ticket.setHolderUserId(userId);
 
     ticketRepository.save(ticket);
  eventLogger.info("Ticket saved. userId={}, ticketId={}, eventId={}, zoneId={}",
@@ -305,6 +328,165 @@ for (int i = 0; i < boughtItems.size(); i++) {
             event.releaseTickets(item.getzoneId(), 1);
 
             eventRepository.save(event);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Guest checkout (D5 reversed — Guests can complete a purchase).
+    // ---------------------------------------------------------------------
+
+    /**
+     * Guest variant of {@link #checkout(String, PaymentRequestDTO)}. The
+     * Guest provides their session id (raw, not a JWT) plus email + name
+     * via {@link GuestCheckoutContactDTO}; the receipt and issued ticket
+     * barcodes are keyed by email + sessionId, not by userId.
+     *
+     * <p>SQ3 deferred: Guest purchase notification semantics are unclear
+     * (no in-system Guest inbox), so this method does not call
+     * {@link INotificationService}. Revisit once requirement is clarified.
+     */
+    public CheckoutResultDTO checkoutAsGuest(
+            String sessionId,
+            GuestCheckoutContactDTO contact,
+            PaymentRequestDTO paymentRequest) {
+
+        eventLogger.info("Entered checkoutAsGuest function");
+
+        // 1. Input validation (cheap, before any IO).
+        if (sessionId == null || sessionId.isBlank()) {
+            eventLogger.warn("Guest checkout rejected: missing sessionId");
+            throw new IllegalArgumentException("Missing guest sessionId");
+        }
+        requireValidGuestContact(contact);
+        requireValidPaymentRequest(paymentRequest);
+
+        // 2. Session must exist and still be a Guest.
+        Session session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new InvalidTokenException("guest session not found"));
+        if (session.isMember()) {
+            throw new InvalidTokenException("session is not a guest session");
+        }
+        if (session.isExpiredAt(clock.instant())) {
+            throw new SessionExpiredException();
+        }
+
+        // 3. Cart lookup.
+        ActiveOrder order = activeOrderRepository.getBySessionId(sessionId)
+                .orElseThrow(() -> new IllegalStateException("Active order not found"));
+
+        order.validateCanCheckout();  // throws if empty / expired
+
+        // 4. Total.
+        java.util.List<CartLineItem> boughtItems = order.getItems();
+        double totalPrice = calculateTotalPrice(order);
+
+        eventLogger.info("Guest checkout. sid={} email={} totalPrice={} itemCount={}",
+                sessionId, contact.email(), totalPrice, boughtItems.size());
+
+        // 5. Charge — email replaces userId in the gateway request.
+        PaymentRequestDTO requestToPay = new PaymentRequestDTO(
+                paymentRequest.idempotencyKey(),
+                totalPrice,
+                paymentRequest.currency(),
+                paymentRequest.paymentMethodToken(),
+                null,                          // buyerUserId — null for Guest
+                contact.email()
+        );
+        PaymentResultDTO paymentResult = paymentGateway.charge(requestToPay);
+
+        // 6. Issue tickets.
+        java.util.List<IssuanceRequestDTO.TicketIssuanceItemDTO> issuanceItems =
+                boughtItems.stream()
+                        .map(item -> {
+                            Event event = eventRepository.findById(item.geteventId());
+                            return new IssuanceRequestDTO.TicketIssuanceItemDTO(
+                                    item.geteventId(),
+                                    event.getName(),
+                                    item.getzoneId(),
+                                    null
+                            );
+                        })
+                        .toList();
+
+        IssuanceRequestDTO issuanceRequest = new IssuanceRequestDTO(null, contact.email(), issuanceItems);
+        IssuanceResultDTO issuanceResult = ticketIssuer.issue(issuanceRequest);
+
+        if (issuanceResult == null || issuanceResult.barcodes() == null
+                || issuanceResult.barcodes().isEmpty()) {
+            errorLogger.error("Guest ticket issuance failed. sid={} email={}",
+                    sessionId, contact.email());
+            throw new IllegalStateException("Ticket issuance failed");
+        }
+        if (issuanceResult.barcodes().size() != boughtItems.size()) {
+            errorLogger.error("Guest ticket issuance count mismatch. sid={}, expected={}, actual={}",
+                    sessionId, boughtItems.size(), issuanceResult.barcodes().size());
+            throw new IllegalStateException("Ticket issuance count mismatch");
+        }
+
+        // 7. Save tickets + build receipt.
+        order.buy();
+        java.util.List<ReceiptLine> receiptLines = new java.util.ArrayList<>();
+        for (int i = 0; i < boughtItems.size(); i++) {
+            CartLineItem item = boughtItems.get(i);
+            var barcode = issuanceResult.barcodes().get(i);
+            Ticket ticket = new Ticket(
+                    item.geteventId(),
+                    item.getzoneId(),
+                    item.getPriceAtReservation(),
+                    barcode.ticketId(),
+                    barcode.barcodeValue()
+            );
+            ticketRepository.save(ticket);
+            ReceiptLine line = new ReceiptLine(
+                    barcode.ticketId(),
+                    item.getPriceAtReservation(),
+                    item.geteventId(),
+                    LocalDateTime.now()
+            );
+            receiptLines.add(line);
+        }
+
+        OrderReceipt receipt = OrderReceipt.forGuest(
+                contact.email(), sessionId, totalPrice, receiptLines);
+        orderReceiptRepository.save(receipt);
+
+        // 8. SQ3: Guest notification deferred — INotificationService is Member-only.
+        // TODO(SQ3): clarify Guest purchase notification requirement.
+
+        eventLogger.info("Guest checkout completed. sid={} email={} transactionId={}",
+                sessionId, contact.email(), paymentResult.paymentTransactionId());
+
+        return new CheckoutResultDTO(
+                totalPrice,
+                paymentResult.paymentTransactionId(),
+                issuanceResult.barcodes().stream().map(b -> b.ticketId()).toList()
+        );
+    }
+
+    private void requireValidGuestContact(GuestCheckoutContactDTO contact) {
+        if (contact == null) {
+            throw new GuestCheckoutMissingContactException("guest checkout requires contact info");
+        }
+        if (contact.email() == null || !EMAIL_PATTERN.matcher(contact.email()).matches()) {
+            throw new GuestCheckoutMissingContactException("guest checkout email is invalid");
+        }
+        if (contact.name() == null || contact.name().isBlank()) {
+            throw new GuestCheckoutMissingContactException("guest checkout name is required");
+        }
+    }
+
+    private void requireValidPaymentRequest(PaymentRequestDTO paymentRequest) {
+        if (paymentRequest == null) {
+            throw new IllegalArgumentException("Missing payment request");
+        }
+        if (paymentRequest.idempotencyKey() == null || paymentRequest.idempotencyKey().isBlank()) {
+            throw new IllegalArgumentException("Missing idempotency key");
+        }
+        if (paymentRequest.currency() == null || paymentRequest.currency().isBlank()) {
+            throw new IllegalArgumentException("Missing currency");
+        }
+        if (paymentRequest.paymentMethodToken() == null || paymentRequest.paymentMethodToken().isBlank()) {
+            throw new IllegalArgumentException("Missing payment method token");
         }
     }
 }
