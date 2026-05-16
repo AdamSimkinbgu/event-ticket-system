@@ -75,9 +75,13 @@ public class Event {
         return zone.release(quantity);
     }
 
-    public double calculatePrice(Map<Integer, Double> tickets,LocalDateTime now) {
-        return discountPolicy.calculate(tickets,now);
+    public double calculatePrice(int quantity,double priceresrevation,LocalDateTime now) {
+        return discountPolicy.calculateFinalPrice(quantity,priceresrevation,now);
     }
+public double calculatePriceforoneticket(int quantity,double priceresrevation,LocalDateTime now) {
+        return discountPolicy.calculatePriceforoneticket(quantity,priceresrevation,now);
+    }
+
 
     public void updateZoneCapacity(int zoneId, int newCapacity, int incomingCompanyId) {
         

@@ -26,7 +26,7 @@ public class Ticket {
         this.price = price;
         this.ticketId=ticketId;
         this.barcodeValue=barcodeValue;
-        this.status = TicketStatus.AVAILABLE; // Default initial status
+        this.status = TicketStatus.PAID; // Default initial status
         this.holderUserId = null;
     }
 

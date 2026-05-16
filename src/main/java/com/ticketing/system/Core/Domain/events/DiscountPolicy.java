@@ -17,18 +17,16 @@ public class DiscountPolicy {
     public double apply(double price) {
         return price * (1 - discountPercentage / 100);
     }
-   public double calculateFinalPrice(double basePricePerTicket, int quantity){
-
-     throw new UnsupportedOperationException("Unimplemented method 'validate'");
-    }
+   
 
 
 
-    public double calculate(Map<Integer, Double> tickets,LocalDateTime now) {
-    double total = 0;
-
+    public double calculateFinalPrice(int quantity,double price ,LocalDateTime now) {
    // TODO Auto-generated method stub
     throw new UnsupportedOperationException("Unimplemented method 'calculatePrice'");
+}  
+public double calculatePriceforoneticket(int quantity,double price ,LocalDateTime now) {
+    return calculateFinalPrice(quantity, price , now) /quantity;
 }  
    
 }

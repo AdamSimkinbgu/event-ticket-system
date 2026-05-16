@@ -5,9 +5,9 @@ public class InventoryZoneDTO {
     private final String name;
     private  int capacity;
     private int reservedAmount;
-    private int price;
+    private double price;
 
-    public InventoryZoneDTO(int id, String name, int capacity, int reservedAmount, int price) {
+    public InventoryZoneDTO(int id, String name, int capacity, int reservedAmount, double price) {
         this.id = id;
         this.name = name;
         this.capacity = capacity;
@@ -31,7 +31,7 @@ public class InventoryZoneDTO {
         return capacity;
     }
 
-    public int getPrice() {
+    public double getPrice() {
         return price;
     }
 
