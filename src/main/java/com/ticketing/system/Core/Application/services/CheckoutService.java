@@ -119,6 +119,7 @@ if (!iSessionManager.validateToken(token)) {
 
              eventLogger.info("Payment charge requested. userId={}, totalPrice={}, currency={}",
                 userId, totalPrice, paymentRequest.currency());
+                
             PaymentRequestDTO requestToPay = new PaymentRequestDTO(
                     paymentRequest.idempotencyKey(),
                     totalPrice,

@@ -19,6 +19,7 @@ public class Event {
     private final List<ShowDate> showDates;
     private final PurchasePolicy purchasePolicy;
     private final DiscountPolicy discountPolicy;
+    private Boolean isCanceled = false;
 
     public Event( int id, String name, Double rating, List<String> artistsNames, EventCategory category, int comapnyid, EventStatus status, VenueMap venueMap, List<ShowDate> showDates, PurchasePolicy purchasePolicy, DiscountPolicy discountPolicy
     ) {
@@ -168,4 +169,13 @@ public class Event {
     public DiscountPolicy getDiscountPolicy() {
         return discountPolicy;
     }
+
+    public void setCanceled(boolean b) {
+        this.isCanceled = b;
+    }
+
+    public boolean isCancelled() {
+        return this.isCanceled;
+    }
+
 }
