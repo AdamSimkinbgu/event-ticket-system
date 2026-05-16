@@ -1,4 +1,4 @@
-package com.ticketing.system.unit.infrastructure.persistence;
+package com.ticketing.system.unit.infrastructure.persistence.UserPersistence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;

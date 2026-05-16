@@ -41,23 +41,38 @@ public class InventoryZone {
     public int getId() {
         return id;
     }
-public double getprice() {
+    public double getprice() {
         return price;
     }
-public boolean release(int quantity) {
-    if (quantity <= 0) {
-        throw new IllegalArgumentException("Quantity must be positive");
+
+
+    public String getName() {
+        return name;
     }
 
-    reservedAmount = reservedAmount - quantity;
-    return true;
-}
+    public int getCapacity() {
+        return capacity;
+    }
 
-public void setCapacity(int newCapacity) {
-    if (newCapacity < reservedAmount) {
-        throw new IllegalArgumentException("New capacity cannot be less than the number of reserved tickets");
-}
-    this.capacity = newCapacity;
-}
+  
+
+    public boolean release(int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be positive");
+        }
+        reservedAmount = reservedAmount - quantity;
+        return true;
+    }
+
+    public void setCapacity(int newCapacity) {
+        if (newCapacity < reservedAmount) {
+            throw new IllegalArgumentException("New capacity cannot be less than the number of reserved tickets");
+    }
+        this.capacity = newCapacity;
+    }
+
+    public int getReservedAmount() {
+        return reservedAmount;
+    }
 
 }

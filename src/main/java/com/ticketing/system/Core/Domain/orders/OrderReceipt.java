@@ -9,15 +9,24 @@ import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import org.hibernate.query.spi.Limit;
 
 public class OrderReceipt {
-    private int userid;
+    // Dual identity (D5 / auth rework): Member receipts carry userid; Guest
+    // receipts carry guestEmail + guestSessionId. Exactly one branch is set.
+    private Integer userid;
+    private String guestEmail;
+    private String guestSessionId;
     List<ReceiptLine> ReceiptLine;
-    private String receiptId;
+    private int receiptId;
     private int eventId;
-    private String zoneId;
+    private int zoneId;
     private double priceAtoneticketReservation;
     private LocalDateTime purchaseTime;
-     
+    private Boolean isRefunded = false;
 
+
+    /**
+     * Legacy Member-only constructor. {@code _userid} is autoboxed into the
+     * {@code Integer} field. Equivalent to {@link #forMember(int, double, List)}.
+     */
     public OrderReceipt(int _userid, double priceAtReservation, List<ReceiptLine> receiptLines) {
         this.userid= _userid;
         this.priceAtoneticketReservation = priceAtReservation;
@@ -25,11 +34,43 @@ public class OrderReceipt {
         this.purchaseTime = LocalDateTime.now();
     }
 
+    /** Member receipt — explicit construction. */
+    public static OrderReceipt forMember(int userId, double totalAmount, List<ReceiptLine> receiptLines) {
+        return new OrderReceipt(userId, totalAmount, receiptLines);
+    }
+
+    /** Guest receipt — D5 reversed. userid stays null; email + sessionId identify the buyer. */
+    public static OrderReceipt forGuest(String guestEmail, String guestSessionId, double totalAmount, List<ReceiptLine> receiptLines) {
+        OrderReceipt r = new OrderReceipt();
+        if (guestEmail == null || guestEmail.isBlank()) {
+            throw new IllegalArgumentException("forGuest requires a non-blank email");
+        }
+        if (guestSessionId == null || guestSessionId.isBlank()) {
+            throw new IllegalArgumentException("forGuest requires a non-blank sessionId");
+        }
+        r.userid = null;
+        r.guestEmail = guestEmail;
+        r.guestSessionId = guestSessionId;
+        r.priceAtoneticketReservation = totalAmount;
+        r.ReceiptLine = receiptLines;
+        r.purchaseTime = LocalDateTime.now();
+        return r;
+    }
+
+    /** Private no-arg constructor for the {@link #forGuest} factory. */
+    private OrderReceipt() { }
+
+    public Integer getUserid() { return userid; }
+    public String getGuestEmail() { return guestEmail; }
+    public String getGuestSessionId() { return guestSessionId; }
+    public boolean isMemberReceipt() { return userid != null; }
+    public boolean isGuestReceipt() { return userid == null; }
+
     public int geteventId() {
         return eventId;
     }
 
-    public String getZoneId() {
+    public int getZoneId() {
         return zoneId;
     }
 
@@ -37,7 +78,7 @@ public class OrderReceipt {
     // Skeleton additions for OrderReceipt aggregate.
     // ---------------------------------------------------------------------------
 
-    public String getId() {
+    public int getId() {
         return receiptId;
     }
 
@@ -46,7 +87,7 @@ public class OrderReceipt {
     }
 
     public int getHolderUserId() {
-        throw new UnsupportedOperationException("not implemented (add holderUserId field)");
+        return userid;
     }
 
     public double getTotalAmount() {
@@ -62,12 +103,17 @@ public class OrderReceipt {
         throw new UnsupportedOperationException("UC-4: not implemented");
     }
 
-    public java.util.List<ReceiptLine> getReceiptLines() {
-        throw new UnsupportedOperationException("not implemented (add receiptLines list)");
+    public List<ReceiptLine> getReceiptLines() {
+        return this.ReceiptLine;
+
     }
 
     public boolean wasRefunded() {
-        throw new UnsupportedOperationException("not implemented");
+        return isRefunded;
+    }
+
+    public void markRefunded() {
+        this.isRefunded = true;
     }
 
 }

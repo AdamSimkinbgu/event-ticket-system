@@ -220,7 +220,8 @@ private PaymentResultDTO chargePayment(
             totalPrice,
             currency,
             paymentMethodToken,
-            userId
+            userId,
+            ""
     );
 
     return paymentGateway.charge(requestToPay);

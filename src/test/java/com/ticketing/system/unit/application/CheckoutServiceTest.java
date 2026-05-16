@@ -3,11 +3,11 @@ package com.ticketing.system.unit.application;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-import static org.mockito.ArgumentMatchers.anyDouble;
-import static org.mockito.ArgumentMatchers.anyInt;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -66,9 +66,9 @@ class CheckoutServiceTest {
     private final int PAYMENT_TRANSACTION_ID = 201;
     private final String ISSUANCE_TRANSACTION_ID = "issue-tx-1";
 
-   private final String IDEMPOTENCY_KEY = "idem-key-1";
-private final String CURRENCY = "ILS";
-private final String PAYMENT_METHOD_TOKEN = "payment-token";
+    private final String IDEMPOTENCY_KEY = "idem-key-1";
+    private final String CURRENCY = "ILS";
+    private final String PAYMENT_METHOD_TOKEN = "payment-token";
 
     private ActiveOrder mockOrder;
     private CartLineItem itemEvent1Zone1;
@@ -87,7 +87,6 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
         mockPaymentGateway = mock(IPaymentGateway.class);
         mockNotificationService = mock(INotificationService.class);
         mockiSessionManager = mock(ISessionManager.class);
-       
 
         checkoutService = new CheckoutService(
                 mockActiveOrderRepo,
@@ -99,7 +98,6 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
                 mockNotificationService,
                 mockiSessionManager
         );
-
 
         mockOrder = mock(ActiveOrder.class);
 
@@ -143,7 +141,7 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
     @Test
     void GivenNullToken_WhenCheckout_ThenThrowException() {
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout (null, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkout(null, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
@@ -161,7 +159,7 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
         when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(null);
 
         assertThrows(RuntimeException.class, () ->
-                 checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
@@ -172,7 +170,7 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
                 List.of(itemEvent1Zone1, itemEvent1Zone2, itemEvent2Zone3)
         );
 
-       assertThrows(RuntimeException.class, () ->
+        assertThrows(RuntimeException.class, () ->
                 checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
@@ -189,7 +187,6 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
 
     @Test
     void GivenPaymentFails_WhenCheckout_ThenThrowException() {
-
         when(mockOrder.validateCanCheckout()).thenReturn(true);
         when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
         when(mockOrder.ReturnToStock()).thenReturn(List.of(itemEvent1Zone1));
@@ -197,42 +194,44 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
         when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
         when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(null);
 
-          assertThrows(RuntimeException.class, () ->
+        assertThrows(RuntimeException.class, () ->
                 checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
     @Test
     void GivenTicketIssuanceFailsAfterPayment_WhenCheckout_ThenThrowException() {
-         PaymentResultDTO paymentResult = new PaymentResultDTO(
+        PaymentResultDTO paymentResult = new PaymentResultDTO(
                 PAYMENT_TRANSACTION_ID,
                 "gateway",
                 100.0,
                 "ILS",
                 LocalDateTime.now()
         );
+
         when(mockOrder.validateCanCheckout()).thenReturn(true);
         when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
         when(mockOrder.ReturnToStock()).thenReturn(List.of(itemEvent1Zone1));
 
-     when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
+        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
         when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
         when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(null);
 
-         assertThrows(RuntimeException.class, () ->
+        assertThrows(RuntimeException.class, () ->
                 checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
     @Test
     void GivenTicketIssuanceReturnsNullBarcodes_WhenCheckout_ThenThrowException() {
-         PaymentResultDTO paymentResult = new PaymentResultDTO(
+        PaymentResultDTO paymentResult = new PaymentResultDTO(
                 PAYMENT_TRANSACTION_ID,
                 "gateway",
                 100.0,
                 "ILS",
                 LocalDateTime.now()
         );
+
         IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
                 ISSUANCE_TRANSACTION_ID,
                 "issuer",
@@ -244,12 +243,12 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
         when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
         when(mockOrder.ReturnToStock()).thenReturn(List.of(itemEvent1Zone1));
 
-  when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
+        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
 
         when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
         when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
 
-         assertThrows(RuntimeException.class, () ->
+        assertThrows(RuntimeException.class, () ->
                 checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
@@ -263,7 +262,7 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
                 "ILS",
                 LocalDateTime.now()
         );
-        
+
         IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
                 ISSUANCE_TRANSACTION_ID,
                 "issuer",
@@ -275,7 +274,7 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
         when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
         when(mockOrder.ReturnToStock()).thenReturn(List.of(itemEvent1Zone1));
 
-     when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
+        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
 
         when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
         when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
@@ -286,14 +285,14 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
     }
 
     @Test
-    void GivenMultipleTicketsButIssuerReturnsLessBarcodes_WhenCheckout_ThenThrowException() { PaymentResultDTO paymentResult = new PaymentResultDTO(
+    void GivenMultipleTicketsButIssuerReturnsLessBarcodes_WhenCheckout_ThenThrowException() {
+        PaymentResultDTO paymentResult = new PaymentResultDTO(
                 PAYMENT_TRANSACTION_ID,
                 "gateway",
                 450.0,
                 "ILS",
                 LocalDateTime.now()
         );
-
 
         IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
                 ISSUANCE_TRANSACTION_ID,
@@ -310,13 +309,13 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
                 List.of(itemEvent1Zone1, itemEvent1Zone2, itemEvent2Zone3)
         );
 
-       when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(250.0);
-       when(event2.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(200.0);
+        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(250.0);
+        when(event2.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(200.0);
 
         when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
         when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
 
-      assertThrows(RuntimeException.class, () ->
+        assertThrows(RuntimeException.class, () ->
                 checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
@@ -329,13 +328,13 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
                 100.0,
                 "ILS",
                 LocalDateTime.now()
-        );//////////////////////////////////////////////////////////////////////////////////
+        );
 
         when(mockOrder.validateCanCheckout()).thenReturn(true);
         when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
         when(mockOrder.ReturnToStock()).thenReturn(List.of(itemEvent1Zone1));
 
-       when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
+        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
 
         when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
         when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(null);
@@ -357,14 +356,14 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
 
         when(mockEventRepo.findById(EVENT_ID_2)).thenReturn(null);
 
-       assertThrows(RuntimeException.class, () ->
+        assertThrows(RuntimeException.class, () ->
                 checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
     @Test
     void GivenValidCheckout_WhenCheckout_ThenReturnCheckoutResult() {
-         PaymentResultDTO paymentResult = new PaymentResultDTO(
+        PaymentResultDTO paymentResult = new PaymentResultDTO(
                 PAYMENT_TRANSACTION_ID,
                 "gateway",
                 100.0,
@@ -372,7 +371,6 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
                 LocalDateTime.now()
         );
 
-   
         IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
                 ISSUANCE_TRANSACTION_ID,
                 "issuer",
@@ -384,12 +382,17 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
         when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
 
         when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
-         when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
+        when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
 
         when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
         when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
 
-        CheckoutResultDTO result =checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+        CheckoutResultDTO result = checkoutService.checkout(
+                VALID_TOKEN,
+                IDEMPOTENCY_KEY,
+                CURRENCY,
+                PAYMENT_METHOD_TOKEN
+        );
 
         assertEquals(
                 new CheckoutResultDTO(
@@ -403,14 +406,14 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
 
     @Test
     void GivenValidCheckoutWithCalculatedPrice_WhenCheckout_ThenReturnCalculatedTotal() {
-         PaymentResultDTO paymentResult = new PaymentResultDTO(
+        PaymentResultDTO paymentResult = new PaymentResultDTO(
                 PAYMENT_TRANSACTION_ID,
                 "gateway",
                 150.0,
                 "ILS",
                 LocalDateTime.now()
         );
-     
+
         IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
                 ISSUANCE_TRANSACTION_ID,
                 "issuer",
@@ -422,13 +425,17 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
         when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone2));
 
         when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(150.0);
-           when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(150.0);
+        when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(150.0);
 
         when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
         when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
 
-        CheckoutResultDTO result = checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
-        
+        CheckoutResultDTO result = checkoutService.checkout(
+                VALID_TOKEN,
+                IDEMPOTENCY_KEY,
+                CURRENCY,
+                PAYMENT_METHOD_TOKEN
+        );
 
         assertEquals(150.0, result.totalCharged());
     }
@@ -456,20 +463,28 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
         when(mockOrder.validateCanCheckout()).thenReturn(true);
         when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1, itemEvent1Zone2));
 
-      when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(250.0);
+        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(250.0);
+        when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(125.0);
 
         when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
         when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
-          when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(125.0);
 
-        CheckoutResultDTO result = checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN) ;
+        CheckoutResultDTO result = checkoutService.checkout(
+                VALID_TOKEN,
+                IDEMPOTENCY_KEY,
+                CURRENCY,
+                PAYMENT_METHOD_TOKEN
+        );
 
-             
-        
-       assertEquals(new CheckoutResultDTO( 250.0, PAYMENT_TRANSACTION_ID, List.of(TICKET_ID_1, TICKET_ID_2)),result);
+        assertEquals(
+                new CheckoutResultDTO(
+                        250.0,
+                        PAYMENT_TRANSACTION_ID,
+                        List.of(TICKET_ID_1, TICKET_ID_2)
+                ),
+                result
+        );
     }
-
-    
 
     @Test
     void GivenTicketsFromDifferentEvents_WhenCheckout_ThenBuyAllTickets() {
@@ -494,16 +509,29 @@ private final String PAYMENT_METHOD_TOKEN = "payment-token";
         when(mockOrder.validateCanCheckout()).thenReturn(true);
         when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1, itemEvent2Zone3));
 
-       when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
-       when(event2.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(200.0);
+        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
+        when(event2.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(200.0);
+
         when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
         when(event2.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(200.0);
 
         when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
         when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
 
-        CheckoutResultDTO result = checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+        CheckoutResultDTO result = checkoutService.checkout(
+                VALID_TOKEN,
+                IDEMPOTENCY_KEY,
+                CURRENCY,
+                PAYMENT_METHOD_TOKEN
+        );
 
-         assertEquals( new CheckoutResultDTO( 300.0,  PAYMENT_TRANSACTION_ID,List.of(TICKET_ID_1, TICKET_ID_3)),result );
+        assertEquals(
+                new CheckoutResultDTO(
+                        300.0,
+                        PAYMENT_TRANSACTION_ID,
+                        List.of(TICKET_ID_1, TICKET_ID_3)
+                ),
+                result
+        );
     }
-    }
+}

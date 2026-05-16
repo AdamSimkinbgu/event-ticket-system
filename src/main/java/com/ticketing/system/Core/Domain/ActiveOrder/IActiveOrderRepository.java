@@ -3,21 +3,34 @@ package com.ticketing.system.Core.Domain.ActiveOrder;
 import java.util.List;
 import java.util.Optional;
 
-// Aggregate-root entry point for the ActiveOrder aggregate.
+/**
+ * Aggregate-root entry point for the {@link ActiveOrder} aggregate.
+ *
+ * <p>
+ * Carts have dual identity (D9a):
+ * <ul>
+ * <li>Member carts are looked up by userId.</li>
+ * <li>Guest carts are looked up by sessionId.</li>
+ * </ul>
+ * Both methods return {@link Optional} to make absence explicit.
+ */
 public interface IActiveOrderRepository {
-
-    ActiveOrder getByUserId(int userId);
 
     void save(ActiveOrder activeOrder);
 
-    void delete(String userId);
+    /**
+     * Member-cart lookup. Returns {@code null} if no Member cart exists for
+     * {@code userId} — preserved as the legacy signature for existing
+     * callers (ReservationService, CheckoutService).
+     */
+    ActiveOrder getByUserId(int userId);
 
-    // UC-5 / UC-13 — guest carts are session-bound (II.1.2 / II.1.3).
+    /** Guest-cart lookup, or active-session Member-cart lookup. */
     Optional<ActiveOrder> getBySessionId(String sessionId);
 
-    // UC-2 — sweep query for the expiration job.
-    List<ActiveOrder> findExpired();
+    /** Delete by reference. Idempotent: deleting an unknown cart is a no-op. */
+    void delete(ActiveOrder activeOrder);
 
-    // UC-13 — quick check before login-time restoration.
-    boolean existsForUser(String userId);
+    /** Sweep query for UC-2 / Phase 5: returns carts with any expired items. */
+    List<ActiveOrder> findExpired();
 }
