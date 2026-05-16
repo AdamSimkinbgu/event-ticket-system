@@ -11,8 +11,8 @@ import com.ticketing.system.Core.Domain.users.Permission;
 
 public class ProductionCompany {
     private final int companyId;
-    private final int founderId;
-    private final List<Integer> owners;
+    private final int ownerId;
+    // private final List<Integer> owners;
     private CompanyStatus companyStatus;
     private String name;
     private String description;
