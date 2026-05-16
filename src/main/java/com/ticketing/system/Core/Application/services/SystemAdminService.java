@@ -7,11 +7,16 @@ import com.ticketing.system.Core.Application.dto.MarketControlRequestDTO;
 import com.ticketing.system.Core.Application.dto.MarketStateDTO;
 import com.ticketing.system.Core.Application.dto.PageDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
+import com.ticketing.system.Core.Application.dtoMappers.OrderReceiptMapper;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
 import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
+import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
+import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 // Owns platform-bootstrap, market-lifecycle, and global admin queries.
 // UC-1 (Initialize), UC-31 (Global History), UC-32 (Open/Close Market).
 import org.springframework.stereotype.Service;
@@ -19,19 +24,27 @@ import org.springframework.stereotype.Service;
 @Service
 public class SystemAdminService {
 
+    private static final Logger logger = LoggerFactory.getLogger(SystemAdminService.class);
+    
     private final IAdminRepository adminRepository;
     private final IOrderReceiptRepository orderReceiptRepository;
+    private final ITicketRepository ticketRepository;
+    private final IEventRepository eventRepository;
     private final List<IPaymentGateway> paymentGateways;
     private final List<ITicketIssuer> ticketIssuers;
 
     public SystemAdminService(
             IAdminRepository adminRepository,
             IOrderReceiptRepository orderReceiptRepository,
+            ITicketRepository ticketRepository,
+            IEventRepository eventRepository,
             List<IPaymentGateway> paymentGateways,
             List<ITicketIssuer> ticketIssuers
     ) {
         this.adminRepository = adminRepository;
         this.orderReceiptRepository = orderReceiptRepository;
+        this.ticketRepository = ticketRepository;
+        this.eventRepository = eventRepository;
         this.paymentGateways = paymentGateways;
         this.ticketIssuers = ticketIssuers;
     }
@@ -61,8 +74,23 @@ public class SystemAdminService {
         throw new UnsupportedOperationException("not implemented");
     }
 
+
+
+
+
+
     // UC-31 — global purchase history with filters (admin-only RBAC enforced inside).
-    public PageDTO<PurchaseHistoryDTO> viewGlobalHistory(GlobalHistoryFiltersDTO filters, int pageNumber, int pageSize) {
-        throw new UnsupportedOperationException("UC-31: not implemented");
+    public List<PurchaseHistoryDTO> viewGlobalHistory(GlobalHistoryFiltersDTO filters) {
+        logger.info("Viewing global purchase history with filters: {}", filters);
+        OrderReceiptMapper mapper = new OrderReceiptMapper();
+
+        List<PurchaseHistoryDTO.PurchaseRecordDTO> records = orderReceiptRepository.findGlobal(filters)
+                .stream()
+                .map(receipt -> mapper.OrderReceiptToPurchaseRecordDTO(receipt, ticketRepository, eventRepository))
+                .toList();
+        
+        logger.info("Found {} records for global purchase history with filters: {}", records.size(), filters);
+        return List.of(new PurchaseHistoryDTO(records));
     }
+
 }
