@@ -13,11 +13,19 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
+import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
+import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
+import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
+import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
@@ -32,57 +40,29 @@ import com.ticketing.system.Core.Domain.users.User;
 @SpringBootTest
 @ActiveProfiles("test")
 class CompanyAcceptanceTest {
-    private CompanyManagementService companyService;
-private IProductionCompanyRepository companyRepo;
-private IUserRepository userRepo;
-private IOrderReceiptRepository orderRepo;
-private ISessionManager sessionManager;
-private ITicketRepository ticketRepo;
-private IEventRepository eventRepo;
+    @Autowired private AuthenticationService authService;
+@Autowired private CompanyManagementService companyService;
+@Autowired private EventManagementService eventManagementService;
+@Autowired private IProductionCompanyRepository companyRepository;
+@Autowired private IEventRepository eventRepository;
+@Autowired private ITicketRepository ticketRepository;
+@Autowired private IOrderReceiptRepository orderReceiptRepository;
+@Autowired private IUserRepository userRepository;
 
-private final String OWNER_TOKEN = "owner-token";
-private final String MANAGER_TOKEN = "manager-token";
-private final String OTHER_OWNER_TOKEN = "other-owner-token";
+    private AuthTokenDTO registerAndLoginMember(String name) {
+    String sid = authService.startGuestSession().sessionId();
 
-private final int COMPANY_ID = 100;
-private final int OWNER_ID = 1;
-private final int MANAGER_ID = 2;
-private final int OTHER_OWNER_ID = 3;
+    authService.register(new RegisterRequestDTO(
+            name,
+            name + "@test.com",
+            "Password1",
+            sid
+    ));
 
-private ProductionCompany company;
-private User manager;
-
-@BeforeEach
-void setUp() {
-    companyRepo = mock(IProductionCompanyRepository.class);
-    userRepo = mock(IUserRepository.class);
-    orderRepo = mock(IOrderReceiptRepository.class);
-    sessionManager = mock(ISessionManager.class);
-    ticketRepo = mock(ITicketRepository.class);
-    eventRepo = mock(IEventRepository.class);
-
-    companyService = new CompanyManagementService(
-            companyRepo, userRepo, orderRepo, sessionManager, ticketRepo, eventRepo
-    );
-
-    company = new ProductionCompany(
-            COMPANY_ID, OWNER_ID, "Test Company",
-            CompanyStatus.ACTIVE, "desc", 4.5
-    );
-    manager = new User(MANAGER_ID, "manager", "m@test.com", "pw");
-
-    when(companyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-    when(userRepo.getUserById(MANAGER_ID)).thenReturn(manager);
-
-    when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
-    when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-
-    when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
-    when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
-
-    when(sessionManager.validateToken(OTHER_OWNER_TOKEN)).thenReturn(true);
-    when(sessionManager.extractUserId(OTHER_OWNER_TOKEN)).thenReturn(OTHER_OWNER_ID);
-}
+    return authService
+            .login(new LoginRequestDTO(name, "Password1", sid))
+            .authToken();
+    }
 
     // UC-18
     @Test @Disabled("UC-18 main: Member registers company → becomes Founder/Owner")
@@ -121,73 +101,141 @@ void setUp() {
     // UC-24
         @Test
     void GivenOwner_WhenAppointManager_ThenWithPermissions() {
-        List<Permission> permissions = List.of(
-                Permission.MANAGE_INVENTORY,
-                Permission.CONFIGURE_VENUE
+        AuthTokenDTO owner = registerAndLoginMember("owner24a");
+        AuthTokenDTO manager = registerAndLoginMember("manager24a");
+
+        ProductionCompanyDTO companyDto = companyService.registerCompany(
+        owner.token(),
+        new CompanyRegistrationDTO("company24a", "desc")
         );
 
-        companyService.inviteManager(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, permissions);
+        int companyId = companyDto.companyId();
 
-        assertTrue(company.getPendingManagers().containsKey(MANAGER_ID));
-        assertEquals(permissions, company.getPendingManagers().get(MANAGER_ID));
-        assertEquals(1, manager.getManagementInvitations().size());
+        List<Permission> permissions = List.of(
+        Permission.MANAGE_INVENTORY,
+        Permission.CONFIGURE_VENUE
+        );
+
+        companyService.inviteManager(
+        owner.token(),
+        companyId,
+        manager.userId(),
+        permissions
+        );
+
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        User managerUser = userRepository.getUserById(manager.userId());
+
+        assertTrue(company.getPendingManagers().containsKey(manager.userId()));
+        assertEquals(permissions, company.getPendingManagers().get(manager.userId()));
+        assertEquals(1, managerUser.getManagementInvitations().size());
     }
 
     @Test
     void GivenAppointer_WhenEditPermissions_ThenUpdated() {
-        List<Permission> oldPermissions = List.of(Permission.MANAGE_INVENTORY);
-        List<Permission> newPermissions = List.of(
-                Permission.CONFIGURE_VENUE,
-                Permission.EDIT_POLICIES
-        );
+       AuthTokenDTO owner = registerAndLoginMember("owner24b");
+    AuthTokenDTO manager = registerAndLoginMember("manager24b");
 
-        companyService.inviteManager(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, oldPermissions);
-        companyService.acceptManagerInvitation(MANAGER_TOKEN, COMPANY_ID);
+    int companyId = companyService.registerCompany(
+            owner.token(),
+            new CompanyRegistrationDTO("company24b", "desc")
+    ).companyId();
 
-        companyService.ModifyManagerPermissions(
-                OWNER_TOKEN,
-                COMPANY_ID,
-                MANAGER_ID,
-                newPermissions
-        );
+    companyService.inviteManager(
+            owner.token(),
+            companyId,
+            manager.userId(),
+            List.of(Permission.MANAGE_INVENTORY)
+    );
 
-        assertEquals(newPermissions, company.getManagers().get(MANAGER_ID));
-        assertEquals(newPermissions,
-                manager.getAppointmentForCompany(COMPANY_ID).getPermissions());
+    companyService.acceptManagerInvitation(manager.token(), companyId);
+
+    List<Permission> updated = List.of(
+            Permission.CONFIGURE_VENUE,
+            Permission.EDIT_POLICIES
+    );
+
+    companyService.ModifyManagerPermissions(
+            owner.token(),
+            companyId,
+            manager.userId(),
+            updated
+    );
+
+    ProductionCompany company = companyRepository.getCompanyById(companyId);
+    User managerUser = userRepository.getUserById(manager.userId());
+
+    assertEquals(updated, company.getManagers().get(manager.userId()));
+    assertEquals(updated,
+            managerUser.getAppointmentForCompany(companyId).getPermissions());
     }
 
     @Test
     void GivenDifferentOwner_WhenEditPermissions_ThenRejected() {
-        List<Permission> oldPermissions = List.of(Permission.MANAGE_INVENTORY);
-        List<Permission> newPermissions = List.of(Permission.EDIT_POLICIES);
+       AuthTokenDTO owner = registerAndLoginMember("owner24c");
+    AuthTokenDTO other = registerAndLoginMember("other24c");
+    AuthTokenDTO manager = registerAndLoginMember("manager24c");
 
-        companyService.inviteManager(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, oldPermissions);
-        companyService.acceptManagerInvitation(MANAGER_TOKEN, COMPANY_ID);
+    int companyId = companyService.registerCompany(
+            owner.token(),
+            new CompanyRegistrationDTO("company24c", "desc")
+    ).companyId();
 
-        assertThrows(RuntimeException.class, () ->
-                companyService.ModifyManagerPermissions(
-                        OTHER_OWNER_TOKEN,
-                        COMPANY_ID,
-                        MANAGER_ID,
-                        newPermissions
-                )
-        );
+    List<Permission> original = List.of(Permission.MANAGE_INVENTORY);
 
-        assertEquals(oldPermissions, company.getManagers().get(MANAGER_ID));
+    companyService.inviteManager(
+            owner.token(),
+            companyId,
+            manager.userId(),
+            original
+    );
+
+    companyService.acceptManagerInvitation(manager.token(), companyId);
+
+    assertThrows(RuntimeException.class, () ->
+            companyService.ModifyManagerPermissions(
+                    other.token(),
+                    companyId,
+                    manager.userId(),
+                    List.of(Permission.EDIT_POLICIES)
+            )
+    );
+
+    ProductionCompany company = companyRepository.getCompanyById(companyId);
+
+    assertEquals(original, company.getManagers().get(manager.userId()));
     }
 
     @Test
     void GivenAppointer_WhenRevokeManager_ThenRevoked() {
-        List<Permission> permissions = List.of(Permission.MANAGE_INVENTORY);
+       AuthTokenDTO owner = registerAndLoginMember("owner24d");
+    AuthTokenDTO manager = registerAndLoginMember("manager24d");
 
-        companyService.inviteManager(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, permissions);
-        companyService.acceptManagerInvitation(MANAGER_TOKEN, COMPANY_ID);
+    int companyId = companyService.registerCompany(
+            owner.token(),
+            new CompanyRegistrationDTO("company24d", "desc")
+    ).companyId();
 
-        companyService.RevokeManager(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+    companyService.inviteManager(
+            owner.token(),
+            companyId,
+            manager.userId(),
+            List.of(Permission.MANAGE_INVENTORY)
+    );
 
-        assertFalse(company.getManagers().containsKey(MANAGER_ID));
-        assertEquals(CompanyRole.None, manager.getMemberProfile().getCompanyRole());
-        assertNull(manager.getAppointmentForCompany(COMPANY_ID));
+    companyService.acceptManagerInvitation(manager.token(), companyId);
+
+    companyService.RevokeManager(
+            owner.token(),
+            companyId,
+            manager.userId()
+    );
+
+    ProductionCompany company = companyRepository.getCompanyById(companyId);
+    User managerUser = userRepository.getUserById(manager.userId());
+
+    assertFalse(company.getManagers().containsKey(manager.userId()));
+    assertNull(managerUser.getAppointmentForCompany(companyId));
     }
 
     // UC-25

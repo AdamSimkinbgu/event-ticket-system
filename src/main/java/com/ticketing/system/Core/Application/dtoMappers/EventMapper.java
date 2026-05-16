@@ -12,10 +12,10 @@ public class EventMapper {
     // HELPER METHOD to convert Event --> EventSummaryDTO; used in both search methods above.
     public EventSummaryDTO convertEventToEventSummaryDTO(Event event, IProductionCompanyRepository productionCompanyRepository) {
         double minPrice = (event.getVenueMap() != null && !event.getVenueMap().getInventoryZones().isEmpty())
-                ? event.getVenueMap().getInventoryZones().stream().mapToInt(z -> z.getprice()).min().getAsInt()
+                ? event.getVenueMap().getInventoryZones().stream().mapToDouble(z -> z.getprice()).min().getAsDouble()
                 : 0;
         double maxPrice = (event.getVenueMap() != null && !event.getVenueMap().getInventoryZones().isEmpty())
-                ? event.getVenueMap().getInventoryZones().stream().mapToInt(z -> z.getprice()).max().getAsInt()
+                ? event.getVenueMap().getInventoryZones().stream().mapToDouble(z -> z.getprice()).max().getAsDouble()
                 : 0;
         return new EventSummaryDTO(
                 event.getId(),

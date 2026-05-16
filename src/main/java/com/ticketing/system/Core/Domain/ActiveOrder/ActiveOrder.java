@@ -1,30 +1,28 @@
 package com.ticketing.system.Core.Domain.ActiveOrder;
 
-import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
-
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
+
 /**
  * ActiveOrder = a cart in progress.
  *
- * <p>
- * Carries a dual identity (auth rework / D9a):
+ * <p>Carries a dual identity (auth rework / D9a):
  * <ul>
- * <li><b>Guest cart:</b> {@code userId == null}, {@code sessionId != null}.
- * Bound to a Guest Session row by sessionId; deleted when that Session
- * is swept or ended.</li>
- * <li><b>Member cart (active session):</b> {@code userId != null} and
- * {@code sessionId != null}. The sessionId is the currently-attached
- * Member session.</li>
- * <li><b>Member cart (between sessions):</b> {@code userId != null},
- * {@code sessionId == null}. Survives logout per II.3.1 / D9a;
- * restored on next login by {@link #attachToSession(String)}.</li>
+ *   <li><b>Guest cart:</b> {@code userId == null}, {@code sessionId != null}.
+ *       Bound to a Guest Session row by sessionId; deleted when that Session
+ *       is swept or ended.</li>
+ *   <li><b>Member cart (active session):</b> {@code userId != null} and
+ *       {@code sessionId != null}. The sessionId is the currently-attached
+ *       Member session.</li>
+ *   <li><b>Member cart (between sessions):</b> {@code userId != null},
+ *       {@code sessionId == null}. Survives logout per II.3.1 / D9a;
+ *       restored on next login by {@link #attachToSession(String)}.</li>
  * </ul>
  *
- * <p>
- * Invariant: at least one of userId / sessionId is non-null at all times.
+ * <p>Invariant: at least one of userId / sessionId is non-null at all times.
  */
 public class ActiveOrder {
 
@@ -32,7 +30,6 @@ public class ActiveOrder {
     private String sessionId;
     private String status;
     private List<CartLineItem> items;
-    private LocalDateTime createdAt;
 
     public ActiveOrder(Integer userId, String sessionId) {
         if (userId == null && sessionId == null) {
@@ -194,40 +191,44 @@ public class ActiveOrder {
         }
         return false;
     }
-    // ---------------------------------------------------------------------------
-    // Skeleton additions for ActiveOrder.
-    // ---------------------------------------------------------------------------
 
-    // UC-9 — sum of priceAtReservation across all lines (for cart-display +
-    // checkout pre-check).
     public double getTotalPrice() {
         throw new UnsupportedOperationException("UC-9: not implemented");
     }
 
-    // UC-5 / UC-9 — minimum remaining time across lines (the cart expires when the
-    // first line does).
     public java.time.Duration getRemainingTime() {
         throw new UnsupportedOperationException("UC-5/9: not implemented");
     }
 
-    public void removeOneTicket(int eventId, int zoneId) {
-        for (int i = 0; i <= items.size() - 1; i = i + 1) {
-            CartLineItem item = items.get(i);
-            if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
-                items.remove(i);
-                return;
-            }
-        }
-        throw new IllegalArgumentException("No reservation found for this event and zone");
+
+
+public void removeTickets(int eventId, int zoneId, int quantity) {
+    if (quantity <= 0) {
+        throw new IllegalArgumentException("Quantity must be positive");
     }
+
+    int existingTickets = countTickets(eventId, zoneId);
+
+    if (existingTickets < quantity) {
+        throw new IllegalArgumentException("Not enough reserved tickets to remove");
+    }
+
+    int removedTickets = 0;
+
+    for (int i =0 ; i <=items.size() - 1 && removedTickets < quantity; i = i + 1) {
+        CartLineItem item = items.get(i);
+
+        if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
+            items.remove(i);
+            removedTickets = removedTickets + 1;
+        }
+    }
+}
+
+
 
     public java.time.LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public boolean isExpired() {
-        // Assuming a fixed reservation duration of 15 minutes for simplicity.
-        return createdAt.plusMinutes(15).isBefore(LocalDateTime.now());
+        throw new UnsupportedOperationException("not implemented (add createdAt field)");
     }
 
     public void expire() {
@@ -242,8 +243,19 @@ public class ActiveOrder {
         }
         return false;
     }
+  public int countTickets(int eventId, int zoneId) {
+    int count = 0;
 
-    public ActiveOrderDTO toDTO() {
+    for (CartLineItem item : items) {
+        if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
+            count = count + 1;
+        }
+    }
+
+    return count;
+}
+
+public ActiveOrderDTO toDTO() {
         List<ActiveOrderDTO.CartLineDTO> lineDTOs = new ArrayList<>();
         for (CartLineItem item : items) {
             lineDTOs.add(item.toDTO());
