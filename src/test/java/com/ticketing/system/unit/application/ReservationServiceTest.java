@@ -1,13 +1,5 @@
 package com.ticketing.system.unit.application;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import com.ticketing.system.Core.Application.dto.ReservationResultDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
@@ -18,250 +10,392 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 
-class ReservationServiceTest {
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-    private IEventRepository mockEventRepository;
-    private IActiveOrderRepository mockActiveOrderRepository;
-    private ISessionManager mockSessionManager;
-    private INotificationService mockNotificationService;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+import java.util.Optional;
+
+public class ReservationServiceTest {
+
+    private IEventRepository eventRepository;
+    private IActiveOrderRepository activeOrderRepository;
+    private ISessionManager sessionManager;
+    private INotificationService notificationService;
 
     private ReservationService reservationService;
 
+    private Event event;
+    private InventoryZone zone;
+    private ActiveOrder activeOrder;
+
     private final String VALID_TOKEN = "valid-token";
-    private final String INVALID_TOKEN = "invalid-token";
-
     private final int USER_ID = 1;
-    private final int INVALID_USER_ID = -1;
-
     private final int EVENT_ID = 10;
-    private final int ZONE_ID = 20;
+    private final int ZONE_ID = 5;
     private final int QUANTITY = 2;
-
-    private Event mockEvent;
-    private InventoryZone mockZone;
-    private ActiveOrder mockActiveOrder;
 
     @BeforeEach
     void setUp() {
-        mockEventRepository = mock(IEventRepository.class);
-        mockActiveOrderRepository = mock(IActiveOrderRepository.class);
-        mockSessionManager = mock(ISessionManager.class);
-        mockNotificationService = mock(INotificationService.class);
+        eventRepository = mock(IEventRepository.class);
+        activeOrderRepository = mock(IActiveOrderRepository.class);
+        sessionManager = mock(ISessionManager.class);
+        notificationService = mock(INotificationService.class);
+
+        event = mock(Event.class);
+        zone = mock(InventoryZone.class);
+        activeOrder = mock(ActiveOrder.class);
 
         reservationService = new ReservationService(
-                mockEventRepository,
-                mockActiveOrderRepository,
-                mockSessionManager,
-                mockNotificationService
-        );
-
-        mockEvent = mock(Event.class);
-        mockZone = mock(InventoryZone.class);
-        mockActiveOrder = mock(ActiveOrder.class);
-
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockSessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
-
-        when(mockEventRepository.findById(EVENT_ID)).thenReturn(mockEvent);
-        when(mockEvent.getZone(ZONE_ID)).thenReturn(mockZone);
-
-        when(mockZone.getAvailableAmount()).thenReturn(10);
-        when(mockZone.getprice()).thenReturn(100.0);
-    }
-
-    @Test
-    void GivenMissingToken_WhenReserveTickets_ThenThrowException() {
-        assertThrows(IllegalArgumentException.class, () ->
-                reservationService.reserveTickets("", EVENT_ID, ZONE_ID, QUANTITY)
+                eventRepository,
+                activeOrderRepository,
+                sessionManager,
+                notificationService
         );
     }
 
     @Test
-    void GivenNullToken_WhenReserveTickets_ThenThrowException() {
-        assertThrows(IllegalArgumentException.class, () ->
-                reservationService.reserveTickets(null, EVENT_ID, ZONE_ID, QUANTITY)
-        );
-    }
-
-    @Test
-    void GivenInvalidToken_WhenReserveTickets_ThenThrowException() {
-        when(mockSessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
-
-        assertThrows(IllegalStateException.class, () ->
-                reservationService.reserveTickets(INVALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
-        );
-    }
-
-    @Test
-    void GivenInvalidUserId_WhenReserveTickets_ThenThrowException() {
-        when(mockSessionManager.extractUserId(VALID_TOKEN)).thenReturn(INVALID_USER_ID);
-
-        assertThrows(IllegalArgumentException.class, () ->
-                reservationService.reserveTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
-        );
-    }
-
-    @Test
-    void GivenZeroQuantity_WhenReserveTickets_ThenThrowException() {
-        assertThrows(IllegalArgumentException.class, () ->
-                reservationService.reserveTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, 0)
-        );
-    }
-
-    @Test
-    void GivenNegativeQuantity_WhenReserveTickets_ThenThrowException() {
-        assertThrows(IllegalArgumentException.class, () ->
-                reservationService.reserveTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, -1)
-        );
-    }
-
-    @Test
-    void GivenEventDoesNotExist_WhenReserveTickets_ThenThrowException() {
-        when(mockEventRepository.findById(EVENT_ID)).thenReturn(null);
-
-        assertThrows(IllegalArgumentException.class, () ->
-                reservationService.reserveTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
-        );
-    }
-
-    @Test
-    void GivenZoneDoesNotExist_WhenReserveTickets_ThenThrowException() {
-        when(mockEvent.getZone(ZONE_ID)).thenReturn(null);
-
-        assertThrows(IllegalArgumentException.class, () ->
-                reservationService.reserveTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
-        );
-    }
-
-    @Test
-    void GivenNotEnoughTickets_WhenReserveTickets_ThenThrowException() {
-        when(mockZone.getAvailableAmount()).thenReturn(1);
-
-        assertThrows(IllegalArgumentException.class, () ->
-                reservationService.reserveTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
-        );
-    }
-
-    @Test
-    void GivenUserAlreadyHasActiveOrderForEvent_WhenReserveTickets_ThenThrowException() {
-        when(mockActiveOrderRepository.getByUserId(USER_ID)).thenReturn(mockActiveOrder);
-        when(mockActiveOrder.hasReservationForEvent(EVENT_ID)).thenReturn(true);
-
-        assertThrows(IllegalStateException.class, () ->
-                reservationService.reserveTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
-        );
-    }
-
-    @Test
-    void GivenValidReservationWithoutExistingActiveOrder_WhenReserveTickets_ThenReturnReservationResult() {
-        when(mockActiveOrderRepository.getByUserId(USER_ID)).thenReturn(null);
+    void GivenValidRequest_WhenRemoveReservedTickets_ThenReturnReservationResult() {
+        when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(event.getZone(ZONE_ID)).thenReturn(zone);
+        when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(activeOrder);
+        when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(true);
+        when(activeOrder.countTickets(EVENT_ID, ZONE_ID)).thenReturn(QUANTITY);
 
         ReservationResultDTO result =
-                reservationService.reserveTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY);
+                reservationService.removeReservedTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY);
 
-        assertEquals(QUANTITY, result.quantity());
+        assertEquals(EVENT_ID, result.getEventId());
     }
 
     @Test
-    void GivenValidReservationWithExistingActiveOrder_WhenReserveTickets_ThenReturnReservationResult() {
-        when(mockActiveOrderRepository.getByUserId(USER_ID)).thenReturn(mockActiveOrder);
-        when(mockActiveOrder.hasReservationForEvent(EVENT_ID)).thenReturn(false);
-
-        ReservationResultDTO result =
-                reservationService.reserveTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY);
-
-        assertEquals(EVENT_ID, result.eventId());
-    }
-
-    @Test
-    void GivenMissingToken_WhenRemoveOneReservedTicket_ThenThrowException() {
+    void GivenMissingToken_WhenRemoveReservedTickets_ThenThrowException() {
         assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeOneReservedTicket("", EVENT_ID, ZONE_ID)
+                reservationService.removeReservedTickets(null, EVENT_ID, ZONE_ID, QUANTITY)
         );
     }
 
     @Test
-    void GivenNullToken_WhenRemoveOneReservedTicket_ThenThrowException() {
-        assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeOneReservedTicket(null, EVENT_ID, ZONE_ID)
-        );
-    }
-
-    @Test
-    void GivenInvalidToken_WhenRemoveOneReservedTicket_ThenThrowException() {
-        when(mockSessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
+    void GivenInvalidToken_WhenRemoveReservedTickets_ThenThrowException() {
+        when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(false);
 
         assertThrows(IllegalStateException.class, () ->
-                reservationService.removeOneReservedTicket(INVALID_TOKEN, EVENT_ID, ZONE_ID)
+                reservationService.removeReservedTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
         );
     }
 
     @Test
-    void GivenInvalidUserId_WhenRemoveOneReservedTicket_ThenThrowException() {
-        when(mockSessionManager.extractUserId(VALID_TOKEN)).thenReturn(INVALID_USER_ID);
+    void GivenInvalidQuantity_WhenRemoveReservedTickets_ThenThrowException() {
+        when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
 
         assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeOneReservedTicket(VALID_TOKEN, EVENT_ID, ZONE_ID)
+                reservationService.removeReservedTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, 0)
         );
     }
 
     @Test
-    void GivenEventDoesNotExist_WhenRemoveOneReservedTicket_ThenThrowException() {
-        when(mockEventRepository.findById(EVENT_ID)).thenReturn(null);
+    void GivenEventDoesNotExist_WhenRemoveReservedTickets_ThenThrowException() {
+        when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        when(eventRepository.findById(EVENT_ID)).thenReturn(null);
 
         assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeOneReservedTicket(VALID_TOKEN, EVENT_ID, ZONE_ID)
+                reservationService.removeReservedTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
         );
     }
 
     @Test
-    void GivenZoneDoesNotExist_WhenRemoveOneReservedTicket_ThenThrowException() {
-        when(mockEvent.getZone(ZONE_ID)).thenReturn(null);
+    void GivenZoneDoesNotExist_WhenRemoveReservedTickets_ThenThrowException() {
+        when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(event.getZone(ZONE_ID)).thenReturn(null);
 
         assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeOneReservedTicket(VALID_TOKEN, EVENT_ID, ZONE_ID)
+                reservationService.removeReservedTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
         );
     }
 
     @Test
-    void GivenNoActiveOrder_WhenRemoveOneReservedTicket_ThenThrowException() {
-        when(mockActiveOrderRepository.getByUserId(USER_ID)).thenReturn(null);
+    void GivenActiveOrderDoesNotExist_WhenRemoveReservedTickets_ThenThrowException() {
+        when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(event.getZone(ZONE_ID)).thenReturn(zone);
+        when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(null);
 
         assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeOneReservedTicket(VALID_TOKEN, EVENT_ID, ZONE_ID)
+                reservationService.removeReservedTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
         );
     }
 
     @Test
-    void GivenActiveOrderDoesNotContainEvent_WhenRemoveOneReservedTicket_ThenThrowException() {
-        when(mockActiveOrderRepository.getByUserId(USER_ID)).thenReturn(mockActiveOrder);
-        when(mockActiveOrder.hasReservationForEvent(EVENT_ID)).thenReturn(false);
+    void GivenOrderDoesNotContainEvent_WhenRemoveReservedTickets_ThenThrowException() {
+        when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(event.getZone(ZONE_ID)).thenReturn(zone);
+        when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(activeOrder);
+        when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(false);
 
         assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeOneReservedTicket(VALID_TOKEN, EVENT_ID, ZONE_ID)
+                reservationService.removeReservedTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
         );
     }
 
     @Test
-    void GivenNoReservedTicketInZone_WhenRemoveOneReservedTicket_ThenThrowException() {
-        when(mockActiveOrderRepository.getByUserId(USER_ID)).thenReturn(mockActiveOrder);
-        when(mockActiveOrder.hasReservationForEvent(EVENT_ID)).thenReturn(true);
-        when(mockActiveOrder.hasTicket(EVENT_ID, ZONE_ID)).thenReturn(false);
+    void GivenNotEnoughReservedTickets_WhenRemoveReservedTickets_ThenThrowException() {
+        when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(event.getZone(ZONE_ID)).thenReturn(zone);
+        when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(activeOrder);
+        when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(true);
+        when(activeOrder.countTickets(EVENT_ID, ZONE_ID)).thenReturn(1);
 
         assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeOneReservedTicket(VALID_TOKEN, EVENT_ID, ZONE_ID)
+                reservationService.removeReservedTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
         );
     }
-
     @Test
-    void GivenValidReservedTicket_WhenRemoveOneReservedTicket_ThenReturnReservationResult() {
-        when(mockActiveOrderRepository.getByUserId(USER_ID)).thenReturn(mockActiveOrder);
-        when(mockActiveOrder.hasReservationForEvent(EVENT_ID)).thenReturn(true);
-        when(mockActiveOrder.hasTicket(EVENT_ID, ZONE_ID)).thenReturn(true);
+void GivenValidMemberRequest_WhenReserveTicketsForMember_ThenReturnReservationResult() {
+    when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+    when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(zone);
+    when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(activeOrder);
 
-        ReservationResultDTO result =
-                reservationService.removeOneReservedTicket(VALID_TOKEN, EVENT_ID, ZONE_ID);
+    when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(false);
+    when(zone.getAvailableAmount()).thenReturn(10);
+    when(zone.getprice()).thenReturn(100.0);
 
-        assertEquals(1, result.quantity());
-    }
+    ReservationResultDTO result =
+            reservationService.reserveTicketsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY);
+
+    assertEquals(EVENT_ID, result.getEventId());
+}
+
+@Test
+void GivenMissingToken_WhenReserveTicketsForMember_ThenThrowException() {
+    assertThrows(IllegalArgumentException.class, () ->
+            reservationService.reserveTicketsForMember(null, EVENT_ID, ZONE_ID, QUANTITY)
+    );
+}
+
+@Test
+void GivenInvalidToken_WhenReserveTicketsForMember_ThenThrowException() {
+    when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(false);
+
+    assertThrows(IllegalStateException.class, () ->
+            reservationService.reserveTicketsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
+    );
+}
+
+@Test
+void GivenInvalidUserId_WhenReserveTicketsForMember_ThenThrowException() {
+    when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+    when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(0);
+
+    assertThrows(IllegalArgumentException.class, () ->
+            reservationService.reserveTicketsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
+    );
+}
+
+@Test
+void GivenInvalidQuantity_WhenReserveTicketsForMember_ThenThrowException() {
+    when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+    when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+
+    assertThrows(IllegalArgumentException.class, () ->
+            reservationService.reserveTicketsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, 0)
+    );
+}
+
+@Test
+void GivenEventDoesNotExist_WhenReserveTicketsForMember_ThenThrowException() {
+    when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+    when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+    when(eventRepository.findById(EVENT_ID)).thenReturn(null);
+
+    assertThrows(IllegalArgumentException.class, () ->
+            reservationService.reserveTicketsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
+    );
+}
+
+@Test
+void GivenZoneDoesNotExist_WhenReserveTicketsForMember_ThenThrowException() {
+    when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+    when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(null);
+
+    assertThrows(IllegalArgumentException.class, () ->
+            reservationService.reserveTicketsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
+    );
+}
+
+@Test
+void GivenUserAlreadyHasReservationForEvent_WhenReserveTicketsForMember_ThenThrowException() {
+    when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+    when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(zone);
+    when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(activeOrder);
+
+    when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(true);
+
+    assertThrows(IllegalStateException.class, () ->
+            reservationService.reserveTicketsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
+    );
+}
+
+@Test
+void GivenNotEnoughTickets_WhenReserveTicketsForMember_ThenThrowException() {
+    when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+    when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(zone);
+    when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(activeOrder);
+
+    when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(false);
+    when(zone.getAvailableAmount()).thenReturn(1);
+
+    assertThrows(IllegalArgumentException.class, () ->
+            reservationService.reserveTicketsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
+    );
+}
+
+@Test
+void GivenNoActiveOrder_WhenReserveTicketsForMember_ThenCreateNewOrderAndReturnResult() {
+    when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+    when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(zone);
+    when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(null);
+
+    when(zone.getAvailableAmount()).thenReturn(10);
+    when(zone.getprice()).thenReturn(100.0);
+
+    ReservationResultDTO result =
+            reservationService.reserveTicketsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY);
+
+    assertEquals(EVENT_ID, result.getEventId());
+}
+@Test
+void GivenValidGuestRequest_WhenReserveTicketsForGuest_ThenReturnReservationResult() {
+    String sessionId = "guest-session";
+
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(zone);
+    when(activeOrderRepository.getBySessionId(sessionId)).thenReturn(Optional.of(activeOrder));
+
+    when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(false);
+    when(zone.getAvailableAmount()).thenReturn(10);
+    when(zone.getprice()).thenReturn(100.0);
+
+    ReservationResultDTO result =
+            reservationService.reserveTicketsForGuest(sessionId, EVENT_ID, ZONE_ID, QUANTITY);
+
+    assertEquals(EVENT_ID, result.getEventId());
+}
+
+@Test
+void GivenMissingSessionId_WhenReserveTicketsForGuest_ThenThrowException() {
+    assertThrows(IllegalArgumentException.class, () ->
+            reservationService.reserveTicketsForGuest(null, EVENT_ID, ZONE_ID, QUANTITY)
+    );
+}
+
+@Test
+void GivenBlankSessionId_WhenReserveTicketsForGuest_ThenThrowException() {
+    assertThrows(IllegalArgumentException.class, () ->
+            reservationService.reserveTicketsForGuest("   ", EVENT_ID, ZONE_ID, QUANTITY)
+    );
+}
+
+@Test
+void GivenInvalidQuantity_WhenReserveTicketsForGuest_ThenThrowException() {
+    String sessionId = "guest-session";
+
+    assertThrows(IllegalArgumentException.class, () ->
+            reservationService.reserveTicketsForGuest(sessionId, EVENT_ID, ZONE_ID, 0)
+    );
+}
+
+@Test
+void GivenEventDoesNotExist_WhenReserveTicketsForGuest_ThenThrowException() {
+    String sessionId = "guest-session";
+
+    when(eventRepository.findById(EVENT_ID)).thenReturn(null);
+
+    assertThrows(IllegalArgumentException.class, () ->
+            reservationService.reserveTicketsForGuest(sessionId, EVENT_ID, ZONE_ID, QUANTITY)
+    );
+}
+
+@Test
+void GivenZoneDoesNotExist_WhenReserveTicketsForGuest_ThenThrowException() {
+    String sessionId = "guest-session";
+
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(null);
+
+    assertThrows(IllegalArgumentException.class, () ->
+            reservationService.reserveTicketsForGuest(sessionId, EVENT_ID, ZONE_ID, QUANTITY)
+    );
+}
+
+@Test
+void GivenGuestAlreadyHasReservationForEvent_WhenReserveTicketsForGuest_ThenThrowException() {
+    String sessionId = "guest-session";
+
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(zone);
+    when(activeOrderRepository.getBySessionId(sessionId)).thenReturn(Optional.of(activeOrder));
+
+    when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(true);
+
+    assertThrows(IllegalStateException.class, () ->
+            reservationService.reserveTicketsForGuest(sessionId, EVENT_ID, ZONE_ID, QUANTITY)
+    );
+}
+
+@Test
+void GivenNotEnoughTickets_WhenReserveTicketsForGuest_ThenThrowException() {
+    String sessionId = "guest-session";
+
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(zone);
+    when(activeOrderRepository.getBySessionId(sessionId)).thenReturn(Optional.of(activeOrder));
+
+    when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(false);
+    when(zone.getAvailableAmount()).thenReturn(1);
+
+    assertThrows(IllegalArgumentException.class, () ->
+            reservationService.reserveTicketsForGuest(sessionId, EVENT_ID, ZONE_ID, QUANTITY)
+    );
+}
+
+@Test
+void GivenNoActiveOrder_WhenReserveTicketsForGuest_ThenCreateNewOrderAndReturnResult() {
+    String sessionId = "guest-session";
+
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(zone);
+    when(activeOrderRepository.getBySessionId(sessionId)).thenReturn(Optional.empty());
+
+    when(zone.getAvailableAmount()).thenReturn(10);
+    when(zone.getprice()).thenReturn(100.0);
+
+    ReservationResultDTO result =
+            reservationService.reserveTicketsForGuest(sessionId, EVENT_ID, ZONE_ID, QUANTITY);
+
+    assertEquals(EVENT_ID, result.getEventId());
+}
+
 }
