@@ -9,6 +9,10 @@ import org.springframework.test.context.ActiveProfiles;
 @ActiveProfiles("test")
 class CheckoutAcceptanceTest {
 
+
+
+
+    
     // UC-10
     @Test @Disabled("UC-10 main: full happy path — charge + issue + receipt + notify")
     void GivenValidOrder_WhenCheckout_ThenAllSucceed() {}
