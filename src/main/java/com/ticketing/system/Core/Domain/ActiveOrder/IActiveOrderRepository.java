@@ -6,10 +6,11 @@ import java.util.Optional;
 /**
  * Aggregate-root entry point for the {@link ActiveOrder} aggregate.
  *
- * <p>Carts have dual identity (D9a):
+ * <p>
+ * Carts have dual identity (D9a):
  * <ul>
- *   <li>Member carts are looked up by userId.</li>
- *   <li>Guest carts are looked up by sessionId.</li>
+ * <li>Member carts are looked up by userId.</li>
+ * <li>Guest carts are looked up by sessionId.</li>
  * </ul>
  * Both methods return {@link Optional} to make absence explicit.
  */

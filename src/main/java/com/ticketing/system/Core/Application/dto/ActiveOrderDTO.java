@@ -7,21 +7,18 @@ import java.util.List;
 // and any cart-display query.
 // 'remainingSecondsBeforeExpiry' is computed at read time so the UI can show countdown.
 public record ActiveOrderDTO(
-    String orderId,
-    Integer userId,                     // null for Guest active orders
-    String sessionId,                   // null for Member active orders
-    LocalDateTime createdAt,
-    long remainingSecondsBeforeExpiry,
-    double currentTotalPrice,
-    List<CartLineDTO> lines
-) {
+        Integer userId, // null for Guest active orders
+        String sessionId, // null for Member active orders
+        LocalDateTime createdAt,
+        long remainingSecondsBeforeExpiry,
+        double currentTotalPrice,
+        List<CartLineDTO> lines) {
     public record CartLineDTO(
-        String ticketId,
-        String eventId,
-        String eventName,
-        String zoneId,
-        String seatNumber,              // null for standing-zone tickets
-        double pricePerTicket,
-        LocalDateTime addedAt
-    ) {}
+            int eventId,
+            String eventName,
+            int zoneId,
+            String seatNumber, // null for standing-zone tickets
+            double pricePerTicket,
+            LocalDateTime addedAt) {
+    }
 }

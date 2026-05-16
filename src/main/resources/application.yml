@@ -25,6 +25,13 @@ session:
   member-ttl-minutes: ${SESSION_MEMBER_TTL_MINUTES:1440}
   guest-idle-timeout-minutes: ${SESSION_GUEST_IDLE_TIMEOUT_MINUTES:30}
 
+
+constants:
+  # System-wide constant
+  ticket-reservation-duration: ${TICKET_RESERVATION_DURATION:15}
+  order-expiration-duration: ${ORDER_EXPIRATION_DURATION:60}
+
+
 # Actuator (SLR.8.1 telemetry / SLR.8.2 logging visibility).
 # Restrict in production by listing only the endpoints you actually want exposed.
 management:

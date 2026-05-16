@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
+import com.ticketing.system.Core.Application.dto.LoginDTO;
 import com.ticketing.system.Core.Application.dto.GuestSessionDTO;
 import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.dto.LogoutRequestDTO;
@@ -32,6 +33,8 @@ import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
+import com.ticketing.system.Core.Application.services.NotificationDispatchService;
+import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
@@ -58,17 +61,21 @@ class AuthenticationServiceTest {
     private IActiveOrderRepository mockActiveOrderRepo;
     private Clock fixedClock;
     private AuthenticationService service;
+    private NotificationDispatchService mockNotification;
+    private ReservationService mockReservation;
 
     @BeforeEach
     void setUp() {
         mockUserRepo = mock(IUserRepository.class);
         mockHasher = mock(IPasswordHasher.class);
         mockSessionManager = mock(ISessionManager.class);
+        mockNotification = mock(NotificationDispatchService.class);
+        mockReservation = mock(ReservationService.class);
         mockSessionRepo = mock(ISessionRepository.class);
         mockActiveOrderRepo = mock(IActiveOrderRepository.class);
         fixedClock = Clock.fixed(T0, ZoneOffset.UTC);
         service = new AuthenticationService(
-                mockUserRepo, mockHasher, mockSessionManager,
+                mockUserRepo, mockHasher, mockSessionManager, mockReservation, mockNotification,
                 mockSessionRepo, mockActiveOrderRepo,
                 fixedClock, GUEST_IDLE_MINUTES, MEMBER_TTL_MINUTES);
         // Default mocks: no cart for anyone. Individual D9a tests override.
@@ -76,7 +83,10 @@ class AuthenticationServiceTest {
         when(mockActiveOrderRepo.getByUserId(anyInt())).thenReturn(null);
     }
 
-    /** Returns a valid Guest session and mocks sessionRepo.findById(sid) to return it. */
+    /**
+     * Returns a valid Guest session and mocks sessionRepo.findById(sid) to return
+     * it.
+     */
     private Session mockValidGuestSession(String sid) {
         Instant expiry = T0.plus(GUEST_IDLE_MINUTES, ChronoUnit.MINUTES);
         Session guest = new Session(sid, null, T0, expiry);
@@ -141,9 +151,8 @@ class AuthenticationServiceTest {
 
     @Test
     void givenMalformedEmail_whenRegister_thenInvalidEmailFormatExceptionThrown() {
-        assertThrows(InvalidEmailFormatException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "not-an-email", "Password1", "guest-1"))
-        );
+        assertThrows(InvalidEmailFormatException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "not-an-email", "Password1", "guest-1")));
         verifyNoInteractions(mockHasher);
         verify(mockUserRepo, never()).save(any(User.class));
         verify(mockSessionRepo, never()).findById(any());
@@ -151,39 +160,34 @@ class AuthenticationServiceTest {
 
     @Test
     void givenNullEmail_whenRegister_thenInvalidEmailFormatExceptionThrown() {
-        assertThrows(InvalidEmailFormatException.class, () ->
-            service.register(new RegisterRequestDTO("alice", null, "Password1", "guest-1"))
-        );
+        assertThrows(InvalidEmailFormatException.class,
+                () -> service.register(new RegisterRequestDTO("alice", null, "Password1", "guest-1")));
     }
 
     @Test
     void givenShortPassword_whenRegister_thenWeakPasswordExceptionThrown() {
-        assertThrows(WeakPasswordException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "Pw1", "guest-1"))
-        );
+        assertThrows(WeakPasswordException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Pw1", "guest-1")));
         verifyNoInteractions(mockHasher);
         verify(mockUserRepo, never()).save(any(User.class));
     }
 
     @Test
     void givenPasswordWithoutDigit_whenRegister_thenWeakPasswordExceptionThrown() {
-        assertThrows(WeakPasswordException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "Passwords", "guest-1"))
-        );
+        assertThrows(WeakPasswordException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Passwords", "guest-1")));
     }
 
     @Test
     void givenPasswordWithoutLetter_whenRegister_thenWeakPasswordExceptionThrown() {
-        assertThrows(WeakPasswordException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "12345678", "guest-1"))
-        );
+        assertThrows(WeakPasswordException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "12345678", "guest-1")));
     }
 
     @Test
     void givenNullPassword_whenRegister_thenWeakPasswordExceptionThrown() {
-        assertThrows(WeakPasswordException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", null, "guest-1"))
-        );
+        assertThrows(WeakPasswordException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", null, "guest-1")));
     }
 
     // ----------------------------------------------------------------------
@@ -192,44 +196,39 @@ class AuthenticationServiceTest {
 
     @Test
     void givenNoGuestSessionId_whenRegister_thenGuestSessionRequiredExceptionThrown() {
-        assertThrows(GuestSessionRequiredException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", null))
-        );
+        assertThrows(GuestSessionRequiredException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", null)));
         verifyNoInteractions(mockHasher);
         verify(mockUserRepo, never()).save(any(User.class));
     }
 
     @Test
     void givenBlankGuestSessionId_whenRegister_thenGuestSessionRequiredExceptionThrown() {
-        assertThrows(GuestSessionRequiredException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "   "))
-        );
+        assertThrows(GuestSessionRequiredException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "   ")));
     }
 
     @Test
     void givenUnknownGuestSessionId_whenRegister_thenGuestSessionRequiredExceptionThrown() {
         when(mockSessionRepo.findById("ghost")).thenReturn(Optional.empty());
-        assertThrows(GuestSessionRequiredException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "ghost"))
-        );
+        assertThrows(GuestSessionRequiredException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "ghost")));
     }
 
     @Test
     void givenMemberSessionIdAsGuest_whenRegister_thenGuestSessionRequiredExceptionThrown() {
         Session memberSession = new Session("sid", 99, T0, T0.plusSeconds(3600));
         when(mockSessionRepo.findById("sid")).thenReturn(Optional.of(memberSession));
-        assertThrows(GuestSessionRequiredException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "sid"))
-        );
+        assertThrows(GuestSessionRequiredException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "sid")));
     }
 
     @Test
     void givenExpiredGuestSession_whenRegister_thenGuestSessionRequiredExceptionThrown() {
         Session expired = new Session("sid", null, T0.minusSeconds(7200), T0.minusSeconds(60));
         when(mockSessionRepo.findById("sid")).thenReturn(Optional.of(expired));
-        assertThrows(GuestSessionRequiredException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "sid"))
-        );
+        assertThrows(GuestSessionRequiredException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "sid")));
     }
 
     // ----------------------------------------------------------------------
@@ -276,9 +275,8 @@ class AuthenticationServiceTest {
         mockValidGuestSession("guest-1");
         when(mockUserRepo.existsByUsername("alice")).thenReturn(true);
 
-        assertThrows(DuplicateUsernameException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "guest-1"))
-        );
+        assertThrows(DuplicateUsernameException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "guest-1")));
         verifyNoInteractions(mockHasher);
         verify(mockUserRepo, never()).save(any(User.class));
     }
@@ -288,23 +286,22 @@ class AuthenticationServiceTest {
         mockValidGuestSession("guest-1");
         when(mockUserRepo.existsByUsername("alice")).thenReturn(false);
         when(mockUserRepo.findByEmail("alice@example.com"))
-            .thenReturn(Optional.of(new User(1, "other", "alice@example.com", "HASH")));
+                .thenReturn(Optional.of(new User(1, "other", "alice@example.com", "HASH")));
 
-        assertThrows(DuplicateEmailException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "guest-1"))
-        );
+        assertThrows(DuplicateEmailException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "guest-1")));
         verifyNoInteractions(mockHasher);
         verify(mockUserRepo, never()).save(any(User.class));
     }
 
     @Test
     void givenBadEmailAndTakenUsername_whenRegister_thenFormatFailsFirst() {
-        // Ordering check: format validators run before any repo lookup OR session check.
+        // Ordering check: format validators run before any repo lookup OR session
+        // check.
         when(mockUserRepo.existsByUsername(any())).thenReturn(true);
 
-        assertThrows(InvalidEmailFormatException.class, () ->
-            service.register(new RegisterRequestDTO("alice", "not-an-email", "Password1", "guest-1"))
-        );
+        assertThrows(InvalidEmailFormatException.class,
+                () -> service.register(new RegisterRequestDTO("alice", "not-an-email", "Password1", "guest-1")));
         verify(mockUserRepo, never()).existsByUsername(any());
         verify(mockSessionRepo, never()).findById(any());
     }
@@ -315,9 +312,8 @@ class AuthenticationServiceTest {
 
     @Test
     void givenNoGuestSessionId_whenLogin_thenGuestSessionRequiredExceptionThrown() {
-        assertThrows(GuestSessionRequiredException.class, () ->
-            service.login(new LoginRequestDTO("alice", "Password1", null))
-        );
+        assertThrows(GuestSessionRequiredException.class,
+                () -> service.login(new LoginRequestDTO("alice", "Password1", null)));
         verifyNoInteractions(mockUserRepo);
         verifyNoInteractions(mockHasher);
     }
@@ -325,27 +321,24 @@ class AuthenticationServiceTest {
     @Test
     void givenUnknownGuestSessionId_whenLogin_thenGuestSessionRequiredExceptionThrown() {
         when(mockSessionRepo.findById("ghost")).thenReturn(Optional.empty());
-        assertThrows(GuestSessionRequiredException.class, () ->
-            service.login(new LoginRequestDTO("alice", "Password1", "ghost"))
-        );
+        assertThrows(GuestSessionRequiredException.class,
+                () -> service.login(new LoginRequestDTO("alice", "Password1", "ghost")));
     }
 
     @Test
     void givenMemberSessionIdAsGuest_whenLogin_thenGuestSessionRequiredExceptionThrown() {
         Session memberSession = new Session("sid", 99, T0, T0.plusSeconds(3600));
         when(mockSessionRepo.findById("sid")).thenReturn(Optional.of(memberSession));
-        assertThrows(GuestSessionRequiredException.class, () ->
-            service.login(new LoginRequestDTO("alice", "Password1", "sid"))
-        );
+        assertThrows(GuestSessionRequiredException.class,
+                () -> service.login(new LoginRequestDTO("alice", "Password1", "sid")));
     }
 
     @Test
     void givenExpiredGuestSession_whenLogin_thenGuestSessionRequiredExceptionThrown() {
         Session expired = new Session("sid", null, T0.minusSeconds(7200), T0.minusSeconds(60));
         when(mockSessionRepo.findById("sid")).thenReturn(Optional.of(expired));
-        assertThrows(GuestSessionRequiredException.class, () ->
-            service.login(new LoginRequestDTO("alice", "Password1", "sid"))
-        );
+        assertThrows(GuestSessionRequiredException.class,
+                () -> service.login(new LoginRequestDTO("alice", "Password1", "sid")));
     }
 
     // ----------------------------------------------------------------------
@@ -360,8 +353,11 @@ class AuthenticationServiceTest {
         when(mockHasher.matches("Password1", "STORED_HASH")).thenReturn(true);
         when(mockSessionManager.generateTokenForSession(any(), any())).thenReturn("ISSUED_TOKEN");
         when(mockSessionManager.extractExpiration("ISSUED_TOKEN")).thenReturn(9999L);
+        when(mockReservation.restoreActiveOrder(7)).thenReturn(null);
+        when(mockNotification.deliverPending(7)).thenReturn(null);
 
-        AuthTokenDTO result = service.login(new LoginRequestDTO("alice", "Password1", "guest-1"));
+        LoginDTO loginResult = service.login(new LoginRequestDTO("alice", "Password1", "guest-1"));
+        AuthTokenDTO result = loginResult.authToken();
 
         assertEquals("ISSUED_TOKEN", result.token());
         assertEquals(9999L, result.expiresAtEpochMillis());
@@ -385,7 +381,8 @@ class AuthenticationServiceTest {
         assertEquals("preserved-sid", guest.getSessionId());
         // Repo save was called on the now-promoted session.
         verify(mockSessionRepo, times(1)).save(guest);
-        // JWT issued via generateTokenForSession (preserving the sid), not generateToken.
+        // JWT issued via generateTokenForSession (preserving the sid), not
+        // generateToken.
         verify(mockSessionManager, times(1)).generateTokenForSession(guest, "alice");
         verify(mockSessionManager, never()).generateToken(anyInt(), any());
     }
@@ -396,10 +393,11 @@ class AuthenticationServiceTest {
         User user = new User(7, "alice", "alice@example.com", "STORED_HASH");
         when(mockUserRepo.findByUsername("alice")).thenReturn(Optional.of(user));
         when(mockHasher.matches("wrong", "STORED_HASH")).thenReturn(false);
+        when(mockReservation.restoreActiveOrder(7)).thenReturn(null);
+        when(mockNotification.deliverPending(7)).thenReturn(null);
 
-        assertThrows(AuthenticationFailedException.class, () ->
-            service.login(new LoginRequestDTO("alice", "wrong", "guest-1"))
-        );
+        assertThrows(AuthenticationFailedException.class,
+                () -> service.login(new LoginRequestDTO("alice", "wrong", "guest-1")));
         verify(mockSessionManager, never()).generateTokenForSession(any(), any());
     }
 
@@ -409,9 +407,8 @@ class AuthenticationServiceTest {
         when(mockUserRepo.findByUsername("ghost")).thenReturn(Optional.empty());
 
         // Same exception type as wrong-password — no enumeration leak.
-        assertThrows(AuthenticationFailedException.class, () ->
-            service.login(new LoginRequestDTO("ghost", "whatever", "guest-1"))
-        );
+        assertThrows(AuthenticationFailedException.class,
+                () -> service.login(new LoginRequestDTO("ghost", "whatever", "guest-1")));
         verifyNoInteractions(mockHasher);
         verify(mockSessionManager, never()).generateTokenForSession(any(), any());
     }
@@ -423,9 +420,8 @@ class AuthenticationServiceTest {
         when(mockUserRepo.findByUsername("alice")).thenReturn(Optional.of(user));
         when(mockHasher.matches("badpass", "STORED_HASH")).thenReturn(false);
 
-        assertThrows(AuthenticationFailedException.class, () ->
-            service.login(new LoginRequestDTO("alice", "badpass", "guest-1"))
-        );
+        assertThrows(AuthenticationFailedException.class,
+                () -> service.login(new LoginRequestDTO("alice", "badpass", "guest-1")));
     }
 
     // ----------------------------------------------------------------------
