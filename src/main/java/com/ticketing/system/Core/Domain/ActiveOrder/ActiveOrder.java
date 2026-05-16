@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
+
 /**
  * ActiveOrder = a cart in progress.
  *
@@ -252,4 +254,19 @@ public void removeTickets(int eventId, int zoneId, int quantity) {
 
     return count;
 }
+
+public ActiveOrderDTO toDTO() {
+        List<ActiveOrderDTO.CartLineDTO> lineDTOs = new ArrayList<>();
+        for (CartLineItem item : items) {
+            lineDTOs.add(item.toDTO());
+        }
+        return new ActiveOrderDTO(
+                getUserId(),
+                null, // sessionId is null for Member active orders
+                getCreatedAt(),
+                this.getRemainingTime().getSeconds(),
+                this.getTotalPrice(),
+                lineDTOs);
+    }
+
 }
