@@ -7,6 +7,7 @@ import com.ticketing.system.Core.Domain.notifications.NotificationStatus;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Repository;
@@ -15,6 +16,12 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class MemoryNotificationRepository implements INotificationRepository {
     private final Map<String, Notification> storage = new HashMap<>();
+    private final AtomicInteger idSequence = new AtomicInteger(1);
+
+    @Override
+    public int nextId() {
+        return idSequence.getAndIncrement();
+    }
     
     @Override
     public void save(Notification notification) {

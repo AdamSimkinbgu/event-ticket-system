@@ -41,6 +41,10 @@ public class InventoryZone {
     public int getId() {
         return id;
     }
+    public double getprice() {
+        return price;
+    }
+
 
     public String getName() {
         return name;
@@ -50,9 +54,6 @@ public class InventoryZone {
         return capacity;
     }
 
-    public double getprice() {
-        return price;
-    }
 
     public boolean release(int quantity) {
         if (quantity <= 0) {

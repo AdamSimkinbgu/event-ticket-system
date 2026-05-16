@@ -4,6 +4,6 @@ import com.ticketing.system.Core.Application.dto.PaymentResultDTO;
 
 public interface PaymentGateway {
    boolean Paying( double price );
-   PaymentResultDTO refund(String paymentTransactionId, double amount, String currency);
+   PaymentResultDTO refund(int userId, double amount, String reason);
  
 }

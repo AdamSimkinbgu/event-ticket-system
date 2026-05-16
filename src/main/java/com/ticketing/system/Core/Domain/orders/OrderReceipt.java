@@ -20,6 +20,7 @@ public class OrderReceipt {
     private int zoneId;
     private double priceAtoneticketReservation;
     private LocalDateTime purchaseTime;
+    private Boolean isRefunded = false;
 
 
     /**
@@ -86,7 +87,7 @@ public class OrderReceipt {
     }
 
     public int getHolderUserId() {
-        throw new UnsupportedOperationException("not implemented (add holderUserId field)");
+        return userid;
     }
 
     public double getTotalAmount() {
@@ -102,12 +103,17 @@ public class OrderReceipt {
         throw new UnsupportedOperationException("UC-4: not implemented");
     }
 
-    public java.util.List<ReceiptLine> getReceiptLines() {
-        throw new UnsupportedOperationException("not implemented (add receiptLines list)");
+    public List<ReceiptLine> getReceiptLines() {
+        return this.ReceiptLine;
+
     }
 
     public boolean wasRefunded() {
-        throw new UnsupportedOperationException("not implemented");
+        return isRefunded;
+    }
+
+    public void markRefunded() {
+        this.isRefunded = true;
     }
 
 }

@@ -52,7 +52,7 @@ public class CompanyAppointment {
     }
 
     public boolean hasPermission(Permission permission) {
-        throw new UnsupportedOperationException("not implemented");
+            return permissions.contains(permission);
     }
 
     public AppointmentStatus getStatus() {

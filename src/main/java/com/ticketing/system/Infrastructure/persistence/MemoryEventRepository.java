@@ -3,6 +3,7 @@ package com.ticketing.system.Infrastructure.persistence;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
@@ -20,6 +21,13 @@ import org.springframework.stereotype.Repository;
 public class MemoryEventRepository implements IEventRepository {
 
     private final ConcurrentHashMap<Integer, Event> events = new ConcurrentHashMap<>();
+    private final AtomicInteger idSequence = new AtomicInteger(1);
+
+    @Override
+    public int nextId() {
+        return idSequence.getAndIncrement();
+    }
+    
 
     @Override
     public Event findById(int eventId) {
@@ -176,5 +184,8 @@ public class MemoryEventRepository implements IEventRepository {
 
         return true;  // if the event passed into all the filters, it got to here and we'll return true
     }
+
+
+
     
 }

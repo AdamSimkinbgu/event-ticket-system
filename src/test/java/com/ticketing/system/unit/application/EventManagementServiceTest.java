@@ -2,6 +2,7 @@ package com.ticketing.system.unit.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -11,9 +12,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.EventManagementService;
+import com.ticketing.system.Core.Application.services.PaymentGateway;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
+import com.ticketing.system.Core.Domain.Tickets.Ticket;
+import com.ticketing.system.Core.Domain.Tickets.TicketStatus;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
@@ -23,6 +28,9 @@ import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.VenueMap;
+import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
+import com.ticketing.system.Core.Domain.orders.OrderReceipt;
+import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.users.Permission;
 
@@ -33,6 +41,8 @@ class EventManagementServiceTest {
     private ITicketRepository mockTicketRepo;
     private ISessionManager sessionManager;
     private EventManagementService eventService;
+    private IOrderReceiptRepository orderReceiptRepository;
+    private IPaymentGateway paymentGateway;
 
     private final String OWNER_TOKEN = "owner-token";
     private final String MANAGER_TOKEN = "manager-token";
@@ -60,12 +70,16 @@ class EventManagementServiceTest {
         mockCompanyRepo = mock(IProductionCompanyRepository.class);
         mockTicketRepo = mock(ITicketRepository.class);
         sessionManager = mock(ISessionManager.class);
+        orderReceiptRepository = mock(IOrderReceiptRepository.class);
+        paymentGateway = mock(IPaymentGateway.class);
 
         eventService = new EventManagementService(
                 mockEventRepo,
                 mockCompanyRepo,
                 mockTicketRepo,
-                sessionManager
+                sessionManager,
+                orderReceiptRepository,
+                paymentGateway
         );
 
         company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
@@ -262,13 +276,140 @@ class EventManagementServiceTest {
     }
 
 
+    private OrderReceipt setupStateBasedHappyPath() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+
+        ReceiptLine line = new ReceiptLine(1, 100.0, EVENT_ID, java.time.LocalDateTime.now());
+        OrderReceipt realReceipt = OrderReceipt.forMember(99, 100.0, List.of(line));
+        
+        when(orderReceiptRepository.findByEventId(String.valueOf(EVENT_ID)))
+            .thenReturn(List.of(realReceipt));
+            
+       
+
+        return realReceipt;
+    }
+
+    @Test
+    public void GivenInvalidToken_WhenCancelEventAndRefund_ThenThrowException() {
+        when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
+
+        assertThrows(RuntimeException.class, () ->
+                eventService.cancelEventAndRefund(INVALID_TOKEN, EVENT_ID)
+        );
+    }
+
+    @Test
+    public void GivenEventDoesNotExist_WhenCancelEventAndRefund_ThenThrowException() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(null);
+
+        assertThrows(RuntimeException.class, () ->
+                eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID)
+        );
+    }
+
+    @Test
+    public void GivenCompanyDoesNotExist_WhenCancelEventAndRefund_ThenThrowException() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
+
+        assertThrows(RuntimeException.class, () ->
+                eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID)
+        );
+    }
+
+    @Test
+    public void GivenEventAlreadyCanceled_WhenCancelEventAndRefund_ThenReceiptStateRemainsUnchanged() {
+        OrderReceipt receipt = setupStateBasedHappyPath();
+        event.setCanceled(true); // Manually cancel it beforehand
+
+        eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
+
+        assertEquals(false, receipt.wasRefunded());
+    }
+
+    @Test
+    public void GivenValidRequest_WhenCancelEventAndRefund_ThenEventStateIsCanceled() {
+        setupStateBasedHappyPath();
+
+        eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
+
+        assertTrue(event.isCancelled());
+    }
+
+    @Test
+    public void GivenValidRequest_WhenCancelEventAndRefund_ThenReceiptStateIsMarkedRefunded() {
+        OrderReceipt realReceipt = setupStateBasedHappyPath();
+
+        eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
+
+        assertTrue(realReceipt.wasRefunded());
+    }
 
 
+@Test
+    public void GivenPaidTicket_WhenCancelEventAndRefund_ThenTicketStatusIsMarkedRefunded() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(orderReceiptRepository.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of());
+
+        Ticket paidTicket = new Ticket(EVENT_ID, ZONE_ID, 100.0, 1, "BARCODE123");
+        
+        when(mockTicketRepo.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of(paidTicket));
+
+        eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
+
+        assertEquals(TicketStatus.REFUNDED, paidTicket.getStatus());
+    }
 
 
+@Test
+    public void GivenIssuedTicket_WhenCancelEventAndRefund_ThenTicketStatusIsMarkedRefunded() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(orderReceiptRepository.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of());
 
+        Ticket issuedTicket = new Ticket(EVENT_ID, ZONE_ID, 100.0, 1, "BARCODE123");
+        
+        issuedTicket.markIssued("BARCODE123"); 
+        
+        when(mockTicketRepo.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of(issuedTicket));
 
+        eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
 
+        assertEquals(TicketStatus.REFUNDED, issuedTicket.getStatus());
+    }
+
+    @Test
+    public void GivenAvailableTicket_WhenCancelEventAndRefund_ThenTicketStatusRemainsUnchanged() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(orderReceiptRepository.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of());
+
+        Ticket availableTicket = 
+            new Ticket(EVENT_ID, ZONE_ID, 100.0, 1, "BARCODE123");
+        
+        availableTicket.release(); 
+        
+        when(mockTicketRepo.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of(availableTicket));
+
+        eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
+
+        assertEquals(TicketStatus.VOIDED, availableTicket.getStatus());
+    }
 
     @Test @Disabled("UC-19: Owner adds event — DRAFT state initially")
     void givenOwner_whenAddEvent_thenEventInDraft() {}

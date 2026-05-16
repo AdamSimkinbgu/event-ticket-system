@@ -61,7 +61,8 @@ public class Ticket {
 
     // UC-10 / UC-34 — PAID -> ISSUED after successful external issuance, stores barcode locally.
     public void markIssued(String barcodeValue) {
-        throw new UnsupportedOperationException("UC-10 / UC-34: not implemented");
+        this.barcodeValue = barcodeValue;
+        this.status = TicketStatus.ISSUED;
     }
 
     // ISSUED -> USED at venue gate scan (no UC in v0; defined for completeness).
@@ -71,17 +72,17 @@ public class Ticket {
 
     // UC-4 — PAID/ISSUED -> REFUNDED via auto-refund pipeline.
     public void markRefunded() {
-        throw new UnsupportedOperationException("UC-4: not implemented");
+        this.status = TicketStatus.REFUNDED;
     }
 
     // Admin / ops action — any state -> VOIDED.
     public void markVoided() {
-        throw new UnsupportedOperationException("not implemented");
+        this.status = TicketStatus.VOIDED;
     }
 
     // UC-2 — RESERVED -> AVAILABLE on cart expiration. Releases the lock.
     public void release() {
-        throw new UnsupportedOperationException("UC-2: not implemented");
+        this.status = TicketStatus.AVAILABLE;
     }
 
     // State checks.

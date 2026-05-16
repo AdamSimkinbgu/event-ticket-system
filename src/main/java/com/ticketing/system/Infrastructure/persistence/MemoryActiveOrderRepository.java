@@ -13,7 +13,8 @@ import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 /**
  * In-memory {@link IActiveOrderRepository} for V1.
  *
- * <p>Storage is a single {@link CopyOnWriteArrayList} of carts; lookups scan.
+ * <p>
+ * Storage is a single {@link CopyOnWriteArrayList} of carts; lookups scan.
  * Identity collapse for {@code save()} matches by userId for Member carts and
  * by sessionId for Guest carts, so re-saving a promoted cart replaces any
  * stale Member-cart row with the same userId (D9a edge: prefer current
@@ -57,12 +58,14 @@ public class MemoryActiveOrderRepository implements IActiveOrderRepository {
 
     @Override
     public void delete(ActiveOrder activeOrder) {
-        if (activeOrder == null) return;
+        if (activeOrder == null)
+            return;
         carts.remove(activeOrder);
     }
 
     @Override
     public List<ActiveOrder> findExpired() {
+
         List<ActiveOrder> result = new ArrayList<>();
         for (ActiveOrder cart : carts) {
             if (cart.hasExpiredItem()) {

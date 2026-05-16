@@ -440,7 +440,6 @@ private void removeTicketsFromOrderAndReleaseStock(
         }
     }
 }
-
 private void validateActiveOrderContainsEnoughTickets(
         ActiveOrder activeOrder,
         int userId,
@@ -458,7 +457,7 @@ private void validateActiveOrderContainsEnoughTickets(
 
 
 
-    public com.ticketing.system.Core.Application.dto.ActiveOrderDTO restoreActiveOrder(String userId) {
+    public com.ticketing.system.Core.Application.dto.ActiveOrderDTO restoreActiveOrder(int userId) {
         throw new UnsupportedOperationException("UC-13: not implemented");
     }
 

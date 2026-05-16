@@ -16,4 +16,6 @@ public interface INotificationRepository {
 
     // Used by MemberAccountService for inbox view of a member's notification history.
     List<Notification> findByRecipient(int recipientUserId);
+
+    int nextId();
 }
