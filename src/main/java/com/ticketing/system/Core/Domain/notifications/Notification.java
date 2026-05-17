@@ -20,7 +20,7 @@ public class Notification {
     private final LocalDateTime createdAt;
 
     public Notification(String id, int recipientUserId, NotificationType type,
-                        NotificationStatus status, String message, LocalDateTime createdAt) {
+            NotificationStatus status, String message, LocalDateTime createdAt) {
         this.id = id;
         this.recipientUserId = recipientUserId;
         this.type = type;
@@ -29,24 +29,46 @@ public class Notification {
         this.createdAt = createdAt;
     }
 
-    public String getId() { return id; }
+    public String getId() {
+        return id;
+    }
 
-    public int getRecipientUserId() { return recipientUserId; }
+    public int getRecipientUserId() {
+        return recipientUserId;
+    }
 
-    public NotificationType getType() { return type; }
+    public NotificationType getType() {
+        return type;
+    }
 
-    public NotificationStatus getStatus() { return status; }
+    public NotificationStatus getStatus() {
+        return status;
+    }
 
-    public String getMessage() { return message; }
+    public String getMessage() {
+        return message;
+    }
 
-    public LocalDateTime getCreatedAt() { return createdAt; }
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
 
-    // Lifecycle transition: invoked by NotificationDispatchService.deliverPending (UC-37).
+    // Lifecycle transition: invoked by NotificationDispatchService.deliverPending
+    // (UC-37).
     public void markDelivered() {
         if (status != NotificationStatus.PENDING) {
-            throw new IllegalStateException("Cannot mark as delivered a notification that is not PENDING. Current status: " + status);
+            throw new IllegalStateException(
+                    "Cannot mark as delivered a notification that is not PENDING. Current status: " + status);
         }
         this.status = NotificationStatus.DELIVERED;
+    }
+
+    public void markPending() {
+        if (status != NotificationStatus.DELIVERED) {
+            throw new IllegalStateException(
+                    "Cannot mark as pending a notification that is not DELIVERED. Current status: " + status);
+        }
+        this.status = NotificationStatus.PENDING;
     }
 
     // Lifecycle transition: invoked when the user opens the notification in the UI.
@@ -69,11 +91,10 @@ public class Notification {
 
     public NotificationDTO toDTO() {
         return new NotificationDTO(
-            id,
-            type.name(),
-            status.name(),
-            message,
-            createdAt
-        );
+                id,
+                type.name(),
+                status.name(),
+                message,
+                createdAt);
     }
 }
