@@ -284,7 +284,7 @@ class EventManagementServiceTest {
         ReceiptLine line = new ReceiptLine(1, 100.0, EVENT_ID, java.time.LocalDateTime.now());
         OrderReceipt realReceipt = OrderReceipt.forMember(99, 100.0, List.of(line));
         
-        when(orderReceiptRepository.findByEventId(String.valueOf(EVENT_ID)))
+        when(orderReceiptRepository.findByEventId(EVENT_ID))
             .thenReturn(List.of(realReceipt));
             
        
@@ -359,7 +359,7 @@ class EventManagementServiceTest {
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-        when(orderReceiptRepository.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of());
+        when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
 
         Ticket paidTicket = new Ticket(EVENT_ID, ZONE_ID, 100.0, 1, "BARCODE123");
         
@@ -377,7 +377,7 @@ class EventManagementServiceTest {
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-        when(orderReceiptRepository.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of());
+        when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
 
         Ticket issuedTicket = new Ticket(EVENT_ID, ZONE_ID, 100.0, 1, "BARCODE123");
         
@@ -396,7 +396,7 @@ class EventManagementServiceTest {
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-        when(orderReceiptRepository.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of());
+        when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
 
         Ticket availableTicket = 
             new Ticket(EVENT_ID, ZONE_ID, 100.0, 1, "BARCODE123");
