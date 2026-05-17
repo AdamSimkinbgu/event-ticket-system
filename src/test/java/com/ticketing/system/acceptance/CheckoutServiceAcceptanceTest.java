@@ -2,14 +2,20 @@ package com.ticketing.system.acceptance;
 
 import com.ticketing.system.Core.Application.dto.*;
 import com.ticketing.system.Core.Application.interfaces.*;
+import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.CheckoutService;
+import com.ticketing.system.Core.Application.services.CompanyManagementService;
+import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.ActiveOrder.*;
 import com.ticketing.system.Core.Domain.Tickets.*;
+import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.events.*;
 import com.ticketing.system.Core.Domain.orders.*;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -33,6 +39,30 @@ public class CheckoutServiceAcceptanceTest {
     private ISessionManager sessionManager;
 
     private CheckoutService checkoutService;
+
+    @Autowired private AuthenticationService authService;
+@Autowired private CompanyManagementService companyService;
+@Autowired private EventManagementService eventManagementService;
+@Autowired private IProductionCompanyRepository companyRepository;
+@Autowired private IEventRepository eventRepository1;
+@Autowired private ITicketRepository ticketRepository1;
+@Autowired private IOrderReceiptRepository orderReceiptRepository1;
+@Autowired private IUserRepository userRepository;
+
+    private AuthTokenDTO registerAndLoginMember(String name) {
+    String sid = authService.startGuestSession().sessionId();
+
+    authService.register(new RegisterRequestDTO(
+            name,
+            name + "@test.com",
+            "Password1",
+            sid
+    ));
+
+    return authService
+            .login(new LoginRequestDTO(name, "Password1", sid))
+            .authToken();
+    }
 
     private static final String VALID_TOKEN = "valid-token";
     private static final String INVALID_TOKEN = "invalid-token";
