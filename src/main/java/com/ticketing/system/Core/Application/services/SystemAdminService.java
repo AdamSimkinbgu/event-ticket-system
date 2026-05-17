@@ -9,10 +9,13 @@ import com.ticketing.system.Core.Application.dto.PageDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dtoMappers.OrderReceiptMapper;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
+import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
 import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 
 import org.slf4j.Logger;
@@ -26,6 +29,7 @@ public class SystemAdminService {
 
     private static final Logger logger = LoggerFactory.getLogger(SystemAdminService.class);
     
+    private final ISessionManager sessionManager;
     private final IAdminRepository adminRepository;
     private final IOrderReceiptRepository orderReceiptRepository;
     private final ITicketRepository ticketRepository;
@@ -34,6 +38,7 @@ public class SystemAdminService {
     private final List<ITicketIssuer> ticketIssuers;
 
     public SystemAdminService(
+            ISessionManager sessionManager,
             IAdminRepository adminRepository,
             IOrderReceiptRepository orderReceiptRepository,
             ITicketRepository ticketRepository,
@@ -41,6 +46,7 @@ public class SystemAdminService {
             List<IPaymentGateway> paymentGateways,
             List<ITicketIssuer> ticketIssuers
     ) {
+        this.sessionManager = sessionManager;
         this.adminRepository = adminRepository;
         this.orderReceiptRepository = orderReceiptRepository;
         this.ticketRepository = ticketRepository;
@@ -80,7 +86,9 @@ public class SystemAdminService {
 
 
     // UC-31 — global purchase history with filters (admin-only RBAC enforced inside).
-    public List<PurchaseHistoryDTO> viewGlobalHistory(GlobalHistoryFiltersDTO filters) {
+    public List<PurchaseHistoryDTO> viewGlobalHistory(String token, GlobalHistoryFiltersDTO filters) {
+        requireSystemAdmin(token);
+
         logger.info("Viewing global purchase history with filters: {}", filters);
         OrderReceiptMapper mapper = new OrderReceiptMapper();
 
@@ -88,9 +96,23 @@ public class SystemAdminService {
                 .stream()
                 .map(receipt -> mapper.OrderReceiptToPurchaseRecordDTO(receipt, ticketRepository, eventRepository))
                 .toList();
-        
+
         logger.info("Found {} records for global purchase history with filters: {}", records.size(), filters);
         return List.of(new PurchaseHistoryDTO(records));
+    }
+    
+    // *HELPER METHOD* to enforce that the requester is a system admin. Throws if not.
+    private void requireSystemAdmin(String token) {
+        if (!sessionManager.validateToken(token)) {
+            logger.warn("Unauthorized access attempt with id: {}", sessionManager.extractUserId(token));
+            throw new UnauthorizedActionException("Invalid or non-admin token.");
+        }
+
+        int userId = sessionManager.extractUserId(token);
+        if (adminRepository.findById(userId) == null) {
+            logger.warn("Unauthorized access attempt with id: {}", userId);
+            throw new UnauthorizedActionException("Invalid or non-admin token.");
+        }
     }
 
 }
