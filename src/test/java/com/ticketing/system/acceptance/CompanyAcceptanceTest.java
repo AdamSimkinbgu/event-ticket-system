@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -19,9 +20,12 @@ import org.springframework.test.context.ActiveProfiles;
 
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
+import com.ticketing.system.Core.Application.dto.EventCreationDTO;
+import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
+import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
@@ -30,7 +34,12 @@ import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
+import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.Location;
+import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.users.CompanyRole;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
@@ -75,8 +84,42 @@ class CompanyAcceptanceTest {
     void GivenManagerNoPermission_WhenAddEvent_ThenRejected() {}
 
     // UC-20
-    @Test @Disabled("UC-20 main: Owner binds VenueMap → Tickets pre-generated")
-    void GivenEvent_WhenBindMap_ThenTicketsCreated() {}
+  @Test
+void GivenOwner_WhenConfigureVenueMapWithCapacity_ThenInventoryZoneCapacityAdded() {
+    AuthTokenDTO owner = registerAndLoginMember("capacityOwner");
+
+    int companyId = companyService.registerCompany(
+            owner.token(),
+            new CompanyRegistrationDTO("capacityCompany", "desc")
+    ).companyId();
+
+    EventCreationDTO eventRequest = new EventCreationDTO(
+            companyId,
+            "Capacity Test Event",
+            "Testing inventory zone capacity",
+            EventCategory.CONCERT,
+            new Location("Test Venue", "Test City"),
+            List.of(new ShowDate(LocalDateTime.now().plusDays(1),LocalDateTime.now().plusDays(30)))
+    );
+    EventDetailDTO event = eventManagementService.addEvent(owner.token(), eventRequest);
+    Event storedEvent = eventRepository.findById(Integer.parseInt(event.eventId()));
+
+    eventManagementService.addCapacitoesToVenueMapZone(owner.token(), companyId, storedEvent.getId(), 1, 150);
+   
+
+   
+
+    InventoryZone zone = storedEvent.getVenueMap().getInventoryZones().stream()
+            .filter(z -> z.getId() == 1)
+            .findFirst()
+            .orElseThrow(() -> new RuntimeException("Zone not found"));
+
+    assertEquals(150, zone.getCapacity());
+    
+
+}
+
+
 
     // UC-21
     @Test @Disabled("UC-21 main: Owner sets event-level purchase policy")

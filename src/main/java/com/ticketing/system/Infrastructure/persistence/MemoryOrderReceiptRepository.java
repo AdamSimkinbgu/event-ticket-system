@@ -99,13 +99,16 @@ public class MemoryOrderReceiptRepository implements IOrderReceiptRepository {
                 })
                 .collect(Collectors.toList());
     }
-
     @Override
-    public List<OrderReceipt> findByEventId(String eventId) {
+    public List<OrderReceipt> findByEventId(int eventId) {
         return receiptsById.values().stream()
-                .filter(receipt -> String.valueOf(receipt.geteventId()).equals(eventId))
+                .filter(receipt -> receipt.getReceiptLines().stream()
+                        .anyMatch(line -> line.getEventId() == eventId))
                 .collect(Collectors.toList());
     }
 
+    public Map<String, OrderReceipt> getReceiptsById() {
+        return receiptsById;
+    }
 
 }

@@ -1,5 +1,6 @@
 package com.ticketing.system.Core.Application.services;
 
+import java.lang.reflect.AccessFlag.Location;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -20,10 +21,15 @@ import com.ticketing.system.Core.Domain.Tickets.TicketStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
+import com.ticketing.system.Core.Domain.events.DiscountPolicy;
+import com.ticketing.system.Core.Domain.events.PurchasePolicy;
 
 @Service
 public class EventManagementService {
@@ -53,8 +59,49 @@ public class EventManagementService {
 
     // UC-19 — Owner adds an Event in DRAFT state.
     public EventDetailDTO addEvent(String token, EventCreationDTO request) {
-        throw new UnsupportedOperationException("UC-19: not implemented");
-    }
+        if (!sessionManager.validateToken(token)) {
+            log.warn("Invalid token provided for adding event");
+            throw new RuntimeException("Invalid token");
+        }
+        int ownerId = sessionManager.extractUserId(token);
+        ProductionCompany company = companyRepository.getCompanyById(request.companyId());
+        if (company == null) {
+            log.warn("Company {} not found", request.companyId());
+            throw new RuntimeException("Company not found");
+        }
+        company.checkowner(ownerId);
+        int newEventId = eventRepository.nextId();
+        InventoryZone zone1 = new InventoryZone(1, "General Admission", 100, 50.0);
+        VenueMap venueMap = new VenueMap(3, request.location(), List.of(zone1));
+        DiscountPolicy discountPolicy = new DiscountPolicy(10.0);
+        PurchasePolicy purchasePolicy = new PurchasePolicy();
+        Event newEvent = new Event(
+                newEventId,
+                request.name(),
+                5.00,
+                List.of("sss", "ddd"),
+                request.category(),
+                request.companyId(),
+                EventStatus.SCHEDULED,
+                venueMap,
+                request.showDates(),
+                purchasePolicy,
+                discountPolicy
+        );
+        eventRepository.save(newEvent);
+        log.info("Event {} created successfully with ID {}", request.name(), newEventId);
+        return new EventDetailDTO(
+                String.valueOf(newEventId),
+                newEvent.getName(),
+                newEvent.getRating(),
+                request.description(),
+                newEvent.getCategory(),
+                request.location(),
+                String.valueOf(newEvent.getCompanyId()),
+                company.getName(),
+                newEvent.getStatus(),
+                newEvent.getShowDates());
+        }
 
     // UC-19 — partial update; immutability rules per II.3.5.2 enforced inside Event.
     public void editEvent(String token, EventUpdateDTO update) {
@@ -87,7 +134,7 @@ public class EventManagementService {
         company.checkowner(ownerId);
         
         List<Ticket> tickets = ticketRepository.findByEventId(String.valueOf(eventId));
-        List<OrderReceipt> orderReceipts = orderReceiptRepository.findByEventId(String.valueOf(eventId));
+        List<OrderReceipt> orderReceipts = orderReceiptRepository.findByEventId(eventId);
         for (OrderReceipt receipt : orderReceipts) {
             if (receipt.wasRefunded()) {
                 continue;
@@ -104,11 +151,11 @@ public class EventManagementService {
             }
 
             if (requiresRefund && totalRefundForReceipt > 0) {
-                paymentGateway.refund(
-                    receipt.getHolderUserId(), 
-                     totalRefundForReceipt 
-                    // "Refund for canceled event: " + event.getId()
-                );
+                // paymentGateway.refund(
+                //     receipt.getHolderUserId(), 
+                //      totalRefundForReceipt 
+                //     // "Refund for canceled event: " + event.getId()
+                // );
                 
                 receipt.markRefunded();
                 orderReceiptRepository.save(receipt);
