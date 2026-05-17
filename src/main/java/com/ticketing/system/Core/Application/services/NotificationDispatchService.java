@@ -31,16 +31,18 @@ public class NotificationDispatchService {
     public NotificationDispatchService(
             INotificationRepository notificationRepository,
             INotificationService notificationService,
-            ISessionManager sessionManager
-    ) {
+            ISessionManager sessionManager) {
         this.notificationRepository = notificationRepository;
         this.notificationService = notificationService;
         this.sessionManager = sessionManager;
     }
 
-    // UC-35: triggered from a domain event. Resolves recipient, checks online state,
-    // routes to live push (UC-35 online branch) or persists for later (UC-36 offline branch).
-    // Parameter type stays Object until the team defines the domain-event base interface in code
+    // UC-35: triggered from a domain event. Resolves recipient, checks online
+    // state,
+    // routes to live push (UC-35 online branch) or persists for later (UC-36
+    // offline branch).
+    // Parameter type stays Object until the team defines the domain-event base
+    // interface in code
     // (events are off-diagram per the design walkthrough).
     public void dispatchFromEvent(Object domainEvent) {
         throw new UnsupportedOperationException("UC-35: not implemented");
@@ -49,34 +51,41 @@ public class NotificationDispatchService {
     // UC-36: store an offline notification in PENDING state.
     public void storePending(Notification notification) {
 
-        logger.info("Storing pending notification for userId={}, type={}", notification.getRecipientUserId(), notification.getType());
-        try{
-        notificationRepository.save(notification);
-        }
-        catch(Exception e){
-            logger.error("Failed to store pending notification for userId={}, type={}. Error: {}", notification.getRecipientUserId(), notification.getType(), e.getMessage());
+        logger.info("Storing pending notification for userId={}, type={}", notification.getRecipientUserId(),
+                notification.getType());
+        try {
+            notificationRepository.save(notification);
+        } catch (Exception e) {
+            logger.error("Failed to store pending notification for userId={}, type={}. Error: {}",
+                    notification.getRecipientUserId(), notification.getType(), e.getMessage());
             throw e; // rethrow or handle as needed
         }
     }
 
-    // UC-37: triggered by MemberLoggedIn event. Pushes all PENDING notifications for the user
-    // and flips them to DELIVERED in bulk. Returns the delivered notifications so the caller
+    // UC-37: triggered by MemberLoggedIn event. Pushes all PENDING notifications
+    // for the user
+    // and flips them to DELIVERED in bulk. Returns the delivered notifications so
+    // the caller
     // can show them to the just-logged-in user.
     public List<NotificationDTO> deliverPending(int userId) {
         logger.info("Delivering pending notifications for userId={}", userId);
 
-        List<Notification> pendingNotifications = notificationRepository.findByRecipientAndStatus(userId, NotificationStatus.PENDING);
+        List<Notification> pendingNotifications = notificationRepository.findByRecipientAndStatus(userId,
+                NotificationStatus.PENDING);
         List<NotificationDTO> deliveredNotifications = new java.util.ArrayList<>();
 
-        for(Notification notification : pendingNotifications) {
+        for (Notification notification : pendingNotifications) {
+            notification.markDelivered();
             boolean pushSuccess = notificationService.send(userId, notification);
             if (pushSuccess) {
-                notification.markDelivered();
                 notificationRepository.save(notification); // persist the status change
                 deliveredNotifications.add(notification.toDTO()); // convert to DTO for return
             } else {
                 // Handle push failure as needed (e.g. log, retry later, etc.)
-                logger.error("Failed to push notification id={} to userId={}. Will remain pending for next login attempt.", notification.getId(), userId);
+                logger.error(
+                        "Failed to push notification id={} to userId={}. Will remain pending for next login attempt.",
+                        notification.getId(), userId);
+                notification.markPending(); // revert status change if push failed
             }
         }
         logger.info("Delivered {} pending notifications to userId={}", deliveredNotifications.size(), userId);

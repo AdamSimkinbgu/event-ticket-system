@@ -1,6 +1,11 @@
 package com.ticketing.system.Core.Application.services;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.Queue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,6 +22,7 @@ import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
+import com.ticketing.system.Core.Domain.users.CompanyAppointment;
 import com.ticketing.system.Core.Domain.users.CompanyRole;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.ManagementInvitation;
@@ -326,11 +332,103 @@ public class CompanyManagementService {
 
 
 
-
-
     // UC-25 — recursive organizational tree (Owners only per II.4.15).
     public OrganizationalTreeNodeDTO viewOrganizationalTree(String token, int companyId) {
-        throw new UnsupportedOperationException("UC-25: not implemented");
+        this.logger.info("Attempting to view organizational tree for company {}", companyId);
+
+        if (!sessionManager.validateToken(token)) {
+            logger.warn("Invalid token provided for viewing organizational tree");
+            throw new InvalidTokenException("Invalid token");
+        }
+
+        int requesterId = sessionManager.extractUserId(token);
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null) {
+            logger.warn("Company {} not found", companyId);
+            throw new RuntimeException("Company not found");
+        }
+
+        User currUser = userRepository.getUserById(requesterId);
+        if (currUser == null) {
+            logger.warn("User {} not found", requesterId);
+            throw new RuntimeException("User not found");
+        }
+        if (!currUser.isOwnerInCompany(companyId)) {
+            logger.warn("User {} does not have permission to view organizational tree for company {}", requesterId,
+                    companyId);
+            throw new RuntimeException("Insufficient permissions");
+        }
+
+        logger.info("Successfully retrieved organizational tree for company {}", companyId);
+        // using the helper method to build the tree starting from the founder (root of the tree)
+        return buildOrganizationalTree(companyId, company.getFounderId());
+    }
+
+    
+
+    // *HELPER METHOD* — BFS build of the organizational tree for UC-25 (viewOrganizationalTree).
+    private OrganizationalTreeNodeDTO buildOrganizationalTree(int companyId, int founderId) {
+
+        // Build appointer -> direct appointees map from all managers' CompanyAppointments.
+        Map<Integer, List<Integer>> appointerToAppointees = new HashMap<>();
+        for (Integer managerId : companyRepository.getCompanyById(companyId).getManagers().keySet()) {
+            User manager = userRepository.getUserById(managerId);
+            // get this manager's appointment in the current company to find out who appointed them (their inviterId)
+            CompanyAppointment appointment = manager.getAppointmentForCompany(companyId);
+            if (appointment != null) {
+                appointerToAppointees
+                    .computeIfAbsent(appointment.getInviterId(), k -> new ArrayList<>()).add(managerId);
+            }
+        }
+        // now we have a map of appointerId -> List of their direct appointees' userIds, which we can use to build the tree.
+        
+        // Build root node (the founder/owner).
+        User founderUser = userRepository.getUserById(founderId);
+        List<OrganizationalTreeNodeDTO> rootChildren = new ArrayList<>();
+        OrganizationalTreeNodeDTO root = new OrganizationalTreeNodeDTO(
+                founderId,
+                founderUser.getUsername(),
+                CompanyRole.Owner.name(),
+                true,
+                List.of(),
+                rootChildren
+        );
+
+        // BFS — for each node, find who it appointed and attach them as children.
+        Queue<OrganizationalTreeNodeDTO> queue = new LinkedList<>();
+        queue.add(root);
+
+        // BFS while traversal of the organizational tree, building DTO nodes on the fly and attaching to parents.
+        while (!queue.isEmpty()) {
+
+            OrganizationalTreeNodeDTO current = queue.poll();
+            // get direct appointees of the current node's userId (if any) from the pre-built map; default to empty list if none.
+            List<Integer> appointees = appointerToAppointees.getOrDefault(current.userId(), List.of());
+            
+            // For each direct appointee, create a DTO node and attach to current, then enqueue for further processing.
+            for (int appointeeId : appointees) {
+                User appointeeUser = userRepository.getUserById(appointeeId);
+                CompanyAppointment appt = appointeeUser.getAppointmentForCompany(companyId);
+                List<String> permissions = appt != null
+                        ? appt.getPermissions().stream().map(Enum::name).toList()
+                        : List.of();
+                
+                List<OrganizationalTreeNodeDTO> childChildren = new ArrayList<>();
+                OrganizationalTreeNodeDTO childNode = new OrganizationalTreeNodeDTO(
+                        appointeeId,
+                        appointeeUser.getUsername(),
+                        CompanyRole.Manager.name(),
+                        false,
+                        permissions,
+                        childChildren
+                );
+                // Attach the child node to the current node's list of appointees and enqueue it for further processing.
+                current.appointedByThisUser().add(childNode);
+                queue.add(childNode);
+            }
+        }
+
+        return root;
     }
 
 }

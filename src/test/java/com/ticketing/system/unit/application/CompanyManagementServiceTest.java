@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +15,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDateTime;
 
+import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
@@ -863,6 +865,224 @@ public class CompanyManagementServiceTest {
         verify(mockOrderReceiptRepo, times(1)).findByCompanyId(COMPANY_ID);
     }
 
-    @Test @Disabled("UC-25: viewOrganizationalTree returns nested tree of ACTIVE appointments")
-    void givenOwner_whenViewOrgTree_thenNestedTree() {}
+    @Test
+    public void GivenInvalidToken_WhenViewOrganizationalTree_ThenThrowException() {
+        when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
+
+        assertThrows(RuntimeException.class, () ->
+                companyService.viewOrganizationalTree(INVALID_TOKEN, COMPANY_ID)
+        );
+    }
+
+    @Test
+    public void GivenCompanyNotFound_WhenViewOrganizationalTree_ThenThrowException() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
+
+        assertThrows(RuntimeException.class, () ->
+                companyService.viewOrganizationalTree(OWNER_TOKEN, COMPANY_ID)
+        );
+    }
+
+    @Test
+    public void GivenUserNotFound_WhenViewOrganizationalTree_ThenThrowException() {
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
+
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(null);
+
+        assertThrows(RuntimeException.class, () ->
+                companyService.viewOrganizationalTree(OWNER_TOKEN, COMPANY_ID)
+        );
+    }
+
+    @Test
+    public void GivenUserIsNotOwner_WhenViewOrganizationalTree_ThenThrowException() {
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
+        User nonOwnerUser = mock(User.class);
+
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(nonOwnerUser);
+        when(nonOwnerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(false);
+
+        assertThrows(RuntimeException.class, () ->
+                companyService.viewOrganizationalTree(OWNER_TOKEN, COMPANY_ID)
+        );
+    }
+
+    @Test
+    public void GivenOwnerWithNoManagers_WhenViewOrganizationalTree_ThenReturnRootOnlyNode() {
+        ProductionCompany company = mock(ProductionCompany.class);
+        when(company.getManagers()).thenReturn(new HashMap<>());
+        when(company.getFounderId()).thenReturn(OWNER_ID);
+
+        User ownerUser = mock(User.class);
+        when(ownerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(true);
+        when(ownerUser.getUsername()).thenReturn("ownerUser");
+
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        OrganizationalTreeNodeDTO result = companyService.viewOrganizationalTree(OWNER_TOKEN, COMPANY_ID);
+
+        assertNotNull(result);
+        assertEquals(OWNER_ID, result.userId());
+        assertEquals("ownerUser", result.username());
+        assertEquals("Owner", result.role());
+        assertTrue(result.isFounder());
+        assertTrue(result.grantedPermissions().isEmpty());
+        assertTrue(result.appointedByThisUser().isEmpty());
+    }
+
+    @Test
+    public void GivenOwnerWithOneDirectManager_WhenViewOrganizationalTree_ThenReturnTreeWithOneChild() {
+        HashMap<Integer, List<Permission>> managersMap = new HashMap<>();
+        managersMap.put(TARGET_USER_ID, defaultPermissions);
+
+        ProductionCompany company = mock(ProductionCompany.class);
+        when(company.getManagers()).thenReturn(managersMap);
+        when(company.getFounderId()).thenReturn(OWNER_ID);
+
+        User ownerUser = mock(User.class);
+        when(ownerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(true);
+        when(ownerUser.getUsername()).thenReturn("ownerUser");
+
+        User managerUser = new User(TARGET_USER_ID, "managerUser", "", "password");
+        managerUser.InvitetoCompanyAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
+        managerUser.acceptInvitation(COMPANY_ID);
+
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(managerUser);
+
+        OrganizationalTreeNodeDTO result = companyService.viewOrganizationalTree(OWNER_TOKEN, COMPANY_ID);
+
+        assertNotNull(result);
+        assertEquals(OWNER_ID, result.userId());
+        assertEquals(1, result.appointedByThisUser().size());
+
+        OrganizationalTreeNodeDTO managerNode = result.appointedByThisUser().get(0);
+        assertEquals(TARGET_USER_ID, managerNode.userId());
+        assertEquals("managerUser", managerNode.username());
+        assertEquals("Manager", managerNode.role());
+        assertFalse(managerNode.isFounder());
+        assertEquals(defaultPermissions.size(), managerNode.grantedPermissions().size());
+        assertTrue(managerNode.appointedByThisUser().isEmpty());
+    }
+
+    @Test
+    public void GivenOwnerWithTwoDirectManagers_WhenViewOrganizationalTree_ThenReturnTreeWithTwoChildren() {
+        int MANAGER1_ID = TARGET_USER_ID;
+        int MANAGER2_ID = 3;
+
+        HashMap<Integer, List<Permission>> managersMap = new HashMap<>();
+        managersMap.put(MANAGER1_ID, defaultPermissions);
+        managersMap.put(MANAGER2_ID, List.of(Permission.VIEW_SALES));
+
+        ProductionCompany company = mock(ProductionCompany.class);
+        when(company.getManagers()).thenReturn(managersMap);
+        when(company.getFounderId()).thenReturn(OWNER_ID);
+
+        User ownerUser = mock(User.class);
+        when(ownerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(true);
+        when(ownerUser.getUsername()).thenReturn("ownerUser");
+
+        User manager1 = new User(MANAGER1_ID, "manager1", "", "password");
+        manager1.InvitetoCompanyAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
+        manager1.acceptInvitation(COMPANY_ID);
+
+        User manager2 = new User(MANAGER2_ID, "manager2", "", "password");
+        manager2.InvitetoCompanyAppointment(COMPANY_ID, OWNER_ID, List.of(Permission.VIEW_SALES));
+        manager2.acceptInvitation(COMPANY_ID);
+
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(mockUserRepo.getUserById(MANAGER1_ID)).thenReturn(manager1);
+        when(mockUserRepo.getUserById(MANAGER2_ID)).thenReturn(manager2);
+
+        OrganizationalTreeNodeDTO result = companyService.viewOrganizationalTree(OWNER_TOKEN, COMPANY_ID);
+
+        assertNotNull(result);
+        assertEquals(OWNER_ID, result.userId());
+        assertEquals(2, result.appointedByThisUser().size());
+
+        List<Integer> childIds = result.appointedByThisUser().stream()
+                .map(OrganizationalTreeNodeDTO::userId)
+                .toList();
+        assertTrue(childIds.contains(MANAGER1_ID));
+        assertTrue(childIds.contains(MANAGER2_ID));
+        result.appointedByThisUser().forEach(child -> {
+            assertEquals("Manager", child.role());
+            assertFalse(child.isFounder());
+            assertTrue(child.appointedByThisUser().isEmpty());
+        });
+    }
+
+    @Test
+    public void GivenManagerWhoAppointedSubManager_WhenViewOrganizationalTree_ThenReturnMultiLevelTree() {
+            int MANAGER1_ID = TARGET_USER_ID;
+            int MANAGER2_ID = 3;
+
+            HashMap<Integer, List<Permission>> managersMap = new HashMap<>();
+            managersMap.put(MANAGER1_ID, defaultPermissions);
+            managersMap.put(MANAGER2_ID, List.of(Permission.MANAGE_INVENTORY));
+
+            ProductionCompany company = mock(ProductionCompany.class);
+            when(company.getManagers()).thenReturn(managersMap);
+            when(company.getFounderId()).thenReturn(OWNER_ID);
+
+            User ownerUser = mock(User.class);
+            when(ownerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(true);
+            when(ownerUser.getUsername()).thenReturn("ownerUser");
+
+            // manager1 was appointed by the owner
+            User manager1 = new User(MANAGER1_ID, "manager1", "", "password");
+            manager1.InvitetoCompanyAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
+            manager1.acceptInvitation(COMPANY_ID);
+
+            // manager2 was appointed by manager1, not by the owner
+            User manager2 = new User(MANAGER2_ID, "manager2", "", "password");
+            manager2.InvitetoCompanyAppointment(COMPANY_ID, MANAGER1_ID, List.of(Permission.MANAGE_INVENTORY));
+            manager2.acceptInvitation(COMPANY_ID);
+
+            when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+            when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+            when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+            when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(ownerUser);
+            when(mockUserRepo.getUserById(MANAGER1_ID)).thenReturn(manager1);
+            when(mockUserRepo.getUserById(MANAGER2_ID)).thenReturn(manager2);
+
+            OrganizationalTreeNodeDTO result = companyService.viewOrganizationalTree(OWNER_TOKEN, COMPANY_ID);
+
+            assertNotNull(result);
+            assertEquals(OWNER_ID, result.userId());
+            assertEquals(1, result.appointedByThisUser().size());
+
+            OrganizationalTreeNodeDTO manager1Node = result.appointedByThisUser().get(0);
+            assertEquals(MANAGER1_ID, manager1Node.userId());
+            assertEquals("manager1", manager1Node.username());
+            assertEquals("Manager", manager1Node.role());
+            assertFalse(manager1Node.isFounder());
+            assertEquals(1, manager1Node.appointedByThisUser().size());
+
+            OrganizationalTreeNodeDTO manager2Node = manager1Node.appointedByThisUser().get(0);
+            assertEquals(MANAGER2_ID, manager2Node.userId());
+            assertEquals("manager2", manager2Node.username());
+            assertEquals("Manager", manager2Node.role());
+            assertFalse(manager2Node.isFounder());
+            assertTrue(manager2Node.appointedByThisUser().isEmpty());
+            assertEquals(List.of("MANAGE_INVENTORY"), manager2Node.grantedPermissions());
+    }
+    
 }
