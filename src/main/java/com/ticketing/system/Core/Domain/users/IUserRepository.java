@@ -5,10 +5,20 @@ import java.util.Optional;
 /** Aggregate-root entry point for the User aggregate. */
 public interface IUserRepository {
 
-    /** @throws com.ticketing.system.Core.Domain.exceptions.UserNotFoundException if no user with that id exists */
+    /**
+     * @throws com.ticketing.system.Core.Domain.exceptions.UserNotFoundException if
+     *                                                                           no
+     *                                                                           user
+     *                                                                           with
+     *                                                                           that
+     *                                                                           id
+     *                                                                           exists
+     */
     User getUserById(int targetId);
 
     boolean sendInvitation(int targetId, int companyId);
+
+    void sendOwnerInvitation(int targetId, int companyId);
 
     /** Persists changes to an existing User. */
     void updateUser(User targetUser);
@@ -22,7 +32,10 @@ public interface IUserRepository {
     /** Fast existence check used during UC-11 registration validation. */
     boolean existsByUsername(String username);
 
-    /** Mints a fresh userId. Storage owns ID generation rather than the service. UC-11. */
+    /**
+     * Mints a fresh userId. Storage owns ID generation rather than the service.
+     * UC-11.
+     */
     int nextId();
 
     /** Persists a newly-registered User. UC-11. */

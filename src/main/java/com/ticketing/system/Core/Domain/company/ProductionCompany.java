@@ -7,8 +7,6 @@ import java.util.List;
 import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.users.Permission;
 
-
-
 public class ProductionCompany {
     private final int companyId;
     private final int ownerId;
@@ -19,10 +17,11 @@ public class ProductionCompany {
     private Double rating;
     private List<DiscountPolicy> discountPolicies;
     private List<PurchasePolicy> purchasePolicies;
-    private HashMap <Integer, List<Permission>> pendingManagers; 
+    private HashMap<Integer, List<Permission>> pendingManagers;
     private HashMap<Integer, List<Permission>> managers;
 
-    public ProductionCompany(int companyId, int ownerId, String name, CompanyStatus companyStatus, String description, Double rating) {
+    public ProductionCompany(int companyId, int ownerId, String name, CompanyStatus companyStatus, String description,
+            Double rating) {
         this.companyId = companyId;
         this.ownerId = ownerId;
         this.name = name;
@@ -35,49 +34,42 @@ public class ProductionCompany {
         this.pendingManagers = new HashMap<>();
     }
 
-
     public void validateManagerInvitation(int companyId, int targetId, int ownerId, List<Permission> permissions) {
-   
+
         if (this.companyId != companyId) {
             throw new RuntimeException("Invalid company");
-        }
-        else if (managers.containsKey(targetId) || pendingManagers.containsKey(targetId)) {
+        } else if (managers.containsKey(targetId) || pendingManagers.containsKey(targetId)) {
             throw new RuntimeException("User is already a manager or has a pending invitation");
-        }
-        else if (targetId == this.ownerId) {
+        } else if (targetId == this.ownerId) {
             throw new RuntimeException("Cannot invite the company owner as a manager");
-        }
-        else if (permissions == null || permissions.isEmpty()) {
+        } else if (permissions == null || permissions.isEmpty()) {
             throw new RuntimeException("Invalid permissions");
-        }
-        else{
-        pendingManagers.put(targetId, permissions);
+        } else {
+            pendingManagers.put(targetId, permissions);
         }
     }
-
 
     public void acceptManagerInvitation(int targetId) {
-    if (!pendingManagers.containsKey(targetId)) {
-        throw new RuntimeException("No pending manager invitation for this user");
+        if (!pendingManagers.containsKey(targetId)) {
+            throw new RuntimeException("No pending manager invitation for this user");
+        }
+        List<Permission> permissions = pendingManagers.get(targetId);
+        pendingManagers.remove(targetId);
+        managers.put(targetId, permissions);
     }
-    List<Permission> permissions = pendingManagers.get(targetId);
-    pendingManagers.remove(targetId);
-    managers.put(targetId, permissions);
-}
 
     public void rejectManagerInvitation(int targetId) {
         if (!pendingManagers.containsKey(targetId)) {
             throw new RuntimeException("No pending manager invitation for this user");
         }
         pendingManagers.remove(targetId);
-       
+
     }
 
     public void RevokeManager(int targetId) {
         if (managers.containsKey(targetId)) {
             managers.remove(targetId);
-        }
-        else {
+        } else {
             throw new RuntimeException("User is not a manager");
         }
     }
@@ -85,14 +77,11 @@ public class ProductionCompany {
     public void ModifyManagerPermissions(int companyId2, int targetId, List<Permission> newPermissions) {
         if (this.companyId != companyId2) {
             throw new RuntimeException("Invalid company");
-        }
-        else if (!managers.containsKey(targetId)) {
+        } else if (!managers.containsKey(targetId)) {
             throw new RuntimeException("User is not a manager");
-        }
-        else if (newPermissions == null || newPermissions.isEmpty()) {
+        } else if (newPermissions == null || newPermissions.isEmpty()) {
             throw new RuntimeException("Invalid permissions");
-        }
-        else {
+        } else {
             managers.put(targetId, newPermissions);
         }
     }
@@ -150,7 +139,8 @@ public class ProductionCompany {
         this.rating = rating;
     }
 
-    // UC-18 — Founder is the original creator (currently aliased to ownerId; see open Q).
+    // UC-18 — Founder is the original creator (currently aliased to ownerId; see
+    // open Q).
     public int getFounderId() {
         return ownerId;
     }
@@ -159,15 +149,30 @@ public class ProductionCompany {
         return companyId;
     }
 
-    // UC-23 — II.4.8.3 cycle prevention. Walks the appointment tree and returns false
+    // UC-23 — II.4.8.3 cycle prevention. Walks the appointment tree and returns
+    // false
     // if the proposed appointment would create a cycle.
     public boolean canAppoint(int appointerUserId, int appointeeUserId) {
-        throw new UnsupportedOperationException("UC-23 / II.4.8.3: not implemented");
+        if (appointeeUserId == ownerId) {
+            return false;
+        }
+        if (managers.containsKey(appointeeUserId) || pendingManagers.containsKey(appointeeUserId)) {
+            return false;
+        }
+        if (appointerUserId == ownerId) {
+            return true;
+        } else if (managers.containsKey(appointerUserId)) {
+            List<Permission> userPermissions = managers.get(appointerUserId);
+            if (userPermissions.contains(Permission.APPOINT_MANAGER)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void ValidateManagerOrOwner(int userId) {
         if (userId == ownerId) {
-            return; 
+            return;
         }
 
         List<Permission> userPermissions = managers.get(userId);
@@ -183,7 +188,7 @@ public class ProductionCompany {
 
     public void checkowner(int ownerId2) {
         if (this.ownerId != ownerId2) {
-            throw new UnauthorizedActionException ("Only the owner can perform this action");
+            throw new UnauthorizedActionException("Only the owner can perform this action");
         }
     }
 }

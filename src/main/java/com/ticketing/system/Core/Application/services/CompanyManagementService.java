@@ -24,6 +24,7 @@ import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
+import com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO;
 import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
@@ -40,8 +41,9 @@ public class CompanyManagementService {
     private static final String EMAIL_PATTERN = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
     private static final String PHONE_PATTERN = "^\\+?[0-9\\-\\s]{9,15}$";
 
-
-    public CompanyManagementService(IProductionCompanyRepository companyRepository, IUserRepository userRepository, IOrderReceiptRepository orderReceiptRepository, ISessionManager sessionManager, ITicketRepository ticketRepository, IEventRepository eventRepository) {
+    public CompanyManagementService(IProductionCompanyRepository companyRepository, IUserRepository userRepository,
+            IOrderReceiptRepository orderReceiptRepository, ISessionManager sessionManager,
+            ITicketRepository ticketRepository, IEventRepository eventRepository) {
         this.companyRepository = companyRepository;
         this.userRepository = userRepository;
         this.orderReceiptRepository = orderReceiptRepository;
@@ -69,7 +71,7 @@ public class CompanyManagementService {
         }
 
         company.validateManagerInvitation(companyId, targetId, ownerId, permissions);
-        
+
         targetUser.InvitetoCompanyAppointment(companyId, ownerId, permissions);
 
         companyRepository.updateCompany(company);
@@ -81,7 +83,7 @@ public class CompanyManagementService {
 
     public void acceptManagerInvitation(String token, int companyId) {
         if (!sessionManager.validateToken(token)) {
-                logger.warn("Invalid token provided for accepting manager invitation");
+            logger.warn("Invalid token provided for accepting manager invitation");
             throw new RuntimeException("Invalid token");
         }
         int targetId = sessionManager.extractUserId(token);
@@ -151,7 +153,6 @@ public class CompanyManagementService {
         company.RevokeManager(targetId);
         targetUser.removeCompanyAppointment(companyId);
 
-        
         userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
         logger.info("Manager revoked successfully");
@@ -179,7 +180,7 @@ public class CompanyManagementService {
         company.ModifyManagerPermissions(companyId, targetId, newPermissions);
         targetUser.ModifyManagerPermissions(companyId, targetId, newPermissions);
 
-         userRepository.updateUser(targetUser);
+        userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
 
         logger.info("Manager permissions modified successfully");
@@ -190,7 +191,8 @@ public class CompanyManagementService {
     // token-arg / List<Permission>-arg methods above; team to consolidate later).
     // ---------------------------------------------------------------------------
 
-    // UC-18 — register a new Production Company; appoints Founder/Owner in same transaction.
+    // UC-18 — register a new Production Company; appoints Founder/Owner in same
+    // transaction.
     public ProductionCompanyDTO registerCompany(String token, CompanyRegistrationDTO request) {
         if (!sessionManager.validateToken(token)) {
             logger.warn("Invalid token provided for registering a company");
@@ -200,7 +202,7 @@ public class CompanyManagementService {
 
         // CompanyRegistrationDTO is a class with get* accessors, not a record.
         if (request.getName() == null || request.getName().trim().isEmpty() ||
-            request.getDescription() == null || request.getDescription().trim().isEmpty()) {
+                request.getDescription() == null || request.getDescription().trim().isEmpty()) {
 
             logger.warn("Company registration failed: Missing required fields by user {}", userId);
             throw new IllegalArgumentException("All company fields (name, description) must be provided");
@@ -215,24 +217,25 @@ public class CompanyManagementService {
         try {
             int companyId = companyRepository.nextId();
             ProductionCompany newProductionCompany = new ProductionCompany(
-                companyId,
-                userId,
-                request.getName().trim(),
-                CompanyStatus.ACTIVE,
-                request.getDescription().trim(),
-                null
-            );
+                    companyId,
+                    userId,
+                    request.getName().trim(),
+                    CompanyStatus.ACTIVE,
+                    request.getDescription().trim(),
+                    null);
 
-            // IProductionCompanyRepository.save returns void; the new instance IS the saved one.
+            // IProductionCompanyRepository.save returns void; the new instance IS the saved
+            // one.
             companyRepository.save(newProductionCompany);
-            logger.info("Successfully registered new company: '{}' by userId: {}", newProductionCompany.getName(), userId);
+            logger.info("Successfully registered new company: '{}' by userId: {}", newProductionCompany.getName(),
+                    userId);
 
             return new ProductionCompanyDTO(
-                newProductionCompany.getCompanyId(),
-                newProductionCompany.getName(),
-                newProductionCompany.getDescription(),
-                newProductionCompany.getStatus().name(),   // DTO field is String
-                newProductionCompany.getFounderId()        // DTO field is founderId
+                    newProductionCompany.getCompanyId(),
+                    newProductionCompany.getName(),
+                    newProductionCompany.getDescription(),
+                    newProductionCompany.getStatus().name(), // DTO field is String
+                    newProductionCompany.getFounderId() // DTO field is founderId
             );
 
         } catch (Exception e) {
@@ -242,10 +245,39 @@ public class CompanyManagementService {
     }
 
     // UC-23 — Owner appoints another Member as co-Owner (PENDING).
-    public void appointOwner(
-            String token,
-            com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO request) {
-        throw new UnsupportedOperationException("UC-23: not implemented");
+    public void RequestUserToBecomeOwner(String token, OwnerAppointmentRequestDTO request) {
+        if (!sessionManager.validateToken(token)) {
+            logger.warn("Invalid token provided for appointing another Member as co-Owner");
+            throw new RuntimeException("Invalid token");
+        }
+
+        ProductionCompany company = companyRepository.getCompanyById(request.getCompanyId());
+        if (company == null) {
+            logger.warn("Company {} not found", request.getCompanyId());
+            throw new RuntimeException("Company not found");
+        }
+
+        if (company.getOwnerId() != sessionManager.extractUserId(token)) {
+            logger.warn("User {} is not an owner of company {}", sessionManager.extractUserId(token),
+                    request.getCompanyId());
+            throw new RuntimeException("User is not an owner of company");
+        }
+
+        User targetUser = userRepository.getUserById(request.getTargetUserId());
+        if (targetUser == null) {
+            logger.warn("User {} not found", request.getTargetUserId());
+            throw new RuntimeException("User not found");
+        }
+
+        if (company.canAppoint(sessionManager.extractUserId(token), request.getTargetUserId())) {
+            userRepository.sendOwnerInvitation(request.getTargetUserId(), request.getCompanyId());
+            logger.info("Owner appointment request sended to user successfully");
+        } else {
+            logger.warn("Owner appointment request failed. the user " + request.getTargetUserId()
+                    + " is already an owner or user " + sessionManager.extractUserId(token) + " is not an owner");
+            throw new RuntimeException("Cannot appoint owner");
+        }
+
     }
 
     // UC-23 / UC-24 — target accepts or rejects a pending appointment.
@@ -276,14 +308,6 @@ public class CompanyManagementService {
         throw new UnsupportedOperationException("UC-21: not implemented");
     }
 
-
-
-
-
-
-    
-
-
     // UC-22 — Owner-side flat list of company sales.
     public List<PurchaseHistoryDTO> viewSalesHistory(String token, int companyId) {
         this.logger.info("Attempting to view sales history for company {}", companyId);
@@ -305,28 +329,22 @@ public class CompanyManagementService {
             logger.warn("User {} not found", requesterId);
             throw new RuntimeException("User not found");
         }
-        if (!currUser.isOwnerInCompany(companyId) && !currUser.hasPermissionInCompany(companyId, Permission.VIEW_SALES)) {
-            logger.warn("User {} does not have permission to view sales history for company {}", requesterId, companyId);
+        if (!currUser.isOwnerInCompany(companyId)
+                && !currUser.hasPermissionInCompany(companyId, Permission.VIEW_SALES)) {
+            logger.warn("User {} does not have permission to view sales history for company {}", requesterId,
+                    companyId);
             throw new RuntimeException("Insufficient permissions");
         }
 
         List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByCompanyId(companyId).stream()
                 .map(sale -> new PurchaseHistoryDTO(
-                    List.of(new OrderReceiptMapper().OrderReceiptToPurchaseRecordDTO(sale, ticketRepository, eventRepository))))
+                        List.of(new OrderReceiptMapper().OrderReceiptToPurchaseRecordDTO(sale, ticketRepository,
+                                eventRepository))))
                 .toList();
 
         logger.info("Successfully retrieved sales history for company {}", companyId);
         return salesHistory;
     }
-
-    
-
-
-
-
-
-
-
 
     // UC-25 — recursive organizational tree (Owners only per II.4.15).
     public OrganizationalTreeNodeDTO viewOrganizationalTree(String token, int companyId) {
