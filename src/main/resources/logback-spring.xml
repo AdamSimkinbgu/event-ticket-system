@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Logger configuration for the Event Ticket System.
+    SLR.8.1 (telemetry) + SLR.8.2 (real-time error logging) anchor here.
+    Lecture 2 rule: NEVER log secrets, tokens, passwords, or PII.
+    Application code uses SLF4J: private static final Logger log = LoggerFactory.getLogger(...);
+-->
+<configuration>
+
+    <!-- Console appender — primary output during dev and CI. -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Rolling file appender — for production / acceptance runs. -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/event-ticket-system.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/event-ticket-system.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Default profile (prod): INFO to file + console. -->
+    <springProfile name="default">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+        <logger name="com.ticketing.system" level="INFO"/>
+    </springProfile>
+
+    <!-- Test profile: DEBUG for our code, console only. -->
+    <springProfile name="test">
+        <root level="WARN">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+        <logger name="com.ticketing.system" level="DEBUG"/>
+    </springProfile>
+
+    <!-- Acceptance profile: INFO, console + file. -->
+    <springProfile name="acceptance">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+        <logger name="com.ticketing.system" level="DEBUG"/>
+    </springProfile>
+
+</configuration>
