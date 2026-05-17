@@ -138,13 +138,7 @@ public class CheckoutServiceAcceptanceTest {
                 barcodes
         );
     }
-
-    private void validPaymentAndIssuance(int ticketCount) {
-        when(paymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult());
-        when(ticketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult(ticketCount));
-    }
-
-   private AtomicBoolean trackRefund() {
+    private AtomicBoolean trackRefund() {
     AtomicBoolean refundRequested = new AtomicBoolean(false);
 
     when(paymentGateway.refund(anyInt(), anyDouble()))
@@ -166,6 +160,11 @@ public class CheckoutServiceAcceptanceTest {
 
     return refundRequested;
 }
+    private void validPaymentAndIssuance(int ticketCount) {
+        when(paymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult());
+        when(ticketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult(ticketCount));
+    }
+
 
     private AtomicInteger trackReturnedTickets(Event event, int zoneId) {
         AtomicInteger returnedTickets = new AtomicInteger(0);
