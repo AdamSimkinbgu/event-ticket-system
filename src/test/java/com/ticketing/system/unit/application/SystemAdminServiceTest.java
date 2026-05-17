@@ -16,7 +16,11 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Application.dto.GlobalHistoryFiltersDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
+import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
+import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
 import com.ticketing.system.Core.Application.services.SystemAdminService;
+import com.ticketing.system.Core.Domain.Admin.Admin;
 import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
@@ -27,19 +31,26 @@ import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 
 class SystemAdminServiceTest {
 
+    private static final String ADMIN_TOKEN = "admin-token";
+    private static final int ADMIN_USER_ID = 1;
+
+    private ISessionManager sessionManager;
     private IAdminRepository adminRepository;
     private IOrderReceiptRepository orderReceiptRepository;
     private ITicketRepository ticketRepository;
     private IEventRepository eventRepository;
     private SystemAdminService service;
 
+
     @BeforeEach
     void setUp() {
+        sessionManager = mock(ISessionManager.class);
         adminRepository = mock(IAdminRepository.class);
         orderReceiptRepository = mock(IOrderReceiptRepository.class);
         ticketRepository = mock(ITicketRepository.class);
         eventRepository = mock(IEventRepository.class);
         service = new SystemAdminService(
+                sessionManager,
                 adminRepository,
                 orderReceiptRepository,
                 ticketRepository,
@@ -47,6 +58,9 @@ class SystemAdminServiceTest {
                 List.of(),
                 List.of()
         );
+        when(sessionManager.validateToken(ADMIN_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(ADMIN_TOKEN)).thenReturn(ADMIN_USER_ID);
+        when(adminRepository.findById(ADMIN_USER_ID)).thenReturn(new Admin(ADMIN_USER_ID, "admin", "hash", true));
     }
 
     @Test @Disabled("UC-1: I.1.1 verify invariants on startup")
@@ -74,7 +88,7 @@ class SystemAdminServiceTest {
         GlobalHistoryFiltersDTO filters = new GlobalHistoryFiltersDTO(null, null, null, null, null);
         when(orderReceiptRepository.findGlobal(filters)).thenReturn(List.of());
 
-        List<PurchaseHistoryDTO> result = service.viewGlobalHistory(filters);
+        List<PurchaseHistoryDTO> result = service.viewGlobalHistory(ADMIN_TOKEN, filters);
 
         assertEquals(1, result.size());
         assertTrue(result.get(0).records().isEmpty());
@@ -94,7 +108,7 @@ class SystemAdminServiceTest {
         when(ticketRepository.findByOrderReceiptId(receipt.getId())).thenReturn(List.of(ticket));
         when(eventRepository.findById(receipt.geteventId())).thenReturn(event);
 
-        List<PurchaseHistoryDTO> result = service.viewGlobalHistory(filters);
+        List<PurchaseHistoryDTO> result = service.viewGlobalHistory(ADMIN_TOKEN, filters);
 
         assertEquals(1, result.size());
         List<PurchaseHistoryDTO.PurchaseRecordDTO> records = result.get(0).records();
@@ -118,7 +132,7 @@ class SystemAdminServiceTest {
         when(ticketRepository.findByOrderReceiptId(anyInt())).thenReturn(List.of());
         when(eventRepository.findById(anyInt())).thenReturn(event);
 
-        List<PurchaseHistoryDTO> result = service.viewGlobalHistory(filters);
+        List<PurchaseHistoryDTO> result = service.viewGlobalHistory(ADMIN_TOKEN, filters);
 
         assertEquals(1, result.size());
         assertEquals(2, result.get(0).records().size());
@@ -132,7 +146,7 @@ class SystemAdminServiceTest {
                 LocalDate.of(2026, 12, 31));
         when(orderReceiptRepository.findGlobal(filters)).thenReturn(List.of());
 
-        service.viewGlobalHistory(filters);
+        service.viewGlobalHistory(ADMIN_TOKEN, filters);
 
         verify(orderReceiptRepository).findGlobal(filters);
     }
@@ -150,7 +164,7 @@ class SystemAdminServiceTest {
         when(ticketRepository.findByOrderReceiptId(receipt.getId())).thenReturn(List.of(t1, t2));
         when(eventRepository.findById(anyInt())).thenReturn(event);
 
-        List<PurchaseHistoryDTO> result = service.viewGlobalHistory(filters);
+        List<PurchaseHistoryDTO> result = service.viewGlobalHistory(ADMIN_TOKEN, filters);
 
         PurchaseHistoryDTO.PurchaseRecordDTO record = result.get(0).records().get(0);
         assertEquals(75.0, record.totalPaid());
