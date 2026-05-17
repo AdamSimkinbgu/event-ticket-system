@@ -139,20 +139,28 @@ private double calculateTotalPrice(ActiveOrder order) {
 }
 
     private void returnTicketsToStock(ActiveOrder order) {
-        if (order == null) {
-            return;
-        }
-
-        List<CartLineItem> returnToStock = order.ReturnToStock();
-
-        for (CartLineItem item : returnToStock) {
-            Event event = eventRepository.findById(item.geteventId());
-
-            event.releaseTickets(item.getzoneId(), 1);
-
-            eventRepository.save(event);
-        }
+    if (order == null) {
+        return;
     }
+
+    List<CartLineItem> returnToStock = order.ReturnToStock();
+
+    for (CartLineItem item : returnToStock) {
+        Event event = eventRepository.findById(item.geteventId());
+
+        if (event == null) {
+            errorLogger.error(
+                    "Cannot return ticket to stock because event was not found. eventId={}, zoneId={}",
+                    item.geteventId(),
+                    item.getzoneId()
+            );
+            continue;
+        }
+
+        event.releaseTickets(item.getzoneId(), 1);
+        eventRepository.save(event);
+    }
+}
 
   private int authenticateAndGetUserId(String token) {
     if (token == null || token.isBlank()) {
