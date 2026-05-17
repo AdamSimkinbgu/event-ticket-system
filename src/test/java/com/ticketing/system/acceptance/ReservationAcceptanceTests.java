@@ -280,6 +280,8 @@ public class ReservationAcceptanceTests {
         assertEquals("Quantity must be positive", result);
     }
 
+
+    
     @Test
     void GivenNoActiveOrder_WhenRemoveReservedTickets_ThenThrowException() {
         when(activeOrderRepository.getByUserId(1)).thenReturn(null);
