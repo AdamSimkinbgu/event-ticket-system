@@ -893,6 +893,9 @@ void GivenTicketsFromDifferentEvents_WhenCheckout_ThenBuyAllTicketsAndSaveTicket
             LocalDateTime.now()
     );
 
+
+    
+
     IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
             ISSUANCE_TRANSACTION_ID,
             "issuer",
