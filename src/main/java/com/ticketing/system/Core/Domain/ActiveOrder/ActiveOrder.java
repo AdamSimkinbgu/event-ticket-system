@@ -240,6 +240,9 @@ public class ActiveOrder {
             if (quantity <= 0) {
                 throw new IllegalArgumentException("Quantity must be positive");
             }
+             if (!hasReservationForEventWithoutLock(eventId)) {
+            throw new IllegalArgumentException("Active order does not contain this event");
+        }
 
             int existingTickets = countTicketsWithoutLock(eventId, zoneId);
 
