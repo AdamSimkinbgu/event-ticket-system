@@ -253,7 +253,7 @@ public class ActiveOrder {
             while (i < items.size() && removedTickets < quantity) {
                 CartLineItem item = items.get(i);
 
-                if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
+               if (item.geteventId() == eventId && item.getzoneId() == zoneId && !item.isExpired()) {
                     items.remove(i);
                     removedTickets = removedTickets + 1;
                 } else {
@@ -263,7 +263,15 @@ public class ActiveOrder {
         }
     }
 
+private boolean hasReservationForEventWithoutLock(int eventId) {
+    for (CartLineItem item : items) {
+        if (item.geteventId() == eventId && !item.isExpired()) {
+            return true;
+        }
+    }
 
+    return false;
+}
 
     public java.time.LocalDateTime getCreatedAt() {
         throw new UnsupportedOperationException("not implemented (add createdAt field)");
@@ -298,7 +306,7 @@ public class ActiveOrder {
         int count = 0;
 
         for (CartLineItem item : items) {
-            if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
+            if (item.geteventId() == eventId && item.getzoneId() == zoneId&&!item.isExpired()) {
                 count = count + 1;
             }
         }

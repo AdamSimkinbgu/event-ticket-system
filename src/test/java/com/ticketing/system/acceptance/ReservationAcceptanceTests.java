@@ -14,6 +14,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
@@ -163,28 +168,29 @@ public class ReservationAcceptanceTests {
         assertEquals("Zone not found: 1", result);
     }
 
-    @Test
-    void GivenNotEnoughTickets_WhenReserveTicketsForMember_ThenThrowException() {
-        when(zone.getAvailableAmount()).thenReturn(1);
+ 
+   @Test
+void GivenNotEnoughTickets_WhenReserveTicketsForMember_ThenThrowException() {
+    when(zone.reserve(2)).thenThrow(new IllegalStateException("Only 1 tickets left"));
 
-        String result;
+    String result;
 
-        try {
-            reservationService.reserveTicketsForMember(
-                    "validToken",
-                    100,
-                    1,
-                    2
-            );
+    try {
+        reservationService.reserveTicketsForMember(
+                "validToken",
+                100,
+                1,
+                2
+        );
 
-            result = "NO_EXCEPTION";
+        result = "NO_EXCEPTION";
 
-        } catch (Exception e) {
-            result = e.getMessage();
-        }
-
-        assertEquals("Only 1 tickets left", result);
+    } catch (Exception e) {
+        result = e.getMessage();
     }
+
+    assertEquals("Only 1 tickets left", result);
+}
 
     @Test
     void GivenUserAlreadyHasReservationForEvent_WhenReserveTicketsForMember_ThenThrowException() {
@@ -348,4 +354,6 @@ public class ReservationAcceptanceTests {
 
         assertEquals("Not enough reserved tickets to remove", result);
     }
+
+
 }
