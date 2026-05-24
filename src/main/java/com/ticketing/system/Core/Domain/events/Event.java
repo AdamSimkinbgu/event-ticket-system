@@ -46,34 +46,28 @@ public class Event {
         throw new IllegalArgumentException("Zone not found");
     }
 
+public boolean checkAvailability(int zoneId, int quantity) {
+    InventoryZone zone = getZone(zoneId);
+    return zone.checkAvailability(quantity);
+}
 
-    public boolean checkAvailability(int zoneId, int quantity) {
-    
-        if( venueMap.checkAvailability(zoneId, quantity)){
-        return true;
-        }
-        return false;
+public boolean reserveTickets(int zoneId, int quantity) {
+    if (!purchasePolicy.validate(quantity)) {
+        throw new IllegalStateException("Purchase policy rejected this quantity");
     }
 
-    public boolean reserveTickets(int zoneId, int quantity) {
-      
-        if (checkAvailability(zoneId, quantity)&& purchasePolicy.validate(quantity)){
-        InventoryZone zone = getZone(zoneId);
-            zone.reserve(quantity);
-            return true;
-        }
-        return false;  
-  
-    }
+    InventoryZone zone = getZone(zoneId);
+    return zone.reserve(quantity);
+}
+
+public boolean releaseTickets(int zoneId, int quantity) {
+    InventoryZone zone = getZone(zoneId);
+    return zone.release(quantity);
+}
+
 
     public int getId() {
         return id;
-    }
-
-
-    public boolean releaseTickets(int zoneId, int quantity) {
-        InventoryZone zone = getZone(zoneId);
-        return zone.release(quantity);
     }
 
 public double calculatePrice(int quantity, Double priceAtoneticketReservation,LocalDateTime now) {

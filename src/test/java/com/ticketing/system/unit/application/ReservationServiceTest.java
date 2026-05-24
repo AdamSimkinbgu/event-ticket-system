@@ -9,6 +9,11 @@ import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public class ReservationServiceTest {
@@ -56,6 +62,7 @@ public class ReservationServiceTest {
         );
     }
 
+    
     @Test
     void GivenValidRequest_WhenRemoveReservedTickets_ThenReturnReservationResult() {
         when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
@@ -134,35 +141,43 @@ public class ReservationServiceTest {
         );
     }
 
-    @Test
-    void GivenOrderDoesNotContainEvent_WhenRemoveReservedTickets_ThenThrowException() {
-        when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
-        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
-        when(event.getZone(ZONE_ID)).thenReturn(zone);
-        when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(activeOrder);
-        when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(false);
+  @Test
+void GivenOrderDoesNotContainEvent_WhenRemoveReservedTickets_ThenThrowException() {
+    when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+    when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(zone);
+    when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(activeOrder);
 
-        assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeReservedTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
-        );
-    }
+    doThrow(new IllegalArgumentException("Active order does not contain this event"))
+            .when(activeOrder)
+            .removeTickets(EVENT_ID, ZONE_ID, QUANTITY);
+
+    Exception exception = assertThrows(IllegalArgumentException.class, () ->
+            reservationService.removeReservedTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
+    );
+
+    assertEquals("Active order does not contain this event", exception.getMessage());
+}
 
     @Test
-    void GivenNotEnoughReservedTickets_WhenRemoveReservedTickets_ThenThrowException() {
-        when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
-        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
-        when(event.getZone(ZONE_ID)).thenReturn(zone);
-        when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(activeOrder);
-        when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(true);
-        when(activeOrder.countTickets(EVENT_ID, ZONE_ID)).thenReturn(1);
+void GivenNotEnoughReservedTickets_WhenRemoveReservedTickets_ThenThrowException() {
+    when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+    when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(zone);
+    when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(activeOrder);
 
-        assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeReservedTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
-        );
-    }
-    @Test
+    doThrow(new IllegalArgumentException("Not enough reserved tickets to remove"))
+            .when(activeOrder)
+            .removeTickets(EVENT_ID, ZONE_ID, QUANTITY);
+
+    Exception exception = assertThrows(IllegalArgumentException.class, () ->
+            reservationService.removeReservedTickets(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
+    );
+
+    assertEquals("Not enough reserved tickets to remove", exception.getMessage());
+}@Test
 void GivenValidMemberRequest_WhenReserveTicketsForMember_ThenReturnReservationResult() {
     when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
     when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
@@ -263,13 +278,14 @@ void GivenNotEnoughTickets_WhenReserveTicketsForMember_ThenThrowException() {
     when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(activeOrder);
 
     when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(false);
-    when(zone.getAvailableAmount()).thenReturn(1);
 
-    assertThrows(IllegalArgumentException.class, () ->
+    when(zone.reserve(QUANTITY))
+            .thenThrow(new IllegalStateException("remaining 1 tickets available"));
+
+    assertThrows(IllegalStateException.class, () ->
             reservationService.reserveTicketsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
     );
 }
-
 @Test
 void GivenNoActiveOrder_WhenReserveTicketsForMember_ThenCreateNewOrderAndReturnResult() {
     when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
@@ -364,7 +380,6 @@ void GivenGuestAlreadyHasReservationForEvent_WhenReserveTicketsForGuest_ThenThro
             reservationService.reserveTicketsForGuest(sessionId, EVENT_ID, ZONE_ID, QUANTITY)
     );
 }
-
 @Test
 void GivenNotEnoughTickets_WhenReserveTicketsForGuest_ThenThrowException() {
     String sessionId = "guest-session";
@@ -374,13 +389,16 @@ void GivenNotEnoughTickets_WhenReserveTicketsForGuest_ThenThrowException() {
     when(activeOrderRepository.getBySessionId(sessionId)).thenReturn(Optional.of(activeOrder));
 
     when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(false);
-    when(zone.getAvailableAmount()).thenReturn(1);
 
-    assertThrows(IllegalArgumentException.class, () ->
+    when(zone.reserve(QUANTITY))
+            .thenThrow(new IllegalStateException("remaining 1 tickets available"));
+
+    Exception exception = assertThrows(IllegalStateException.class, () ->
             reservationService.reserveTicketsForGuest(sessionId, EVENT_ID, ZONE_ID, QUANTITY)
     );
-}
 
+    assertEquals("remaining 1 tickets available", exception.getMessage());
+}
 @Test
 void GivenNoActiveOrder_WhenReserveTicketsForGuest_ThenCreateNewOrderAndReturnResult() {
     String sessionId = "guest-session";
@@ -398,4 +416,200 @@ void GivenNoActiveOrder_WhenReserveTicketsForGuest_ThenCreateNewOrderAndReturnRe
     assertEquals(EVENT_ID, result.getEventId());
 }
 
+
+@Test
+void GivenManyGuestsReserveSameZoneConcurrently_WhenReserveTicketsForGuest_ThenDoNotOverReserve() throws InterruptedException {
+    int capacity = 5;
+    int numberOfThreads = 20;
+    int quantityPerRequest = 1;
+
+    InventoryZone realZone = new InventoryZone(ZONE_ID, "VIP", capacity, 100.0);
+
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(realZone);
+
+    ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
+    CountDownLatch readyLatch = new CountDownLatch(numberOfThreads);
+    CountDownLatch startLatch = new CountDownLatch(1);
+    CountDownLatch doneLatch = new CountDownLatch(numberOfThreads);
+
+    AtomicInteger successCount = new AtomicInteger(0);
+    AtomicInteger failureCount = new AtomicInteger(0);
+
+    for (int i = 0; i < numberOfThreads; i = i + 1) {
+        final String sessionId = "guest-session-" + i;
+
+        when(activeOrderRepository.getBySessionId(sessionId)).thenReturn(Optional.empty());
+
+        executorService.submit(() -> {
+            try {
+                readyLatch.countDown();
+                startLatch.await();
+
+                reservationService.reserveTicketsForGuest(
+                        sessionId,
+                        EVENT_ID,
+                        ZONE_ID,
+                        quantityPerRequest
+                );
+
+                successCount.incrementAndGet();
+
+            } catch (Exception e) {
+                failureCount.incrementAndGet();
+
+            } finally {
+                doneLatch.countDown();
+            }
+        });
+    }
+
+    readyLatch.await();
+    startLatch.countDown();
+
+    boolean finished = doneLatch.await(5, TimeUnit.SECONDS);
+    executorService.shutdown();
+
+    assertEquals(true, finished);
+    assertEquals(capacity, successCount.get());
+    assertEquals(numberOfThreads - capacity, failureCount.get());
+    assertEquals(0, realZone.getAvailableAmount());
+    assertEquals(capacity, realZone.getReservedAmount());
+}
+@Test
+void GivenManyMembersReserveSameZoneConcurrently_WhenReserveTicketsForMember_ThenDoNotOverReserve()
+        throws InterruptedException {
+
+    int capacity = 5;
+    int numberOfThreads = 20;
+    int quantityPerRequest = 1;
+
+    InventoryZone realZone = new InventoryZone(ZONE_ID, "VIP", capacity, 100.0);
+
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(realZone);
+
+    ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
+    CountDownLatch readyLatch = new CountDownLatch(numberOfThreads);
+    CountDownLatch startLatch = new CountDownLatch(1);
+    CountDownLatch doneLatch = new CountDownLatch(numberOfThreads);
+
+    AtomicInteger successCount = new AtomicInteger(0);
+    AtomicInteger failureCount = new AtomicInteger(0);
+
+    for (int i = 0; i < numberOfThreads; i = i + 1) {
+        final String token = "valid-token-" + i;
+        final int userId = i + 1;
+
+        when(sessionManager.validateToken(token)).thenReturn(true);
+        when(sessionManager.extractUserId(token)).thenReturn(userId);
+        when(activeOrderRepository.getByUserId(userId)).thenReturn(null);
+
+        executorService.submit(() -> {
+            try {
+                readyLatch.countDown();
+                startLatch.await();
+
+                reservationService.reserveTicketsForMember(
+                        token,
+                        EVENT_ID,
+                        ZONE_ID,
+                        quantityPerRequest
+                );
+
+                successCount.incrementAndGet();
+
+            } catch (Exception e) {
+                failureCount.incrementAndGet();
+
+            } finally {
+                doneLatch.countDown();
+            }
+        });
+    }
+
+    readyLatch.await();
+    startLatch.countDown();
+
+    boolean finished = doneLatch.await(5, TimeUnit.SECONDS);
+    executorService.shutdown();
+
+    assertEquals(true, finished);
+    assertEquals(capacity, successCount.get());
+    assertEquals(numberOfThreads - capacity, failureCount.get());
+    assertEquals(0, realZone.getAvailableAmount());
+    assertEquals(capacity, realZone.getReservedAmount());
+}
+@Test
+void GivenManyThreadsRemoveReservedTicketsForMemberConcurrently_WhenRemoveReservedTickets_ThenDoNotOverRelease()
+        throws InterruptedException {
+
+    int initialReservedTickets = 5;
+    int capacity = 10;
+    int numberOfThreads = 20;
+    int quantityPerRemove = 1;
+
+    InventoryZone realZone = new InventoryZone(ZONE_ID, "VIP", capacity, 100.0);
+    realZone.reserve(initialReservedTickets);
+
+    ActiveOrder realActiveOrder = new ActiveOrder(USER_ID);
+    realActiveOrder.addReservation(
+            EVENT_ID,
+            ZONE_ID,
+            initialReservedTickets,
+            100.0,
+            LocalDateTime.now()
+    );
+
+    when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+    when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+    when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+    when(event.getZone(ZONE_ID)).thenReturn(realZone);
+    when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(realActiveOrder);
+
+    ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
+    CountDownLatch readyLatch = new CountDownLatch(numberOfThreads);
+    CountDownLatch startLatch = new CountDownLatch(1);
+    CountDownLatch doneLatch = new CountDownLatch(numberOfThreads);
+
+    AtomicInteger successCount = new AtomicInteger(0);
+    AtomicInteger failureCount = new AtomicInteger(0);
+
+    for (int i = 0; i < numberOfThreads; i = i + 1) {
+        executorService.submit(() -> {
+            try {
+                readyLatch.countDown();
+                startLatch.await();
+
+                reservationService.removeReservedTickets(
+                        VALID_TOKEN,
+                        EVENT_ID,
+                        ZONE_ID,
+                        quantityPerRemove
+                );
+
+                successCount.incrementAndGet();
+
+            } catch (Exception e) {
+                failureCount.incrementAndGet();
+
+            } finally {
+                doneLatch.countDown();
+            }
+        });
+    }
+
+    readyLatch.await();
+    startLatch.countDown();
+
+    boolean finished = doneLatch.await(5, TimeUnit.SECONDS);
+    executorService.shutdown();
+
+    assertEquals(true, finished);
+    assertEquals(initialReservedTickets, successCount.get());
+    assertEquals(numberOfThreads - initialReservedTickets, failureCount.get());
+    assertEquals(0, realActiveOrder.countTickets(EVENT_ID, ZONE_ID));
+    assertEquals(0, realZone.getReservedAmount());
+    assertEquals(capacity, realZone.getAvailableAmount());
+}
 }

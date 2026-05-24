@@ -18,7 +18,7 @@ public class OrderReceipt {
     private int receiptId;
     private int eventId;
     private int zoneId;
-    private double priceAtoneticketReservation;
+    private double totalPrice;
     private LocalDateTime purchaseTime;
     private Boolean isRefunded = false;
 
@@ -29,7 +29,7 @@ public class OrderReceipt {
      */
     public OrderReceipt(int _userid, double priceAtReservation, List<ReceiptLine> receiptLines) {
         this.userid= _userid;
-        this.priceAtoneticketReservation = priceAtReservation;
+        this.totalPrice = priceAtReservation;
         this.ReceiptLine=receiptLines;
         this.purchaseTime = LocalDateTime.now();
     }
@@ -51,7 +51,7 @@ public class OrderReceipt {
         r.userid = null;
         r.guestEmail = guestEmail;
         r.guestSessionId = guestSessionId;
-        r.priceAtoneticketReservation = totalAmount;
+        r.totalPrice = totalAmount;
         r.ReceiptLine = receiptLines;
         r.purchaseTime = LocalDateTime.now();
         return r;
@@ -91,7 +91,7 @@ public class OrderReceipt {
     }
 
     public double getTotalAmount() {
-        throw new UnsupportedOperationException("not implemented");
+        return totalPrice;
     }
 
     public java.util.List<TransactionRecord> getTransactionRecords() {

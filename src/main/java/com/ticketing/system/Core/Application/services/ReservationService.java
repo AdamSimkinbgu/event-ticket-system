@@ -361,43 +361,32 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
     }
 
     private double reserveStock(InventoryZone zone, int eventId, int zoneId, int quantity) {
-        synchronized (zone) {
-            if (zone.getAvailableAmount() < quantity) {
-                eventLogger.warn(
-                        "reserveTickets rejected: not enough tickets. eventId={}, zoneId={}, requested={}, available={}",
-                        eventId, zoneId, quantity, zone.getAvailableAmount()
-                );
+    double pricePerTicket = zone.getprice();
 
-                throw new IllegalArgumentException("Only " + zone.getAvailableAmount() + " tickets left");
-            }
+    zone.reserve(quantity);
 
-            double pricePerTicket = zone.getprice();
-            zone.reserve(quantity);
+    eventLogger.info(
+            "Tickets reserved in zone stock: eventId={}, zoneId={}, quantity={}, pricePerTicket={}",
+            eventId, zoneId, quantity, pricePerTicket
+    );
 
-            eventLogger.info(
-                    "Tickets reserved in zone stock: eventId={}, zoneId={}, quantity={}, pricePerTicket={}",
-                    eventId, zoneId, quantity, pricePerTicket
-            );
+    return pricePerTicket;
+}
 
-            return pricePerTicket;
-        }
+   private void rollbackReservedStockIfNeeded(
+        boolean stockReserved,
+        InventoryZone reservedZone,
+        int quantity,
+        int eventId,
+        int zoneId) {
+
+    if (stockReserved && reservedZone != null) {
+        reservedZone.release(quantity);
+
+        eventLogger.warn("Rollback completed: released {} tickets for eventId={}, zoneId={}",
+                quantity, eventId, zoneId);
     }
-
-    private void rollbackReservedStockIfNeeded(
-            boolean stockReserved,
-            InventoryZone reservedZone,
-            int quantity,
-            int eventId,
-            int zoneId) {
-        if (stockReserved && reservedZone != null) {
-            synchronized (reservedZone) {
-                reservedZone.release(quantity);
-            }
-
-            eventLogger.warn("Rollback completed: released {} tickets for eventId={}, zoneId={}",
-                    quantity, eventId, zoneId);
-        }
-    }
+}
 
     private void notifyRemoveFailureIfPossible(int userId, int eventId, int zoneId, String message) {
         if (userId > 0) {
@@ -409,6 +398,13 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
             );
         }
     }
+
+    private void removeTicketsFromOrderAndReleaseStock(  ActiveOrder activeOrder, InventoryZone zone, int userId, int eventId, int zoneId, int quantity) {
+
+    activeOrder.removeTickets(eventId, zoneId, quantity);
+    zone.release(quantity);
+    activeOrderRepository.save(activeOrder);
+}
 
     private ReservationResultDTO buildReservationResult(int eventId, int zoneId, int quantity) {
         return new ReservationResultDTO(
@@ -424,39 +420,6 @@ private void validateRemoveQuantity(int quantity) {
         throw new IllegalArgumentException("Quantity must be positive");
     }
 }
-private void removeTicketsFromOrderAndReleaseStock(
-        ActiveOrder activeOrder,
-        InventoryZone zone,
-        int userId,
-        int eventId,
-        int zoneId,
-        int quantity) {
-    synchronized (activeOrder) {
-        synchronized (zone) {
-            validateActiveOrderContainsEnoughTickets(activeOrder, userId, eventId, zoneId, quantity);
-
-            activeOrder.removeTickets(eventId, zoneId, quantity);
-            zone.release(quantity);
-            activeOrderRepository.save(activeOrder);
-        }
-    }
-}
-
-private void validateActiveOrderContainsEnoughTickets(
-        ActiveOrder activeOrder,
-        int userId,
-        int eventId,
-        int zoneId,
-        int quantity) {
-    if (!activeOrder.hasReservationForEvent(eventId)) {
-        throw new IllegalArgumentException("Active order does not contain this event");
-    }
-
-    if (activeOrder.countTickets(eventId, zoneId) < quantity) {
-        throw new IllegalArgumentException("Not enough reserved tickets to remove");
-    }
-}
-
 
 
     public com.ticketing.system.Core.Application.dto.ActiveOrderDTO restoreActiveOrder(int userId) {
@@ -492,7 +455,5 @@ private void validateActiveOrderContainsEnoughTickets(
         throw new UnsupportedOperationException("UC-5/9: not implemented");
     }
 
-    public void removeFromActiveOrder(String orderId, String ticketId) {
-        throw new UnsupportedOperationException("UC-9: not implemented");
-    }
+   
 }
