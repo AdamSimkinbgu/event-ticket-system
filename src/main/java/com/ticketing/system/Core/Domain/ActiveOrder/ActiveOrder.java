@@ -29,8 +29,8 @@ public class ActiveOrder {
     private Integer userId;
     private String sessionId;
     private String status;
-    private List<CartLineItem> items;
-
+    private final List<CartLineItem> items;
+     private final Object itemsLock = new Object();
     public ActiveOrder(Integer userId, String sessionId) {
         if (userId == null && sessionId == null) {
             throw new IllegalArgumentException(
@@ -67,36 +67,52 @@ public class ActiveOrder {
         return new ActiveOrder(null, sessionId);
     }
 
-    public void addReservation(int eventId, int zoneId, int quantity, double price, LocalDateTime addedAt) {
-        for (int i = 1; i <= quantity; i = i + 1) {
-            CartLineItem newItem = new CartLineItem(eventId, zoneId, price, addedAt);
-            this.items.add(newItem);
+   public void addReservation(int eventId, int zoneId, int quantity, double price, LocalDateTime addedAt) {
+        synchronized (itemsLock) {
+            if (quantity <= 0) {
+                throw new IllegalArgumentException("Quantity must be positive");
+            }
+
+            for (int i = 1; i <= quantity; i = i + 1) {
+                CartLineItem newItem = new CartLineItem(eventId, zoneId, price, addedAt);
+                this.items.add(newItem);
+            }
         }
     }
 
-    public List<CartLineItem> getItems() {
-        return items;
+
+     public List<CartLineItem> getItems() {
+        synchronized (itemsLock) {
+            return new ArrayList<>(items);
+        }
     }
 
+
     public List<CartLineItem> ReturnToStock() {
-        List<CartLineItem> returnToStock = new ArrayList<>();
-        returnToStock.addAll(items);
-        clear();
-        return returnToStock;
+        synchronized (itemsLock) {
+            List<CartLineItem> returnToStock = new ArrayList<>(items);
+            items.clear();
+            return returnToStock;
+        }
     }
 
     public boolean isEmpty() {
-        return items.isEmpty();
+        synchronized (itemsLock) {
+            return items.isEmpty();
+        }
+    }
+      public boolean hasExpiredItem() {
+        synchronized (itemsLock) {
+            for (CartLineItem item : items) {
+                if (item.isExpired()) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 
-    public boolean hasExpiredItem() {
-        for (CartLineItem item : items) {
-            if (item.isExpired()) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     /**
      * Returns the userId, or {@code 0} for Guest carts. Preserved as
@@ -159,39 +175,57 @@ public class ActiveOrder {
         this.sessionId = null;
     }
 
-    public boolean validateCanCheckout() {
-        if (isEmpty()) {
-            throw new IllegalStateException("Cannot checkout an empty order");
+
+
+  public boolean validateCanCheckout() {
+        synchronized (itemsLock) {
+            if (items.isEmpty()) {
+                throw new IllegalStateException("Cannot checkout an empty order");
+            }
+
+            for (CartLineItem item : items) {
+                if (item.isExpired()) {
+                    throw new IllegalStateException("Cannot checkout because one or more tickets expired");
+                }
+            }
+
+            return true;
         }
-        if (hasExpiredItem()) {
-            throw new IllegalStateException("Cannot checkout because one or more tickets expired");
-        }
-        return true;
     }
 
-    public List<CartLineItem> buy() {
-        List<CartLineItem> ticketToBUY = new ArrayList<>();
-        if (isEmpty()) {
-            throw new IllegalStateException("Cannot buy an empty order");
+
+ public List<CartLineItem> buy() {
+        synchronized (itemsLock) {
+            if (items.isEmpty()) {
+                throw new IllegalStateException("Cannot buy an empty order");
+            }
+
+            List<CartLineItem> ticketToBuy = new ArrayList<>(items);
+            items.clear();
+
+            return ticketToBuy;
         }
-        ticketToBUY.addAll(items);
-        clear();
-        return ticketToBUY;
     }
 
     public void clear() {
-        items.clear();
-    }
-
-    public boolean hasReservationForEvent(int eventId) {
-        for (CartLineItem item : items) {
-            if (item.geteventId() == eventId && !item.isExpired()) {
-                return true;
-            }
+        synchronized (itemsLock) {
+            items.clear();
         }
-        return false;
     }
 
+
+ public boolean hasReservationForEvent(int eventId) {
+        synchronized (itemsLock) {
+            for (CartLineItem item : items) {
+                if (item.geteventId() == eventId && !item.isExpired()) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+    
     public double getTotalPrice() {
         throw new UnsupportedOperationException("UC-9: not implemented");
     }
@@ -201,29 +235,33 @@ public class ActiveOrder {
     }
 
 
+ public void removeTickets(int eventId, int zoneId, int quantity) {
+        synchronized (itemsLock) {
+            if (quantity <= 0) {
+                throw new IllegalArgumentException("Quantity must be positive");
+            }
 
-public void removeTickets(int eventId, int zoneId, int quantity) {
-    if (quantity <= 0) {
-        throw new IllegalArgumentException("Quantity must be positive");
-    }
+            int existingTickets = countTicketsWithoutLock(eventId, zoneId);
 
-    int existingTickets = countTickets(eventId, zoneId);
+            if (existingTickets < quantity) {
+                throw new IllegalArgumentException("Not enough reserved tickets to remove");
+            }
 
-    if (existingTickets < quantity) {
-        throw new IllegalArgumentException("Not enough reserved tickets to remove");
-    }
+            int removedTickets = 0;
+            int i = 0;
 
-    int removedTickets = 0;
+            while (i < items.size() && removedTickets < quantity) {
+                CartLineItem item = items.get(i);
 
-    for (int i =0 ; i <=items.size() - 1 && removedTickets < quantity; i = i + 1) {
-        CartLineItem item = items.get(i);
-
-        if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
-            items.remove(i);
-            removedTickets = removedTickets + 1;
+                if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
+                    items.remove(i);
+                    removedTickets = removedTickets + 1;
+                } else {
+                    i = i + 1;
+                }
+            }
         }
     }
-}
 
 
 
@@ -235,38 +273,55 @@ public void removeTickets(int eventId, int zoneId, int quantity) {
         throw new UnsupportedOperationException("UC-2: not implemented");
     }
 
-    public boolean hasTicket(int eventId, int zoneId) {
+ public boolean hasTicket(int eventId, int zoneId) {
+        synchronized (itemsLock) {
+            for (CartLineItem item : items) {
+                if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+
+
+
+  public int countTickets(int eventId, int zoneId) {
+        synchronized (itemsLock) {
+            return countTicketsWithoutLock(eventId, zoneId);
+        }
+    }
+
+    private int countTicketsWithoutLock(int eventId, int zoneId) {
+        int count = 0;
+
         for (CartLineItem item : items) {
             if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
-                return true;
+                count = count + 1;
             }
         }
-        return false;
-    }
-  public int countTickets(int eventId, int zoneId) {
-    int count = 0;
 
-    for (CartLineItem item : items) {
-        if (item.geteventId() == eventId && item.getzoneId() == zoneId) {
-            count = count + 1;
-        }
+        return count;
     }
-
-    return count;
-}
 
 public ActiveOrderDTO toDTO() {
+    synchronized (itemsLock) {
         List<ActiveOrderDTO.CartLineDTO> lineDTOs = new ArrayList<>();
+
         for (CartLineItem item : items) {
             lineDTOs.add(item.toDTO());
         }
+
         return new ActiveOrderDTO(
                 getUserId(),
-                null, // sessionId is null for Member active orders
+                sessionId,
                 getCreatedAt(),
                 this.getRemainingTime().getSeconds(),
                 this.getTotalPrice(),
-                lineDTOs);
+                lineDTOs
+        );
     }
-
+}
 }
