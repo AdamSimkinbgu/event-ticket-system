@@ -19,14 +19,28 @@ public class Ticket implements InvariantChecked {
     // ITicketRepository.findByHolderUserId(int) in a single hop.
     private Integer holderUserId;
 
-    //TODO: change the seat number so it will get a proper seat
-    public Ticket(int eventId,int zoneid ,double price,int ticketId,String barcodeValue) {
+    /**
+     * Standing-zone ticket constructor — {@code seatLabel} stays {@code null}.
+     * Preserved for existing callers (CheckoutService, tests) that don't carry
+     * seat identity.
+     */
+    public Ticket(int eventId, int zoneid, double price, int ticketId, String barcodeValue) {
+        this(eventId, zoneid, null, price, ticketId, barcodeValue);
+    }
+
+    /**
+     * Seated-zone ticket constructor — {@code seatLabel} is the label of the
+     * {@link com.ticketing.system.Core.Domain.events.Seat} this ticket refers
+     * to inside its {@link com.ticketing.system.Core.Domain.events.SeatedZone}.
+     * Pass {@code null} for standing-zone tickets (or use the 5-arg form).
+     */
+    public Ticket(int eventId, int zoneid, String seatLabel, double price, int ticketId, String barcodeValue) {
         this.eventId = eventId;
-        this.zoneid=zoneid;
-        this.seatNumber="seatNumber";
+        this.zoneid = zoneid;
+        this.seatNumber = seatLabel;
         this.price = price;
-        this.ticketId=ticketId;
-        this.barcodeValue=barcodeValue;
+        this.ticketId = ticketId;
+        this.barcodeValue = barcodeValue;
         this.status = TicketStatus.PAID; // Default initial status
         this.holderUserId = null;
     }
@@ -181,6 +195,11 @@ public class Ticket implements InvariantChecked {
         }
         if (holderUserId != null && holderUserId <= 0) {
             throw new IllegalStateException("Ticket invariant violated: holderUserId must be positive when set (was " + holderUserId + ")");
+        }
+        // seatNumber (aka seatLabel) is nullable: standing-zone tickets have null,
+        // seated-zone tickets carry the seat label they reference. If set, must be non-blank.
+        if (seatNumber != null && seatNumber.isBlank()) {
+            throw new IllegalStateException("Ticket invariant violated: seatLabel must be non-blank when set");
         }
     }
 }

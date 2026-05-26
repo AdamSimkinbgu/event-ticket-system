@@ -40,6 +40,7 @@ import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 
 class CheckoutServiceTest {
@@ -185,8 +186,8 @@ class CheckoutServiceTest {
     //////////////////////////////////////////////////////////added test for expired order with multiple tickets scenario after check1
 @Test
 void GivenExpiredOrderWithMultipleTickets_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
-    InventoryZone zone1 = new InventoryZone(ZONE_ID_1, "VIP", 5, 100.0);
-    InventoryZone zone2 = new InventoryZone(ZONE_ID_2, "REGULAR", 5, 150.0);
+    InventoryZone zone1 = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+    InventoryZone zone2 = new StandingZone(ZONE_ID_2, "REGULAR", 5, 150.0);
 
     zone1.reserve(1);
     zone2.reserve(1);
@@ -241,7 +242,7 @@ void GivenExpiredOrderWithMultipleTickets_WhenCheckout_ThenClearCartAndReturnTic
 
     @Test
 void GivenOrderCannotCheckout_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
-    InventoryZone zone = new InventoryZone(ZONE_ID_1, "VIP", 5, 100.0);
+    InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
     zone.reserve(1);
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
@@ -277,7 +278,7 @@ void GivenOrderCannotCheckout_WhenCheckout_ThenClearCartAndReturnTicketsToStock(
 
    @Test
 void GivenPaymentFails_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
-    InventoryZone zone = new InventoryZone(ZONE_ID_1, "VIP", 5, 100.0);
+    InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
     zone.reserve(1);
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
@@ -319,7 +320,7 @@ void GivenPaymentFails_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
 }
     @Test
 void GivenTicketIssuanceFailsAfterPayment_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
-    InventoryZone zone = new InventoryZone(ZONE_ID_1, "VIP", 5, 100.0);
+    InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
     zone.reserve(1);
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
@@ -374,7 +375,7 @@ void GivenTicketIssuanceFailsAfterPayment_WhenCheckout_ThenClearCartAndReturnTic
 
    @Test
 void GivenTicketIssuanceReturnsNullBarcodes_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
-    InventoryZone zone = new InventoryZone(ZONE_ID_1, "VIP", 5, 100.0);
+    InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
     zone.reserve(1);
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
@@ -434,7 +435,7 @@ void GivenTicketIssuanceReturnsNullBarcodes_WhenCheckout_ThenClearCartAndReturnT
     assertEquals(0, zone.getReservedAmount());
 }@Test
 void GivenTicketIssuanceReturnsEmptyBarcodes_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
-    InventoryZone zone = new InventoryZone(ZONE_ID_1, "VIP", 5, 100.0);
+    InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
     zone.reserve(1);
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
@@ -496,9 +497,9 @@ void GivenTicketIssuanceReturnsEmptyBarcodes_WhenCheckout_ThenClearCartAndReturn
 
    @Test
 void GivenMultipleTicketsButIssuerReturnsLessBarcodes_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
-    InventoryZone zone1 = new InventoryZone(ZONE_ID_1, "VIP", 5, 100.0);
-    InventoryZone zone2 = new InventoryZone(ZONE_ID_2, "REGULAR", 5, 150.0);
-    InventoryZone zone3 = new InventoryZone(ZONE_ID_3, "BALCONY", 5, 200.0);
+    InventoryZone zone1 = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+    InventoryZone zone2 = new StandingZone(ZONE_ID_2, "REGULAR", 5, 150.0);
+    InventoryZone zone3 = new StandingZone(ZONE_ID_3, "BALCONY", 5, 200.0);
 
     zone1.reserve(1);
     zone2.reserve(1);
@@ -582,7 +583,7 @@ void GivenMultipleTicketsButIssuerReturnsLessBarcodes_WhenCheckout_ThenClearCart
 }
    @Test
 void GivenPaymentRefundFails_WhenCheckout_ThenClearCartReturnTicketsToStockAndThrowRefundException() {
-    InventoryZone zone = new InventoryZone(ZONE_ID_1, "VIP", 5, 100.0);
+    InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
     zone.reserve(1);
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
@@ -640,8 +641,8 @@ void GivenPaymentRefundFails_WhenCheckout_ThenClearCartReturnTicketsToStockAndTh
 }
     @Test
 void GivenTicketFromDifferentEventDoesNotExist_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
-    InventoryZone zone1 = new InventoryZone(ZONE_ID_1, "VIP", 5, 100.0);
-    InventoryZone zone3 = new InventoryZone(ZONE_ID_3, "BALCONY", 5, 200.0);
+    InventoryZone zone1 = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+    InventoryZone zone3 = new StandingZone(ZONE_ID_3, "BALCONY", 5, 200.0);
 
     zone1.reserve(1);
     zone3.reserve(1);

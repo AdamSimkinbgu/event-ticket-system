@@ -25,6 +25,7 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
@@ -82,7 +83,7 @@ class EventManagementServiceTest {
         );
 
         company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
-        zone = new InventoryZone(ZONE_ID, "VIP", 10, 100);
+        zone = new StandingZone(ZONE_ID, "VIP", 10, 100);
         venueMap = new VenueMap(1, LOCATION, List.of(zone));
         event = new Event(
                 EVENT_ID,

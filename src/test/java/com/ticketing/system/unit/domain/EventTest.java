@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.events.EventCategory;
@@ -33,7 +34,7 @@ class EventTest extends BaseDomainTest {
 
     @BeforeEach
     public void setUp() {
-        zone = track(new InventoryZone(ZONE_ID, "VIP", 10, 100));
+        zone = track(new StandingZone(ZONE_ID, "VIP", 10, 100));
 
         VenueMap venueMap = new VenueMap(1, LOCATION, List.of(zone));
 

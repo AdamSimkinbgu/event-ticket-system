@@ -2,143 +2,86 @@ package com.ticketing.system.Core.Domain.events;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
-public class InventoryZone implements InvariantChecked {
-    private final int id;
-    private final String name;
-    private  int capacity;
-    private int reservedAmount;
-    private  double price;
-     private final Object inventoryLock = new Object();
-    
+/**
+ * Abstract base for all inventory-zone types inside a {@link VenueMap}.
+ *
+ * <p>Two concrete shapes:
+ * <ul>
+ *   <li>{@link StandingZone} — counter-based. Capacity is a single number;
+ *       reservations and releases are integer arithmetic.</li>
+ *   <li>{@link SeatedZone} — catalog of named, addressable seats with
+ *       coordinates. Reservations target specific seat labels.</li>
+ * </ul>
+ *
+ * <p>Common state (id, name, price) lives on this class. Pre-purchase
+ * inventory state (capacity/reservations) lives on the subclass and is
+ * mediated through {@link #getCapacity()} / {@link #getAvailableAmount()} /
+ * {@link #getReservedAmount()}.
+ *
+ * <p>The legacy counter-based methods ({@code reserve(int)} / {@code release(int)} /
+ * {@code checkAvailability(int)} / {@code setCapacity(int)}) are defined here
+ * with default throwing implementations so existing callers that hold an
+ * {@code InventoryZone} reference continue to work for standing zones.
+ * Seated-zone callers must downcast or use the typed
+ * {@link SeatedZone#reserveSeats(java.util.List)} / {@link SeatedZone#releaseSeats(java.util.List)} methods.
+ */
+public abstract class InventoryZone implements InvariantChecked {
 
-    public InventoryZone(int id, String name, int capacity, double price) {
-        if (capacity < 0) {
-        throw new IllegalArgumentException("Capacity cannot be negative");
-    }
+    protected final int id;
+    protected final String name;
+    protected double price;
 
-    if (price < 0) {
-        throw new IllegalArgumentException("Price cannot be negative");
-    }
+    protected InventoryZone(int id, String name, double price) {
+        if (price < 0) {
+            throw new IllegalArgumentException("Price cannot be negative");
+        }
         this.id = id;
         this.name = name;
-        this.capacity = capacity;
-        this.reservedAmount = 0;
-        this.price=price;
-    }
-
-    public int getAvailableAmount() {
-        synchronized (inventoryLock) {
-            return capacity - reservedAmount;
-        }
-    }
-
-
-    public boolean checkAvailability(int quantity) {
-        synchronized (inventoryLock) {
-            validatePositiveQuantity(quantity);
-
-            int availableAmount = capacity - reservedAmount;
-
-            if (availableAmount < quantity) {
-                throw new IllegalStateException("remaining " + availableAmount + " tickets available");
-            }
-
-            return true;
-        }
-    }
-      public boolean reserve(int quantity) {
-        synchronized (inventoryLock) {
-            validatePositiveQuantity(quantity);
-
-            int availableAmount = capacity - reservedAmount;
-
-            if (availableAmount < quantity) {
-                throw new IllegalStateException("remaining " + availableAmount + " tickets available");
-            }
-
-            reservedAmount = reservedAmount + quantity;
-            return true;
-        }
+        this.price = price;
     }
 
     public int getId() {
         return id;
     }
-    public double getprice() {
-        return price;
-    }
-
 
     public String getName() {
         return name;
     }
 
-   public int getCapacity() {
-        synchronized (inventoryLock) {
-            return capacity;
-        }
+    public double getprice() {
+        return price;
     }
 
-  
+    /** Total inventory units in this zone (seats for SeatedZone, capacity for StandingZone). */
+    public abstract int getCapacity();
+
+    /** Units currently available for new reservations. */
+    public abstract int getAvailableAmount();
+
+    /** Units currently held by un-purchased reservations. */
+    public abstract int getReservedAmount();
+
+    // ---------------------------------------------------------------------
+    // Legacy counter-based API. Concrete on StandingZone; throws on SeatedZone.
+    // ---------------------------------------------------------------------
+
+    public boolean reserve(int quantity) {
+        throw new UnsupportedOperationException(
+                "reserve(int) is a StandingZone operation — for SeatedZone, downcast and call reserveSeats(List<String>) instead");
+    }
 
     public boolean release(int quantity) {
-        synchronized (inventoryLock) {
-            validatePositiveQuantity(quantity);
-
-            if (quantity > reservedAmount) {
-                throw new IllegalStateException("Cannot release more tickets than reserved");
-            }
-
-            reservedAmount = reservedAmount - quantity;
-            return true;
-        }
+        throw new UnsupportedOperationException(
+                "release(int) is a StandingZone operation — for SeatedZone, downcast and call releaseSeats(List<String>) instead");
     }
 
-
-      public void setCapacity(int newCapacity) {
-        synchronized (inventoryLock) {
-            if (newCapacity < 0) {
-                throw new IllegalArgumentException("Capacity cannot be negative");
-            }
-
-            if (newCapacity < reservedAmount) {
-                throw new IllegalArgumentException("New capacity cannot be less than the number of reserved tickets");
-            }
-
-            this.capacity = newCapacity;
-        }
+    public boolean checkAvailability(int quantity) {
+        throw new UnsupportedOperationException(
+                "checkAvailability(int) is a StandingZone operation");
     }
 
-
-    public int getReservedAmount() {
-        synchronized (inventoryLock) {
-            return reservedAmount;
-        }
-    }
-private void validatePositiveQuantity(int quantity) {
-        if (quantity <= 0) {
-            throw new IllegalArgumentException("Quantity must be positive");
-        }
-}
-
-    @Override
-    public void checkInvariants() {
-        synchronized (inventoryLock) {
-            if (name == null || name.isBlank()) {
-                throw new IllegalStateException("InventoryZone invariant violated: name must be non-blank");
-            }
-            if (capacity < 0) {
-                throw new IllegalStateException("InventoryZone invariant violated: capacity must be >= 0 (was " + capacity + ")");
-            }
-            if (reservedAmount < 0) {
-                throw new IllegalStateException("InventoryZone invariant violated: reservedAmount must be >= 0 (was " + reservedAmount + ")");
-            }
-            if (reservedAmount > capacity) {
-                throw new IllegalStateException("InventoryZone invariant violated: reservedAmount (" + reservedAmount + ") must be <= capacity (" + capacity + ")");
-            }
-            if (price < 0) {
-                throw new IllegalStateException("InventoryZone invariant violated: price must be >= 0 (was " + price + ")");
-            }
-        }
+    public void setCapacity(int newCapacity) {
+        throw new UnsupportedOperationException(
+                "setCapacity(int) is a StandingZone operation — SeatedZone capacity is derived from its seat list");
     }
 }
