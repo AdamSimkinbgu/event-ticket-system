@@ -8,10 +8,11 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.Tickets.TicketStatus;
+import com.ticketing.system.support.BaseDomainTest;
 
 // Unit tests for the Ticket aggregate (the unified inventory + post-purchase record).
 // State machine: AVAILABLE -> RESERVED -> PAID -> ISSUED -> USED | REFUNDED | VOIDED
-class TicketTest {
+class TicketTest extends BaseDomainTest {
 
     @Test
     @Disabled("V1: implement Ticket lifecycle invariants")
@@ -35,13 +36,13 @@ class TicketTest {
 
     @Test
     void freshlyConstructedTicket_hasNullHolderUserId() {
-        Ticket t = new Ticket(1, 10, 25.0, 100, "barcode-X");
+        Ticket t = track(new Ticket(1, 10, 25.0, 100, "barcode-X"));
         assertNull(t.getHolderUserId());
     }
 
     @Test
     void setHolderUserId_assignsMemberOwnership() {
-        Ticket t = new Ticket(1, 10, 25.0, 100, "barcode-X");
+        Ticket t = track(new Ticket(1, 10, 25.0, 100, "barcode-X"));
         t.setHolderUserId(42);
         assertEquals(42, t.getHolderUserId());
     }
@@ -49,7 +50,7 @@ class TicketTest {
     @Test
     void setHolderUserId_nullClearsOwnership() {
         // E.g., refund-to-pool flow could clear the holder. Domain allows it.
-        Ticket t = new Ticket(1, 10, 25.0, 100, "barcode-X");
+        Ticket t = track(new Ticket(1, 10, 25.0, 100, "barcode-X"));
         t.setHolderUserId(42);
         t.setHolderUserId(null);
         assertNull(t.getHolderUserId());
@@ -57,7 +58,7 @@ class TicketTest {
 
     @Test
     void testMarkRefundedChangesStatusToRefunded() {
-        Ticket ticket = new Ticket(10, 1, 50.0, 100, "BARCODE123");
+        Ticket ticket = track(new Ticket(10, 1, 50.0, 100, "BARCODE123"));
         ticket.markRefunded();
         assertEquals(TicketStatus.REFUNDED, ticket.getStatus());
     }

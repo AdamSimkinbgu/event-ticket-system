@@ -1,6 +1,7 @@
 package com.ticketing.system.Core.Domain.notifications;
 
 import com.ticketing.system.Core.Application.dto.NotificationDTO;
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 import java.time.LocalDateTime;
 
@@ -10,7 +11,7 @@ import java.time.LocalDateTime;
 //
 // Cross-aggregate references by ID per course rules:
 //   recipientUserId — User aggregate
-public class Notification {
+public class Notification implements InvariantChecked {
 
     private final String id;
     private final int recipientUserId;
@@ -96,5 +97,24 @@ public class Notification {
                 status.name(),
                 message,
                 createdAt);
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (id == null || id.isBlank()) {
+            throw new IllegalStateException("Notification invariant violated: id must be non-blank");
+        }
+        if (recipientUserId <= 0) {
+            throw new IllegalStateException("Notification invariant violated: recipientUserId must be positive (was " + recipientUserId + ")");
+        }
+        if (type == null) {
+            throw new IllegalStateException("Notification invariant violated: type must not be null");
+        }
+        if (status == null) {
+            throw new IllegalStateException("Notification invariant violated: status must not be null");
+        }
+        if (createdAt == null) {
+            throw new IllegalStateException("Notification invariant violated: createdAt must not be null");
+        }
     }
 }

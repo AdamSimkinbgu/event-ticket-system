@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
@@ -30,6 +30,8 @@ import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 
+@Service
+@Slf4j
 public class CheckoutService {
 
     private final IActiveOrderRepository activeOrderRepository;
@@ -40,10 +42,6 @@ public class CheckoutService {
     private final IPaymentGateway paymentGateway;
     private final INotificationService notificationService;
     private final ISessionManager iSessionManager;
-     private static final Logger eventLogger = LoggerFactory.getLogger("EVENT_LOG");
-
-private static final Logger errorLogger = LoggerFactory.getLogger("ERROR_LOG");
-
 
     public CheckoutService(
             IActiveOrderRepository activeOrderRepository,
@@ -67,7 +65,7 @@ private static final Logger errorLogger = LoggerFactory.getLogger("ERROR_LOG");
     }
 
 public CheckoutResultDTO checkout( String token,String idempotencyKey,String currency,String paymentMethodToken){
-    eventLogger.info("Entered checkout function");
+    log.info("Entered checkout function");
       int userId =-1;
     ActiveOrder order = null;
     PaymentResultDTO paymentResult = null;
@@ -81,10 +79,10 @@ public CheckoutResultDTO checkout( String token,String idempotencyKey,String cur
         validateOrderForCheckout(order, userId);
 
         List<CartLineItem> boughtItems = order.getItems();
-        eventLogger.info("Checkout order validated. userId={}, itemCount={}", userId, boughtItems.size());
+        log.info("Checkout order validated. userId={}, itemCount={}", userId, boughtItems.size());
 
         totalPrice = calculateTotalPrice(order);
-        eventLogger.info("Checkout total price calculated. userId={}, totalPrice={}", userId, totalPrice);
+        log.info("Checkout total price calculated. userId={}, totalPrice={}", userId, totalPrice);
 
         paymentResult = chargePayment( userId,totalPrice,idempotencyKey, currency, paymentMethodToken );
 
@@ -92,14 +90,14 @@ public CheckoutResultDTO checkout( String token,String idempotencyKey,String cur
         validateIssuanceResult(issuanceResult, boughtItems, userId);
 
         order.buy();
-        eventLogger.info("Order marked as bought. userId={}", userId);
+        log.info("Order marked as bought. userId={}", userId);
 
         List<ReceiptLine> receiptLines = saveTicketsAndBuildReceiptLines(boughtItems, issuanceResult);
 
         saveReceipt(userId, totalPrice, receiptLines);
         notifyPurchaseCompleted(userId, totalPrice, receiptLines);
 
-        eventLogger.info(
+        log.info(
                 "Checkout completed successfully. userId={}, transactionId={}, issuedTicketCount={}",
                 userId,
                 paymentResult.paymentTransactionId(),
@@ -149,7 +147,7 @@ private double calculateTotalPrice(ActiveOrder order) {
         Event event = eventRepository.findById(item.geteventId());
 
         if (event == null) {
-            errorLogger.error(
+            log.error(
                     "Cannot return ticket to stock because event was not found. eventId={}, zoneId={}",
                     item.geteventId(),
                     item.getzoneId()
@@ -164,12 +162,12 @@ private double calculateTotalPrice(ActiveOrder order) {
 
   private int authenticateAndGetUserId(String token) {
     if (token == null || token.isBlank()) {
-        eventLogger.warn("Checkout rejected: missing authentication token");
+        log.warn("Checkout rejected: missing authentication token");
         throw new IllegalArgumentException("Missing authentication token");
     }
 
     if (!iSessionManager.validateToken(token)) {
-        eventLogger.warn("Checkout rejected: invalid or expired token");
+        log.warn("Checkout rejected: invalid or expired token");
         throw new IllegalStateException("Invalid or expired authentication token");
     }
 
@@ -183,29 +181,29 @@ private void validatePaymentInput(
         int userId
 ) {
     if (idempotencyKey == null || idempotencyKey.isBlank()) {
-        eventLogger.warn("Checkout rejected: missing idempotency key. userId={}", userId);
+        log.warn("Checkout rejected: missing idempotency key. userId={}", userId);
         throw new IllegalArgumentException("Missing idempotency key");
     }
 
     if (currency == null || currency.isBlank()) {
-        eventLogger.warn("Checkout rejected: missing currency. userId={}", userId);
+        log.warn("Checkout rejected: missing currency. userId={}", userId);
         throw new IllegalArgumentException("Missing currency");
     }
 
     if (paymentMethodToken == null || paymentMethodToken.isBlank()) {
-        eventLogger.warn("Checkout rejected: missing payment method token. userId={}", userId);
+        log.warn("Checkout rejected: missing payment method token. userId={}", userId);
         throw new IllegalArgumentException("Missing payment method token");
     }
 }
 
 private void validateOrderForCheckout(ActiveOrder order, int userId) {
     if (order == null) {
-        eventLogger.warn("Checkout rejected: active order not found. userId={}", userId);
+        log.warn("Checkout rejected: active order not found. userId={}", userId);
         throw new IllegalStateException("Active order not found");
     }
 
     if (!order.validateCanCheckout()) {
-        eventLogger.warn("Checkout rejected: order cannot checkout. userId={}", userId);
+        log.warn("Checkout rejected: order cannot checkout. userId={}", userId);
         throw new IllegalStateException("Order cannot checkout");
     }
 }
@@ -217,7 +215,7 @@ private PaymentResultDTO chargePayment(
         String currency,
         String paymentMethodToken
 ) {
-    eventLogger.info(
+    log.info(
             "Payment charge requested. userId={}, totalPrice={}, currency={}",
             userId,
             totalPrice,
@@ -251,7 +249,7 @@ private IssuanceResultDTO issueTickets(int userId, List<CartLineItem> boughtItem
                     })
                     .toList();
 
-    eventLogger.info(
+    log.info(
             "Ticket issuance request built. userId={}, ticketCount={}",
             userId,
             issuanceItems.size()
@@ -269,12 +267,12 @@ private IssuanceResultDTO issueTickets(int userId, List<CartLineItem> boughtItem
 private void validateIssuanceResult( IssuanceResultDTO issuanceResult,  List<CartLineItem> boughtItems,  int userId
 ) {
     if (issuanceResult == null || issuanceResult.barcodes() == null || issuanceResult.barcodes().isEmpty()) {
-        errorLogger.error("Ticket issuance failed. userId={}, itemCount={}", userId, boughtItems.size());
+        log.error("Ticket issuance failed. userId={}, itemCount={}", userId, boughtItems.size());
         throw new IllegalStateException("Ticket issuance failed");
     }
 
     if (issuanceResult.barcodes().size() != boughtItems.size()) {
-        errorLogger.error(
+        log.error(
                 "Ticket issuance count mismatch. userId={}, expected={}, actual={}",
                 userId,
                 boughtItems.size(),
@@ -283,7 +281,7 @@ private void validateIssuanceResult( IssuanceResultDTO issuanceResult,  List<Car
         throw new IllegalStateException("Ticket issuance count mismatch");
     }
 
-    eventLogger.info(
+    log.info(
             "Ticket issuance succeeded. userId={}, issuedCount={}",
             userId,
             issuanceResult.barcodes().size()
@@ -336,7 +334,7 @@ private void saveReceipt(int userId, double totalPrice, List<ReceiptLine> receip
     OrderReceipt receipt = new OrderReceipt(userId, totalPrice, receiptLines);
     orderReceiptRepository.save(receipt);
 
-    eventLogger.info(
+    log.info(
             "Order receipt saved. userId={}, totalPrice={}, receiptLineCount={}",
             userId,
             totalPrice,
@@ -353,7 +351,7 @@ private void notifyPurchaseCompleted(int userId, double totalPrice, List<Receipt
                     .toList()
     );
 
-    eventLogger.info("Purchase completed notification sent. userId={}", userId);
+    log.info("Purchase completed notification sent. userId={}", userId);
 }
 
 private CheckoutResultDTO buildCheckoutResult(
@@ -372,7 +370,7 @@ private CheckoutResultDTO buildCheckoutResult(
 }
 
 private void handleCheckoutFailure(int userId, ActiveOrder order, PaymentResultDTO paymentResult, double totalPrice,Exception e) {
-    errorLogger.error(
+    log.error(
             "Checkout failed. userId={}, totalPrice={}, paymentDone={}",
             userId,
             totalPrice,
@@ -381,7 +379,7 @@ private void handleCheckoutFailure(int userId, ActiveOrder order, PaymentResultD
     );
 
     returnTicketsToStock(order);
-    eventLogger.info("Checkout rollback: tickets returned to stock. userId={}", userId);
+    log.info("Checkout rollback: tickets returned to stock. userId={}", userId);
 
     if (paymentResult != null) {
         notificationService.notifyPurchaseFailed(
@@ -389,7 +387,7 @@ private void handleCheckoutFailure(int userId, ActiveOrder order, PaymentResultD
                 "Checkout failed, we want give you back the money"
         );
 
-        eventLogger.info(
+        log.info(
                 "Refund requested. userId={}, transactionId={}, amount={}",
                 userId,
                 paymentResult.paymentTransactionId(),

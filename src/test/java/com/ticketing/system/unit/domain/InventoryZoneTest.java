@@ -13,8 +13,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.support.BaseDomainTest;
 
-public class InventoryZoneTest {
+public class InventoryZoneTest extends BaseDomainTest {
 
     private InventoryZone zone;
 
@@ -22,7 +23,7 @@ public class InventoryZoneTest {
 
     @BeforeEach
     public void setUp() {
-        zone = new InventoryZone(ZONE_ID, "VIP", 10, 100);
+        zone = track(new InventoryZone(ZONE_ID, "VIP", 10, 100));
     }
 
     @Test
@@ -33,7 +34,7 @@ public class InventoryZoneTest {
         int numberOfThreads = 20;
         int quantityPerRequest = 1;
 
-        InventoryZone realZone = new InventoryZone(ZONE_ID, "VIP", capacity, 100.0);
+        InventoryZone realZone = track(new InventoryZone(ZONE_ID, "VIP", capacity, 100.0));
 
         ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
 

@@ -18,6 +18,13 @@ import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
 public class MemoryAdminRepository implements IAdminRepository {
 
     private final Map<Integer, Admin> adminsById = new ConcurrentHashMap<>();
+    private final RepositoryLocks<Integer> locks = new RepositoryLocks<>();
+
+    @Override
+    public void lockForUpdate(Integer id) { locks.lock(id); }
+
+    @Override
+    public void unlock(Integer id) { locks.unlock(id); }
 
     @Override
     public void save(Admin admin) {

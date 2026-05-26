@@ -1,8 +1,7 @@
 package com.ticketing.system.Core.Application.services;
 
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import com.ticketing.system.Core.Application.dto.NotificationDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
@@ -21,12 +20,12 @@ import com.ticketing.system.Core.Domain.notifications.NotificationStatus;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class NotificationDispatchService {
 
     private final INotificationRepository notificationRepository;
     private final INotificationService notificationService; // push channel port
     private final ISessionManager sessionManager;
-    private final Logger logger = LoggerFactory.getLogger(NotificationDispatchService.class);
 
     public NotificationDispatchService(
             INotificationRepository notificationRepository,
@@ -51,12 +50,12 @@ public class NotificationDispatchService {
     // UC-36: store an offline notification in PENDING state.
     public void storePending(Notification notification) {
 
-        logger.info("Storing pending notification for userId={}, type={}", notification.getRecipientUserId(),
+        log.info("Storing pending notification for userId={}, type={}", notification.getRecipientUserId(),
                 notification.getType());
         try {
             notificationRepository.save(notification);
         } catch (Exception e) {
-            logger.error("Failed to store pending notification for userId={}, type={}. Error: {}",
+            log.error("Failed to store pending notification for userId={}, type={}. Error: {}",
                     notification.getRecipientUserId(), notification.getType(), e.getMessage());
             throw e; // rethrow or handle as needed
         }
@@ -68,7 +67,7 @@ public class NotificationDispatchService {
     // the caller
     // can show them to the just-logged-in user.
     public List<NotificationDTO> deliverPending(int userId) {
-        logger.info("Delivering pending notifications for userId={}", userId);
+        log.info("Delivering pending notifications for userId={}", userId);
 
         List<Notification> pendingNotifications = notificationRepository.findByRecipientAndStatus(userId,
                 NotificationStatus.PENDING);
@@ -82,13 +81,13 @@ public class NotificationDispatchService {
                 deliveredNotifications.add(notification.toDTO()); // convert to DTO for return
             } else {
                 // Handle push failure as needed (e.g. log, retry later, etc.)
-                logger.error(
+                log.error(
                         "Failed to push notification id={} to userId={}. Will remain pending for next login attempt.",
                         notification.getId(), userId);
                 notification.markPending(); // revert status change if push failed
             }
         }
-        logger.info("Delivered {} pending notifications to userId={}", deliveredNotifications.size(), userId);
+        log.info("Delivered {} pending notifications to userId={}", deliveredNotifications.size(), userId);
         return deliveredNotifications;
 
     }

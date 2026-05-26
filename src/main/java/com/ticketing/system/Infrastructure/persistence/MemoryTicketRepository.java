@@ -24,6 +24,13 @@ import com.ticketing.system.Core.Domain.Tickets.Ticket;
 public class MemoryTicketRepository implements ITicketRepository {
 
     private final Map<Integer, Ticket> ticketsById = new ConcurrentHashMap<>();
+    private final RepositoryLocks<Integer> locks = new RepositoryLocks<>();
+
+    @Override
+    public void lockForUpdate(Integer id) { locks.lock(id); }
+
+    @Override
+    public void unlock(Integer id) { locks.unlock(id); }
 
     @Override
     public boolean save(Ticket ticket) {

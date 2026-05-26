@@ -9,8 +9,7 @@ import java.util.UUID;
 
 import javax.crypto.SecretKey;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -43,9 +42,8 @@ import io.jsonwebtoken.security.Keys;
  * repository.
  */
 @Component
+@Slf4j
 public class JwtSessionManager implements ISessionManager {
-
-    private static final Logger log = LoggerFactory.getLogger(JwtSessionManager.class);
 
     private static final String CLAIM_USERNAME = "username";
     private static final String CLAIM_SID = "sid";
