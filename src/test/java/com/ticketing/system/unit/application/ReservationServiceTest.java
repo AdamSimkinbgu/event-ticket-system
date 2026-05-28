@@ -380,6 +380,7 @@ void GivenGuestAlreadyHasReservationForEvent_WhenReserveTicketsForGuest_ThenThro
             reservationService.reserveTicketsForGuest(sessionId, EVENT_ID, ZONE_ID, QUANTITY)
     );
 }
+
 @Test
 void GivenNotEnoughTickets_WhenReserveTicketsForGuest_ThenThrowException() {
     String sessionId = "guest-session";
