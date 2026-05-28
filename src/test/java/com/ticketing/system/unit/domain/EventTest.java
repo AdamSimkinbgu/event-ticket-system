@@ -15,9 +15,10 @@ import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.events.EventCategory;
+import com.ticketing.system.support.BaseDomainTest;
 
 // Unit tests for the Event aggregate (Event + VenueMap + InventoryZone + ShowDate + policies).
-class EventTest {
+class EventTest extends BaseDomainTest {
 
 
     private final int COMPANY_ID = 100;
@@ -32,11 +33,11 @@ class EventTest {
 
     @BeforeEach
     public void setUp() {
-        zone = new InventoryZone(ZONE_ID, "VIP", 10, 100);
+        zone = track(new InventoryZone(ZONE_ID, "VIP", 10, 100));
 
         VenueMap venueMap = new VenueMap(1, LOCATION, List.of(zone));
-        
-        event = new Event(
+
+        event = track(new Event(
                 EVENT_ID,
                 "Concert",
                 4.5,
@@ -48,7 +49,7 @@ class EventTest {
                 List.of(),
                 null,
                 null
-        );
+        ));
     }
 
 

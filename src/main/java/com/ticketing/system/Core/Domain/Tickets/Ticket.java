@@ -3,8 +3,9 @@ package com.ticketing.system.Core.Domain.Tickets;
 
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.TicketRecordDTO;
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
-public class Ticket {
+public class Ticket implements InvariantChecked {
 
     private int zoneid;
     private int eventId;
@@ -159,5 +160,27 @@ public class Ticket {
             this.getStatus()
         );
         return dto;
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (ticketId <= 0) {
+            throw new IllegalStateException("Ticket invariant violated: ticketId must be positive (was " + ticketId + ")");
+        }
+        if (eventId <= 0) {
+            throw new IllegalStateException("Ticket invariant violated: eventId must be positive (was " + eventId + ")");
+        }
+        if (zoneid < 0) {
+            throw new IllegalStateException("Ticket invariant violated: zoneId must be >= 0 (was " + zoneid + ")");
+        }
+        if (price < 0) {
+            throw new IllegalStateException("Ticket invariant violated: price must be >= 0 (was " + price + ")");
+        }
+        if (status == null) {
+            throw new IllegalStateException("Ticket invariant violated: status must not be null");
+        }
+        if (holderUserId != null && holderUserId <= 0) {
+            throw new IllegalStateException("Ticket invariant violated: holderUserId must be positive when set (was " + holderUserId + ")");
+        }
     }
 }

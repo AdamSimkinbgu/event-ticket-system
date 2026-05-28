@@ -5,11 +5,12 @@ import java.util.HashMap;
 import java.util.List;
 
 import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 import com.ticketing.system.Core.Domain.users.Permission;
 
 
 
-public class ProductionCompany {
+public class ProductionCompany implements InvariantChecked {
     private final int companyId;
     private final int ownerId;
     // private final List<Integer> owners;
@@ -184,6 +185,44 @@ public class ProductionCompany {
     public void checkowner(int ownerId2) {
         if (this.ownerId != ownerId2) {
             throw new UnauthorizedActionException ("Only the owner can perform this action");
+        }
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (companyId <= 0) {
+            throw new IllegalStateException("ProductionCompany invariant violated: companyId must be positive (was " + companyId + ")");
+        }
+        if (ownerId <= 0) {
+            throw new IllegalStateException("ProductionCompany invariant violated: ownerId must be positive (was " + ownerId + ")");
+        }
+        if (name == null || name.isBlank()) {
+            throw new IllegalStateException("ProductionCompany invariant violated: name must be non-blank");
+        }
+        if (companyStatus == null) {
+            throw new IllegalStateException("ProductionCompany invariant violated: status must not be null");
+        }
+        if (discountPolicies == null) {
+            throw new IllegalStateException("ProductionCompany invariant violated: discountPolicies list must not be null");
+        }
+        if (purchasePolicies == null) {
+            throw new IllegalStateException("ProductionCompany invariant violated: purchasePolicies list must not be null");
+        }
+        if (managers == null) {
+            throw new IllegalStateException("ProductionCompany invariant violated: managers map must not be null");
+        }
+        if (pendingManagers == null) {
+            throw new IllegalStateException("ProductionCompany invariant violated: pendingManagers map must not be null");
+        }
+        // No user can be in both pending and active manager maps simultaneously
+        for (Integer targetId : managers.keySet()) {
+            if (pendingManagers.containsKey(targetId)) {
+                throw new IllegalStateException("ProductionCompany invariant violated: user " + targetId + " is both active manager and pending");
+            }
+        }
+        // Owner cannot also be a manager
+        if (managers.containsKey(ownerId) || pendingManagers.containsKey(ownerId)) {
+            throw new IllegalStateException("ProductionCompany invariant violated: owner cannot also be a manager");
         }
     }
 }

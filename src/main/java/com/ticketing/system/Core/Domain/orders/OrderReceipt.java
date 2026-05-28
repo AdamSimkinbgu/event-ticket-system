@@ -6,9 +6,10 @@ import java.util.Collections;
 import java.util.List;
 
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 import org.hibernate.query.spi.Limit;
 
-public class OrderReceipt {
+public class OrderReceipt implements InvariantChecked {
     // Dual identity (D5 / auth rework): Member receipts carry userid; Guest
     // receipts carry guestEmail + guestSessionId. Exactly one branch is set.
     private Integer userid;
@@ -114,6 +115,27 @@ public class OrderReceipt {
 
     public void markRefunded() {
         this.isRefunded = true;
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (totalPrice < 0) {
+            throw new IllegalStateException(
+                    "OrderReceipt invariant violated: totalPrice must be non-negative (was " + totalPrice + ")");
+        }
+        if (purchaseTime == null) {
+            throw new IllegalStateException("OrderReceipt invariant violated: purchaseTime must not be null");
+        }
+        // Dual-identity rule: exactly one of userid OR (guestEmail + guestSessionId) is set.
+        boolean isMember = userid != null;
+        boolean isGuest = guestEmail != null && guestSessionId != null;
+        if (isMember == isGuest) {
+            throw new IllegalStateException(
+                    "OrderReceipt invariant violated: must be exactly Member (userid set) OR Guest (email+sessionId set)");
+        }
+        if (isRefunded == null) {
+            throw new IllegalStateException("OrderReceipt invariant violated: isRefunded must not be null");
+        }
     }
 
 }

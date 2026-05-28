@@ -22,6 +22,13 @@ public class MemoryProductionCompanyRepository implements IProductionCompanyRepo
 
     private final Map<Integer, ProductionCompany> companiesById = new ConcurrentHashMap<>();
     private final AtomicInteger idSequence = new AtomicInteger(1);
+    private final RepositoryLocks<Integer> locks = new RepositoryLocks<>();
+
+    @Override
+    public void lockForUpdate(Integer id) { locks.lock(id); }
+
+    @Override
+    public void unlock(Integer id) { locks.unlock(id); }
 
     @Override
     public void save(ProductionCompany company) {

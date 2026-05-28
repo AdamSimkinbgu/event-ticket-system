@@ -16,8 +16,9 @@ import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.users.Permission;
+import com.ticketing.system.support.BaseDomainTest;
 
-class ProductionCompanyTest {
+class ProductionCompanyTest extends BaseDomainTest {
 
     private final int COMPANY_ID = 100;
     private final int OWNER_ID = 1;
@@ -32,7 +33,7 @@ class ProductionCompanyTest {
 
     @BeforeEach
     public void setUp() {
-        company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, COMPANY_1_RATING);
+        company = track(new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, COMPANY_1_RATING));
 
         defaultPermissions = new ArrayList<>();
         defaultPermissions.add(Permission.APPOINT_MANAGER);

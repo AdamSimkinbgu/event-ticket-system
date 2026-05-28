@@ -3,8 +3,12 @@ package com.ticketing.system.unit.domain;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.system.support.BaseDomainTest;
+
 // Unit tests for the centralized messaging Conversation aggregate.
-class ConversationTest {
+// Extends BaseDomainTest so future (currently @Disabled) tests get automatic
+// invariant verification via track(aggregate).
+class ConversationTest extends BaseDomainTest {
 
     @Test @Disabled("messaging: addMessage appends + updates lastMessageAt")
     void givenOpenConversation_whenAddMessage_thenAppendedAndTimestamped() {}

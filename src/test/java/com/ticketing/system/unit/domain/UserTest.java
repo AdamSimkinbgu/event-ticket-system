@@ -15,8 +15,9 @@ import com.ticketing.system.Core.Domain.users.CompanyRole;
 import com.ticketing.system.Core.Domain.users.ManagementInvitation;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
+import com.ticketing.system.support.BaseDomainTest;
 
-public class UserTest {
+public class UserTest extends BaseDomainTest {
 
     private final int USER_ID = 2;
     private final int OWNER_ID = 1;
@@ -28,7 +29,7 @@ public class UserTest {
 
     @BeforeEach
     public void setUp() {
-        user = new User(USER_ID, "targetUser","", "password");
+        user = track(new User(USER_ID, "targetUser", "target@example.com", "password"));
 
         defaultPermissions = new ArrayList<>();
         defaultPermissions.add(Permission.APPOINT_MANAGER);

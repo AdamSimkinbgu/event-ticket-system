@@ -5,9 +5,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 
-public class User {
+public class User implements InvariantChecked {
 
     private MemberProfile memberProfile;
     private List <ManagementInvitation> managementInvitations;
@@ -160,5 +161,27 @@ public List<ManagementInvitation> getManagementInvitations() {
             }
         }
         return null;
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (userId <= 0) {
+            throw new IllegalStateException("User invariant violated: userId must be positive (was " + userId + ")");
+        }
+        if (username == null || username.isBlank()) {
+            throw new IllegalStateException("User invariant violated: username must be non-blank");
+        }
+        if (email == null || email.isBlank()) {
+            throw new IllegalStateException("User invariant violated: email must be non-blank");
+        }
+        if (password == null || password.isBlank()) {
+            throw new IllegalStateException("User invariant violated: password hash must be non-blank");
+        }
+        if (managementInvitations == null) {
+            throw new IllegalStateException("User invariant violated: managementInvitations list must not be null");
+        }
+        if (companyAppointments == null) {
+            throw new IllegalStateException("User invariant violated: companyAppointments list must not be null");
+        }
     }
 }
