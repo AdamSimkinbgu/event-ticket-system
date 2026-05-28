@@ -12,20 +12,31 @@ import com.ticketing.system.Core.Domain.users.Permission;
 
 public class ProductionCompany implements InvariantChecked {
     private final int companyId;
-    private final int ownerId;
-    // private final List<Integer> owners;
+    /**
+     * The original creator of the company. Immutable: the founder cannot be
+     * removed from {@link #ownerIds} and cannot self-resign. The founder
+     * always remains an owner — the two roles are coupled by design.
+     */
+    private final int founderId;
+    /**
+     * All current owners (includes {@link #founderId} at all times). Any owner
+     * can add or remove another owner; non-founder owners can also self-resign.
+     */
+    private final List<Integer> ownerIds;
     private CompanyStatus companyStatus;
     private String name;
     private String description;
     private Double rating;
     private List<DiscountPolicy> discountPolicies;
     private List<PurchasePolicy> purchasePolicies;
-    private HashMap <Integer, List<Permission>> pendingManagers; 
+    private HashMap <Integer, List<Permission>> pendingManagers;
     private HashMap<Integer, List<Permission>> managers;
 
-    public ProductionCompany(int companyId, int ownerId, String name, CompanyStatus companyStatus, String description, Double rating) {
+    public ProductionCompany(int companyId, int founderId, String name, CompanyStatus companyStatus, String description, Double rating) {
         this.companyId = companyId;
-        this.ownerId = ownerId;
+        this.founderId = founderId;
+        this.ownerIds = new ArrayList<>();
+        this.ownerIds.add(founderId);  // founder is the first owner
         this.name = name;
         this.description = description;
         this.rating = rating;
@@ -38,15 +49,15 @@ public class ProductionCompany implements InvariantChecked {
 
 
     public void validateManagerInvitation(int companyId, int targetId, int ownerId, List<Permission> permissions) {
-   
+
         if (this.companyId != companyId) {
             throw new RuntimeException("Invalid company");
         }
         else if (managers.containsKey(targetId) || pendingManagers.containsKey(targetId)) {
             throw new RuntimeException("User is already a manager or has a pending invitation");
         }
-        else if (targetId == this.ownerId) {
-            throw new RuntimeException("Cannot invite the company owner as a manager");
+        else if (ownerIds.contains(targetId)) {
+            throw new RuntimeException("Cannot invite a company owner as a manager");
         }
         else if (permissions == null || permissions.isEmpty()) {
             throw new RuntimeException("Invalid permissions");
@@ -105,8 +116,80 @@ public class ProductionCompany implements InvariantChecked {
         return this.managers;
     }
 
+    /**
+     * Legacy accessor — returns the founder's id. Most call sites should
+     * migrate to {@link #isOwner(int)} for permission checks or
+     * {@link #getOwnerIds()} for the full owner list.
+     */
     public int getOwnerId() {
-        return this.ownerId;
+        return this.founderId;
+    }
+
+    /** Snapshot of all current owners (includes the founder). */
+    public List<Integer> getOwnerIds() {
+        return new ArrayList<>(this.ownerIds);
+    }
+
+    /** True iff {@code userId} is a current owner of this company. */
+    public boolean isOwner(int userId) {
+        return this.ownerIds.contains(userId);
+    }
+
+    /**
+     * Add a new owner. Caller (the {@code actorId}) must already be an owner.
+     * No-op if {@code newOwnerId} is already an owner.
+     *
+     * @throws com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException
+     *         if {@code actorId} is not an owner
+     */
+    public void addOwner(int actorId, int newOwnerId) {
+        if (!isOwner(actorId)) {
+            throw new UnauthorizedActionException("Only existing owners can add new owners");
+        }
+        if (this.ownerIds.contains(newOwnerId)) {
+            return;
+        }
+        if (this.managers.containsKey(newOwnerId) || this.pendingManagers.containsKey(newOwnerId)) {
+            throw new RuntimeException("Cannot promote a current/pending manager to owner");
+        }
+        this.ownerIds.add(newOwnerId);
+    }
+
+    /**
+     * Remove an owner. Caller must be an owner. The founder cannot be removed.
+     *
+     * @throws com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException
+     *         if {@code actorId} is not an owner
+     * @throws IllegalStateException if {@code targetId} is the founder, or
+     *         {@code targetId} is not an owner
+     */
+    public void removeOwner(int actorId, int targetId) {
+        if (!isOwner(actorId)) {
+            throw new UnauthorizedActionException("Only owners can remove other owners");
+        }
+        if (targetId == this.founderId) {
+            throw new IllegalStateException("The founder cannot be removed as owner");
+        }
+        if (!this.ownerIds.contains(targetId)) {
+            throw new IllegalStateException("User is not an owner of this company");
+        }
+        this.ownerIds.remove(Integer.valueOf(targetId));
+    }
+
+    /**
+     * Self-resign as owner. The founder cannot resign (their two roles —
+     * founder and owner — are immutably coupled).
+     *
+     * @throws IllegalStateException if the caller is the founder or not an owner
+     */
+    public void resignAsOwner(int userId) {
+        if (userId == this.founderId) {
+            throw new IllegalStateException("The founder cannot resign as owner");
+        }
+        if (!this.ownerIds.contains(userId)) {
+            throw new IllegalStateException("User is not an owner of this company");
+        }
+        this.ownerIds.remove(Integer.valueOf(userId));
     }
 
     public CompanyStatus getStatus() {
@@ -151,9 +234,9 @@ public class ProductionCompany implements InvariantChecked {
         this.rating = rating;
     }
 
-    // UC-18 — Founder is the original creator (currently aliased to ownerId; see open Q).
+    // UC-18 — Founder is the original creator, immutable for the lifetime of the company.
     public int getFounderId() {
-        return ownerId;
+        return founderId;
     }
 
     public int getCompanyId() {
@@ -167,8 +250,8 @@ public class ProductionCompany implements InvariantChecked {
     }
 
     public void ValidateManagerOrOwner(int userId) {
-        if (userId == ownerId) {
-            return; 
+        if (isOwner(userId)) {
+            return;
         }
 
         List<Permission> userPermissions = managers.get(userId);
@@ -182,9 +265,15 @@ public class ProductionCompany implements InvariantChecked {
         return this.pendingManagers;
     }
 
+    /**
+     * Permission gate for owner-only actions. Now accepts <em>any</em> current
+     * owner (per the multi-owner refactor) rather than founder-only.
+     *
+     * @throws UnauthorizedActionException if {@code ownerId2} is not a current owner
+     */
     public void checkowner(int ownerId2) {
-        if (this.ownerId != ownerId2) {
-            throw new UnauthorizedActionException ("Only the owner can perform this action");
+        if (!isOwner(ownerId2)) {
+            throw new UnauthorizedActionException("Only an owner can perform this action");
         }
     }
 
@@ -193,8 +282,8 @@ public class ProductionCompany implements InvariantChecked {
         if (companyId <= 0) {
             throw new IllegalStateException("ProductionCompany invariant violated: companyId must be positive (was " + companyId + ")");
         }
-        if (ownerId <= 0) {
-            throw new IllegalStateException("ProductionCompany invariant violated: ownerId must be positive (was " + ownerId + ")");
+        if (founderId <= 0) {
+            throw new IllegalStateException("ProductionCompany invariant violated: founderId must be positive (was " + founderId + ")");
         }
         if (name == null || name.isBlank()) {
             throw new IllegalStateException("ProductionCompany invariant violated: name must be non-blank");
@@ -214,15 +303,23 @@ public class ProductionCompany implements InvariantChecked {
         if (pendingManagers == null) {
             throw new IllegalStateException("ProductionCompany invariant violated: pendingManagers map must not be null");
         }
+        if (ownerIds == null || ownerIds.isEmpty()) {
+            throw new IllegalStateException("ProductionCompany invariant violated: ownerIds list must be non-empty");
+        }
+        if (!ownerIds.contains(founderId)) {
+            throw new IllegalStateException("ProductionCompany invariant violated: founder must always be in ownerIds");
+        }
         // No user can be in both pending and active manager maps simultaneously
         for (Integer targetId : managers.keySet()) {
             if (pendingManagers.containsKey(targetId)) {
                 throw new IllegalStateException("ProductionCompany invariant violated: user " + targetId + " is both active manager and pending");
             }
         }
-        // Owner cannot also be a manager
-        if (managers.containsKey(ownerId) || pendingManagers.containsKey(ownerId)) {
-            throw new IllegalStateException("ProductionCompany invariant violated: owner cannot also be a manager");
+        // No owner can also be a manager (the roles are mutually exclusive)
+        for (Integer ownerIdEntry : ownerIds) {
+            if (managers.containsKey(ownerIdEntry) || pendingManagers.containsKey(ownerIdEntry)) {
+                throw new IllegalStateException("ProductionCompany invariant violated: owner " + ownerIdEntry + " cannot also be a manager");
+            }
         }
     }
 }

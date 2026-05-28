@@ -18,6 +18,7 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.PurchasePolicy;
 import com.ticketing.system.Core.Domain.events.ShowDate;
@@ -45,7 +46,7 @@ public abstract class IEventRepositoryContractTest {
 
     // Builds a minimal valid Event with specified category and one zone priced at 50.
     private Event buildEvent(int id, String name, Double rating, int companyId, EventStatus status, EventCategory category) {
-        VenueMap venueMap = new VenueMap(id, LOCATION, List.of(new InventoryZone(1, "Floor", 100, 50)));
+        VenueMap venueMap = new VenueMap(id, LOCATION, List.of(new StandingZone(1, "Floor", 100, 50)));
         ShowDate showDate = new ShowDate(FUTURE_START, FUTURE_END);
         return new Event(id, name, rating, List.of("Artist A"), category, companyId, status,
                 venueMap, List.of(showDate), new PurchasePolicy(), new DiscountPolicy(0));
@@ -181,7 +182,7 @@ public abstract class IEventRepositoryContractTest {
 
     @Test
     void givenMatchingArtistName_whenSearch_thenReturnsMatchingEvent() {
-        VenueMap vm = new VenueMap(1, LOCATION, List.of(new InventoryZone(1, "Floor", 100, 50)));
+        VenueMap vm = new VenueMap(1, LOCATION, List.of(new StandingZone(1, "Floor", 100, 50)));
         Event event = new Event(1, "Concert", 4.5, List.of("John Doe", "Jane Smith"),
                 EventCategory.CONCERT, 10, EventStatus.ON_SALE, vm,
                 List.of(new ShowDate(FUTURE_START, FUTURE_END)),
@@ -200,7 +201,7 @@ public abstract class IEventRepositoryContractTest {
     @Test
     void givenMatchingCategory_whenSearch_thenReturnsMatchingEvent() {
         eventRepo.save(buildEvent(1, "Hamlet", 4.5, 10, EventStatus.ON_SALE, EventCategory.MUSIC)); // MUSIC
-        VenueMap vm = new VenueMap(2, LOCATION, List.of(new InventoryZone(1, "Stalls", 100, 60)));
+        VenueMap vm = new VenueMap(2, LOCATION, List.of(new StandingZone(1, "Stalls", 100, 60)));
         Event theaterEvent = new Event(2, "Hamlet2", 4.5, List.of("Actor B"),
                 EventCategory.THEATER, 10, EventStatus.ON_SALE, vm,
                 List.of(new ShowDate(FUTURE_START, FUTURE_END)),
@@ -240,7 +241,7 @@ public abstract class IEventRepositoryContractTest {
 
     @Test
     void givenMatchingKeywordInArtistName_whenSearch_thenReturnsMatchingEvent() {
-        VenueMap vm = new VenueMap(1, LOCATION, List.of(new InventoryZone(1, "Floor", 100, 50)));
+        VenueMap vm = new VenueMap(1, LOCATION, List.of(new StandingZone(1, "Floor", 100, 50)));
         Event event = new Event(1, "Night Out", 4.5, List.of("Coldplay"),
                 EventCategory.CONCERT, 10, EventStatus.ON_SALE, vm,
                 List.of(new ShowDate(FUTURE_START, FUTURE_END)),
