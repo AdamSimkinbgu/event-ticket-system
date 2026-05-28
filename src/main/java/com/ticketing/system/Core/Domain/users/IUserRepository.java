@@ -2,8 +2,10 @@ package com.ticketing.system.Core.Domain.users;
 
 import java.util.Optional;
 
+import com.ticketing.system.Core.Domain.shared.IRepository;
+
 /** Aggregate-root entry point for the User aggregate. */
-public interface IUserRepository {
+public interface IUserRepository extends IRepository<User, Integer> {
 
     /** @throws com.ticketing.system.Core.Domain.exceptions.UserNotFoundException if no user with that id exists */
     User getUserById(int targetId);

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 /**
  * ActiveOrder = a cart in progress.
@@ -24,7 +25,7 @@ import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
  *
  * <p>Invariant: at least one of userId / sessionId is non-null at all times.
  */
-public class ActiveOrder {
+public class ActiveOrder implements InvariantChecked {
 
     private Integer userId;
     private String sessionId;
@@ -335,4 +336,31 @@ public ActiveOrderDTO toDTO() {
         );
     }
 }
+
+    @Override
+    public void checkInvariants() {
+        // The constructor already enforces "at least one identity present" — re-verify here.
+        if (userId == null && sessionId == null) {
+            throw new IllegalStateException(
+                    "ActiveOrder invariant violated: must have userId or sessionId (or both)");
+        }
+        if (userId != null && userId <= 0) {
+            throw new IllegalStateException(
+                    "ActiveOrder invariant violated: userId must be positive when set (was " + userId + ")");
+        }
+        if (sessionId != null && sessionId.isBlank()) {
+            throw new IllegalStateException(
+                    "ActiveOrder invariant violated: sessionId must be non-blank when set");
+        }
+        synchronized (itemsLock) {
+            if (items == null) {
+                throw new IllegalStateException("ActiveOrder invariant violated: items list must not be null");
+            }
+            for (CartLineItem item : items) {
+                if (item == null) {
+                    throw new IllegalStateException("ActiveOrder invariant violated: items list contains null");
+                }
+            }
+        }
+    }
 }

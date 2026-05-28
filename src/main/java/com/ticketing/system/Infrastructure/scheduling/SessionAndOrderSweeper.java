@@ -7,8 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -45,9 +44,8 @@ import com.ticketing.system.Core.Domain.users.Session;
  * {@code @Scheduled} cadence).
  */
 @Component
+@Slf4j
 public class SessionAndOrderSweeper {
-
-    private static final Logger log = LoggerFactory.getLogger(SessionAndOrderSweeper.class);
 
     private final ISessionRepository sessionRepository;
     private final IActiveOrderRepository activeOrderRepository;

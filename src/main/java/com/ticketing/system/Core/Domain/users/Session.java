@@ -2,6 +2,8 @@ package com.ticketing.system.Core.Domain.users;
 
 import java.time.Instant;
 
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
 /**
  * Session aggregate — the unified identity record for both Member and Guest
  * sessions. Part of the auth rework (see docs/auth-rework-plan.md).
@@ -19,7 +21,7 @@ import java.time.Instant;
  * {@link #promoteTo(int, Instant)} — the sessionId is preserved, so any cart
  * or other state already attached to it survives the transition.
  */
-public class Session {
+public class Session implements InvariantChecked {
 
     private final String sessionId;
     private Integer userId;
@@ -112,5 +114,27 @@ public class Session {
             throw new IllegalArgumentException("now must not be null");
         }
         return !now.isBefore(expiresAt);
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new IllegalStateException("Session invariant violated: sessionId must be non-blank");
+        }
+        if (createdAt == null) {
+            throw new IllegalStateException("Session invariant violated: createdAt must not be null");
+        }
+        if (lastSeenAt == null) {
+            throw new IllegalStateException("Session invariant violated: lastSeenAt must not be null");
+        }
+        if (expiresAt == null) {
+            throw new IllegalStateException("Session invariant violated: expiresAt must not be null");
+        }
+        if (lastSeenAt.isBefore(createdAt)) {
+            throw new IllegalStateException("Session invariant violated: lastSeenAt must be >= createdAt");
+        }
+        // Note: userId is intentionally NOT bounds-checked here. The Session domain stays
+        // permissive about userId values — positive/zero/negative is the User aggregate's
+        // concern. See SessionTest#memberSession_acceptsZeroAndNegativeUserIds.
     }
 }

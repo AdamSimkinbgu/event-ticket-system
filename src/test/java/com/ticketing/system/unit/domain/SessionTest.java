@@ -12,8 +12,9 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Domain.users.Session;
+import com.ticketing.system.support.BaseDomainTest;
 
-class SessionTest {
+class SessionTest extends BaseDomainTest {
 
     private static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");
     private static final Instant T_EXPIRES = Instant.parse("2026-01-01T01:00:00Z");
@@ -22,7 +23,7 @@ class SessionTest {
 
     @Test
     void guestSession_hasNullUserId() {
-        Session guest = new Session("sid-1", null, T0, T_EXPIRES);
+        Session guest = track(new Session("sid-1", null, T0, T_EXPIRES));
 
         assertTrue(guest.isGuest());
         assertFalse(guest.isMember());
@@ -31,7 +32,7 @@ class SessionTest {
 
     @Test
     void memberSession_hasUserId() {
-        Session member = new Session("sid-2", 5, T0, T_EXPIRES);
+        Session member = track(new Session("sid-2", 5, T0, T_EXPIRES));
 
         assertFalse(member.isGuest());
         assertTrue(member.isMember());
@@ -64,7 +65,7 @@ class SessionTest {
 
     @Test
     void promoteTo_setsUserId_andExtendsExpiry() {
-        Session s = new Session("sid", null, T0, T_EXPIRES);
+        Session s = track(new Session("sid", null, T0, T_EXPIRES));
         Instant newExpiry = Instant.parse("2026-01-02T00:00:00Z");
 
         s.promoteTo(7, newExpiry);
@@ -76,7 +77,7 @@ class SessionTest {
 
     @Test
     void promoteTo_preservesSessionId() {
-        Session s = new Session("preserved-sid", null, T0, T_EXPIRES);
+        Session s = track(new Session("preserved-sid", null, T0, T_EXPIRES));
 
         s.promoteTo(7, T_EXPIRES.plusSeconds(60));
 
@@ -101,7 +102,7 @@ class SessionTest {
 
     @Test
     void touch_updatesLastSeenAt() {
-        Session s = new Session("sid", null, T0, T_EXPIRES);
+        Session s = track(new Session("sid", null, T0, T_EXPIRES));
         Instant later = T0.plusSeconds(60);
 
         s.touch(later);
@@ -117,7 +118,7 @@ class SessionTest {
 
     @Test
     void extendExpiry_updatesExpiresAt() {
-        Session s = new Session("sid", null, T0, T_EXPIRES);
+        Session s = track(new Session("sid", null, T0, T_EXPIRES));
         Instant later = T_EXPIRES.plusSeconds(600);
 
         s.extendExpiry(later);

@@ -13,9 +13,10 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
+import com.ticketing.system.support.BaseDomainTest;
 
 // Unit tests for the ActiveOrder aggregate.
-class ActiveOrderTest {
+class ActiveOrderTest extends BaseDomainTest {
 
     private final int USER_ID = 1;
     private final int EVENT_ID = 10;
@@ -45,7 +46,7 @@ class ActiveOrderTest {
         int numberOfThreads = 20;
         int quantityPerRemove = 1;
 
-        ActiveOrder realActiveOrder = new ActiveOrder(USER_ID);
+        ActiveOrder realActiveOrder = track(new ActiveOrder(USER_ID));
 
         realActiveOrder.addReservation(
                 EVENT_ID,

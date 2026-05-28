@@ -3,6 +3,8 @@ package com.ticketing.system.Core.Domain.ActiveOrder;
 import java.util.List;
 import java.util.Optional;
 
+import com.ticketing.system.Core.Domain.shared.IRepository;
+
 /**
  * Aggregate-root entry point for the {@link ActiveOrder} aggregate.
  *
@@ -13,8 +15,13 @@ import java.util.Optional;
  * <li>Guest carts are looked up by sessionId.</li>
  * </ul>
  * Both methods return {@link Optional} to make absence explicit.
+ *
+ * <p>The {@link IRepository} contract uses {@link String} as the lock-id type
+ * — callers should normalize to {@code "user:" + userId} or {@code "sess:" + sessionId}
+ * when calling {@link #lockForUpdate(String)} to avoid id collisions between
+ * the two identity spaces.
  */
-public interface IActiveOrderRepository {
+public interface IActiveOrderRepository extends IRepository<ActiveOrder, String> {
 
     void save(ActiveOrder activeOrder);
 

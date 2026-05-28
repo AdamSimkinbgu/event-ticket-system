@@ -50,6 +50,12 @@
 			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
 
+		<!-- AOP — used by LoggingAspect to log entry/exit of every service method -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-aop</artifactId>
+		</dependency>
+
 		<!-- BCrypt password hashing (IPasswordHasher impl) — lecture 2's recommended approach.
 		     Pulls just the crypto module, NOT the full Spring Security stack. -->
 		<dependency>

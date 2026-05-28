@@ -8,8 +8,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -51,9 +50,8 @@ import java.util.Optional;
  * to a Member session in place).
  */
 @Service
+@Slf4j
 public class AuthenticationService {
-
-    private static final Logger log = LoggerFactory.getLogger(AuthenticationService.class);
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 

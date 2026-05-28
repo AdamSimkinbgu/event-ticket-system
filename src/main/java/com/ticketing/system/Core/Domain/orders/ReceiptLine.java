@@ -2,7 +2,9 @@ package com.ticketing.system.Core.Domain.orders;
 
 import java.time.LocalDateTime;
 
-public class ReceiptLine {
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
+public class ReceiptLine implements InvariantChecked {
 
     private final int ticketId;
     private final double price;
@@ -32,5 +34,20 @@ public class ReceiptLine {
     public double getPriceAtReservation() {
         return price;
     }
-    
+
+    @Override
+    public void checkInvariants() {
+        if (ticketId <= 0) {
+            throw new IllegalStateException("ReceiptLine invariant violated: ticketId must be positive (was " + ticketId + ")");
+        }
+        if (eventid <= 0) {
+            throw new IllegalStateException("ReceiptLine invariant violated: eventid must be positive (was " + eventid + ")");
+        }
+        if (price < 0) {
+            throw new IllegalStateException("ReceiptLine invariant violated: price must be >= 0 (was " + price + ")");
+        }
+        if (addedAt == null) {
+            throw new IllegalStateException("ReceiptLine invariant violated: addedAt must not be null");
+        }
+    }
 }

@@ -3,8 +3,7 @@ package com.ticketing.system.Core.Application.services;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.web.servlet.server.Session;
 
 import com.ticketing.system.Core.Domain.exceptions.*;
@@ -32,9 +31,8 @@ import com.ticketing.system.Core.Domain.events.IEventRepository;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class CatalogService {
-
-    private static final Logger logger = LoggerFactory.getLogger(CatalogService.class);
 
     private final ISessionManager sessionManager;
     private final IEventRepository eventRepository;
@@ -70,9 +68,9 @@ public class CatalogService {
 
     // UC-7: Global search with filters (price/date/location/rating, plus name/artist/category/keywords).
     public List<EventSummaryDTO> searchGlobal(String token, CatalogSearchFiltersDTO filters) {
-        logger.info("Starting global search with filters: {}", filters);
+        log.info("Starting global search with filters: {}", filters);
         if (!this.sessionManager.validateToken(token)) {
-            logger.warn("Invalid Token provided while performing global search with filters: {}", filters);
+            log.warn("Invalid Token provided while performing global search with filters: {}", filters);
             throw new InvalidTokenException();
         }
 
@@ -92,7 +90,7 @@ public class CatalogService {
             }
             results.add(new EventMapper().convertEventToEventSummaryDTO(event, productionCompanyRepository));
         }
-        logger.info("Global search with filters: {} returning {} results", filters, results.size());
+        log.info("Global search with filters: {} returning {} results", filters, results.size());
         return results;
     }
 
@@ -101,9 +99,9 @@ public class CatalogService {
 
     // UC-7: Company-scoped search (no rating filter per II.2.3.2).
     public List<EventSummaryDTO> searchByCompany(String token, int companyId, CatalogSearchFiltersDTO filters) {
-        logger.info("Starting company-scoped search for companyId: {} with filters: {}", companyId, filters);
+        log.info("Starting company-scoped search for companyId: {} with filters: {}", companyId, filters);
         if (!this.sessionManager.validateToken(token)) {
-            logger.warn("Invalid Token provided while performing company-scoped search for companyId: {} with filters: {}", companyId, filters);
+            log.warn("Invalid Token provided while performing company-scoped search for companyId: {} with filters: {}", companyId, filters);
             throw new InvalidTokenException();
         }
 
@@ -117,7 +115,7 @@ public class CatalogService {
             }
             results.add(new EventMapper().convertEventToEventSummaryDTO(event, productionCompanyRepository));
         }
-        logger.info("Company-scoped search for companyId: {} with filters: {} returning {} results", companyId, filters, results.size());
+        log.info("Company-scoped search for companyId: {} with filters: {} returning {} results", companyId, filters, results.size());
         return results;
     }
 
@@ -133,34 +131,34 @@ public class CatalogService {
     // viewing is open to anyone with an active session per UC-3 / UC-8
     // (auth rework #181 / Phase 4.3).
     public VenueMapDTO getEventVenueMap(String credential, int eventId) {
-        logger.info("Fetching venue map for eventId: {}", eventId);
+        log.info("Fetching venue map for eventId: {}", eventId);
 
             if (!this.sessionManager.validateCredential(credential)) {
-                logger.warn("Invalid credential provided while getting venue map for eventId: {}", eventId);
+                log.warn("Invalid credential provided while getting venue map for eventId: {}", eventId);
                 throw new InvalidTokenException();
             }
             
             // see that event exists and has a venue map
             Event event = this.eventRepository.findById(eventId);
             if (event == null) {
-                logger.warn("Event not found while getting venue map: {}", eventId);
+                log.warn("Event not found while getting venue map: {}", eventId);
                 throw new EventNotFoundException("Event with ID " + eventId + " not found while getting venue map");
             }
 
             // Additional check to enforce company status is ACTIVE.
             ProductionCompany company = productionCompanyRepository.getCompanyById(event.getCompanyId());
             if (company == null || company.getStatus() != CompanyStatus.ACTIVE) {
-                logger.warn("Attempt to access venue map for eventId: {} from inactive company", eventId);
+                log.warn("Attempt to access venue map for eventId: {} from inactive company", eventId);
                 throw new CompanyClosedException("Event with ID " + eventId + " not found while getting venue map");
             }
             
             // see that event has a venue map
             if (event.getVenueMap() == null) {
-                logger.warn("Null venue map for event while getting venue map: {}", eventId);
+                log.warn("Null venue map for event while getting venue map: {}", eventId);
                 throw new NullVenueMapException(eventId);
             }
 
-            logger.info("Venue map found for eventId: {} while getting venue map and being returned", eventId);
+            log.info("Venue map found for eventId: {} while getting venue map and being returned", eventId);
             return new VenueMapMapper().venueMapToVenueMapDTO(event.getVenueMap());
         
     }

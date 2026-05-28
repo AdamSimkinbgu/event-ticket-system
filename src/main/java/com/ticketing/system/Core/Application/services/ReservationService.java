@@ -3,8 +3,7 @@ package com.ticketing.system.Core.Application.services;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
@@ -18,14 +17,13 @@ import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 
 @Service
+@Slf4j
 public class ReservationService {
 
     private final IEventRepository eventRepository;
     private final IActiveOrderRepository activeOrderRepository;
     private final ISessionManager iSessionManager;
     private final INotificationService notificationService;
-
-    private static final Logger eventLogger = LoggerFactory.getLogger("EVENT_LOG");
 
     public ReservationService(
             IEventRepository eventRepository,
@@ -39,7 +37,7 @@ public class ReservationService {
     }
 
     public ReservationResultDTO reserveTicketsForMember(String token, int eventId, int zoneId, int quantity) {
-        eventLogger.info("Entered reserveTickets function: eventId={}, zoneId={}, quantity={}",
+        log.info("Entered reserveTickets function: eventId={}, zoneId={}, quantity={}",
                 eventId, zoneId, quantity);
 
         InventoryZone reservedZone = null;
@@ -70,7 +68,7 @@ public class ReservationService {
         } catch (IllegalArgumentException | IllegalStateException e) {
             rollbackReservedStockIfNeeded(stockReserved, reservedZone, quantity, eventId, zoneId);
 
-            eventLogger.warn(
+            log.warn(
                     "reserveTickets failed: eventId={}, zoneId={}, quantity={}, reason={}",
                     eventId, zoneId, quantity, e.getMessage()
             );
@@ -80,7 +78,7 @@ public class ReservationService {
     }
 
     public ReservationResultDTO reserveTicketsForGuest(String sessionId, int eventId, int zoneId, int quantity) {
-        eventLogger.info("Entered reserveTicketsForGuest function: sessionId={}, eventId={}, zoneId={}, quantity={}",
+        log.info("Entered reserveTicketsForGuest function: sessionId={}, eventId={}, zoneId={}, quantity={}",
                 sessionId, eventId, zoneId, quantity);
 
         InventoryZone reservedZone = null;
@@ -104,14 +102,14 @@ public class ReservationService {
             activeOrder.addReservation(eventId, zoneId, quantity, pricePerTicket, LocalDateTime.now());
             activeOrderRepository.save(activeOrder);
 
-            eventLogger.info("Reservation successful for guest session {}", sessionId);
+            log.info("Reservation successful for guest session {}", sessionId);
 
             return buildReservationResult(eventId, zoneId, quantity);
 
         } catch (IllegalArgumentException | IllegalStateException e) {
             rollbackReservedStockIfNeeded(stockReserved, reservedZone, quantity, eventId, zoneId);
 
-            eventLogger.warn(
+            log.warn(
                     "reserveTicketsForGuest failed: eventId={}, zoneId={}, quantity={}, reason={}",
                     eventId, zoneId, quantity, e.getMessage()
             );
@@ -121,7 +119,7 @@ public class ReservationService {
     }
 
 public ReservationResultDTO removeReservedTickets(String token, int eventId, int zoneId, int quantity) {
-    eventLogger.info("Entered removeReservedTickets function: eventId={}, zoneId={}, quantity={}",
+    log.info("Entered removeReservedTickets function: eventId={}, zoneId={}, quantity={}",
             eventId, zoneId, quantity);
 
     int userId = -1;
@@ -148,19 +146,19 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
 
     private int validateTokenAndGetUserId(String token) {
         if (token == null || token.isBlank()) {
-            eventLogger.warn("Request rejected: missing authentication token");
+            log.warn("Request rejected: missing authentication token");
             throw new IllegalArgumentException("Missing authentication token");
         }
 
         if (!iSessionManager.validateToken(token)) {
-            eventLogger.warn("Request rejected: invalid or expired token");
+            log.warn("Request rejected: invalid or expired token");
             throw new IllegalStateException("Invalid or expired authentication token");
         }
 
         int userId = iSessionManager.extractUserId(token);
 
         if (userId <= 0) {
-            eventLogger.warn("Request rejected: invalid buyer id={}", userId);
+            log.warn("Request rejected: invalid buyer id={}", userId);
             throw new IllegalArgumentException("Invalid buyer id");
         }
 
@@ -169,7 +167,7 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
 
     private void validateSessionId(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
-            eventLogger.warn("Checkout rejected: missing session ID");
+            log.warn("Checkout rejected: missing session ID");
             throw new IllegalArgumentException("Missing session ID");
         }
     }
@@ -183,14 +181,14 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
                     "Reservation failed: quantity must be positive"
             );
 
-            eventLogger.warn("reserveTickets rejected: quantity must be positive. quantity={}", quantity);
+            log.warn("reserveTickets rejected: quantity must be positive. quantity={}", quantity);
             throw new IllegalArgumentException("Quantity must be positive");
         }
     }
 
     private void validateQuantityForGuest(int quantity) {
         if (quantity <= 0) {
-            eventLogger.warn("reserveTicketsForGuest rejected: quantity must be positive. quantity={}", quantity);
+            log.warn("reserveTicketsForGuest rejected: quantity must be positive. quantity={}", quantity);
             throw new IllegalArgumentException("Quantity must be positive");
         }
     }
@@ -206,7 +204,7 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
                     "Reservation failed: event not found"
             );
 
-            eventLogger.warn("reserveTickets rejected: event not found. eventId={}", eventId);
+            log.warn("reserveTickets rejected: event not found. eventId={}", eventId);
             throw new IllegalArgumentException("Event not found: " + eventId);
         }
 
@@ -217,7 +215,7 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
         Event event = eventRepository.findById(eventId);
 
         if (event == null) {
-            eventLogger.warn("reserveTicketsForGuest rejected: event not found. eventId={}", eventId);
+            log.warn("reserveTicketsForGuest rejected: event not found. eventId={}", eventId);
             throw new IllegalArgumentException("Event not found: " + eventId);
         }
 
@@ -235,7 +233,7 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
                     "Remove reservation failed: event not found"
             );
 
-            eventLogger.warn("removeOneReservedTicket rejected: event not found. eventId={}", eventId);
+            log.warn("removeOneReservedTicket rejected: event not found. eventId={}", eventId);
             throw new IllegalArgumentException("Event not found: " + eventId);
         }
 
@@ -253,7 +251,7 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
                     "Reservation failed: zone not found"
             );
 
-            eventLogger.warn("reserveTickets rejected: zone not found. eventId={}, zoneId={}",
+            log.warn("reserveTickets rejected: zone not found. eventId={}, zoneId={}",
                     eventId, zoneId);
             throw new IllegalArgumentException("Zone not found: " + zoneId);
         }
@@ -265,7 +263,7 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
         InventoryZone zone = event.getZone(zoneId);
 
         if (zone == null) {
-            eventLogger.warn("reserveTicketsForGuest rejected: zone not found. eventId={}, zoneId={}",
+            log.warn("reserveTicketsForGuest rejected: zone not found. eventId={}, zoneId={}",
                     eventId, zoneId);
             throw new IllegalArgumentException("Zone not found: " + zoneId);
         }
@@ -284,7 +282,7 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
                     "Remove reservation failed: zone not found"
             );
 
-            eventLogger.warn("removeOneReservedTicket rejected: zone not found. eventId={}, zoneId={}",
+            log.warn("removeOneReservedTicket rejected: zone not found. eventId={}, zoneId={}",
                     eventId, zoneId);
             throw new IllegalArgumentException("Zone not found: " + zoneId);
         }
@@ -296,7 +294,7 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
         ActiveOrder activeOrder = activeOrderRepository.getByUserId(userId);
 
         if (activeOrder == null) {
-            eventLogger.info("No active order found for userId={}, creating new ActiveOrder", userId);
+            log.info("No active order found for userId={}, creating new ActiveOrder", userId);
             activeOrder = new ActiveOrder(userId);
         }
 
@@ -310,7 +308,7 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
             return existingOrderOpt.get();
         }
 
-        eventLogger.info("No active order found for sessionId={}, creating new ActiveOrder", sessionId);
+        log.info("No active order found for sessionId={}, creating new ActiveOrder", sessionId);
         return ActiveOrder.forGuest(sessionId);
     }
 
@@ -325,7 +323,7 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
                     "Remove reservation failed: active order not found"
             );
 
-            eventLogger.warn("removeOneReservedTicket rejected: active order not found. userId={}", userId);
+            log.warn("removeOneReservedTicket rejected: active order not found. userId={}", userId);
             throw new IllegalArgumentException("Active order not found");
         }
 
@@ -354,7 +352,7 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
             String sessionId,
             int eventId) {
         if (activeOrder.hasReservationForEvent(eventId)) {
-            eventLogger.warn("Reservation failed: guest already has an active order for this event. sessionId={}",
+            log.warn("Reservation failed: guest already has an active order for this event. sessionId={}",
                     sessionId);
             throw new IllegalStateException("User already has an active order for this event");
         }
@@ -365,7 +363,7 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
 
     zone.reserve(quantity);
 
-    eventLogger.info(
+    log.info(
             "Tickets reserved in zone stock: eventId={}, zoneId={}, quantity={}, pricePerTicket={}",
             eventId, zoneId, quantity, pricePerTicket
     );
@@ -383,7 +381,7 @@ public ReservationResultDTO removeReservedTickets(String token, int eventId, int
     if (stockReserved && reservedZone != null) {
         reservedZone.release(quantity);
 
-        eventLogger.warn("Rollback completed: released {} tickets for eventId={}, zoneId={}",
+        log.warn("Rollback completed: released {} tickets for eventId={}, zoneId={}",
                 quantity, eventId, zoneId);
     }
 }
@@ -425,10 +423,10 @@ private void validateRemoveQuantity(int quantity) {
     public com.ticketing.system.Core.Application.dto.ActiveOrderDTO restoreActiveOrder(int userId) {
  ActiveOrder activeOrder = activeOrderRepository.getByUserId(userId);
         if (activeOrder == null) {
-            eventLogger.info("No active order found for userId={}, returning null", userId);
+            log.info("No active order found for userId={}, returning null", userId);
             return null;
         }
-        eventLogger.info("Active order found for userId={}, restoring ActiveOrderDTO", userId);
+        log.info("Active order found for userId={}, restoring ActiveOrderDTO", userId);
         ActiveOrderDTO activeOrderDTO = activeOrder.toDTO();
         for (ActiveOrderDTO.CartLineDTO line : activeOrderDTO.lines()) {
             String eventName = eventRepository.findById(line.eventId()).getName();

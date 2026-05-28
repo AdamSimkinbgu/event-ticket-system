@@ -1,6 +1,8 @@
 package com.ticketing.system.Core.Domain.events;
 
-public class InventoryZone {
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
+public class InventoryZone implements InvariantChecked {
     private final int id;
     private final String name;
     private  int capacity;
@@ -118,4 +120,25 @@ private void validatePositiveQuantity(int quantity) {
             throw new IllegalArgumentException("Quantity must be positive");
         }
 }
+
+    @Override
+    public void checkInvariants() {
+        synchronized (inventoryLock) {
+            if (name == null || name.isBlank()) {
+                throw new IllegalStateException("InventoryZone invariant violated: name must be non-blank");
+            }
+            if (capacity < 0) {
+                throw new IllegalStateException("InventoryZone invariant violated: capacity must be >= 0 (was " + capacity + ")");
+            }
+            if (reservedAmount < 0) {
+                throw new IllegalStateException("InventoryZone invariant violated: reservedAmount must be >= 0 (was " + reservedAmount + ")");
+            }
+            if (reservedAmount > capacity) {
+                throw new IllegalStateException("InventoryZone invariant violated: reservedAmount (" + reservedAmount + ") must be <= capacity (" + capacity + ")");
+            }
+            if (price < 0) {
+                throw new IllegalStateException("InventoryZone invariant violated: price must be >= 0 (was " + price + ")");
+            }
+        }
+    }
 }

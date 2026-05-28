@@ -5,9 +5,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
 import jakarta.persistence.criteria.CriteriaBuilder.In;
 
-public class Event {
+public class Event implements InvariantChecked {
     private final int id;
     private final String name;
     private final Double rating;
@@ -176,6 +178,36 @@ public double calculatePriceforoneticket(int quantity, Double priceAtoneticketRe
 
     public boolean isCancelled() {
         return this.isCanceled;
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (id <= 0) {
+            throw new IllegalStateException("Event invariant violated: id must be positive (was " + id + ")");
+        }
+        if (name == null || name.isBlank()) {
+            throw new IllegalStateException("Event invariant violated: name must be non-blank");
+        }
+        if (comapnyid <= 0) {
+            throw new IllegalStateException("Event invariant violated: companyId must be positive (was " + comapnyid + ")");
+        }
+        if (status == null) {
+            throw new IllegalStateException("Event invariant violated: status must not be null");
+        }
+        if (category == null) {
+            throw new IllegalStateException("Event invariant violated: category must not be null");
+        }
+        if (artistsNames == null) {
+            throw new IllegalStateException("Event invariant violated: artistsNames list must not be null");
+        }
+        if (showDates == null) {
+            throw new IllegalStateException("Event invariant violated: showDates list must not be null");
+        }
+        if (isCanceled == null) {
+            throw new IllegalStateException("Event invariant violated: isCanceled flag must not be null");
+        }
+        // venueMap may be null in DRAFT state (UC-19) before UC-20 binds it — don't enforce non-null.
+        // If present, the VenueMap's own invariants apply (cascade-check when implemented).
     }
 
 }

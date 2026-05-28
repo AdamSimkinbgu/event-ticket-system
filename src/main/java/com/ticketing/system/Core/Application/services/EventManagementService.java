@@ -3,8 +3,7 @@ package com.ticketing.system.Core.Application.services;
 import java.lang.reflect.AccessFlag.Location;
 import java.util.List;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 // Owner / Manager-side write service for the Event aggregate and its lifecycle.
 // UC-19 (Manage Event Catalog), UC-20 (Configure Venue Map & Inventory), UC-21 (Configure Policies).
 import org.springframework.stereotype.Service;
@@ -32,6 +31,7 @@ import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.PurchasePolicy;
 
 @Service
+@Slf4j
 public class EventManagementService {
 
     private final IEventRepository eventRepository;
@@ -40,7 +40,7 @@ public class EventManagementService {
     private final ISessionManager sessionManager;
     private final IOrderReceiptRepository orderReceiptRepository;
     private final IPaymentGateway paymentGateway;
-    private static final Logger log = LoggerFactory.getLogger(EventManagementService.class);
+
     public EventManagementService(
             IEventRepository eventRepository,
             IProductionCompanyRepository companyRepository,

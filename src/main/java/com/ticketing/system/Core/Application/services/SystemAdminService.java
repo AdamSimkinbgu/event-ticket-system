@@ -18,17 +18,15 @@ import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 // Owns platform-bootstrap, market-lifecycle, and global admin queries.
 // UC-1 (Initialize), UC-31 (Global History), UC-32 (Open/Close Market).
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class SystemAdminService {
 
-    private static final Logger logger = LoggerFactory.getLogger(SystemAdminService.class);
-    
     private final ISessionManager sessionManager;
     private final IAdminRepository adminRepository;
     private final IOrderReceiptRepository orderReceiptRepository;
@@ -89,7 +87,7 @@ public class SystemAdminService {
     public List<PurchaseHistoryDTO> viewGlobalHistory(String token, GlobalHistoryFiltersDTO filters) {
         requireSystemAdmin(token);
 
-        logger.info("Viewing global purchase history with filters: {}", filters);
+        log.info("Viewing global purchase history with filters: {}", filters);
         OrderReceiptMapper mapper = new OrderReceiptMapper();
 
         List<PurchaseHistoryDTO.PurchaseRecordDTO> records = orderReceiptRepository.findGlobal(filters)
@@ -97,20 +95,20 @@ public class SystemAdminService {
                 .map(receipt -> mapper.OrderReceiptToPurchaseRecordDTO(receipt, ticketRepository, eventRepository))
                 .toList();
 
-        logger.info("Found {} records for global purchase history with filters: {}", records.size(), filters);
+        log.info("Found {} records for global purchase history with filters: {}", records.size(), filters);
         return List.of(new PurchaseHistoryDTO(records));
     }
     
     // *HELPER METHOD* to enforce that the requester is a system admin. Throws if not.
     private void requireSystemAdmin(String token) {
         if (!sessionManager.validateToken(token)) {
-            logger.warn("Unauthorized access attempt with id: {}", sessionManager.extractUserId(token));
+            log.warn("Unauthorized access attempt with id: {}", sessionManager.extractUserId(token));
             throw new UnauthorizedActionException("Invalid or non-admin token.");
         }
 
         int userId = sessionManager.extractUserId(token);
         if (adminRepository.findById(userId) == null) {
-            logger.warn("Unauthorized access attempt with id: {}", userId);
+            log.warn("Unauthorized access attempt with id: {}", userId);
             throw new UnauthorizedActionException("Invalid or non-admin token.");
         }
     }

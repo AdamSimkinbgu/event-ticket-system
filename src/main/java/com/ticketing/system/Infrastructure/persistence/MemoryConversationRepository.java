@@ -27,6 +27,14 @@ import com.ticketing.system.Core.Domain.messaging.ParticipantType;
 public class MemoryConversationRepository implements IConversationRepository {
 
     private final Map<String, Conversation> conversationsById = new ConcurrentHashMap<>();
+    private final RepositoryLocks<String> locks = new RepositoryLocks<>();
+
+    @Override
+    public void lockForUpdate(String id) { locks.lock(id); }
+
+    @Override
+    public void unlock(String id) { locks.unlock(id); }
+
 
     @Override
     public void save(Conversation conversation) {
