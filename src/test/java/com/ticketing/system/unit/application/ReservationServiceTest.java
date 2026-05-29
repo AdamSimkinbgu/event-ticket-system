@@ -9,6 +9,7 @@ import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.StandingZone;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -424,7 +425,7 @@ void GivenManyGuestsReserveSameZoneConcurrently_WhenReserveTicketsForGuest_ThenD
     int numberOfThreads = 20;
     int quantityPerRequest = 1;
 
-    InventoryZone realZone = new InventoryZone(ZONE_ID, "VIP", capacity, 100.0);
+    InventoryZone realZone = new StandingZone(ZONE_ID, "VIP", capacity, 100.0);
 
     when(eventRepository.findById(EVENT_ID)).thenReturn(event);
     when(event.getZone(ZONE_ID)).thenReturn(realZone);
@@ -485,7 +486,7 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenReserveTicketsForMember_The
     int numberOfThreads = 20;
     int quantityPerRequest = 1;
 
-    InventoryZone realZone = new InventoryZone(ZONE_ID, "VIP", capacity, 100.0);
+    InventoryZone realZone = new StandingZone(ZONE_ID, "VIP", capacity, 100.0);
 
     when(eventRepository.findById(EVENT_ID)).thenReturn(event);
     when(event.getZone(ZONE_ID)).thenReturn(realZone);
@@ -550,7 +551,7 @@ void GivenManyThreadsRemoveReservedTicketsForMemberConcurrently_WhenRemoveReserv
     int numberOfThreads = 20;
     int quantityPerRemove = 1;
 
-    InventoryZone realZone = new InventoryZone(ZONE_ID, "VIP", capacity, 100.0);
+    InventoryZone realZone = new StandingZone(ZONE_ID, "VIP", capacity, 100.0);
     realZone.reserve(initialReservedTickets);
 
     ActiveOrder realActiveOrder = new ActiveOrder(USER_ID);

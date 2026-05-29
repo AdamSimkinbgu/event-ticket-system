@@ -23,6 +23,7 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
@@ -71,7 +72,7 @@ public class EventManagementService {
         }
         company.checkowner(ownerId);
         int newEventId = eventRepository.nextId();
-        InventoryZone zone1 = new InventoryZone(1, "General Admission", 100, 50.0);
+        InventoryZone zone1 = new StandingZone(1, "General Admission", 100, 50.0);
         VenueMap venueMap = new VenueMap(3, request.location(), List.of(zone1));
         DiscountPolicy discountPolicy = new DiscountPolicy(10.0);
         PurchasePolicy purchasePolicy = new PurchasePolicy();
