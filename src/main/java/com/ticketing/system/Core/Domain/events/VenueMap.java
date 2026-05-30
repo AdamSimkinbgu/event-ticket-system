@@ -50,20 +50,37 @@ public class VenueMap {
         throw new IllegalArgumentException("Zone not found");
     }
     
-        public boolean checkAvailability(int zoneId, int quantity) {
+    public boolean checkAvailability(int zoneId, int quantity) {
         InventoryZone zone = getZone(zoneId);
         return zone.checkAvailability(quantity);
     }
 
-    public void releaseTicketsToInventory(Map<Integer, Integer> ticketsByZone) {
-        for (Map.Entry<Integer, Integer> entry : ticketsByZone.entrySet()) {
-            int zoneId = entry.getKey();
-            int quantity = entry.getValue();
 
-            InventoryZone zone = getZone(zoneId);
-            zone.release(quantity);
-        }
+
+    
+    //// changed name from reserveTickets to reserveInventory and added InventorySelection parameter to support seated zones as well.
+    // supports both standing and seated zones via the InventorySelection abstraction, simply don't include seat numbers for standing zones.
+    public void reserveInventory(int zoneId, InventorySelection selection) {
+        InventoryZone zone = getZone(zoneId);
+        zone.reserve(selection);
     }
+
+
+    //// changed name from releaseTickets to releaseInventory and added InventorySelection parameter to support seated zones as well.
+    // supports both standing and seated zones via the InventorySelection abstraction, simply don't include seat numbers for standing zones.
+    public void releaseInventory(int zoneId, InventorySelection selection) {
+        InventoryZone zone = getZone(zoneId);
+        zone.release(selection);
+    }
+
+    // supports both standing and seated zones via the InventorySelection abstraction, simply don't include seat numbers for standing zones.
+    public void confirmSale(int zoneId, InventorySelection selection) {
+        InventoryZone zone = getZone(zoneId);
+        zone.confirmSale(selection);
+    }
+
+
+
 
      public void updateZoneCapacity(int zoneId, int newCapacity) {
         InventoryZone zone = getZone(zoneId);

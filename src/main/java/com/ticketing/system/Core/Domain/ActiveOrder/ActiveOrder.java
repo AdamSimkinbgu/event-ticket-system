@@ -52,6 +52,7 @@ public class ActiveOrder implements InvariantChecked {
         this(Integer.valueOf(userId), null);
     }
 
+
     /** Member cart attached to an active session. */
     public static ActiveOrder forMember(int userId, String sessionId) {
         if (sessionId == null) {
@@ -59,6 +60,7 @@ public class ActiveOrder implements InvariantChecked {
         }
         return new ActiveOrder(Integer.valueOf(userId), sessionId);
     }
+
 
     /** Guest cart bound to a session (no userId yet). */
     public static ActiveOrder forGuest(String sessionId) {
@@ -68,21 +70,184 @@ public class ActiveOrder implements InvariantChecked {
         return new ActiveOrder(null, sessionId);
     }
 
-   public void addReservation(int eventId, int zoneId, int quantity, double price, LocalDateTime addedAt) {
+
+
+
+
+
+
+
+
+
+
+
+    // changed name from addReservation to addStandingReservation and added addSeatedReservation to support seated zones as well.
+    public void addStandingReservation(int eventId, int zoneId, int quantity, double price, LocalDateTime addedAt) {
         synchronized (itemsLock) {
             if (quantity <= 0) {
                 throw new IllegalArgumentException("Quantity must be positive");
             }
 
-            for (int i = 1; i <= quantity; i = i + 1) {
-                CartLineItem newItem = new CartLineItem(eventId, zoneId, price, addedAt);
-                this.items.add(newItem);
+            for (int i = 0; i < quantity; i++) {
+                items.add(new CartLineItem(eventId, zoneId, null, price, addedAt));
             }
         }
     }
 
 
-     public List<CartLineItem> getItems() {
+    public void addSeatedReservation(int eventId, int zoneId, List<String> seatNumbers, double price, LocalDateTime addedAt) {
+        synchronized (itemsLock) {
+            if (seatNumbers == null || seatNumbers.isEmpty()) {
+                throw new IllegalArgumentException("Seat numbers must be non-empty");
+            }
+            // check that we're not adding duplicate seat numbers for the same event and zone that already exist in the active order.
+            this.checkThatNotAddingDuplicateSeatNumbersForEventAndZone(eventId, zoneId, seatNumbers);
+
+            for (String seatNumber : seatNumbers) {
+                items.add(new CartLineItem(eventId, zoneId, seatNumber, price, addedAt));
+            }
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+    public void removeStandingSpots(int eventId, int zoneId, int quantity) {
+        synchronized (itemsLock) {
+            if (quantity <= 0) {
+                throw new IllegalArgumentException("Quantity must be positive");
+            }
+            if (!hasReservationForEventWithoutLock(eventId)) {
+                throw new IllegalArgumentException("Active order does not contain this event");
+            }
+
+            // check that enough standing tickets exist in the active order before attempting removal, to avoid partial removals if the quantity is greater than the number of reserved tickets.
+            int existingTickets = countStandingTicketsWithoutLock(eventId, zoneId);
+
+            if (existingTickets < quantity) {
+                throw new IllegalArgumentException("Not enough reserved tickets to remove");
+            }
+
+
+            int removedCount = 0;
+            for (int i = 0; i < items.size() && removedCount < quantity; i++) {
+                CartLineItem item = items.get(i);
+                if (item.geteventId() == eventId &&
+                        item.getzoneId() == zoneId &&
+                        item.getSeatNumber() == null && // only match standing tickets
+                        !item.isExpired()) {
+                    items.remove(i);
+                    removedCount++;
+                    i--; // adjust index after removal
+                }
+            }
+        }
+    }
+    
+
+
+    public void removeSeats(int eventId, int zoneId, List<String> seatNumbers) {
+        synchronized (itemsLock) {
+            if (!hasReservationForEventWithoutLock(eventId)) {
+                throw new IllegalArgumentException("Active order does not contain this event");
+            }
+
+            // check that all seatNumbers exist in the active order before attempting removal, to avoid partial removals if an invalid seatNumber is provided.
+            this.validateSeatNumbersForEventAndZoneDoExist(eventId, zoneId, seatNumbers);
+
+            // start removals
+            for (String seatNumber : seatNumbers) {
+                boolean removed = items.removeIf(item -> item.geteventId() == eventId &&
+                        item.getzoneId() == zoneId &&
+                        seatNumber.equals(item.getSeatNumber()) &&
+                        !item.isExpired());
+
+                if (!removed) {
+                    // check just in case even though we already checked that the seat numbers do exist, to avoid silent failures if there's a bug in the validation logic.
+                    throw new IllegalArgumentException("Seat not found in active order: " + seatNumber);
+                }
+            }
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+    private void checkThatNotAddingDuplicateSeatNumbersForEventAndZone(int eventId, int zoneId,
+            List<String> seatNumbers) {
+        for (String seatNumber : seatNumbers) {
+            boolean exists = items.stream().anyMatch(item -> item.geteventId() == eventId &&
+                    item.getzoneId() == zoneId &&
+                    seatNumber.equals(item.getSeatNumber()) &&
+                    !item.isExpired());
+
+            if (exists) {
+                throw new IllegalArgumentException(
+                        "Duplicate seat number for event and zone being added even though it already exists in the active order: "
+                                + seatNumber);
+            }
+        }
+    }
+    
+
+    
+    private void validateSeatNumbersForEventAndZoneDoExist(int eventId, int zoneId, List<String> seatNumbers) {
+        // check that all seatNumbers exist in the active order before attempting removal, to avoid partial removals if an invalid seatNumber is provided.
+        for (String seatNumber : seatNumbers) {
+            boolean exists = items.stream().anyMatch(item -> item.geteventId() == eventId &&
+                    item.getzoneId() == zoneId &&
+                    seatNumber.equals(item.getSeatNumber()) &&
+                    !item.isExpired());
+
+            if (!exists) {
+                throw new IllegalArgumentException("Seat number to remove not found in active order: " + seatNumber);
+            }
+        }
+    }
+
+
+
+    
+
+    private int countStandingTicketsWithoutLock(int eventId, int zoneId) {
+        int count = 0;
+
+        for (CartLineItem item : items) {
+            if (item.geteventId() == eventId &&
+                    item.getzoneId() == zoneId &&
+                    item.getSeatNumber() == null && // only count standing tickets
+                    !item.isExpired()) {
+                count = count + 1;
+            }
+        }
+
+        return count;
+    }
+
+
+
+
+
+
+
+    public List<CartLineItem> getItems() {
         synchronized (itemsLock) {
             return new ArrayList<>(items);
         }
@@ -236,36 +401,10 @@ public class ActiveOrder implements InvariantChecked {
     }
 
 
- public void removeTickets(int eventId, int zoneId, int quantity) {
-        synchronized (itemsLock) {
-            if (quantity <= 0) {
-                throw new IllegalArgumentException("Quantity must be positive");
-            }
-             if (!hasReservationForEventWithoutLock(eventId)) {
-            throw new IllegalArgumentException("Active order does not contain this event");
-        }
+    
 
-            int existingTickets = countTicketsWithoutLock(eventId, zoneId);
 
-            if (existingTickets < quantity) {
-                throw new IllegalArgumentException("Not enough reserved tickets to remove");
-            }
 
-            int removedTickets = 0;
-            int i = 0;
-
-            while (i < items.size() && removedTickets < quantity) {
-                CartLineItem item = items.get(i);
-
-               if (item.geteventId() == eventId && item.getzoneId() == zoneId && !item.isExpired()) {
-                    items.remove(i);
-                    removedTickets = removedTickets + 1;
-                } else {
-                    i = i + 1;
-                }
-            }
-        }
-    }
 
 private boolean hasReservationForEventWithoutLock(int eventId) {
     for (CartLineItem item : items) {
@@ -273,7 +412,6 @@ private boolean hasReservationForEventWithoutLock(int eventId) {
             return true;
         }
     }
-
     return false;
 }
 
@@ -300,17 +438,17 @@ private boolean hasReservationForEventWithoutLock(int eventId) {
 
 
 
-  public int countTickets(int eventId, int zoneId) {
+    public int countTickets(int eventId, int zoneId) {
         synchronized (itemsLock) {
             return countTicketsWithoutLock(eventId, zoneId);
         }
     }
-
+    
     private int countTicketsWithoutLock(int eventId, int zoneId) {
         int count = 0;
 
         for (CartLineItem item : items) {
-            if (item.geteventId() == eventId && item.getzoneId() == zoneId&&!item.isExpired()) {
+            if (item.geteventId() == eventId && item.getzoneId() == zoneId && !item.isExpired()) {
                 count = count + 1;
             }
         }
@@ -318,24 +456,26 @@ private boolean hasReservationForEventWithoutLock(int eventId) {
         return count;
     }
 
-public ActiveOrderDTO toDTO() {
-    synchronized (itemsLock) {
-        List<ActiveOrderDTO.CartLineDTO> lineDTOs = new ArrayList<>();
+    
 
-        for (CartLineItem item : items) {
-            lineDTOs.add(item.toDTO());
+    public ActiveOrderDTO toDTO() {
+        synchronized (itemsLock) {
+            List<ActiveOrderDTO.CartLineDTO> lineDTOs = new ArrayList<>();
+
+            for (CartLineItem item : items) {
+                lineDTOs.add(item.toDTO());
+            }
+
+            return new ActiveOrderDTO(
+                    getUserId(),
+                    sessionId,
+                    getCreatedAt(),
+                    this.getRemainingTime().getSeconds(),
+                    this.getTotalPrice(),
+                    lineDTOs
+            );
         }
-
-        return new ActiveOrderDTO(
-                getUserId(),
-                sessionId,
-                getCreatedAt(),
-                this.getRemainingTime().getSeconds(),
-                this.getTotalPrice(),
-                lineDTOs
-        );
     }
-}
 
     @Override
     public void checkInvariants() {

@@ -53,18 +53,33 @@ public class SeatedZone extends InventoryZone {
         return seats.get(label);
     }
 
+
+
+
+
+
+
+    
     /**
      * Reserve the given seats atomically. Either all flip to RESERVED or none do.
      *
      * @throws IllegalArgumentException if any label is unknown to this zone
      * @throws IllegalStateException    if any requested seat is not AVAILABLE
      */
-    public void reserveSeats(List<String> labels) {
+    @Override
+    public boolean reserve(InventorySelection selection) {
+        if (!selection.isSeatedSelection()) {
+            throw new IllegalArgumentException("Seated zone requires selected seat numbers");
+        }
+        
+        List<String> labels = selection.getSeatNumbers();
+
         if (labels == null || labels.isEmpty()) {
             throw new IllegalArgumentException("labels must be non-empty");
         }
-        List<String> sorted = new ArrayList<>(new HashSet<>(labels));
-        Collections.sort(sorted);
+
+        List<String> sorted = validateAndSortLabels(labels);
+
         List<ReentrantLock> acquired = new ArrayList<>();
         try {
             // Acquire all locks in sorted order to prevent deadlock with concurrent reservers.
@@ -93,7 +108,16 @@ public class SeatedZone extends InventoryZone {
                 lock.unlock();
             }
         }
+
+        return true;
     }
+
+
+
+
+
+
+
 
     /**
      * Release the given seats back to AVAILABLE. Same locking discipline as
@@ -101,12 +125,20 @@ public class SeatedZone extends InventoryZone {
      *
      * @throws IllegalStateException if any seat is not RESERVED
      */
-    public void releaseSeats(List<String> labels) {
+    @Override
+    public boolean release(InventorySelection selection) {
+        if (!selection.isSeatedSelection()) {
+            throw new IllegalArgumentException("Seated zone requires selected seat numbers");
+        }
+
+        List<String> labels = selection.getSeatNumbers();
+
         if (labels == null || labels.isEmpty()) {
             throw new IllegalArgumentException("labels must be non-empty");
         }
-        List<String> sorted = new ArrayList<>(new HashSet<>(labels));
-        Collections.sort(sorted);
+
+        List<String> sorted = validateAndSortLabels(labels);
+
         List<ReentrantLock> acquired = new ArrayList<>();
         try {
             for (String label : sorted) {
@@ -132,19 +164,33 @@ public class SeatedZone extends InventoryZone {
                 lock.unlock();
             }
         }
+
+        return true;
     }
+
+
+
+
 
     /**
      * Mark seats as SOLD (e.g. after successful checkout). Same locking discipline.
      *
      * @throws IllegalStateException if any seat is not RESERVED
      */
-    public void confirmSale(List<String> labels) {
+    @Override
+    public boolean confirmSale(InventorySelection selection) {
+        if (!selection.isSeatedSelection()) {
+            throw new IllegalArgumentException("Seated zone requires selected seat numbers");
+        }
+
+        List<String> labels = selection.getSeatNumbers();
+
         if (labels == null || labels.isEmpty()) {
             throw new IllegalArgumentException("labels must be non-empty");
         }
-        List<String> sorted = new ArrayList<>(new HashSet<>(labels));
-        Collections.sort(sorted);
+
+        List<String> sorted = validateAndSortLabels(labels);
+
         List<ReentrantLock> acquired = new ArrayList<>();
         try {
             for (String label : sorted) {
@@ -170,7 +216,58 @@ public class SeatedZone extends InventoryZone {
                 lock.unlock();
             }
         }
+
+        return true;
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+    private List<String> validateAndSortLabels(List<String> labels) {
+        if (labels == null || labels.isEmpty()) {
+            throw new IllegalArgumentException("labels must be non-empty");
+        }
+
+        Set<String> unique = new HashSet<>(labels);
+        if (unique.size() != labels.size()) {
+            throw new IllegalArgumentException("Duplicate seat labels are not allowed");
+        }
+
+        List<String> sorted = new ArrayList<>(labels);
+        Collections.sort(sorted);
+        return sorted;
+    }
+
+
+
+
+
+
+    @Override
+    public boolean checkAvailability(int quantity){
+        // check if there are at least 'quantity' available seats in this zone
+        int available = getAvailableAmount();
+        if (available < quantity) {
+            throw new IllegalStateException("Only " + available + " seats available, but " + quantity + " requested");
+        }
+        return true;
+    }
+
+
+    @Override
+    public ZoneType getZoneType() {
+        return ZoneType.SEATED;
+    }
+
 
     @Override
     public int getCapacity() {

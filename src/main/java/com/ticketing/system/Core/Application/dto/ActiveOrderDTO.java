@@ -17,7 +17,7 @@ public record ActiveOrderDTO(
             int eventId,
             String eventName,
             int zoneId,
-            String seatNumber, // null for standing-zone tickets
+            String seatNumber,  // null for standing-zone tickets
             double pricePerTicket,
             LocalDateTime addedAt) {
     }

@@ -45,8 +45,21 @@ public class StandingZone extends InventoryZone {
         }
     }
 
+
+
+
+
+
+
+
+
+
     @Override
-    public boolean reserve(int quantity) {
+    public boolean reserve(InventorySelection selection) {
+        if (!selection.isStandingSelection()) {
+            throw new IllegalArgumentException("Standing zone cannot reserve specific seats");
+        }
+        int quantity = selection.getQuantity();
         synchronized (inventoryLock) {
             validatePositiveQuantity(quantity);
 
@@ -61,15 +74,15 @@ public class StandingZone extends InventoryZone {
         }
     }
 
-    @Override
-    public int getCapacity() {
-        synchronized (inventoryLock) {
-            return capacity;
-        }
-    }
+
+
 
     @Override
-    public boolean release(int quantity) {
+    public boolean release(InventorySelection selection) {
+        if (!selection.isStandingSelection()) {
+            throw new IllegalArgumentException("Standing zone cannot release specific seats");
+        }
+        int quantity = selection.getQuantity();
         synchronized (inventoryLock) {
             validatePositiveQuantity(quantity);
 
@@ -81,6 +94,44 @@ public class StandingZone extends InventoryZone {
             return true;
         }
     }
+
+
+
+    
+    @Override
+    public boolean confirmSale(InventorySelection selection) {
+        if (!selection.isStandingSelection()) {
+            throw new IllegalArgumentException("Standing zone cannot confirm specific seats");
+        }
+        return true;
+        // No state change needed for standing zone on sale confirmation, as the reserved amount already reflects the unavailable inventory.
+        // StandingZone.reservedAmount already represents unavailable inventory.
+        // On successful checkout, we keep it unavailable.
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    @Override
+    public int getCapacity() {
+        synchronized (inventoryLock) {
+            return capacity;
+        }
+    }
+
 
     @Override
     public void setCapacity(int newCapacity) {
@@ -95,6 +146,11 @@ public class StandingZone extends InventoryZone {
 
             this.capacity = newCapacity;
         }
+    }
+
+    @Override
+    public ZoneType getZoneType() {
+        return ZoneType.STANDING;
     }
 
     @Override

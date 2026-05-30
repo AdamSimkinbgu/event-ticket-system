@@ -23,14 +23,15 @@ public class Event implements InvariantChecked {
     private final DiscountPolicy discountPolicy;
     private Boolean isCanceled = false;
 
-    public Event( int id, String name, Double rating, List<String> artistsNames, EventCategory category, int comapnyid, EventStatus status, VenueMap venueMap, List<ShowDate> showDates, PurchasePolicy purchasePolicy, DiscountPolicy discountPolicy
-    ) {
+    public Event(int id, String name, Double rating, List<String> artistsNames, EventCategory category, int comapnyid,
+            EventStatus status, VenueMap venueMap, List<ShowDate> showDates, PurchasePolicy purchasePolicy,
+            DiscountPolicy discountPolicy) {
         this.id = id;
         this.name = name;
         this.rating = rating;
         this.artistsNames = artistsNames;
         this.category = category;
-        this.comapnyid=comapnyid;
+        this.comapnyid = comapnyid;
         this.status = status;
         this.venueMap = venueMap;
         this.showDates = showDates;
@@ -38,70 +39,88 @@ public class Event implements InvariantChecked {
         this.discountPolicy = discountPolicy;
     }
 
-    public InventoryZone getZone(int zoneId) {
-        for (InventoryZone zone : venueMap.getInventoryZones()) {
-            if ( zoneId == (zone.getId())) {
-                return zone;
-            }
+
+
+
+
+    // for standing zones, the quantity is the only relevant parameter; for seated zones, the seat numbers are required and quantity is derived from them (must match seatNumbers.size()).
+
+    public boolean reserveStandingSpots(int zoneId, int quantity) {
+        if (!purchasePolicy.validate(quantity)) {
+            throw new IllegalStateException("Purchase policy rejected this quantity");
         }
-
-        throw new IllegalArgumentException("Zone not found");
+        this.venueMap.reserveInventory(zoneId, InventorySelection.standing(quantity));
+        return true;
     }
 
-public boolean checkAvailability(int zoneId, int quantity) {
-    InventoryZone zone = getZone(zoneId);
-    return zone.checkAvailability(quantity);
-}
-
-public boolean reserveTickets(int zoneId, int quantity) {
-    if (!purchasePolicy.validate(quantity)) {
-        throw new IllegalStateException("Purchase policy rejected this quantity");
+    public boolean releaseStandingSpots(int zoneId, int quantity) {
+        this.venueMap.releaseInventory(zoneId, InventorySelection.standing(quantity));
+        return true;
     }
 
-    InventoryZone zone = getZone(zoneId);
-    return zone.reserve(quantity);
-}
+    public void confirmStandingSpotSale(int zoneId, int quantity) {
+        this.venueMap.confirmSale(zoneId, InventorySelection.standing(quantity));
+    }
 
-public boolean releaseTickets(int zoneId, int quantity) {
-    InventoryZone zone = getZone(zoneId);
-    return zone.release(quantity);
-}
 
+
+    // for seated zones, the seat numbers must be provided in the InventorySelection; the zone will validate them and throw if any are invalid.
+
+    public void reserveSeats(int zoneId, List<String> seatNumbers) {
+        if (!purchasePolicy.validate(seatNumbers.size())) {
+            throw new IllegalStateException("Purchase policy rejected this quantity");
+        }
+        this.venueMap.reserveInventory(zoneId, InventorySelection.seated(seatNumbers));
+    }
+
+    public void releaseSeats(int zoneId, List<String> seatNumbers) {
+        this.venueMap.releaseInventory(zoneId, InventorySelection.seated(seatNumbers));
+    }
+
+    public void confirmSeatSale(int zoneId, List<String> seatNumbers) {
+        this.venueMap.confirmSale(zoneId, InventorySelection.seated(seatNumbers));
+    }
+
+
+
+
+
+
+
+
+    public boolean checkAvailability(int zoneId, int quantity) {
+        return this.venueMap.checkAvailability(zoneId, quantity);
+    }
 
     public int getId() {
         return id;
     }
 
-public double calculatePrice(int quantity, Double priceAtoneticketReservation,LocalDateTime now) {
-    return discountPolicy.calculate( quantity,priceAtoneticketReservation,now);
-}
-public double calculatePriceforoneticket(int quantity, Double priceAtoneticketReservation,LocalDateTime now) {
-    return discountPolicy.calculatePriceforoneticket( quantity,priceAtoneticketReservation,now);
-}
+
+    public double calculatePrice(int quantity, Double priceAtoneticketReservation, LocalDateTime now) {
+        return discountPolicy.calculate(quantity, priceAtoneticketReservation, now);
+    }
 
 
+    public double calculatePriceforoneticket(int quantity, Double priceAtoneticketReservation, LocalDateTime now) {
+        return discountPolicy.calculatePriceforoneticket(quantity, priceAtoneticketReservation, now);
+    }
+    
 
+    public void updateStandingZoneCapacity(int zoneId, int newCapacity, int incomingCompanyId) {
 
-    public void updateZoneCapacity(int zoneId, int newCapacity, int incomingCompanyId) {
-        
-        
         if (comapnyid != incomingCompanyId) {
             throw new RuntimeException("Unauthorized to update zone capacity");
         }
-       
+
         if (this.venueMap == null) {
             throw new RuntimeException("Venue map must be initialized first");
         }
 
         InventoryZone zone = this.venueMap.getZone(zoneId);
-        
 
-        zone.setCapacity(newCapacity); 
+        zone.setCapacity(newCapacity);
     }
-
-    
-    
-
 
 
     // UC-19 / UC-32 — DRAFT/SCHEDULED -> ON_SALE when admin opens or owner publishes.
@@ -109,25 +128,31 @@ public double calculatePriceforoneticket(int quantity, Double priceAtoneticketRe
         throw new UnsupportedOperationException("UC-19/32: not implemented");
     }
 
+
     // UC-19 — soft cancel; fires EventCancelled event for UC-4.
     public void transitionToCanceled(String reason) {
         throw new UnsupportedOperationException("UC-19: not implemented");
     }
+
 
     // ON_SALE -> COMPLETED after the last show date.
     public void transitionToCompleted() {
         throw new UnsupportedOperationException("not implemented");
     }
 
+
     // ON_SALE -> SOLD_OUT when no AVAILABLE tickets remain.
     public void markSoldOut() {
         throw new UnsupportedOperationException("not implemented");
     }
 
+
     // UC-19 — II.3.5.2 immutability check; returns false if 'field' is frozen by sales.
     public boolean canBeEdited(String field) {
         throw new UnsupportedOperationException("UC-19: not implemented");
     }
+
+
 
 
     // Missing getters.
@@ -180,6 +205,9 @@ public double calculatePriceforoneticket(int quantity, Double priceAtoneticketRe
         return this.isCanceled;
     }
 
+
+
+
     @Override
     public void checkInvariants() {
         if (id <= 0) {
@@ -189,7 +217,8 @@ public double calculatePriceforoneticket(int quantity, Double priceAtoneticketRe
             throw new IllegalStateException("Event invariant violated: name must be non-blank");
         }
         if (comapnyid <= 0) {
-            throw new IllegalStateException("Event invariant violated: companyId must be positive (was " + comapnyid + ")");
+            throw new IllegalStateException(
+                    "Event invariant violated: companyId must be positive (was " + comapnyid + ")");
         }
         if (status == null) {
             throw new IllegalStateException("Event invariant violated: status must not be null");
