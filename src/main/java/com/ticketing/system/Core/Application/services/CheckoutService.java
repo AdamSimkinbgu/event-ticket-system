@@ -410,11 +410,13 @@ private List<ReceiptLine> saveTicketsAndBuildReceiptLines( List<CartLineItem> bo
         ticketRepository.save(ticket);
 
         ReceiptLine line = new ReceiptLine(
-                barcode.ticketId(),
-                finalPriceForOneTicket,
-                item.geteventId(),
-                LocalDateTime.now()
-        );
+                            barcode.ticketId(),
+                            finalPriceForOneTicket,
+                            item.geteventId(),
+                            item.getzoneId(),
+                            item.getSeatNumber(),
+                            LocalDateTime.now()
+                    );
 
         receiptLines.add(line);
     }

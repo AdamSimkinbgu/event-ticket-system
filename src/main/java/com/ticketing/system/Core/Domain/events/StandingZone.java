@@ -134,7 +134,7 @@ public class StandingZone extends InventoryZone {
 
 
     @Override
-    public void setCapacity(int newCapacity) {
+    public void setStandingCapacity(int newCapacity) {
         synchronized (inventoryLock) {
             if (newCapacity < 0) {
                 throw new IllegalArgumentException("Capacity cannot be negative");

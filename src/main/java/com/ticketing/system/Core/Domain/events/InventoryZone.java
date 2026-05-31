@@ -79,8 +79,12 @@ public abstract class InventoryZone implements InvariantChecked {
     public boolean isSeated() {
         return getZoneType() == ZoneType.SEATED;
     }
-
-    public void setCapacity(int newCapacity) {
-        throw new UnsupportedOperationException("Cannot update capacity directly for a seated zone");
+    
+    // setCapacity is overriden only in standing zone, will throw here if called on seated zone; the seat-based methods must be used instead
+    public void setStandingCapacity(int newCapacity) {
+        if (!isStanding()) {
+            throw new UnsupportedOperationException("Cannot update capacity directly for a seated zone");
+        }
+        //Note: won't get here if it's a standing zone
     }
 }

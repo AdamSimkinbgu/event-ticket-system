@@ -2,6 +2,7 @@ package com.ticketing.system.Core.Domain.ActiveOrder;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
@@ -190,8 +191,7 @@ public class ActiveOrder implements InvariantChecked {
 
 
 
-    private void checkThatNotAddingDuplicateSeatNumbersForEventAndZone(int eventId, int zoneId,
-            List<String> seatNumbers) {
+    private void checkThatNotAddingDuplicateSeatNumbersForEventAndZone(int eventId, int zoneId, List<String> seatNumbers) {
         for (String seatNumber : seatNumbers) {
             boolean exists = items.stream().anyMatch(item -> item.geteventId() == eventId &&
                     item.getzoneId() == zoneId &&
@@ -203,6 +203,10 @@ public class ActiveOrder implements InvariantChecked {
                         "Duplicate seat number for event and zone being added even though it already exists in the active order: "
                                 + seatNumber);
             }
+        }
+        // that there aren't duplicates in seatnumbers
+        if (seatNumbers.size() != new HashSet<>(seatNumbers).size()) {
+            throw new IllegalArgumentException("Duplicate seat numbers provided in input: " + seatNumbers);
         }
     }
     

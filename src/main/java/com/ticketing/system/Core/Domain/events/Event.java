@@ -17,7 +17,7 @@ public class Event implements InvariantChecked {
     private final EventCategory category;
     private final int comapnyid;
     private final EventStatus status;
-    private final VenueMap venueMap;
+    private VenueMap venueMap;
     private final List<ShowDate> showDates;
     private final PurchasePolicy purchasePolicy;
     private final DiscountPolicy discountPolicy;
@@ -39,10 +39,6 @@ public class Event implements InvariantChecked {
         this.discountPolicy = discountPolicy;
     }
 
-
-
-
-
     // for standing zones, the quantity is the only relevant parameter; for seated zones, the seat numbers are required and quantity is derived from them (must match seatNumbers.size()).
 
     public boolean reserveStandingSpots(int zoneId, int quantity) {
@@ -62,8 +58,6 @@ public class Event implements InvariantChecked {
         this.venueMap.confirmSale(zoneId, InventorySelection.standing(quantity));
     }
 
-
-
     // for seated zones, the seat numbers must be provided in the InventorySelection; the zone will validate them and throw if any are invalid.
 
     public void reserveSeats(int zoneId, List<String> seatNumbers) {
@@ -81,13 +75,6 @@ public class Event implements InvariantChecked {
         this.venueMap.confirmSale(zoneId, InventorySelection.seated(seatNumbers));
     }
 
-
-
-
-
-
-
-
     public boolean checkAvailability(int zoneId, int quantity) {
         return this.venueMap.checkAvailability(zoneId, quantity);
     }
@@ -96,16 +83,27 @@ public class Event implements InvariantChecked {
         return id;
     }
 
-
     public double calculatePrice(int quantity, Double priceAtoneticketReservation, LocalDateTime now) {
         return discountPolicy.calculate(quantity, priceAtoneticketReservation, now);
     }
 
-
     public double calculatePriceforoneticket(int quantity, Double priceAtoneticketReservation, LocalDateTime now) {
         return discountPolicy.calculatePriceforoneticket(quantity, priceAtoneticketReservation, now);
     }
-    
+
+    // UC-20 — only company that owns the event can configure the venue map; must be done before going ON_SALE. 
+    // For simplicity, we allow configuring the entire map at once, rather than incremental updates.
+    public void configureVenueMap(VenueMap venueMap, int incomingCompanyId) {
+        if (comapnyid != incomingCompanyId) {
+            throw new RuntimeException("Unauthorized to configure venue map");
+        }
+
+        if (venueMap == null) {
+            throw new IllegalArgumentException("Venue map cannot be null");
+        }
+
+        this.venueMap = venueMap;
+    }
 
     public void updateStandingZoneCapacity(int zoneId, int newCapacity, int incomingCompanyId) {
 
@@ -119,41 +117,51 @@ public class Event implements InvariantChecked {
 
         InventoryZone zone = this.venueMap.getZone(zoneId);
 
-        zone.setCapacity(newCapacity);
+        if (!zone.isStanding()) {
+            throw new IllegalStateException("Cannot update capacity of seated zone directly");
+        }
+
+        zone.setStandingCapacity(newCapacity);
     }
 
 
+
+    //TODO: might need to implement in EventManagementService or in Event or we can say seated layout is immutable after venue configuration.
+    // public void addSeatToSeatedZone(...){
+    //TODO: might need to add a seat ID generator in VenueMap or SeatedZone to ensure unique seat IDs within the zone; or we can require the client to provide unique seat IDs in the request.
+    // }
+
+    // public void removeSeatFromSeatedZone(...){
+    //TODO: might need to check if the seat is already reserved/sold before allowing removal, and handle that accordingly (e.g. prevent removal, or allow removal but mark any affected reservations as invalid and notify users, etc.)
+    // }
+
+    
+    
+    
     // UC-19 / UC-32 — DRAFT/SCHEDULED -> ON_SALE when admin opens or owner publishes.
     public void transitionToOnSale() {
         throw new UnsupportedOperationException("UC-19/32: not implemented");
     }
-
 
     // UC-19 — soft cancel; fires EventCancelled event for UC-4.
     public void transitionToCanceled(String reason) {
         throw new UnsupportedOperationException("UC-19: not implemented");
     }
 
-
     // ON_SALE -> COMPLETED after the last show date.
     public void transitionToCompleted() {
         throw new UnsupportedOperationException("not implemented");
     }
-
 
     // ON_SALE -> SOLD_OUT when no AVAILABLE tickets remain.
     public void markSoldOut() {
         throw new UnsupportedOperationException("not implemented");
     }
 
-
     // UC-19 — II.3.5.2 immutability check; returns false if 'field' is frozen by sales.
     public boolean canBeEdited(String field) {
         throw new UnsupportedOperationException("UC-19: not implemented");
     }
-
-
-
 
     // Missing getters.
     public String getName() {
@@ -204,9 +212,6 @@ public class Event implements InvariantChecked {
     public boolean isCancelled() {
         return this.isCanceled;
     }
-
-
-
 
     @Override
     public void checkInvariants() {

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +25,7 @@ import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
@@ -108,7 +110,7 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
-        eventService.addCapacitoesToVenueMapZone(
+        eventService.updateStandingZoneCapacity(
                 OWNER_TOKEN,
                 COMPANY_ID,
                 EVENT_ID,
@@ -134,7 +136,7 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
-        eventService.addCapacitoesToVenueMapZone(
+        eventService.updateStandingZoneCapacity(
                 MANAGER_TOKEN,
                 COMPANY_ID,
                 EVENT_ID,
@@ -150,7 +152,7 @@ class EventManagementServiceTest {
         when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
 
         assertThrows(RuntimeException.class, () ->
-                eventService.addCapacitoesToVenueMapZone(
+                eventService.updateStandingZoneCapacity(
                         INVALID_TOKEN,
                         COMPANY_ID,
                         EVENT_ID,
@@ -167,7 +169,7 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
 
         assertThrows(RuntimeException.class, () ->
-                eventService.addCapacitoesToVenueMapZone(
+                eventService.updateStandingZoneCapacity(
                         OWNER_TOKEN,
                         COMPANY_ID,
                         EVENT_ID,
@@ -185,7 +187,7 @@ class EventManagementServiceTest {
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(null);
 
         assertThrows(RuntimeException.class, () ->
-                eventService.addCapacitoesToVenueMapZone(
+                eventService.updateStandingZoneCapacity(
                         OWNER_TOKEN,
                         COMPANY_ID,
                         EVENT_ID,
@@ -202,7 +204,7 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
         assertThrows(RuntimeException.class, () ->
-                eventService.addCapacitoesToVenueMapZone(
+                eventService.updateStandingZoneCapacity(
                         OWNER_TOKEN,
                         COMPANY_ID,
                         EVENT_ID,
@@ -227,7 +229,7 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
         assertThrows(RuntimeException.class, () ->
-                eventService.addCapacitoesToVenueMapZone(
+                eventService.updateStandingZoneCapacity(
                         MANAGER_TOKEN,
                         COMPANY_ID,
                         EVENT_ID,
@@ -245,7 +247,7 @@ class EventManagementServiceTest {
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
         assertThrows(IllegalArgumentException.class, () ->
-                eventService.addCapacitoesToVenueMapZone(
+                eventService.updateStandingZoneCapacity(
                         OWNER_TOKEN,
                         COMPANY_ID,
                         EVENT_ID,
@@ -257,7 +259,7 @@ class EventManagementServiceTest {
 
     @Test
     public void GivenReservedTicketsMoreThanNewCapacity_WhenUpdateZoneCapacity_ThenThrowException() {
-        zone.reserve(8);
+        zone.reserve(InventorySelection.standing(8));
 
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
@@ -265,7 +267,7 @@ class EventManagementServiceTest {
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
         assertThrows(IllegalArgumentException.class, () ->
-                eventService.addCapacitoesToVenueMapZone(
+                eventService.updateStandingZoneCapacity(
                         OWNER_TOKEN,
                         COMPANY_ID,
                         EVENT_ID,
@@ -281,8 +283,8 @@ class EventManagementServiceTest {
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-
-        ReceiptLine line = new ReceiptLine(1, 100.0, EVENT_ID, java.time.LocalDateTime.now());
+        
+        ReceiptLine line = new ReceiptLine(1, 100.0, EVENT_ID, 1, "A1", java.time.LocalDateTime.now());
         OrderReceipt realReceipt = OrderReceipt.forMember(99, 100.0, List.of(line));
         
         when(orderReceiptRepository.findByEventId(EVENT_ID))

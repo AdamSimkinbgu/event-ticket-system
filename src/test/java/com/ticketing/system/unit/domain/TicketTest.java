@@ -2,6 +2,7 @@ package com.ticketing.system.unit.domain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -62,4 +63,46 @@ class TicketTest extends BaseDomainTest {
         ticket.markRefunded();
         assertEquals(TicketStatus.REFUNDED, ticket.getStatus());
     }
+
+
+
+
+
+
+
+
+    @Test
+    void GivenStandingTicket_WhenConstructed_ThenSeatNumberIsNull() {
+        Ticket ticket = track(new Ticket(1, 10, 50.0, 100, "barcode-X"));
+
+        assertNull(ticket.getSeatNumber());
+        assertEquals(1, ticket.getEventId());
+        assertEquals(10, ticket.getZoneId());
+    }
+
+    @Test
+    void GivenSeatedTicket_WhenConstructed_ThenSeatNumberIsPreserved() {
+        Ticket ticket = track(new Ticket(1, 10, "A12", 75.0, 101, "barcode-Y"));
+
+        assertEquals("A12", ticket.getSeatNumber());
+        assertEquals(1, ticket.getEventId());
+        assertEquals(10, ticket.getZoneId());
+        assertEquals(101, ticket.getId());
+    }
+
+    @Test
+    void GivenBlankSeatNumber_WhenCheckInvariants_ThenThrowsException() {
+        Ticket ticket = new Ticket(1, 10, "   ", 75.0, 101, "barcode-Y");
+
+        assertThrows(IllegalStateException.class, ticket::checkInvariants);
+    }
+
+
+
+
+
+
+
+
+
 }

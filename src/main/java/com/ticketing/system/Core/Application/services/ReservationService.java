@@ -105,7 +105,8 @@ public class ReservationService {
             activeOrder.addStandingReservation(eventId, zoneId, quantity, pricePerTicket, LocalDateTime.now());
             activeOrderRepository.save(activeOrder);
 
-            notificationService.notifyTicketReservationSuccess(Integer.parseInt(sessionId), eventId, zoneId, quantity);
+            // he's a guest so no notification for him
+            // notificationService.notifyTicketReservationSuccess(Integer.parseInt(sessionId), eventId, zoneId, quantity);
             log.info("Reservation successful for guest session {}", sessionId);
 
             return buildReservationResult(eventId, zoneId, quantity, List.of());
@@ -200,8 +201,8 @@ public class ReservationService {
             eventRepository.save(event);
             activeOrderRepository.save(activeOrder);
 
-            notificationService.notifyTicketReservationSuccess(Integer.parseInt(sessionId), eventId, zoneId,
-                    seatNumbers.size());
+            // he's a guest so no notification for him
+            // notificationService.notifyTicketReservationSuccess(Integer.parseInt(sessionId), eventId, zoneId, seatNumbers.size());
 
             return buildReservationResult(eventId, zoneId, seatNumbers.size(), seatNumbers);
 
@@ -378,7 +379,10 @@ public class ReservationService {
     }
 
     private InventoryZone getZoneOrThrowForMember(int userId, int eventId, int zoneId, Event event) {
-        InventoryZone zone = event.getVenueMap().getZone(zoneId);
+        InventoryZone zone = null;
+        if (event.getVenueMap() != null) {
+            zone = event.getVenueMap().getZone(zoneId);   
+        }
 
         if (zone == null) {
             notificationService.notifyTicketReservationFailure(
@@ -396,7 +400,10 @@ public class ReservationService {
     }
 
     private InventoryZone getZoneOrThrowForGuest(Event event, int eventId, int zoneId) {
-        InventoryZone zone = event.getVenueMap().getZone(zoneId);
+        InventoryZone zone = null;
+        if (event.getVenueMap() != null) {
+            zone = event.getVenueMap().getZone(zoneId);
+        }
 
         if (zone == null) {
             log.warn("reserveTicketsForGuest rejected: zone not found. eventId={}, zoneId={}",
@@ -408,7 +415,10 @@ public class ReservationService {
     }
 
     private InventoryZone getZoneOrThrowForRemove(int userId, Event event, int eventId, int zoneId) {
-        InventoryZone zone = event.getVenueMap().getZone(zoneId);
+        InventoryZone zone = null;
+        if (event.getVenueMap() != null) {
+            zone = event.getVenueMap().getZone(zoneId);
+        }
 
         if (zone == null) {
             notificationService.notifyRemoveTicketReservationFailure(

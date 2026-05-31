@@ -82,8 +82,8 @@ public class VenueMap {
 
 
 
-     public void updateZoneCapacity(int zoneId, int newCapacity) {
+     public void updateStandingZoneCapacity(int zoneId, int newCapacity) {
         InventoryZone zone = getZone(zoneId);
-        zone.setCapacity(newCapacity);
+        zone.setStandingCapacity(newCapacity);
     }
 }

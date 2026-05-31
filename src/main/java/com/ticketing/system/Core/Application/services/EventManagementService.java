@@ -1,6 +1,7 @@
 package com.ticketing.system.Core.Application.services;
 
 import java.lang.reflect.AccessFlag.Location;
+import java.util.ArrayList;
 import java.util.List;
 
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,7 @@ import com.ticketing.system.Core.Application.dto.EventCreationDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
+import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
@@ -30,6 +32,8 @@ import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.PurchasePolicy;
+import com.ticketing.system.Core.Domain.events.Seat;
+import com.ticketing.system.Core.Domain.events.SeatedZone;
 
 @Service
 @Slf4j
@@ -58,6 +62,17 @@ public class EventManagementService {
         this.paymentGateway = paymentGateway;
     }
 
+    // flows:
+
+    //addEvent(...)
+    // → creates event with no zones / draft venue
+
+    // configureVenueMap(...)
+    // → creates StandingZone and SeatedZone objects from VenueMapConfigDTO
+    // → attaches VenueMap to Event
+
+
+
     // UC-19 — Owner adds an Event in DRAFT state.
     public EventDetailDTO addEvent(String token, EventCreationDTO request) {
         if (!sessionManager.validateToken(token)) {
@@ -72,8 +87,7 @@ public class EventManagementService {
         }
         company.checkowner(ownerId);
         int newEventId = eventRepository.nextId();
-        InventoryZone zone1 = new StandingZone(1, "General Admission", 100, 50.0);
-        VenueMap venueMap = new VenueMap(3, request.location(), List.of(zone1));
+        VenueMap venueMap = new VenueMap(3, request.location(), List.of());
         DiscountPolicy discountPolicy = new DiscountPolicy(10.0);
         PurchasePolicy purchasePolicy = new PurchasePolicy();
         Event newEvent = new Event(
@@ -87,8 +101,7 @@ public class EventManagementService {
                 venueMap,
                 request.showDates(),
                 purchasePolicy,
-                discountPolicy
-        );
+                discountPolicy);
         eventRepository.save(newEvent);
         log.info("Event {} created successfully with ID {}", request.name(), newEventId);
         return new EventDetailDTO(
@@ -102,16 +115,23 @@ public class EventManagementService {
                 company.getName(),
                 newEvent.getStatus(),
                 newEvent.getShowDates());
-        }
+    }
+
+        
+
 
     // UC-19 — partial update; immutability rules per II.3.5.2 enforced inside Event.
     public void editEvent(String token, EventUpdateDTO update) {
         throw new UnsupportedOperationException("UC-19: not implemented");
     }
 
+
+
+
+
     // UC-19 — soft cancel; fires EventCancelled domain event for UC-4 refund pipeline.
     public void cancelEventAndRefund(String token, int eventId) {
-        
+
         if (!sessionManager.validateToken(token)) {
             log.warn("Invalid token provided for inviting manager");
             throw new RuntimeException("Invalid token");
@@ -133,7 +153,7 @@ public class EventManagementService {
             throw new RuntimeException("Company not found");
         }
         company.checkowner(ownerId);
-        
+
         List<Ticket> tickets = ticketRepository.findByEventId(String.valueOf(eventId));
         List<OrderReceipt> orderReceipts = orderReceiptRepository.findByEventId(eventId);
         for (OrderReceipt receipt : orderReceipts) {
@@ -157,35 +177,112 @@ public class EventManagementService {
                 //      totalRefundForReceipt 
                 //     // "Refund for canceled event: " + event.getId()
                 // );
-                
+                //TODO: do the refund through the payment gateway and handle potential failures
                 receipt.markRefunded();
                 orderReceiptRepository.save(receipt);
             }
         }
 
-        for(Ticket ticket : tickets){
-            if(ticket.getEventId() == eventId &&  (ticket.getStatus() == TicketStatus.PAID || ticket.getStatus() == TicketStatus.ISSUED)){
+        for (Ticket ticket : tickets) {
+            if (ticket.getEventId() == eventId
+                    && (ticket.getStatus() == TicketStatus.PAID || ticket.getStatus() == TicketStatus.ISSUED)) {
                 ticket.markRefunded();
                 ticketRepository.save(ticket);
-            }else{
+            } else {
                 ticket.markVoided();
                 ticketRepository.save(ticket);
             }
         }
 
-
         event.setCanceled(true);
         eventRepository.save(event);
 
         log.info("Event {} canceled successfully", eventId);
-    
-        
+
     }
 
+
+
+
+
+
+    public void configureVenueMap(String token, int companyId, VenueMapConfigDTO config) {
+        log.info("Configuring venue map for company {}, event {}, by user {}", companyId, config.eventId(), sessionManager.extractUserId(token));
+        if (!sessionManager.validateToken(token)) {
+            throw new RuntimeException("Invalid token");
+        }
+
+        int userId = sessionManager.extractUserId(token);
+
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null) {
+            throw new RuntimeException("Company not found");
+        }
+
+        company.ValidateManagerOrOwnerForConfigureVenue(userId);
+
+        Event event = eventRepository.findById(Integer.parseInt(config.eventId()));
+        if (event == null) {
+            throw new RuntimeException("Event not found");
+        }
+
+        List<InventoryZone> zones = new ArrayList<>();
+        int nextZoneId = 1;
+
+        for (VenueMapConfigDTO.ZoneConfigDTO zoneConfig : config.zones()) {
+            if (zoneConfig.seated()) {
+                List<Seat> seats = zoneConfig.seats().stream()
+                        .map(seatConfig_dto -> new Seat(seatConfig_dto.label(), 0, 0))
+                        .toList();
+
+                zones.add(new SeatedZone(
+                        nextZoneId,
+                        zoneConfig.zoneName(),
+                        zoneConfig.pricePerTicket(),
+                        seats
+                ));
+            } else {
+                zones.add(new StandingZone(
+                        nextZoneId,
+                        zoneConfig.zoneName(),
+                        zoneConfig.capacity(),
+                        zoneConfig.pricePerTicket()
+                ));
+            }
+
+            nextZoneId++;
+        }
+
+        VenueMap venueMap = new VenueMap(
+                event.getVenueMap() != null ? event.getVenueMap().getId() : 1,
+                event.getVenueMap() != null ? event.getVenueMap().getLocation() : null,
+                zones
+        );
+
+        event.configureVenueMap(venueMap, companyId);
+        eventRepository.save(event);
+        log.info("Venue map for event {} configured successfully", event.getId());
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // UC-20 — Owner/Manager configures venue map and inventory zones.
-    public void addCapacitoesToVenueMapZone(String token, int company_id,int event_id, int zone_id, int newCapacity) {
-       
-          if (!sessionManager.validateToken(token)) {
+    public void updateStandingZoneCapacity(String token, int company_id, int event_id, int zone_id, int newCapacity) {
+
+        if (!sessionManager.validateToken(token)) {
             log.warn("Invalid token provided for updating zone capacity");
             throw new RuntimeException("Invalid token");
         }
@@ -196,7 +293,7 @@ public class EventManagementService {
             throw new RuntimeException("Company not found");
         }
 
-        company.ValidateManagerOrOwner(userId);
+        company.ValidateManagerOrOwnerForConfigureVenue(userId);
 
         Event event = eventRepository.findById(event_id);
 
@@ -205,18 +302,35 @@ public class EventManagementService {
             throw new RuntimeException("Event not found");
         }
 
-        event.updateZoneCapacity(zone_id, newCapacity, company_id);
+        event.updateStandingZoneCapacity(zone_id, newCapacity, company_id);
 
         eventRepository.save(event);
         log.info("Zone {} at company {} capacity updated successfully", zone_id, company_id);
 
     }
+    
+
+
+    //TODO: might need to implement in EventManagementService or in Event, or we can say seated layout is immutable after venue configuration.
+    // public void addSeatToSeatedZone(...){
+            //TODO: might need to add a seat ID generator in VenueMap or SeatedZone to ensure unique seat IDs within the zone; or we can require the client to provide unique seat IDs in the request.
+    // }
+
+
+    // public void removeSeatFromSeatedZone(...){
+            //TODO: might need to check if the seat is already reserved/sold before allowing removal, and handle that accordingly (e.g. prevent removal, or allow removal but mark any affected reservations as invalid and notify users, etc.)
+    // }
+
+
+
 
 
     // UC-21 — set / replace event-level purchase + discount policies.
     public void setEventPolicies(String token, EventPolicyConfigDTO config) {
         throw new UnsupportedOperationException("UC-21: not implemented");
     }
+
+
 
     // Detail view for owner-side editing pages.
     public EventDetailDTO getEventDetail(String token, String eventId) {

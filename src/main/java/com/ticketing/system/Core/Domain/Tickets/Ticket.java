@@ -117,6 +117,14 @@ public class Ticket implements InvariantChecked {
         throw new UnsupportedOperationException("not implemented");
     }
 
+    public boolean isSeatedTicket() {
+        return seatNumber != null;
+    }
+
+    public boolean isStandingTicket() {
+        return seatNumber == null;
+    }
+
     // Missing getters per the unified-Ticket model.
     public int getZoneId() {
         return zoneid;

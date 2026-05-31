@@ -10,11 +10,15 @@ public class ReceiptLine implements InvariantChecked {
     private final double price;
     private final int eventid;
     private final LocalDateTime addedAt;
+    private final int zoneId;
+    private final String seatNumber;
 
-      public ReceiptLine(int ticketId, double price, int eventid, LocalDateTime addedAt) {
+      public ReceiptLine(int ticketId, double price, int eventid, int zoneId, String seatNumber, LocalDateTime addedAt) {
         this.ticketId = ticketId;
         this.price = price;
         this.eventid = eventid;
+        this.zoneId = zoneId;
+        this.seatNumber = seatNumber;
         this.addedAt = addedAt;
     }
 
@@ -35,6 +39,14 @@ public class ReceiptLine implements InvariantChecked {
         return price;
     }
 
+    public int getZoneId() {
+        return zoneId;
+    }
+
+    public String getSeatNumber() {
+        return seatNumber;
+    }
+
     @Override
     public void checkInvariants() {
         if (ticketId <= 0) {
@@ -48,6 +60,12 @@ public class ReceiptLine implements InvariantChecked {
         }
         if (addedAt == null) {
             throw new IllegalStateException("ReceiptLine invariant violated: addedAt must not be null");
+        }
+        if (seatNumber != null && seatNumber.isBlank()) {
+            throw new IllegalStateException("ReceiptLine invariant violated: seatNumber must not be blank if provided");
+        }
+        if (zoneId < 0) {
+            throw new IllegalStateException("ReceiptLine invariant violated: zoneId must be non-negative (was " + zoneId + ")");
         }
     }
 }

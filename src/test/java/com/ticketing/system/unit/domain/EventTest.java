@@ -18,6 +18,18 @@ import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.support.BaseDomainTest;
 
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import com.ticketing.system.Core.Domain.events.DiscountPolicy;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
+import com.ticketing.system.Core.Domain.events.PurchasePolicy;
+import com.ticketing.system.Core.Domain.events.Seat;
+import com.ticketing.system.Core.Domain.events.SeatStatus;
+import com.ticketing.system.Core.Domain.events.SeatedZone;
+
 // Unit tests for the Event aggregate (Event + VenueMap + InventoryZone + ShowDate + policies).
 class EventTest extends BaseDomainTest {
 
@@ -56,23 +68,23 @@ class EventTest extends BaseDomainTest {
 
        @Test
     public void GivenExistingZone_WhenUpdateZoneCapacity_ThenCapacityUpdated() {
-        event.updateZoneCapacity(ZONE_ID, 20, COMPANY_ID);
+        event.updateStandingZoneCapacity(ZONE_ID, 20, COMPANY_ID);
 
         assertEquals(20, zone.getAvailableAmount());
     }
-
+    
 
     @Test
     public void GivenMissingZone_WhenUpdateZoneCapacity_ThenThrowException() {
         assertThrows(IllegalArgumentException.class, () ->
-                event.updateZoneCapacity(999, 20, COMPANY_ID)
+                event.updateStandingZoneCapacity(999, 20, COMPANY_ID)
         );
     }
 
     @Test
     public void GivenWrongCompany_WhenUpdateZoneCapacity_ThenThrowException() {
         assertThrows(RuntimeException.class, () ->
-                event.updateZoneCapacity(ZONE_ID, 20, 999)
+                event.updateStandingZoneCapacity(ZONE_ID, 20, 999)
         );
     }
 
@@ -94,5 +106,198 @@ class EventTest extends BaseDomainTest {
 
     @Test
     @Disabled("V1: calculatePrice applies DiscountPolicy")
-    void givenDiscountPolicy_whenCalculatePrice_thenAppliesDiscount() {}
+    void givenDiscountPolicy_whenCalculatePrice_thenAppliesDiscount() {
+    }
+    
+
+
+
+
+
+
+
+    @Test
+    void GivenStandingZone_WhenReserveInventoryStandingSelection_ThenQuantityReserved() {
+        StandingZone standingZone = track(new StandingZone(1, "General Admission", 10, 50.0));
+        Event event = createEventWithZones(List.of(standingZone));
+
+        event.reserveStandingSpots(1, 3);
+
+        assertEquals(7, standingZone.getAvailableAmount());
+        assertEquals(3, standingZone.getReservedAmount());
+    }
+
+    @Test
+    void GivenSeatedZone_WhenReserveInventorySeatSelection_ThenExactSeatsReserved() {
+        SeatedZone seatedZone = track(new SeatedZone(
+                2,
+                "Orchestra",
+                120.0,
+                List.of(
+                        new Seat("A1", 0, 0),
+                        new Seat("A2", 1, 0),
+                        new Seat("A3", 2, 0)
+                )
+        ));
+        Event event = createEventWithZones(List.of(seatedZone));
+
+        event.reserveSeats(2, List.of("A1", "A2"));
+
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("A1").getStatus());
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("A2").getStatus());
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A3").getStatus());
+    }
+
+    @Test
+    void GivenSeatedZone_WhenReleaseInventorySeatSelection_ThenExactSeatsReleased() {
+        SeatedZone seatedZone = track(new SeatedZone(
+                2,
+                "Orchestra",
+                120.0,
+                List.of(
+                        new Seat("A1", 0, 0),
+                        new Seat("A2", 1, 0)
+                )
+        ));
+        Event event = createEventWithZones(List.of(seatedZone));
+
+        event.reserveSeats(2, List.of("A1", "A2"));
+        event.releaseSeats(2, List.of("A1"));
+
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A1").getStatus());
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("A2").getStatus());
+    }
+
+    @Test
+    void GivenSeatedZone_WhenConfirmSale_ThenReservedSeatsBecomeSold() {
+        SeatedZone seatedZone = track(new SeatedZone(
+                2,
+                "Orchestra",
+                120.0,
+                List.of(
+                        new Seat("A1", 0, 0),
+                        new Seat("A2", 1, 0)
+                )
+        ));
+        Event event = createEventWithZones(List.of(seatedZone));
+
+        event.reserveSeats(2, List.of("A1"));
+        event.confirmSeatSale(2, List.of("A1"));
+
+        assertEquals(SeatStatus.SOLD, seatedZone.getSeat("A1").getStatus());
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A2").getStatus());
+    }
+
+    @Test
+    void GivenSeatedZone_WhenUpdateZoneCapacity_ThenThrowsException() {
+        SeatedZone seatedZone = track(new SeatedZone(
+                ZONE_ID,
+                "Orchestra",
+                120.0,
+                List.of(
+                        new Seat("A1", 0, 0),
+                        new Seat("A2", 1, 0)
+                )
+        ));
+        Event event = createEventWithZones(List.of(seatedZone));
+
+        assertThrows(IllegalStateException.class, () ->
+                event.updateStandingZoneCapacity(ZONE_ID, 100, COMPANY_ID)
+        );
+
+        assertEquals(2, seatedZone.getCapacity());
+    }
+
+    @Test
+    void GivenStandingZone_WhenUpdateZoneCapacity_ThenCapacityUpdated() {
+        StandingZone standingZone = track(new StandingZone(ZONE_ID, "General Admission", 10, 50.0));
+        Event event = createEventWithZones(List.of(standingZone));
+
+        event.updateStandingZoneCapacity(ZONE_ID, 20, COMPANY_ID);
+
+        assertEquals(20, standingZone.getCapacity());
+        assertEquals(20, standingZone.getAvailableAmount());
+    }
+
+    @Test
+    void GivenPurchasePolicyRejectsQuantity_WhenReserveInventory_ThenThrowsException() {
+        StandingZone standingZone = track(new StandingZone(1, "General Admission", 10, 50.0));
+
+        PurchasePolicy rejectingPolicy = new PurchasePolicy() {
+            @Override
+            public boolean validate(int quantity) {
+                return false;
+            }
+        };
+
+        Event event = track(new Event(
+                EVENT_ID,
+                "Concert",
+                4.5,
+                ARTISTS,
+                EventCategory.CONCERT,
+                COMPANY_ID,
+                EventStatus.SCHEDULED,
+                new VenueMap(1, LOCATION, List.of(standingZone)),
+                List.of(),
+                rejectingPolicy,
+                noDiscountPolicy()
+        ));
+
+        assertThrows(IllegalStateException.class, () -> event.reserveStandingSpots(1, 1));
+
+        assertEquals(10, standingZone.getAvailableAmount());
+        assertEquals(0, standingZone.getReservedAmount());
+    }
+
+
+
+
+
+
+
+
+
+
+
+    // test helper functions:
+
+    private PurchasePolicy acceptingPurchasePolicy() {
+        return new PurchasePolicy() {
+            @Override
+            public boolean validate(int quantity) {
+                return quantity > 0 && quantity <= 10;
+            }
+        };
+    }
+
+    private DiscountPolicy noDiscountPolicy() {
+        return new DiscountPolicy(0) {
+            @Override
+            public double calculate(int quantity, Double priceAtOneTicketReservation, LocalDateTime now) {
+                return quantity * priceAtOneTicketReservation;
+            }
+
+            @Override
+            public double calculatePriceforoneticket(int quantity, Double priceAtOneTicketReservation, LocalDateTime now) {
+                return priceAtOneTicketReservation;
+            }
+        };
+    }
+
+    private Event createEventWithZones(List<InventoryZone> zones) {
+        return track(new Event(
+                EVENT_ID,
+                "Concert",
+                4.5,
+                ARTISTS,
+                EventCategory.CONCERT,
+                COMPANY_ID,
+                EventStatus.SCHEDULED,
+                new VenueMap(1, LOCATION, zones),
+                List.of(),
+                acceptingPurchasePolicy(),
+                noDiscountPolicy()
+        ));
+    }
 }
