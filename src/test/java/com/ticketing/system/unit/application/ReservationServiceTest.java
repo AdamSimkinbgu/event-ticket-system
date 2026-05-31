@@ -94,7 +94,7 @@ public class ReservationServiceTest {
         when(activeOrder.countTickets(EVENT_ID, ZONE_ID)).thenReturn(QUANTITY);
 
         ReservationResultDTO result =
-                reservationService.removeReservedStandingSpots(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY);
+                reservationService.removeReservedStandingSpotsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY);
 
         assertEquals(EVENT_ID, result.getEventId());
     }
@@ -102,7 +102,7 @@ public class ReservationServiceTest {
     @Test
     void GivenMissingToken_WhenremoveReservedStandingSpots_ThenThrowException() {
         assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeReservedStandingSpots(null, EVENT_ID, ZONE_ID, QUANTITY)
+                reservationService.removeReservedStandingSpotsForMember(null, EVENT_ID, ZONE_ID, QUANTITY)
         );
     }
 
@@ -111,7 +111,7 @@ public class ReservationServiceTest {
         when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(false);
 
         assertThrows(IllegalStateException.class, () ->
-                reservationService.removeReservedStandingSpots(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
+                reservationService.removeReservedStandingSpotsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
         );
     }
 
@@ -121,7 +121,7 @@ public class ReservationServiceTest {
         when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
 
         assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeReservedStandingSpots(VALID_TOKEN, EVENT_ID, ZONE_ID, 0)
+                reservationService.removeReservedStandingSpotsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, 0)
         );
     }
 
@@ -132,7 +132,7 @@ public class ReservationServiceTest {
         when(eventRepository.findById(EVENT_ID)).thenReturn(null);
 
         assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeReservedStandingSpots(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
+                reservationService.removeReservedStandingSpotsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
         );
     }
 
@@ -144,7 +144,7 @@ public class ReservationServiceTest {
         when(event.getVenueMap().getZone(ZONE_ID)).thenReturn(null);
 
         assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeReservedStandingSpots(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
+                reservationService.removeReservedStandingSpotsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
         );
     }
 
@@ -157,7 +157,7 @@ public class ReservationServiceTest {
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(null);
 
         assertThrows(IllegalArgumentException.class, () ->
-                reservationService.removeReservedStandingSpots(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
+                reservationService.removeReservedStandingSpotsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
         );
     }
 
@@ -174,7 +174,7 @@ void GivenOrderDoesNotContainEvent_WhenremoveReservedStandingSpots_ThenThrowExce
             .removeStandingSpots(EVENT_ID, ZONE_ID, QUANTITY);
 
     Exception exception = assertThrows(IllegalArgumentException.class, () ->
-            reservationService.removeReservedStandingSpots(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
+            reservationService.removeReservedStandingSpotsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
     );
 
     assertEquals("Active order does not contain this event", exception.getMessage());
@@ -193,7 +193,7 @@ void GivenNotEnoughReservedTickets_WhenremoveReservedStandingSpots_ThenThrowExce
             .removeStandingSpots(EVENT_ID, ZONE_ID, QUANTITY);
 
     Exception exception = assertThrows(IllegalArgumentException.class, () ->
-            reservationService.removeReservedStandingSpots(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
+            reservationService.removeReservedStandingSpotsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, QUANTITY)
     );
 
     assertEquals("Not enough reserved tickets to remove", exception.getMessage());
@@ -617,7 +617,7 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
                     readyLatch.countDown();
                     startLatch.await();
 
-                    reservationService.removeReservedStandingSpots(
+                    reservationService.removeReservedStandingSpotsForMember(
                             VALID_TOKEN,
                             EVENT_ID,
                             ZONE_ID,
@@ -825,7 +825,7 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(realOrder);
 
         ReservationResultDTO result =
-                reservationService.removeReservedSeats(VALID_TOKEN, EVENT_ID, ZONE_ID, List.of("A2"));
+                reservationService.removeReservedSeatsForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, List.of("A2"));
 
         assertEquals(1, result.getQuantity());
         assertEquals(List.of("A2"), result.getSeatNumbers());
@@ -853,12 +853,7 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
     // helper test methods:
 
     private PurchasePolicy acceptingPurchasePolicy() {
-        return new PurchasePolicy() {
-            @Override
-            public boolean validate(int quantity) {
-                return quantity > 0 && quantity <= 10;
-            }
-        };
+        return new PurchasePolicy(10);
     }
 
     private DiscountPolicy noDiscountPolicy() {

@@ -71,7 +71,8 @@ public class CheckoutService {
 
 
 
-
+    //TODO: currently this seems to be only for members, as it requires authentication and saves receipts with userId. 
+    // We might want to add a guest checkout flow that doesn't require authentication, saves receipts with guestEmail instead of userId.
     public CheckoutResultDTO checkout(String token, String idempotencyKey, String currency, String paymentMethodToken) {
         log.info("Entered checkout function");
         int userId = -1;
@@ -96,15 +97,16 @@ public class CheckoutService {
 
             IssuanceResultDTO issuanceResult = issueTickets(userId, boughtItems);
             validateIssuanceResult(issuanceResult, boughtItems, userId);
+            
+            int orderReceiptId = orderReceiptRepository.nextId();
+            List<ReceiptLine> receiptLines = saveTicketsAndBuildReceiptLines(userId, orderReceiptId, boughtItems, issuanceResult);
 
             confirmInventorySale(boughtItems);
 
+            saveReceipt(userId, orderReceiptId, totalPrice, receiptLines);
             order.buy();
             log.info("Order marked as bought. userId={}", userId);
 
-            List<ReceiptLine> receiptLines = saveTicketsAndBuildReceiptLines(boughtItems, issuanceResult);
-
-            saveReceipt(userId, totalPrice, receiptLines);
             notifyPurchaseCompleted(userId, totalPrice, receiptLines);
 
             log.info(
@@ -120,6 +122,12 @@ public class CheckoutService {
             throw new RuntimeException("Checkout failed, tickets returned to stock", e);
         }
     }
+
+
+
+
+    //TODO: maybe add a checkout for guest users that doesn't require authentication, but requires email and sessionId for receipt purposes, and  saves it with a null userId.
+    // The flow would be the same, but the userId would be null and the email would be used for notifications instead of userId. This would allow guest users to checkout without creating an account, but still receive notifications and have a record of their purchase.
 
 
 
@@ -214,9 +222,10 @@ public class CheckoutService {
         if (order == null) {
             return;
         }
-
-        List<CartLineItem> returnToStock = order.ReturnToStock();
         
+        List<CartLineItem> returnToStock = order.getItems();
+        
+        // now we release inventory first...
         Map<Integer, Map<Integer, List<CartLineItem>>> grouped = returnToStock.stream()
                 .collect(Collectors.groupingBy(
                         CartLineItem::geteventId,
@@ -246,6 +255,10 @@ public class CheckoutService {
             }
             eventRepository.save(event);
         }
+
+        // now we clear the order
+        order.clear();
+        activeOrderRepository.save(order);
     }
 
 
@@ -355,145 +368,149 @@ private PaymentResultDTO chargePayment(
         return ticketIssuer.issue(issuanceRequest);
     }
 
-private void validateIssuanceResult( IssuanceResultDTO issuanceResult,  List<CartLineItem> boughtItems,  int userId
-) {
-    if (issuanceResult == null || issuanceResult.barcodes() == null || issuanceResult.barcodes().isEmpty()) {
-        log.error("Ticket issuance failed. userId={}, itemCount={}", userId, boughtItems.size());
-        throw new IllegalStateException("Ticket issuance failed");
-    }
+    private void validateIssuanceResult( IssuanceResultDTO issuanceResult,  List<CartLineItem> boughtItems,  int userId
+    ) {
+        if (issuanceResult == null || issuanceResult.barcodes() == null || issuanceResult.barcodes().isEmpty()) {
+            log.error("Ticket issuance failed. userId={}, itemCount={}", userId, boughtItems.size());
+            throw new IllegalStateException("Ticket issuance failed");
+        }
 
-    if (issuanceResult.barcodes().size() != boughtItems.size()) {
-        log.error(
-                "Ticket issuance count mismatch. userId={}, expected={}, actual={}",
-                userId,
-                boughtItems.size(),
-                issuanceResult.barcodes().size()
-        );
-        throw new IllegalStateException("Ticket issuance count mismatch");
-    }
-
-    log.info(
-            "Ticket issuance succeeded. userId={}, issuedCount={}",
-            userId,
-            issuanceResult.barcodes().size()
-    );
-}
-
-private List<ReceiptLine> saveTicketsAndBuildReceiptLines( List<CartLineItem> boughtItems, IssuanceResultDTO issuanceResult) {
-    List<ReceiptLine> receiptLines = new ArrayList<>();
-
-    for (int i = 0; i < boughtItems.size(); i++) {
-        CartLineItem item = boughtItems.get(i);
-        var barcode = issuanceResult.barcodes().get(i);
-
-        Event event = eventRepository.findById(item.geteventId());
-
-        long quantityForSameEvent = boughtItems.stream()
-                .filter(x -> x.geteventId() == item.geteventId())
-                .count();
-
-        double finalPriceForOneTicket = event.calculatePriceforoneticket(
-                (int) quantityForSameEvent,
-                item.getPriceAtReservation(),
-                LocalDateTime.now()
-        );
-
-        Ticket ticket = new Ticket(
-                item.geteventId(),
-                item.getzoneId(),
-                item.getSeatNumber(),
-                finalPriceForOneTicket,
-                barcode.ticketId(),
-                barcode.barcodeValue()
-        );
-
-        ticketRepository.save(ticket);
-
-        ReceiptLine line = new ReceiptLine(
-                            barcode.ticketId(),
-                            finalPriceForOneTicket,
-                            item.geteventId(),
-                            item.getzoneId(),
-                            item.getSeatNumber(),
-                            LocalDateTime.now()
-                    );
-
-        receiptLines.add(line);
-    }
-
-    return receiptLines;
-}
-
-private void saveReceipt(int userId, double totalPrice, List<ReceiptLine> receiptLines) {
-    OrderReceipt receipt = new OrderReceipt(userId, totalPrice, receiptLines);
-    orderReceiptRepository.save(receipt);
-
-    log.info(
-            "Order receipt saved. userId={}, totalPrice={}, receiptLineCount={}",
-            userId,
-            totalPrice,
-            receiptLines.size()
-    );
-}
-
-private void notifyPurchaseCompleted(int userId, double totalPrice, List<ReceiptLine> receiptLines) {
-    notificationService.notifyPurchaseCompleted(
-            userId,
-            totalPrice,
-            receiptLines.stream()
-                    .map(ReceiptLine::getTicketId)
-                    .toList()
-    );
-
-    log.info("Purchase completed notification sent. userId={}", userId);
-}
-
-private CheckoutResultDTO buildCheckoutResult(
-        double totalPrice,
-        PaymentResultDTO paymentResult,
-        IssuanceResultDTO issuanceResult
-) {
-    return new CheckoutResultDTO(
-            totalPrice,
-            paymentResult.paymentTransactionId(),
-            issuanceResult.barcodes()
-                    .stream()
-                    .map(barcode -> barcode.ticketId())
-                    .toList()
-    );
-}
-
-private void handleCheckoutFailure(int userId, ActiveOrder order, PaymentResultDTO paymentResult, double totalPrice,Exception e) {
-    log.error(
-            "Checkout failed. userId={}, totalPrice={}, paymentDone={}",
-            userId,
-            totalPrice,
-            paymentResult != null,
-            e
-    );
-
-    returnTicketsToStock(order);
-    log.info("Checkout rollback: tickets returned to stock. userId={}", userId);
-
-    if (paymentResult != null) {
-        notificationService.notifyPurchaseFailed(
-                userId,
-                "Checkout failed, we want give you back the money"
-        );
+        if (issuanceResult.barcodes().size() != boughtItems.size()) {
+            log.error(
+                    "Ticket issuance count mismatch. userId={}, expected={}, actual={}",
+                    userId,
+                    boughtItems.size(),
+                    issuanceResult.barcodes().size()
+            );
+            throw new IllegalStateException("Ticket issuance count mismatch");
+        }
 
         log.info(
-                "Refund requested. userId={}, transactionId={}, amount={}",
+                "Ticket issuance succeeded. userId={}, issuedCount={}",
                 userId,
-                paymentResult.paymentTransactionId(),
-                totalPrice
+                issuanceResult.barcodes().size()
         );
-
-        paymentGateway.refund(paymentResult.paymentTransactionId(), totalPrice);
     }
 
-    notificationService.notifyPurchaseFailed(
-            userId,
-            "Checkout failed. Tickets were returned to stock."
-    );
-}
+    private List<ReceiptLine> saveTicketsAndBuildReceiptLines(int holderId, int orderReceiptId, List<CartLineItem> boughtItems,
+            IssuanceResultDTO issuanceResult) {
+        List<ReceiptLine> receiptLines = new ArrayList<>();
+
+        for (int i = 0; i < boughtItems.size(); i++) {
+            CartLineItem item = boughtItems.get(i);
+            var barcode = issuanceResult.barcodes().get(i);
+
+            Event event = eventRepository.findById(item.geteventId());
+
+            long quantityForSameEvent = boughtItems.stream()
+                    .filter(x -> x.geteventId() == item.geteventId())
+                    .count();
+
+            double finalPriceForOneTicket = event.calculatePriceforoneticket(
+                    (int) quantityForSameEvent,
+                    item.getPriceAtReservation(),
+                    LocalDateTime.now());
+
+            Ticket ticket = new Ticket(
+                    item.geteventId(),
+                    item.getzoneId(),
+                    orderReceiptId,
+                    item.getSeatNumber(),
+                    finalPriceForOneTicket,
+                    barcode.ticketId(),
+                    barcode.barcodeValue());
+
+            ticket.setHolderUserId(holderId);
+
+            ticketRepository.save(ticket);
+
+            ReceiptLine line = new ReceiptLine(
+                    barcode.ticketId(),
+                    finalPriceForOneTicket,
+                    item.geteventId(),
+                    item.getzoneId(),
+                    item.getSeatNumber(),
+                    LocalDateTime.now());
+
+            receiptLines.add(line);
+        }
+
+        return receiptLines;
+    }
+
+
+    //TODO: currently this is only for the member(userId here)
+    private void saveReceipt(int userId, int receiptId, double totalPrice, List<ReceiptLine> receiptLines) {
+        OrderReceipt receipt = new OrderReceipt(receiptId, userId, totalPrice, receiptLines);
+        orderReceiptRepository.save(receipt);
+
+        log.info(
+                "Order receipt saved. receiptId={}, userId={}, totalPrice={}, receiptLineCount={}",
+                receiptId,
+                userId,
+                totalPrice,
+                receiptLines.size()
+        );
+    }
+
+    private void notifyPurchaseCompleted(int userId, double totalPrice, List<ReceiptLine> receiptLines) {
+        notificationService.notifyPurchaseCompleted(
+                userId,
+                totalPrice,
+                receiptLines.stream()
+                        .map(ReceiptLine::getTicketId)
+                        .toList()
+        );
+
+        log.info("Purchase completed notification sent. userId={}", userId);
+    }
+
+    private CheckoutResultDTO buildCheckoutResult(
+            double totalPrice,
+            PaymentResultDTO paymentResult,
+            IssuanceResultDTO issuanceResult
+    ) {
+        return new CheckoutResultDTO(
+                totalPrice,
+                paymentResult.paymentTransactionId(),
+                issuanceResult.barcodes()
+                        .stream()
+                        .map(barcode -> barcode.ticketId())
+                        .toList()
+        );
+    }
+
+    private void handleCheckoutFailure(int userId, ActiveOrder order, PaymentResultDTO paymentResult, double totalPrice, Exception e) {
+        log.error(
+                "Checkout failed. userId={}, totalPrice={}, paymentDone={}",
+                userId,
+                totalPrice,
+                paymentResult != null,
+                e
+        );
+
+        returnTicketsToStock(order);
+        log.info("Checkout rollback: tickets returned to stock. userId={}", userId);
+
+        if (paymentResult != null) {
+            notificationService.notifyPurchaseFailed(
+                    userId,
+                    "Checkout failed, we want give you back the money"
+            );
+
+            log.info(
+                    "Refund requested. userId={}, transactionId={}, amount={}",
+                    userId,
+                    paymentResult.paymentTransactionId(),
+                    totalPrice
+            );
+
+            paymentGateway.refund(paymentResult.paymentTransactionId(), totalPrice);
+        }
+
+        notificationService.notifyPurchaseFailed(
+                userId,
+                "Checkout failed. Tickets were returned to stock."
+        );
+    }
 }

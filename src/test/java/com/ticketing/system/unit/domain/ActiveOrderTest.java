@@ -232,6 +232,17 @@ class ActiveOrderTest extends BaseDomainTest {
     }
 
 
+    @Test
+    void GivenDuplicateSeatNumbers_WhenRemoveSeats_ThenThrowsAndCartUnchanged() {
+        ActiveOrder order = new ActiveOrder(1);
+        order.addSeatedReservation(10, 2, List.of("A1", "A2"), 100, LocalDateTime.now());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> order.removeSeats(10, 2, List.of("A1", "A1")));
+
+        assertEquals(List.of("A1", "A2"),
+                order.getItems().stream().map(CartLineItem::getSeatNumber).toList());
+    }
 
 
 

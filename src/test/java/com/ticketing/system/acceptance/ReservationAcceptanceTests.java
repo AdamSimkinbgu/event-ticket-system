@@ -255,10 +255,10 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowExceptio
     }
 
     @Test
-    void GivenValidReservedTickets_WhenremoveReservedStandingSpots_ThenReturnReservationResult() {
+    void GivenValidReservedTickets_WhenremoveReservedStandingSpotsForMember_ThenReturnReservationResult() {
         activeOrder.addStandingReservation(100, 1, 3, 50.0, java.time.LocalDateTime.now());
 
-        ReservationResultDTO result = reservationService.removeReservedStandingSpots(
+        ReservationResultDTO result = reservationService.removeReservedStandingSpotsForMember(
                 "validToken",
                 100,
                 1,
@@ -269,11 +269,11 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowExceptio
     }
 
     @Test
-    void GivenRemoveQuantityIsZero_WhenremoveReservedStandingSpots_ThenThrowException() {
+    void GivenRemoveQuantityIsZero_WhenremoveReservedStandingSpotsForMember_ThenThrowException() {
         String result;
 
         try {
-            reservationService.removeReservedStandingSpots(
+            reservationService.removeReservedStandingSpotsForMember(
                     "validToken",
                     100,
                     1,
@@ -292,13 +292,13 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowExceptio
 
     
     @Test
-    void GivenNoActiveOrder_WhenremoveReservedStandingSpots_ThenThrowException() {
+    void GivenNoActiveOrder_WhenremoveReservedStandingSpotsForMember_ThenThrowException() {
         when(activeOrderRepository.getByUserId(1)).thenReturn(null);
 
         String result;
 
         try {
-            reservationService.removeReservedStandingSpots(
+            reservationService.removeReservedStandingSpotsForMember(
                     "validToken",
                     100,
                     1,
@@ -315,11 +315,11 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowExceptio
     }
 
     @Test
-    void GivenActiveOrderDoesNotContainEvent_WhenremoveReservedStandingSpots_ThenThrowException() {
+    void GivenActiveOrderDoesNotContainEvent_WhenremoveReservedStandingSpotsForMember_ThenThrowException() {
         String result;
 
         try {
-            reservationService.removeReservedStandingSpots(
+            reservationService.removeReservedStandingSpotsForMember(
                     "validToken",
                     100,
                     1,
@@ -336,13 +336,13 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowExceptio
     }
 
     @Test
-    void GivenNotEnoughReservedTickets_WhenremoveReservedStandingSpots_ThenThrowException() {
+    void GivenNotEnoughReservedTickets_WhenremoveReservedStandingSpotsForMember_ThenThrowException() {
         activeOrder.addStandingReservation(100, 1, 1, 50.0, java.time.LocalDateTime.now());
 
         String result;
 
         try {
-            reservationService.removeReservedStandingSpots(
+            reservationService.removeReservedStandingSpotsForMember(
                     "validToken",
                     100,
                     1,

@@ -37,13 +37,13 @@ class TicketTest extends BaseDomainTest {
 
     @Test
     void freshlyConstructedTicket_hasNullHolderUserId() {
-        Ticket t = track(new Ticket(1, 10, 25.0, 100, "barcode-X"));
+        Ticket t = track(new Ticket(1, 10, 11, 25.0, 100, "barcode-X"));
         assertNull(t.getHolderUserId());
     }
 
     @Test
     void setHolderUserId_assignsMemberOwnership() {
-        Ticket t = track(new Ticket(1, 10, 25.0, 100, "barcode-X"));
+        Ticket t = track(new Ticket(1, 10, 11, 25.0, 100, "barcode-X"));
         t.setHolderUserId(42);
         assertEquals(42, t.getHolderUserId());
     }
@@ -51,7 +51,7 @@ class TicketTest extends BaseDomainTest {
     @Test
     void setHolderUserId_nullClearsOwnership() {
         // E.g., refund-to-pool flow could clear the holder. Domain allows it.
-        Ticket t = track(new Ticket(1, 10, 25.0, 100, "barcode-X"));
+        Ticket t = track(new Ticket(1, 10, 11, 25.0, 100, "barcode-X"));
         t.setHolderUserId(42);
         t.setHolderUserId(null);
         assertNull(t.getHolderUserId());
@@ -59,7 +59,7 @@ class TicketTest extends BaseDomainTest {
 
     @Test
     void testMarkRefundedChangesStatusToRefunded() {
-        Ticket ticket = track(new Ticket(10, 1, 50.0, 100, "BARCODE123"));
+        Ticket ticket = track(new Ticket(10, 1, 11, 50.0, 100, "BARCODE123"));
         ticket.markRefunded();
         assertEquals(TicketStatus.REFUNDED, ticket.getStatus());
     }
@@ -67,13 +67,12 @@ class TicketTest extends BaseDomainTest {
 
 
 
-
-
+    
 
 
     @Test
     void GivenStandingTicket_WhenConstructed_ThenSeatNumberIsNull() {
-        Ticket ticket = track(new Ticket(1, 10, 50.0, 100, "barcode-X"));
+        Ticket ticket = track(new Ticket(1, 10, 11, 50.0, 100, "barcode-X"));
 
         assertNull(ticket.getSeatNumber());
         assertEquals(1, ticket.getEventId());
@@ -82,7 +81,7 @@ class TicketTest extends BaseDomainTest {
 
     @Test
     void GivenSeatedTicket_WhenConstructed_ThenSeatNumberIsPreserved() {
-        Ticket ticket = track(new Ticket(1, 10, "A12", 75.0, 101, "barcode-Y"));
+        Ticket ticket = track(new Ticket(1, 10, 11, "A12", 75.0, 101, "barcode-Y"));
 
         assertEquals("A12", ticket.getSeatNumber());
         assertEquals(1, ticket.getEventId());
@@ -92,7 +91,7 @@ class TicketTest extends BaseDomainTest {
 
     @Test
     void GivenBlankSeatNumber_WhenCheckInvariants_ThenThrowsException() {
-        Ticket ticket = new Ticket(1, 10, "   ", 75.0, 101, "barcode-Y");
+        Ticket ticket = new Ticket(1, 10, 11, "   ", 75.0, 101, "barcode-Y");
 
         assertThrows(IllegalStateException.class, ticket::checkInvariants);
     }

@@ -370,12 +370,7 @@ class SessionAndOrderSweeperTest {
     // test helper functions:
 
     private PurchasePolicy acceptingPurchasePolicy() {
-        return new PurchasePolicy() {
-            @Override
-            public boolean validate(int quantity) {
-                return quantity > 0 && quantity <= 10;
-            }
-        };
+        return new PurchasePolicy(10);
     }
 
     private DiscountPolicy noDiscountPolicy() {

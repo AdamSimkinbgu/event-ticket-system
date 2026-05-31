@@ -7,7 +7,7 @@ import com.ticketing.system.Core.Domain.events.InventoryZone;
 
 // Output of CatalogService.getEventVenueMap() (UC-8).
 public record VenueMapDTO(
-    int eventId,
+    int venueMapId,
     LocationDTO location,
     List<InventoryZoneDTO> inventoryZones
 ) {}

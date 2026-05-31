@@ -56,6 +56,7 @@ class EventManagementServiceTest {
     private final int OWNER_ID = 1;
     private final int MANAGER_ID = 2;
     private final int ZONE_ID = 5;
+    private final int ORDER_RECEIPT_ID = 20;
     private final String COMPANY_1_NAME = "Company1";
     private final String COMPANY_1_DESCRIPTION = "A test production company1";
     private final Location LOCATION = new Location("Belgium", "Brussels");
@@ -283,9 +284,8 @@ class EventManagementServiceTest {
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-        
         ReceiptLine line = new ReceiptLine(1, 100.0, EVENT_ID, 1, "A1", java.time.LocalDateTime.now());
-        OrderReceipt realReceipt = OrderReceipt.forMember(99, 100.0, List.of(line));
+        OrderReceipt realReceipt = OrderReceipt.forMember(99, OWNER_ID, 100.0, List.of(line));
         
         when(orderReceiptRepository.findByEventId(EVENT_ID))
             .thenReturn(List.of(realReceipt));
@@ -364,7 +364,7 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
 
-        Ticket paidTicket = new Ticket(EVENT_ID, ZONE_ID, 100.0, 1, "BARCODE123");
+        Ticket paidTicket = new Ticket(EVENT_ID, ZONE_ID, ORDER_RECEIPT_ID, 100.0, 1, "BARCODE123");
         
         when(mockTicketRepo.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of(paidTicket));
 
@@ -382,7 +382,7 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
 
-        Ticket issuedTicket = new Ticket(EVENT_ID, ZONE_ID, 100.0, 1, "BARCODE123");
+        Ticket issuedTicket = new Ticket(EVENT_ID, ZONE_ID, ORDER_RECEIPT_ID, 100.0, 1, "BARCODE123");
         
         issuedTicket.markIssued("BARCODE123"); 
         
@@ -401,17 +401,41 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
 
-        Ticket availableTicket = 
-            new Ticket(EVENT_ID, ZONE_ID, 100.0, 1, "BARCODE123");
-        
-        availableTicket.release(); 
-        
+        Ticket availableTicket = new Ticket(EVENT_ID, ZONE_ID, ORDER_RECEIPT_ID, 100.0, 1, "BARCODE123");
+
+        availableTicket.release();
+
         when(mockTicketRepo.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of(availableTicket));
 
         eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
 
         assertEquals(TicketStatus.VOIDED, availableTicket.getStatus());
     }
+    
+
+    // new test
+    @Test
+    void GivenSeatedVenueConfig_WhenConfigureVenueMap_ThenSeatCoordinatesArePreserved() {
+        // configure seats A1 with x=10, y=20
+        // fetch event venue map
+        // assert A1.getX() == 10
+        // assert A1.getY() == 20
+
+    }
+    
+
+    @Test
+    void GivenEventCreatedByAddEventAndVenueConfigured_WhenReserveStandingTicket_ThenReservationSucceeds() {
+        // addEvent(...)
+        // configureVenueMap(...)
+        // reserveStandingTicketsForMember(...)
+        // should not throw UnsupportedOperationException from PurchasePolicy
+
+    }
+
+
+
+
 
     @Test @Disabled("UC-19: Owner adds event — DRAFT state initially")
     void givenOwner_whenAddEvent_thenEventInDraft() {}

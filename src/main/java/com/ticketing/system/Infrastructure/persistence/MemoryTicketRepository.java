@@ -98,9 +98,11 @@ public class MemoryTicketRepository implements ITicketRepository {
 
     @Override
     public List<Ticket> findByOrderReceiptId(int orderReceiptId) {
-        // Ticket has no orderReceiptId field yet (UC-22 / receipt-join feature).
-        throw new UnsupportedOperationException(
-                "findByOrderReceiptId: Ticket entity needs an orderReceiptId field first");
+        List<Ticket> result = new ArrayList<>();
+        for (Ticket t : ticketsById.values()) {
+            if (t.getOrderReceiptId() == orderReceiptId) result.add(t);
+        }
+        return result;
     }
 
     @Override

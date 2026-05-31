@@ -1228,6 +1228,59 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
 
 
 
+        // new test
+        @Test
+        void GivenReceiptSaveFailsAfterSeatConfirmation_WhenCheckout_ThenSystemDoesNotLoseSeatOrCart() {
+                // Arrange seated seat A1 RESERVED in cart
+                // Make payment and issuance succeed
+                // Make orderReceiptRepository.save(...) throw
+                // Assert checkout throws
+                // Assert seat is not left in an impossible state
+                // Assert active order is not silently lost
+                SeatedZone seatedZone = new SeatedZone(
+                                ZONE_ID_1,
+                                "Orchestra",
+                                120.0,
+                                List.of(new Seat("A1", 0, 0)));
+                seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+                Event realEvent = createRealEventWithZone(EVENT_ID_1, seatedZone);
+                ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+
+                activeOrder.addSeatedReservation(
+                                EVENT_ID_1,
+                                ZONE_ID_1,
+                                List.of("A1"),
+                                120.0,
+                                LocalDateTime.now());
+
+                PaymentResultDTO paymentResult = new PaymentResultDTO(
+                                PAYMENT_TRANSACTION_ID,
+                                "gateway",
+                                120.0,
+                                                "ILS",
+                                LocalDateTime.now());
+
+                IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
+                                ISSUANCE_TRANSACTION_ID,
+                                "issuer",
+                                LocalDateTime.now(),
+                                List.of(new BarcodeDTO(TICKET_ID_1, "barcode-A1", "QR")));
+                                
+                when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+                when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(realEvent);
+                when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
+                when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+
+                doThrow(new RuntimeException("DB error on receipt save"))
+                                .when(mockOrderReceiptRepo).save(any(OrderReceipt.class));
+
+                assertThrows(RuntimeException.class, () -> checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY,
+                                CURRENCY, PAYMENT_METHOD_TOKEN));
+                                
+                assertEquals(SeatStatus.SOLD, seatedZone.getSeat("A1").getStatus());
+                assertFalse(activeOrder.isEmpty());
+                assertThrows(RuntimeException.class, () -> checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN));
+        }
 
 
 
@@ -1243,12 +1296,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
    // test helper functions:
 
    private PurchasePolicy acceptingPurchasePolicy() {
-        return new PurchasePolicy() {
-                @Override
-                public boolean validate(int quantity) {
-                return quantity > 0 && quantity <= 10;
-                }
-        };
+           return new PurchasePolicy(10);
         }
 
         private DiscountPolicy noDiscountPolicy() {

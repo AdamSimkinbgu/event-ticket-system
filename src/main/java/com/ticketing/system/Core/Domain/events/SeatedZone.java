@@ -284,10 +284,12 @@ public class SeatedZone extends InventoryZone {
         return (int) seats.values().stream().filter(s -> s.getStatus() == SeatStatus.RESERVED).count();
     }
 
+    @Override
     public int getSoldAmount() {
         return (int) seats.values().stream().filter(s -> s.getStatus() == SeatStatus.SOLD).count();
     }
 
+    
     @Override
     public void checkInvariants() {
         if (name == null || name.isBlank()) {

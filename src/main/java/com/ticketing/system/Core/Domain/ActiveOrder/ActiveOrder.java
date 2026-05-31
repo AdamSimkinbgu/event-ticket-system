@@ -1,5 +1,6 @@
 package com.ticketing.system.Core.Domain.ActiveOrder;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -32,7 +33,10 @@ public class ActiveOrder implements InvariantChecked {
     private String sessionId;
     private String status;
     private final List<CartLineItem> items;
-     private final Object itemsLock = new Object();
+    private final LocalDateTime createdAt;
+    private final Object itemsLock = new Object();
+     
+
     public ActiveOrder(Integer userId, String sessionId) {
         if (userId == null && sessionId == null) {
             throw new IllegalArgumentException(
@@ -41,6 +45,7 @@ public class ActiveOrder implements InvariantChecked {
         this.userId = userId;
         this.sessionId = sessionId;
         this.items = new ArrayList<>();
+        this.createdAt = LocalDateTime.now();
     }
 
     /**
@@ -156,13 +161,15 @@ public class ActiveOrder implements InvariantChecked {
 
 
     public void removeSeats(int eventId, int zoneId, List<String> seatNumbers) {
+        this.checkThatSeatNumbersListDoesNotContainDuplicates(seatNumbers);
+
         synchronized (itemsLock) {
             if (!hasReservationForEventWithoutLock(eventId)) {
                 throw new IllegalArgumentException("Active order does not contain this event");
             }
 
             // check that all seatNumbers exist in the active order before attempting removal, to avoid partial removals if an invalid seatNumber is provided.
-            this.validateSeatNumbersForEventAndZoneDoExist(eventId, zoneId, seatNumbers);
+            this.validateContainsSeats(eventId, zoneId, seatNumbers);
 
             // start removals
             for (String seatNumber : seatNumbers) {
@@ -191,7 +198,8 @@ public class ActiveOrder implements InvariantChecked {
 
 
 
-    private void checkThatNotAddingDuplicateSeatNumbersForEventAndZone(int eventId, int zoneId, List<String> seatNumbers) {
+    private void checkThatNotAddingDuplicateSeatNumbersForEventAndZone(int eventId, int zoneId,
+            List<String> seatNumbers) {
         for (String seatNumber : seatNumbers) {
             boolean exists = items.stream().anyMatch(item -> item.geteventId() == eventId &&
                     item.getzoneId() == zoneId &&
@@ -205,23 +213,30 @@ public class ActiveOrder implements InvariantChecked {
             }
         }
         // that there aren't duplicates in seatnumbers
-        if (seatNumbers.size() != new HashSet<>(seatNumbers).size()) {
-            throw new IllegalArgumentException("Duplicate seat numbers provided in input: " + seatNumbers);
-        }
+        checkThatSeatNumbersListDoesNotContainDuplicates(seatNumbers);
     }
     
 
-    
-    private void validateSeatNumbersForEventAndZoneDoExist(int eventId, int zoneId, List<String> seatNumbers) {
-        // check that all seatNumbers exist in the active order before attempting removal, to avoid partial removals if an invalid seatNumber is provided.
-        for (String seatNumber : seatNumbers) {
-            boolean exists = items.stream().anyMatch(item -> item.geteventId() == eventId &&
-                    item.getzoneId() == zoneId &&
-                    seatNumber.equals(item.getSeatNumber()) &&
-                    !item.isExpired());
+    private void checkThatSeatNumbersListDoesNotContainDuplicates(List<String> seatNumbers) {
+        if (seatNumbers.size() != new HashSet<>(seatNumbers).size()) {
+            throw new IllegalArgumentException("Duplicate seat numbers provided in input list: " + seatNumbers);
+        }
+    }
 
-            if (!exists) {
-                throw new IllegalArgumentException("Seat number to remove not found in active order: " + seatNumber);
+
+    
+
+    public void validateContainsSeats(int eventId, int zoneId, List<String> seatNumbers) {
+        synchronized (itemsLock) {
+            for (String seatNumber : seatNumbers) {
+                boolean exists = items.stream().anyMatch(item -> item.geteventId() == eventId &&
+                        item.getzoneId() == zoneId &&
+                        seatNumber.equals(item.getSeatNumber()) &&
+                        !item.isExpired());
+
+                if (!exists) {
+                    throw new IllegalArgumentException("Active order does not contain seat: " + seatNumber);
+                }
             }
         }
     }
@@ -249,6 +264,7 @@ public class ActiveOrder implements InvariantChecked {
 
 
 
+    
 
 
     public List<CartLineItem> getItems() {
@@ -313,6 +329,36 @@ public class ActiveOrder implements InvariantChecked {
     public String getStatus() {
         return status;
     }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    // returns the minimum remaining time among the items in the active order, which represents the time until the next item expires. If there are no items, returns Duration.ZERO.
+    public Duration getRemainingTime() {
+        synchronized (itemsLock) {
+            if (items.isEmpty()) {
+                return Duration.ZERO;
+            }
+
+            return items.stream()
+                    .map(CartLineItem::getRemainingTime)
+                    .min(Duration::compareTo)
+                    .orElse(Duration.ZERO);
+        }
+    }
+
+    // returns the total price of all items in the active order by summing up their individual prices at reservation time.
+    // OR* avoid using domain total and let ReservationService build the DTO with event policies.   <------
+    public double getRegularTotalPrice() {
+        synchronized (itemsLock) {
+            return items.stream()
+                    .mapToDouble(CartLineItem::getPriceAtReservation)
+                    .sum();
+        }
+    }
+
+
 
     /**
      * Guest→Member promotion: claim this cart for a user. Throws if the cart
@@ -395,14 +441,6 @@ public class ActiveOrder implements InvariantChecked {
             return false;
         }
     }
-    
-    public double getTotalPrice() {
-        throw new UnsupportedOperationException("UC-9: not implemented");
-    }
-
-    public java.time.Duration getRemainingTime() {
-        throw new UnsupportedOperationException("UC-5/9: not implemented");
-    }
 
 
     
@@ -410,18 +448,15 @@ public class ActiveOrder implements InvariantChecked {
 
 
 
-private boolean hasReservationForEventWithoutLock(int eventId) {
-    for (CartLineItem item : items) {
-        if (item.geteventId() == eventId && !item.isExpired()) {
-            return true;
+    private boolean hasReservationForEventWithoutLock(int eventId) {
+        for (CartLineItem item : items) {
+            if (item.geteventId() == eventId && !item.isExpired()) {
+                return true;
+            }
         }
+        return false;
     }
-    return false;
-}
 
-    public java.time.LocalDateTime getCreatedAt() {
-        throw new UnsupportedOperationException("not implemented (add createdAt field)");
-    }
 
     public void expire() {
         throw new UnsupportedOperationException("UC-2: not implemented");
@@ -475,7 +510,7 @@ private boolean hasReservationForEventWithoutLock(int eventId) {
                     sessionId,
                     getCreatedAt(),
                     this.getRemainingTime().getSeconds(),
-                    this.getTotalPrice(),
+                    this.getRegularTotalPrice(),
                     lineDTOs
             );
         }

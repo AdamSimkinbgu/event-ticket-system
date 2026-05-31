@@ -455,6 +455,18 @@ public class InventoryZoneTest extends BaseDomainTest {
 
 
 
+    @Test
+    void GivenStandingZoneReservedTickets_WhenConfirmSale_ThenReservedDecreasesAndSoldIncreases() {
+        StandingZone zone = new StandingZone(1, "General", 100, 50);
+
+        zone.reserve(InventorySelection.standing(3));
+        zone.confirmSale(InventorySelection.standing(3));
+
+        assertEquals(0, zone.getReservedAmount());
+        assertEquals(3, zone.getSoldAmount());
+        assertEquals(97, zone.getAvailableAmount());
+    }
+
 
 
 

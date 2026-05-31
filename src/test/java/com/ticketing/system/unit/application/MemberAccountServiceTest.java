@@ -74,7 +74,7 @@ class MemberAccountServiceTest {
         Mockito.when(receipt.getTotalAmount()).thenReturn(150.00);
         Mockito.when(event.getName()).thenReturn("Rock Concert");
         Mockito.when(ticket.toTicketRecordDTO()).thenReturn(new TicketRecordDTO(
-                101, 1, "15", 150.00, TicketStatus.AVAILABLE
+                101, 1, 2, 12, "15", 150.00, TicketStatus.AVAILABLE
         ));
 
 

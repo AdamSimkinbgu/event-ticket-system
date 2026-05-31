@@ -21,6 +21,8 @@ public record PurchaseHistoryDTO(List<PurchaseRecordDTO> records) {
     public record TicketRecordDTO(
         int ticketId,
         int zoneId,
+        int eventId,
+        int orderReceiptId,
         String seatNumber,     // nullable for standing zones
         double pricePaid,
         TicketStatus currentStatus

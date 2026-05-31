@@ -49,7 +49,7 @@ public abstract class IEventRepositoryContractTest {
         VenueMap venueMap = new VenueMap(id, LOCATION, List.of(new StandingZone(1, "Floor", 100, 50)));
         ShowDate showDate = new ShowDate(FUTURE_START, FUTURE_END);
         return new Event(id, name, rating, List.of("Artist A"), category, companyId, status,
-                venueMap, List.of(showDate), new PurchasePolicy(), new DiscountPolicy(0));
+                venueMap, List.of(showDate), new PurchasePolicy(10), new DiscountPolicy(0));
     }
 
     // === save ===
@@ -186,7 +186,7 @@ public abstract class IEventRepositoryContractTest {
         Event event = new Event(1, "Concert", 4.5, List.of("John Doe", "Jane Smith"),
                 EventCategory.CONCERT, 10, EventStatus.ON_SALE, vm,
                 List.of(new ShowDate(FUTURE_START, FUTURE_END)),
-                new PurchasePolicy(), new DiscountPolicy(0));
+                new PurchasePolicy(10), new DiscountPolicy(0));
         eventRepo.save(event);
 
         List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
@@ -205,7 +205,7 @@ public abstract class IEventRepositoryContractTest {
         Event theaterEvent = new Event(2, "Hamlet2", 4.5, List.of("Actor B"),
                 EventCategory.THEATER, 10, EventStatus.ON_SALE, vm,
                 List.of(new ShowDate(FUTURE_START, FUTURE_END)),
-                new PurchasePolicy(), new DiscountPolicy(0));
+                new PurchasePolicy(10), new DiscountPolicy(0));
         eventRepo.save(theaterEvent);
 
         List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
@@ -245,7 +245,7 @@ public abstract class IEventRepositoryContractTest {
         Event event = new Event(1, "Night Out", 4.5, List.of("Coldplay"),
                 EventCategory.CONCERT, 10, EventStatus.ON_SALE, vm,
                 List.of(new ShowDate(FUTURE_START, FUTURE_END)),
-                new PurchasePolicy(), new DiscountPolicy(0));
+                new PurchasePolicy(10), new DiscountPolicy(0));
         eventRepo.save(event);
 
         List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(

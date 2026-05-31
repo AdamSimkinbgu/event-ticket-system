@@ -72,6 +72,8 @@ public abstract class InventoryZone implements InvariantChecked {
 
     public abstract boolean confirmSale(InventorySelection selection);
 
+    public abstract int getSoldAmount();
+
     public boolean isStanding() {
         return getZoneType() == ZoneType.STANDING;
     }

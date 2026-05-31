@@ -98,8 +98,8 @@ class SystemAdminServiceTest {
     void givenOneReceipt_whenViewGlobalHistory_thenRecordMapped() {
         int ticketId = 42;
         double price = 99.0;
-        OrderReceipt receipt = OrderReceipt.forMember(1, price, List.of());
-        Ticket ticket = new Ticket(receipt.geteventId(), 1, price, ticketId, "BARCODE");
+        OrderReceipt receipt = OrderReceipt.forMember(11, 1, price, List.of());
+        Ticket ticket = new Ticket(receipt.geteventId(), 1, 11, price, ticketId, "BARCODE");
         Event event = mock(Event.class);
         when(event.getName()).thenReturn("Rock Night");
 
@@ -122,8 +122,8 @@ class SystemAdminServiceTest {
 
     @Test
     void givenMultipleReceipts_whenViewGlobalHistory_thenAllRecordsMapped() {
-        OrderReceipt receipt1 = OrderReceipt.forMember(1, 50.0, List.of());
-        OrderReceipt receipt2 = OrderReceipt.forMember(2, 75.0, List.of());
+        OrderReceipt receipt1 = OrderReceipt.forMember(11, 1, 50.0, List.of());
+        OrderReceipt receipt2 = OrderReceipt.forMember(12, 2, 75.0, List.of());
         Event event = mock(Event.class);
         when(event.getName()).thenReturn("Jazz Night");
 
@@ -153,9 +153,9 @@ class SystemAdminServiceTest {
 
     @Test
     void givenReceiptWithMultipleTickets_whenViewGlobalHistory_thenTotalPaidIsSumOfTicketPrices() {
-        OrderReceipt receipt = OrderReceipt.forMember(1, 0.0, List.of());
-        Ticket t1 = new Ticket(receipt.geteventId(), 1, 30.0, 1, "B1");
-        Ticket t2 = new Ticket(receipt.geteventId(), 1, 45.0, 2, "B2");
+        OrderReceipt receipt = OrderReceipt.forMember(11, 1, 0.0, List.of());
+        Ticket t1 = new Ticket(receipt.geteventId(), 1, 11, 30.0, 1, "B1");
+        Ticket t2 = new Ticket(receipt.geteventId(), 1, 11, 45.0, 2, "B2");
         Event event = mock(Event.class);
         when(event.getName()).thenReturn("Pop Show");
 

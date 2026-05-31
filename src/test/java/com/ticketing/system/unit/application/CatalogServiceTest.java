@@ -271,7 +271,7 @@ class CatalogServiceTest {
         VenueMapDTO result = catalogService.getEventVenueMap(VALID_TOKEN, EVENT_ID);
 
         assertNotNull(result);
-        assertEquals(5, result.eventId());
+        assertEquals(5, result.venueMapId());
         assertEquals(1, result.inventoryZones().size());
         assertEquals(10, result.inventoryZones().get(0).getId());
         assertEquals("Floor", result.inventoryZones().get(0).getName());

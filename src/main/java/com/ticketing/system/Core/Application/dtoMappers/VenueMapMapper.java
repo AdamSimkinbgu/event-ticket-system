@@ -29,7 +29,7 @@ public class VenueMapMapper {
     
     private InventoryZoneDTO toInventoryZoneDTO(InventoryZone zone) {
         List<SeatDTO> seats = List.of();
-        int soldAmount = 0;
+        int soldAmount = zone.getSoldAmount();
 
         if (zone instanceof SeatedZone seatedZone) {
             seats = seatedZone.getSeats().stream()

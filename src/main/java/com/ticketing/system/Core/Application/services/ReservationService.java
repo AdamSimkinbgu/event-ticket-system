@@ -1,6 +1,7 @@
 package com.ticketing.system.Core.Application.services;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,11 +41,17 @@ public class ReservationService {
         this.notificationService = notificationService;
     }
 
+
+
+
+
+
     public ReservationResultDTO reserveStandingTicketsForMember(String token, int eventId, int zoneId, int quantity) {
         log.info("Entered reserveStandingTicketsForMember function: eventId={}, zoneId={}, quantity={}",
                 eventId, zoneId, quantity);
 
         boolean stockReserved = false;
+        ActiveOrder activeOrder = null;
 
         try {
             int userId = validateTokenAndGetUserId(token);
@@ -52,8 +59,7 @@ public class ReservationService {
 
             Event event = getEventOrThrowForMember(userId, eventId, zoneId);
             InventoryZone zone = getZoneOrThrowForMember(userId, eventId, zoneId, event);
-
-            ActiveOrder activeOrder = getOrCreateActiveOrderForMember(userId);
+            activeOrder = getOrCreateActiveOrderForMember(userId);
             // validateNoReservationForEventForMember(activeOrder, userId, eventId, zoneId);  // he can buy more from the same event he already bought from
 
             double pricePerTicket = reserveStandingStock(event, zone, zoneId, quantity);
@@ -67,7 +73,13 @@ public class ReservationService {
             return buildReservationResult(eventId, zoneId, quantity, List.of());
 
         } catch (IllegalArgumentException | IllegalStateException e) {
+
             if (stockReserved) {
+                try {
+                    activeOrder.removeStandingSpots(eventId, zoneId, quantity);
+                } catch (Exception ignored) {
+                    // best-effort rollback
+                }
                 rollbackReservedStandingStockIfNeeded(quantity, eventId, zoneId);
             }
 
@@ -79,15 +91,17 @@ public class ReservationService {
         }
     }
 
+    
     //?NOTE: I thought about merging these above and below functions but I saw that more and more of the code is diverging between member and guest flows,
     //?      so I think it's better to keep them separate for now. We can always refactor later if we see a lot of duplication.
 
-    public ReservationResultDTO reserveStandingTicketsForGuest(String sessionId, int eventId, int zoneId,
-            int quantity) {
+
+    public ReservationResultDTO reserveStandingTicketsForGuest(String sessionId, int eventId, int zoneId, int quantity) {
         log.info("Entered reserveStandingTicketsForGuest function: sessionId={}, eventId={}, zoneId={}, quantity={}",
                 sessionId, eventId, zoneId, quantity);
 
         boolean stockReserved = false;
+        ActiveOrder activeOrder = null;
 
         try {
             validateSessionId(sessionId);
@@ -96,7 +110,8 @@ public class ReservationService {
             Event event = getEventOrThrowForGuest(eventId);
             InventoryZone zone = getZoneOrThrowForGuest(event, eventId, zoneId);
 
-            ActiveOrder activeOrder = getOrCreateActiveOrderForGuest(sessionId);
+            activeOrder = getOrCreateActiveOrderForGuest(sessionId);
+
             // validateNoReservationForEventForGuest(activeOrder, sessionId, eventId);  // he can buy more from the same event he already bought from
 
             double pricePerTicket = reserveStandingStock(event, zone, zoneId, quantity);
@@ -113,6 +128,11 @@ public class ReservationService {
 
         } catch (IllegalArgumentException | IllegalStateException e) {
             if (stockReserved) {
+                try {
+                    activeOrder.removeStandingSpots(eventId, zoneId, quantity);
+                } catch (Exception ignored) {
+                    // best-effort rollback
+                }
                 rollbackReservedStandingStockIfNeeded(quantity, eventId, zoneId);
             }
 
@@ -123,6 +143,11 @@ public class ReservationService {
             throw e;
         }
     }
+
+
+
+
+
 
     // The seat flow should be:
     // authenticate / validate session
@@ -167,6 +192,12 @@ public class ReservationService {
 
         } catch (RuntimeException e) {
             if (stockReserved) {
+                try {
+                    activeOrder.removeSeats(eventId, zoneId, seatNumbers);
+                } catch (Exception ignored) {
+                    // best-effort rollback
+                }
+
                 event.releaseSeats(zoneId, seatNumbers);
                 eventRepository.save(event);
             }
@@ -175,6 +206,8 @@ public class ReservationService {
             throw e;
         }
     }
+
+
 
     public ReservationResultDTO reserveSeatsForGuest(String sessionId, int eventId, int zoneId,
             List<String> seatNumbers) {
@@ -208,6 +241,12 @@ public class ReservationService {
 
         } catch (RuntimeException e) {
             if (stockReserved) {
+                try {
+                    activeOrder.removeSeats(eventId, zoneId, seatNumbers);
+                } catch (Exception ignored) {
+                    // best-effort rollback
+                }
+
                 event.releaseSeats(zoneId, seatNumbers);
                 eventRepository.save(event);
             }
@@ -217,13 +256,22 @@ public class ReservationService {
         }
     }
 
-    //Note: check if need to add function for removing one reserved ticket for a member (for example if he wants to change his mind and remove one ticket from his active order before checkout, or if he accidentally reserved too many tickets and wants to remove some of them). For guests, since we don't have a userId, we would need to identify the active order by sessionId, so we would need a function like removeOneReservedTicketForGuest(String sessionId, int eventId, int zoneId) that would do the same but for guests.
 
-    //TODO: 2 remove reserved spots and seats functions for the guests            <<-----------------            <<----------------------
 
-    // for standing zones of members
-    public ReservationResultDTO removeReservedStandingSpots(String token, int eventId, int zoneId, int quantity) {
-        log.info("Entered removeReservedStandingSpots function: eventId={}, zoneId={}, quantity={}", eventId, zoneId,
+
+
+
+
+
+
+
+
+
+
+    
+    public ReservationResultDTO removeReservedStandingSpotsForMember(String token, int eventId, int zoneId, int quantity) {
+        log.info("Entered removeReservedStandingSpotsForMember function: eventId={}, zoneId={}, quantity={}", eventId,
+                zoneId,
                 quantity);
 
         int userId = -1;
@@ -243,10 +291,50 @@ public class ReservationService {
             return buildReservationResult(eventId, zoneId, quantity, List.of());
 
         } catch (IllegalArgumentException | IllegalStateException e) {
-            notifyRemoveFailureIfPossible(userId, eventId, zoneId, "Remove reservation failed: " + e.getMessage());
+            notifyRemoveFailureIfPossible(userId, eventId, zoneId,
+                    "Remove reservation for member failed: " + e.getMessage());
             throw e;
         }
     }
+    
+
+
+    public ReservationResultDTO removeReservedStandingSpotsForGuest(String sessionId, int eventId, int zoneId, int quantity) {
+        log.info("Entered removeReservedStandingSpotsForGuest function: sessionId={}, eventId={}, zoneId={}, quantity={}",
+                sessionId, eventId, zoneId, quantity);
+
+        try {
+            validateSessionId(sessionId);
+            validateRemoveQuantity(quantity);
+
+            Event event = getEventOrThrowForGuest(eventId);
+            InventoryZone zone = getZoneOrThrowForGuest(event, eventId, zoneId);
+
+            ActiveOrder activeOrder = activeOrderRepository.getBySessionId(sessionId)
+                    .orElseThrow(() -> {
+                        log.warn("removeReservedStandingSpotsForGuest rejected: active order not found. sessionId={}", sessionId);
+                        return new IllegalArgumentException("Active order not found");
+                    });
+
+            removeStandingTicketsFromOrderAndReleaseStock(activeOrder, zone, 0, eventId, zoneId, quantity);
+
+            return buildReservationResult(eventId, zoneId, quantity, List.of());
+
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.warn("removeReservedStandingSpotsForGuest failed: eventId={}, zoneId={}, quantity={}, reason={}",
+                    eventId, zoneId, quantity, e.getMessage());
+            throw e;
+        }
+    }
+    
+
+
+
+
+
+
+
+
 
     // flow:
     // load user
@@ -256,9 +344,8 @@ public class ReservationService {
     // event.releaseSeats(zoneId, seatNumbers)
     // save active order
     // save event
-    public ReservationResultDTO removeReservedSeats(String token, int eventId, int zoneId, List<String> seatNumbers) {
-        log.info("Entered removeReservedSeats function: eventId={}, zoneId={}, seatNumbers={}", eventId, zoneId,
-                seatNumbers);
+    public ReservationResultDTO removeReservedSeatsForMember(String token, int eventId, int zoneId, List<String> seatNumbers) {
+        log.info("Entered removeReservedSeatsForMember function: eventId={}, zoneId={}, seatNumbers={}", eventId, zoneId, seatNumbers);
 
         int userId = -1;
 
@@ -268,11 +355,14 @@ public class ReservationService {
             Event event = getEventOrThrowForRemove(userId, eventId, zoneId);
             ActiveOrder activeOrder = getActiveOrderOrThrowForRemove(userId, eventId, zoneId);
 
-            activeOrder.removeSeats(eventId, zoneId, seatNumbers);
+            activeOrder.validateContainsSeats(eventId, zoneId, seatNumbers);
+
             event.releaseSeats(zoneId, seatNumbers);
 
-            activeOrderRepository.save(activeOrder);
+            activeOrder.removeSeats(eventId, zoneId, seatNumbers);
+
             eventRepository.save(event);
+            activeOrderRepository.save(activeOrder);
 
             notificationService.notifyRemoveTicketReservationSuccess(userId, eventId, zoneId, seatNumbers.size());
 
@@ -282,11 +372,71 @@ public class ReservationService {
             log.warn("removeReservedSeats failed: eventId={}, zoneId={}, seatNumbers={}, reason={}", eventId, zoneId,
                     seatNumbers, e.getMessage());
             notificationService.notifyRemoveTicketReservationFailure(userId, eventId, zoneId,
-                    "Remove reservation failed: " + e.getMessage());
+                    "Remove reservation for member failed: " + e.getMessage());
             throw e;
-            // TODO: handle exception
         }
     }
+
+    
+
+
+    public ReservationResultDTO removeReservedSeatsForGuest(String sessionId, int eventId, int zoneId, List<String> seatNumbers) {
+        log.info("Entered removeReservedSeatsForGuest function: sessionId={}, eventId={}, zoneId={}, seatNumbers={}",
+                sessionId, eventId, zoneId, seatNumbers);
+
+        try {
+            validateSessionId(sessionId);
+
+            Event event = getEventOrThrowForGuest(eventId);
+            InventoryZone zone = getZoneOrThrowForGuest(event, eventId, zoneId);
+
+            if (!zone.isSeated()) {
+                throw new IllegalArgumentException("Zone is not a seated zone");
+            }
+
+            ActiveOrder activeOrder = activeOrderRepository.getBySessionId(sessionId)
+                    .orElseThrow(() -> {
+                        log.warn("removeReservedSeatsForGuest rejected: active order not found. sessionId={}", sessionId);
+                        return new IllegalArgumentException("Active order not found");
+                    });
+
+            activeOrder.validateContainsSeats(eventId, zoneId, seatNumbers);
+
+            event.releaseSeats(zoneId, seatNumbers);
+
+            activeOrder.removeSeats(eventId, zoneId, seatNumbers);
+
+            eventRepository.save(event);
+            activeOrderRepository.save(activeOrder);
+
+            return buildReservationResult(eventId, zoneId, seatNumbers.size(), seatNumbers);
+
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.warn("removeReservedSeatsForGuest failed: eventId={}, zoneId={}, seatNumbers={}, reason={}",
+                    eventId, zoneId, seatNumbers, e.getMessage());
+            throw e;
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     private int validateTokenAndGetUserId(String token) {
         if (token == null || token.isBlank()) {
@@ -315,6 +465,11 @@ public class ReservationService {
             throw new IllegalArgumentException("Missing session ID");
         }
     }
+
+
+
+
+
 
     private void validateQuantityForMember(int userId, int eventId, int zoneId, int quantity) {
         if (quantity <= 0) {
@@ -545,7 +700,9 @@ public class ReservationService {
         }
     }
 
-    public com.ticketing.system.Core.Application.dto.ActiveOrderDTO restoreActiveOrder(int userId) {
+
+
+    public ActiveOrderDTO restoreActiveOrder(int userId) {
         ActiveOrder activeOrder = activeOrderRepository.getByUserId(userId);
         if (activeOrder == null) {
             log.info("No active order found for userId={}, returning null", userId);
@@ -553,18 +710,30 @@ public class ReservationService {
         }
         log.info("Active order found for userId={}, restoring ActiveOrderDTO", userId);
         ActiveOrderDTO activeOrderDTO = activeOrder.toDTO();
+        // enrich the DTO with event and zone details for each line item (for better UX in the frontend; avoids extra calls from frontend to get event/zone details for each line)
+        List<ActiveOrderDTO.CartLineDTO> enrichedLines = new ArrayList<>();
         for (ActiveOrderDTO.CartLineDTO line : activeOrderDTO.lines()) {
-            String eventName = eventRepository.findById(line.eventId()).getName();
-            line = new ActiveOrderDTO.CartLineDTO(
+            Event event = eventRepository.findById(line.eventId());
+            String eventName = (event != null) ? event.getName() : "Unknown Event";
+            enrichedLines.add(new ActiveOrderDTO.CartLineDTO(
                     line.eventId(),
                     eventName,
                     line.zoneId(),
                     line.seatNumber(),
                     line.pricePerTicket(),
-                    line.addedAt());
+                    line.addedAt()));
         }
-        return activeOrderDTO;
+        // return the same DTO but with enriched lines (event names) for better frontend UX; the frontend can ignore the extra eventName field if it wants and just use eventId, or it can show the event name directly in the cart without needing to make extra calls to get event details for each line item
+        return new ActiveOrderDTO(
+                activeOrderDTO.userId(),
+                activeOrderDTO.sessionId(),
+                activeOrderDTO.createdAt(),
+                activeOrderDTO.remainingSecondsBeforeExpiry(),
+                activeOrderDTO.currentTotalPrice(),
+                enrichedLines);
     }
+
+
 
     public void abandonActiveOrder(String userId) {
         throw new UnsupportedOperationException("UC-14: not implemented");

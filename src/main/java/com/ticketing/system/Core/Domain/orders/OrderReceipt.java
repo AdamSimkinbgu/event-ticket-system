@@ -29,19 +29,27 @@ public class OrderReceipt implements InvariantChecked {
      * {@code Integer} field. Equivalent to {@link #forMember(int, double, List)}.
      */
     public OrderReceipt(int _userid, double priceAtReservation, List<ReceiptLine> receiptLines) {
-        this.userid= _userid;
+        this.userid = _userid;
         this.totalPrice = priceAtReservation;
-        this.ReceiptLine=receiptLines;
+        this.ReceiptLine = receiptLines;
+        this.purchaseTime = LocalDateTime.now();
+    }
+    
+    public OrderReceipt(int receiptId, int userId, double totalPrice, List<ReceiptLine> lines){
+        this.receiptId = receiptId;
+        this.userid = userId;
+        this.totalPrice = totalPrice;
+        this.ReceiptLine = lines;
         this.purchaseTime = LocalDateTime.now();
     }
 
     /** Member receipt — explicit construction. */
-    public static OrderReceipt forMember(int userId, double totalAmount, List<ReceiptLine> receiptLines) {
-        return new OrderReceipt(userId, totalAmount, receiptLines);
+    public static OrderReceipt forMember(int receiptId, int userId, double totalAmount, List<ReceiptLine> receiptLines) {
+        return new OrderReceipt(receiptId, userId, totalAmount, receiptLines);
     }
 
     /** Guest receipt — D5 reversed. userid stays null; email + sessionId identify the buyer. */
-    public static OrderReceipt forGuest(String guestEmail, String guestSessionId, double totalAmount, List<ReceiptLine> receiptLines) {
+    public static OrderReceipt forGuest(String guestEmail, String guestSessionId, int receiptId, double totalAmount, List<ReceiptLine> receiptLines) {
         OrderReceipt r = new OrderReceipt();
         if (guestEmail == null || guestEmail.isBlank()) {
             throw new IllegalArgumentException("forGuest requires a non-blank email");
@@ -51,6 +59,7 @@ public class OrderReceipt implements InvariantChecked {
         }
         r.userid = null;
         r.guestEmail = guestEmail;
+        r.receiptId = receiptId;
         r.guestSessionId = guestSessionId;
         r.totalPrice = totalAmount;
         r.ReceiptLine = receiptLines;

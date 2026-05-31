@@ -64,6 +64,8 @@ public class JwtSessionManager implements ISessionManager {
         this.clock = clock;
     }
 
+
+    // UC-12: issue a new JWT for a user session. A Session row is created to track the session and enable revocation.
     @Override
     public String generateToken(int userId, String username) {
         Instant now = clock.instant();
@@ -73,6 +75,8 @@ public class JwtSessionManager implements ISessionManager {
         return buildJwt(userId, username, sid, now, expiry);
     }
 
+    // UC-12: issue a new JWT for an existing session (e.g. after password login to a guest session).
+    // The Session row is reused and the JWT is reissued with the same expiry.
     @Override
     public String generateTokenForSession(Session session, String username) {
         if (session == null) {
@@ -85,16 +89,22 @@ public class JwtSessionManager implements ISessionManager {
         return buildJwt(session.getUserId(), username, session.getSessionId(), now, session.getExpiresAt());
     }
 
+    // UC-12: validate a JWT's signature, expiry, and revocation status. Revocation is checked by verifying that the Session row still exists.
     @Override
     public boolean validateToken(String token) {
-        if (token == null || token.isBlank()) return false;
+        if (token == null || token.isBlank())
+            return false;
         parseClaims(token);
         return true;
     }
 
+    // UC-12: validate either a raw sessionId or a JWT. This is the main entry point for authentication checks on incoming requests, so it supports both "raw" (sessionId) and "token" (JWT) credentials for flexibility.
+    // The raw path is validated by checking for a non-expired Session row with the given id; the token path routes through the full JWT validation logic (signature, expiry, revocation).
     @Override
     public boolean validateCredential(String credential) {
-        if (credential == null || credential.isBlank()) return false;
+        if (credential == null || credential.isBlank())
+            return false;
+        // Token path — if it looks like a JWT, try to validate it as one. If validation fails for any reason, return false (invalid token).
         if (looksLikeJwt(credential)) {
             try {
                 return validateToken(credential);
@@ -102,7 +112,7 @@ public class JwtSessionManager implements ISessionManager {
                 return false;
             }
         }
-        // Raw sessionId path — direct repository lookup.
+        // Raw sessionId path — direct repository lookup. returns true if a non-expired Session with the given id exists, false otherwise.
         return sessions.findById(credential)
                 .filter(s -> !s.isExpiredAt(clock.instant()))
                 .isPresent();

@@ -50,6 +50,7 @@ public class CompanyManagementServiceTest {
 
     private final int COMPANY_ID = 100;
     private final int OWNER_ID = 1;
+    private final int ORDER_RECEIPT_ID = 11;
     private final String COMPANY_1_NAME = "Company1";
     private final String COMPANY_1_DESCRIPTION = "A test production company1";
 
@@ -800,7 +801,7 @@ public class CompanyManagementServiceTest {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
         User managerUser = mock(User.class);
         OrderReceipt mockReceipt = mock(OrderReceipt.class);
-        Ticket ticket = new Ticket(1, 1, 50.0, 10, "BARCODE-001");
+        Ticket ticket = new Ticket(1, 1, ORDER_RECEIPT_ID, 50.0, 10, "BARCODE-001");
         Event mockEvent = mock(Event.class);
 
         when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);

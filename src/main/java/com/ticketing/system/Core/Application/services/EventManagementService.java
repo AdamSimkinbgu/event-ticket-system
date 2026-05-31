@@ -79,30 +79,26 @@ public class EventManagementService {
             log.warn("Invalid token provided for adding event");
             throw new RuntimeException("Invalid token");
         }
+
         int ownerId = sessionManager.extractUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(request.companyId());
         if (company == null) {
             log.warn("Company {} not found", request.companyId());
             throw new RuntimeException("Company not found");
         }
+
         company.checkowner(ownerId);
         int newEventId = eventRepository.nextId();
         VenueMap venueMap = new VenueMap(3, request.location(), List.of());
-        DiscountPolicy discountPolicy = new DiscountPolicy(10.0);
-        PurchasePolicy purchasePolicy = new PurchasePolicy();
+        DiscountPolicy discountPolicy = new DiscountPolicy(10.0);   // Note: support policies later
+        PurchasePolicy purchasePolicy = new PurchasePolicy(10);                  // Note: support policies later
+
         Event newEvent = new Event(
-                newEventId,
-                request.name(),
-                5.00,
-                List.of("sss", "ddd"),
-                request.category(),
-                request.companyId(),
-                EventStatus.SCHEDULED,
-                venueMap,
-                request.showDates(),
-                purchasePolicy,
-                discountPolicy);
+                newEventId, request.name(), 5.00, List.of("sss", "ddd"),
+                request.category(), request.companyId(), EventStatus.SCHEDULED,
+                venueMap, request.showDates(), purchasePolicy, discountPolicy);
         eventRepository.save(newEvent);
+
         log.info("Event {} created successfully with ID {}", request.name(), newEventId);
         return new EventDetailDTO(
                 String.valueOf(newEventId),
@@ -207,12 +203,12 @@ public class EventManagementService {
 
 
     public void configureVenueMap(String token, int companyId, VenueMapConfigDTO config) {
-        log.info("Configuring venue map for company {}, event {}, by user {}", companyId, config.eventId(), sessionManager.extractUserId(token));
         if (!sessionManager.validateToken(token)) {
             throw new RuntimeException("Invalid token");
         }
 
         int userId = sessionManager.extractUserId(token);
+        log.info("Configuring venue map for company {}, event {}, by user {}", companyId, config.eventId(), userId);
 
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
@@ -231,8 +227,13 @@ public class EventManagementService {
 
         for (VenueMapConfigDTO.ZoneConfigDTO zoneConfig : config.zones()) {
             if (zoneConfig.seated()) {
+
+                if (zoneConfig.seats() == null || zoneConfig.seats().isEmpty()) {
+                    throw new IllegalArgumentException("Seated zone must contain seats");
+                }
+
                 List<Seat> seats = zoneConfig.seats().stream()
-                        .map(seatConfig_dto -> new Seat(seatConfig_dto.label(), 0, 0))
+                        .map(seatConfig -> new Seat(seatConfig.label(), seatConfig.x(), seatConfig.y()))
                         .toList();
 
                 zones.add(new SeatedZone(
@@ -242,6 +243,11 @@ public class EventManagementService {
                         seats
                 ));
             } else {
+
+                if (zoneConfig.capacity() == null || zoneConfig.capacity() <= 0) {
+                    throw new IllegalArgumentException("Standing zone capacity must be positive");
+                }
+
                 zones.add(new StandingZone(
                         nextZoneId,
                         zoneConfig.zoneName(),

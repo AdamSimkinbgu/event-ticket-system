@@ -33,7 +33,6 @@ import com.ticketing.system.Core.Domain.events.SeatedZone;
 // Unit tests for the Event aggregate (Event + VenueMap + InventoryZone + ShowDate + policies).
 class EventTest extends BaseDomainTest {
 
-
     private final int COMPANY_ID = 100;
     private final int EVENT_ID = 10;
     private final int ZONE_ID = 5;
@@ -61,60 +60,50 @@ class EventTest extends BaseDomainTest {
                 venueMap,
                 List.of(),
                 null,
-                null
-        ));
+                null));
     }
 
-
-       @Test
+    @Test
     public void GivenExistingZone_WhenUpdateZoneCapacity_ThenCapacityUpdated() {
         event.updateStandingZoneCapacity(ZONE_ID, 20, COMPANY_ID);
 
         assertEquals(20, zone.getAvailableAmount());
     }
-    
 
     @Test
     public void GivenMissingZone_WhenUpdateZoneCapacity_ThenThrowException() {
-        assertThrows(IllegalArgumentException.class, () ->
-                event.updateStandingZoneCapacity(999, 20, COMPANY_ID)
-        );
+        assertThrows(IllegalArgumentException.class, () -> event.updateStandingZoneCapacity(999, 20, COMPANY_ID));
     }
 
     @Test
     public void GivenWrongCompany_WhenUpdateZoneCapacity_ThenThrowException() {
-        assertThrows(RuntimeException.class, () ->
-                event.updateStandingZoneCapacity(ZONE_ID, 20, 999)
-        );
+        assertThrows(RuntimeException.class, () -> event.updateStandingZoneCapacity(ZONE_ID, 20, 999));
     }
 
     @Test
     @Disabled("V1: getZone returns matching zone")
-    void givenEvent_whenGetZoneById_thenReturnsZone() {}
+    void givenEvent_whenGetZoneById_thenReturnsZone() {
+    }
 
     @Test
     @Disabled("V1: getZone throws on unknown id")
-    void givenEvent_whenGetUnknownZone_thenThrows() {}
+    void givenEvent_whenGetUnknownZone_thenThrows() {
+    }
 
     @Test
     @Disabled("V1: reserveTickets succeeds when available + policy passes")
-    void givenAvailableZone_whenReserveTickets_thenSuccess() {}
+    void givenAvailableZone_whenReserveTickets_thenSuccess() {
+    }
 
     @Test
     @Disabled("V1: reserveTickets fails when policy rejects (II.4.3.1)")
-    void givenPolicyViolation_whenReserveTickets_thenRejected() {}
+    void givenPolicyViolation_whenReserveTickets_thenRejected() {
+    }
 
     @Test
     @Disabled("V1: calculatePrice applies DiscountPolicy")
     void givenDiscountPolicy_whenCalculatePrice_thenAppliesDiscount() {
     }
-    
-
-
-
-
-
-
 
     @Test
     void GivenStandingZone_WhenReserveInventoryStandingSelection_ThenQuantityReserved() {
@@ -136,9 +125,7 @@ class EventTest extends BaseDomainTest {
                 List.of(
                         new Seat("A1", 0, 0),
                         new Seat("A2", 1, 0),
-                        new Seat("A3", 2, 0)
-                )
-        ));
+                        new Seat("A3", 2, 0))));
         Event event = createEventWithZones(List.of(seatedZone));
 
         event.reserveSeats(2, List.of("A1", "A2"));
@@ -156,9 +143,7 @@ class EventTest extends BaseDomainTest {
                 120.0,
                 List.of(
                         new Seat("A1", 0, 0),
-                        new Seat("A2", 1, 0)
-                )
-        ));
+                        new Seat("A2", 1, 0))));
         Event event = createEventWithZones(List.of(seatedZone));
 
         event.reserveSeats(2, List.of("A1", "A2"));
@@ -176,9 +161,7 @@ class EventTest extends BaseDomainTest {
                 120.0,
                 List.of(
                         new Seat("A1", 0, 0),
-                        new Seat("A2", 1, 0)
-                )
-        ));
+                        new Seat("A2", 1, 0))));
         Event event = createEventWithZones(List.of(seatedZone));
 
         event.reserveSeats(2, List.of("A1"));
@@ -196,14 +179,10 @@ class EventTest extends BaseDomainTest {
                 120.0,
                 List.of(
                         new Seat("A1", 0, 0),
-                        new Seat("A2", 1, 0)
-                )
-        ));
+                        new Seat("A2", 1, 0))));
         Event event = createEventWithZones(List.of(seatedZone));
 
-        assertThrows(IllegalStateException.class, () ->
-                event.updateStandingZoneCapacity(ZONE_ID, 100, COMPANY_ID)
-        );
+        assertThrows(IllegalStateException.class, () -> event.updateStandingZoneCapacity(ZONE_ID, 100, COMPANY_ID));
 
         assertEquals(2, seatedZone.getCapacity());
     }
@@ -223,12 +202,7 @@ class EventTest extends BaseDomainTest {
     void GivenPurchasePolicyRejectsQuantity_WhenReserveInventory_ThenThrowsException() {
         StandingZone standingZone = track(new StandingZone(1, "General Admission", 10, 50.0));
 
-        PurchasePolicy rejectingPolicy = new PurchasePolicy() {
-            @Override
-            public boolean validate(int quantity) {
-                return false;
-            }
-        };
+        PurchasePolicy rejectingPolicy = new PurchasePolicy(0);
 
         Event event = track(new Event(
                 EVENT_ID,
@@ -241,8 +215,7 @@ class EventTest extends BaseDomainTest {
                 new VenueMap(1, LOCATION, List.of(standingZone)),
                 List.of(),
                 rejectingPolicy,
-                noDiscountPolicy()
-        ));
+                noDiscountPolicy()));
 
         assertThrows(IllegalStateException.class, () -> event.reserveStandingSpots(1, 1));
 
@@ -254,22 +227,12 @@ class EventTest extends BaseDomainTest {
 
 
 
-
-
-
-
-
-
     // test helper functions:
 
     private PurchasePolicy acceptingPurchasePolicy() {
-        return new PurchasePolicy() {
-            @Override
-            public boolean validate(int quantity) {
-                return quantity > 0 && quantity <= 10;
-            }
-        };
+        return new PurchasePolicy(10);
     }
+    
 
     private DiscountPolicy noDiscountPolicy() {
         return new DiscountPolicy(0) {
@@ -279,7 +242,8 @@ class EventTest extends BaseDomainTest {
             }
 
             @Override
-            public double calculatePriceforoneticket(int quantity, Double priceAtOneTicketReservation, LocalDateTime now) {
+            public double calculatePriceforoneticket(int quantity, Double priceAtOneTicketReservation,
+                    LocalDateTime now) {
                 return priceAtOneTicketReservation;
             }
         };
@@ -297,7 +261,6 @@ class EventTest extends BaseDomainTest {
                 new VenueMap(1, LOCATION, zones),
                 List.of(),
                 acceptingPurchasePolicy(),
-                noDiscountPolicy()
-        ));
+                noDiscountPolicy()));
     }
 }

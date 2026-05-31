@@ -3,6 +3,7 @@ package com.ticketing.system.Core.Domain.Tickets;
 
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.TicketRecordDTO;
+import com.ticketing.system.Core.Domain.exceptions.TicketNotAvailableException;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 public class Ticket implements InvariantChecked {
@@ -12,6 +13,7 @@ public class Ticket implements InvariantChecked {
     private String seatNumber;
     private double price;
     private int ticketId;
+    private int orderReceiptId;
     private String barcodeValue;
     private TicketStatus status;
     // D7 (auth rework #181): nullable. Set on the Member path of CheckoutService;
@@ -24,8 +26,8 @@ public class Ticket implements InvariantChecked {
      * Preserved for existing callers (CheckoutService, tests) that don't carry
      * seat identity.
      */
-    public Ticket(int eventId, int zoneid, double price, int ticketId, String barcodeValue) {
-        this(eventId, zoneid, null, price, ticketId, barcodeValue);
+    public Ticket(int eventId, int zoneid, int orderReceiptId, double price, int ticketId, String barcodeValue) {
+        this(eventId, zoneid, orderReceiptId, null, price, ticketId, barcodeValue);
     }
 
     /**
@@ -34,12 +36,13 @@ public class Ticket implements InvariantChecked {
      * to inside its {@link com.ticketing.system.Core.Domain.events.SeatedZone}.
      * Pass {@code null} for standing-zone tickets (or use the 5-arg form).
      */
-    public Ticket(int eventId, int zoneid, String seatLabel, double price, int ticketId, String barcodeValue) {
+    public Ticket(int eventId, int zoneid, int orderReceiptId, String seatLabel, double price, int ticketId, String barcodeValue) {
         this.eventId = eventId;
         this.zoneid = zoneid;
         this.seatNumber = seatLabel;
         this.price = price;
         this.ticketId = ticketId;
+        this.orderReceiptId = orderReceiptId;
         this.barcodeValue = barcodeValue;
         this.status = TicketStatus.PAID; // Default initial status
         this.holderUserId = null;
@@ -59,6 +62,14 @@ public class Ticket implements InvariantChecked {
         return price;
     }
 
+    public int getOrderReceiptId() {
+        return orderReceiptId;
+    }
+
+    public void setOrderReceiptId(int orderReceiptId) {
+        this.orderReceiptId = orderReceiptId;
+    }
+
     // ---------------------------------------------------------------------------
     // Skeleton additions for the unified-Ticket aggregate.
     // State machine: AVAILABLE -> RESERVED -> PAID -> ISSUED -> USED | REFUNDED | VOIDED
@@ -66,12 +77,16 @@ public class Ticket implements InvariantChecked {
 
     // UC-9 / UC-5 — AVAILABLE -> RESERVED. Throws TicketNotAvailableException if not AVAILABLE.
     public void reserve(int holderUserId) {
-        throw new UnsupportedOperationException("UC-9: not implemented");
+        if (!isAvailable()) {
+            throw new TicketNotAvailableException("Ticket " + ticketId + " is not available for reservation (current status: " + status + ")");
+        }
+        this.holderUserId = holderUserId;
+        this.status = TicketStatus.RESERVED;
     }
 
     // UC-10 — RESERVED -> PAID after successful charge.
     public void markPaid() {
-        throw new UnsupportedOperationException("UC-10: not implemented");
+        this.status = TicketStatus.PAID;
     }
 
     // UC-10 / UC-34 — PAID -> ISSUED after successful external issuance, stores barcode locally.
@@ -82,7 +97,7 @@ public class Ticket implements InvariantChecked {
 
     // ISSUED -> USED at venue gate scan (no UC in v0; defined for completeness).
     public void markUsed() {
-        throw new UnsupportedOperationException("not implemented");
+        this.status = TicketStatus.USED;
     }
 
     // UC-4 — PAID/ISSUED -> REFUNDED via auto-refund pipeline.
@@ -102,19 +117,19 @@ public class Ticket implements InvariantChecked {
 
     // State checks.
     public boolean isAvailable() {
-        throw new UnsupportedOperationException("not implemented");
+        return status == TicketStatus.AVAILABLE;
     }
 
     public boolean isReserved() {
-        throw new UnsupportedOperationException("not implemented");
+        return status == TicketStatus.RESERVED;
     }
 
     public boolean isPaid() {
-        throw new UnsupportedOperationException("not implemented");
+        return status == TicketStatus.PAID;
     }
 
     public boolean isIssued() {
-        throw new UnsupportedOperationException("not implemented");
+        return status == TicketStatus.ISSUED;
     }
 
     public boolean isSeatedTicket() {
@@ -147,43 +162,39 @@ public class Ticket implements InvariantChecked {
         this.holderUserId = userId;
     }
 
-    public String getOrderReceiptId() {
-        throw new UnsupportedOperationException("not implemented (add orderReceiptId field)");
+    public String getBarcode() {
+        return barcodeValue;
     }
 
-    public String getBarcode() {
-        throw new UnsupportedOperationException("not implemented (add barcode field)");
+    public void setBarcodeValue(String barcodeValue) {
+       this.barcodeValue=barcodeValue;
     }
 
     public TicketStatus getStatus() {
         return status;
     }
 
-
-
     public void setTicketId(int ticketId) {
-       
        this.ticketId = ticketId;
          
     }
 
 
 
-    public void setBarcodeValue(String barcodeValue) {
-       this.barcodeValue=barcodeValue;
-    }
-
-    public TicketRecordDTO toTicketRecordDTO(){
+    public TicketRecordDTO toTicketRecordDTO() {
         TicketRecordDTO dto = new TicketRecordDTO(
-            this.getId(),
-            this.getZoneId(),
-            this.getSeatNumber(),
-            this.getPrice(),
-            this.getStatus()
-        );
+                this.getId(),
+                this.getZoneId(),
+                this.getEventId(),
+                this.getOrderReceiptId(),
+                this.getSeatNumber(), // nullable for standing zones
+                this.getPrice(),
+                this.getStatus());
         return dto;
     }
 
+    
+    
     @Override
     public void checkInvariants() {
         if (ticketId <= 0) {
