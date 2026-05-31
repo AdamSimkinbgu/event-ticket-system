@@ -12,6 +12,7 @@ import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dtoMappers.OrderReceiptMapper;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Domain.company.CompanyAppointment;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
@@ -21,7 +22,6 @@ import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
-import com.ticketing.system.Core.Domain.users.CompanyAppointment;
 import com.ticketing.system.Core.Domain.users.CompanyRole;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.ManagementInvitation;
@@ -45,8 +45,9 @@ public class CompanyManagementService {
     private static final String EMAIL_PATTERN = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
     private static final String PHONE_PATTERN = "^\\+?[0-9\\-\\s]{9,15}$";
 
-
-    public CompanyManagementService(IProductionCompanyRepository companyRepository, IUserRepository userRepository, IOrderReceiptRepository orderReceiptRepository, ISessionManager sessionManager, ITicketRepository ticketRepository, IEventRepository eventRepository) {
+    public CompanyManagementService(IProductionCompanyRepository companyRepository, IUserRepository userRepository,
+            IOrderReceiptRepository orderReceiptRepository, ISessionManager sessionManager,
+            ITicketRepository ticketRepository, IEventRepository eventRepository) {
         this.companyRepository = companyRepository;
         this.userRepository = userRepository;
         this.orderReceiptRepository = orderReceiptRepository;
@@ -74,8 +75,8 @@ public class CompanyManagementService {
         }
 
         company.validateManagerInvitation(companyId, targetId, ownerId, permissions);
-        
-        targetUser.InvitetoCompanyAppointment(companyId, ownerId, permissions);
+
+        targetUser.receiveManagerAppointment(companyId, ownerId, permissions);
 
         companyRepository.updateCompany(company);
         userRepository.updateUser(targetUser);
@@ -86,7 +87,7 @@ public class CompanyManagementService {
 
     public void acceptManagerInvitation(String token, int companyId) {
         if (!sessionManager.validateToken(token)) {
-                log.warn("Invalid token provided for accepting manager invitation");
+            log.warn("Invalid token provided for accepting manager invitation");
             throw new RuntimeException("Invalid token");
         }
         int targetId = sessionManager.extractUserId(token);
@@ -154,9 +155,8 @@ public class CompanyManagementService {
         }
 
         company.RevokeManager(targetId);
-        targetUser.removeCompanyAppointment(companyId);
+        targetUser.revokeManagerAppointment(companyId);
 
-        
         userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
         log.info("Manager revoked successfully");
@@ -184,7 +184,7 @@ public class CompanyManagementService {
         company.ModifyManagerPermissions(companyId, targetId, newPermissions);
         targetUser.ModifyManagerPermissions(companyId, targetId, newPermissions);
 
-         userRepository.updateUser(targetUser);
+        userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
 
         log.info("Manager permissions modified successfully");
@@ -195,7 +195,8 @@ public class CompanyManagementService {
     // token-arg / List<Permission>-arg methods above; team to consolidate later).
     // ---------------------------------------------------------------------------
 
-    // UC-18 — register a new Production Company; appoints Founder/Owner in same transaction.
+    // UC-18 — register a new Production Company; appoints Founder/Owner in same
+    // transaction.
     public ProductionCompanyDTO registerCompany(String token, CompanyRegistrationDTO request) {
         if (!sessionManager.validateToken(token)) {
             log.warn("Invalid token provided for registering a company");
@@ -205,7 +206,7 @@ public class CompanyManagementService {
 
         // CompanyRegistrationDTO is a class with get* accessors, not a record.
         if (request.getName() == null || request.getName().trim().isEmpty() ||
-            request.getDescription() == null || request.getDescription().trim().isEmpty()) {
+                request.getDescription() == null || request.getDescription().trim().isEmpty()) {
 
             log.warn("Company registration failed: Missing required fields by user {}", userId);
             throw new IllegalArgumentException("All company fields (name, description) must be provided");
@@ -220,24 +221,24 @@ public class CompanyManagementService {
         try {
             int companyId = companyRepository.nextId();
             ProductionCompany newProductionCompany = new ProductionCompany(
-                companyId,
-                userId,
-                request.getName().trim(),
-                CompanyStatus.ACTIVE,
-                request.getDescription().trim(),
-                null
-            );
+                    companyId,
+                    userId,
+                    request.getName().trim(),
+                    CompanyStatus.ACTIVE,
+                    request.getDescription().trim(),
+                    null);
 
-            // IProductionCompanyRepository.save returns void; the new instance IS the saved one.
+            // IProductionCompanyRepository.save returns void; the new instance IS the saved
+            // one.
             companyRepository.save(newProductionCompany);
             log.info("Successfully registered new company: '{}' by userId: {}", newProductionCompany.getName(), userId);
 
             return new ProductionCompanyDTO(
-                newProductionCompany.getCompanyId(),
-                newProductionCompany.getName(),
-                newProductionCompany.getDescription(),
-                newProductionCompany.getStatus().name(),   // DTO field is String
-                newProductionCompany.getFounderId()        // DTO field is founderId
+                    newProductionCompany.getCompanyId(),
+                    newProductionCompany.getName(),
+                    newProductionCompany.getDescription(),
+                    newProductionCompany.getStatus().name(), // DTO field is String
+                    newProductionCompany.getFounderId() // DTO field is founderId
             );
 
         } catch (Exception e) {
@@ -281,14 +282,6 @@ public class CompanyManagementService {
         throw new UnsupportedOperationException("UC-21: not implemented");
     }
 
-
-
-
-
-
-    
-
-
     // UC-22 — Owner-side flat list of company sales.
     public List<PurchaseHistoryDTO> viewSalesHistory(String token, int companyId) {
         this.log.info("Attempting to view sales history for company {}", companyId);
@@ -310,26 +303,21 @@ public class CompanyManagementService {
             log.warn("User {} not found", requesterId);
             throw new RuntimeException("User not found");
         }
-        if (!currUser.isOwnerInCompany(companyId) && !currUser.hasPermissionInCompany(companyId, Permission.VIEW_SALES)) {
+        if (!currUser.isOwnerInCompany(companyId)
+                && !currUser.hasPermissionInCompany(companyId, Permission.VIEW_SALES)) {
             log.warn("User {} does not have permission to view sales history for company {}", requesterId, companyId);
             throw new RuntimeException("Insufficient permissions");
         }
 
         List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByCompanyId(companyId).stream()
                 .map(sale -> new PurchaseHistoryDTO(
-                    List.of(new OrderReceiptMapper().OrderReceiptToPurchaseRecordDTO(sale, ticketRepository, eventRepository))))
+                        List.of(new OrderReceiptMapper().OrderReceiptToPurchaseRecordDTO(sale, ticketRepository,
+                                eventRepository))))
                 .toList();
 
         log.info("Successfully retrieved sales history for company {}", companyId);
         return salesHistory;
     }
-
-    
-
-
-
-
-
 
     // UC-25 — recursive organizational tree (Owners only per II.4.15).
     public OrganizationalTreeNodeDTO viewOrganizationalTree(String token, int companyId) {
@@ -359,28 +347,31 @@ public class CompanyManagementService {
         }
 
         log.info("Successfully retrieved organizational tree for company {}", companyId);
-        // using the helper method to build the tree starting from the founder (root of the tree)
+        // using the helper method to build the tree starting from the founder (root of
+        // the tree)
         return buildOrganizationalTree(companyId, company.getFounderId());
     }
 
-    
-
-    // *HELPER METHOD* — BFS build of the organizational tree for UC-25 (viewOrganizationalTree).
+    // *HELPER METHOD* — BFS build of the organizational tree for UC-25
+    // (viewOrganizationalTree).
     private OrganizationalTreeNodeDTO buildOrganizationalTree(int companyId, int founderId) {
 
-        // Build appointer -> direct appointees map from all managers' CompanyAppointments.
+        // Build appointer -> direct appointees map from all managers'
+        // CompanyAppointments.
         Map<Integer, List<Integer>> appointerToAppointees = new HashMap<>();
         for (Integer managerId : companyRepository.getCompanyById(companyId).getManagers().keySet()) {
             User manager = userRepository.getUserById(managerId);
-            // get this manager's appointment in the current company to find out who appointed them (their inviterId)
+            // get this manager's appointment in the current company to find out who
+            // appointed them (their inviterId)
             CompanyAppointment appointment = manager.getAppointmentForCompany(companyId);
             if (appointment != null) {
                 appointerToAppointees
-                    .computeIfAbsent(appointment.getInviterId(), k -> new ArrayList<>()).add(managerId);
+                        .computeIfAbsent(appointment.getInviterId(), k -> new ArrayList<>()).add(managerId);
             }
         }
-        // now we have a map of appointerId -> List of their direct appointees' userIds, which we can use to build the tree.
-        
+        // now we have a map of appointerId -> List of their direct appointees' userIds,
+        // which we can use to build the tree.
+
         // Build root node (the founder/owner).
         User founderUser = userRepository.getUserById(founderId);
         List<OrganizationalTreeNodeDTO> rootChildren = new ArrayList<>();
@@ -390,28 +381,30 @@ public class CompanyManagementService {
                 CompanyRole.Owner.name(),
                 true,
                 List.of(),
-                rootChildren
-        );
+                rootChildren);
 
         // BFS — for each node, find who it appointed and attach them as children.
         Queue<OrganizationalTreeNodeDTO> queue = new LinkedList<>();
         queue.add(root);
 
-        // BFS while traversal of the organizational tree, building DTO nodes on the fly and attaching to parents.
+        // BFS while traversal of the organizational tree, building DTO nodes on the fly
+        // and attaching to parents.
         while (!queue.isEmpty()) {
 
             OrganizationalTreeNodeDTO current = queue.poll();
-            // get direct appointees of the current node's userId (if any) from the pre-built map; default to empty list if none.
+            // get direct appointees of the current node's userId (if any) from the
+            // pre-built map; default to empty list if none.
             List<Integer> appointees = appointerToAppointees.getOrDefault(current.userId(), List.of());
-            
-            // For each direct appointee, create a DTO node and attach to current, then enqueue for further processing.
+
+            // For each direct appointee, create a DTO node and attach to current, then
+            // enqueue for further processing.
             for (int appointeeId : appointees) {
                 User appointeeUser = userRepository.getUserById(appointeeId);
                 CompanyAppointment appt = appointeeUser.getAppointmentForCompany(companyId);
                 List<String> permissions = appt != null
                         ? appt.getPermissions().stream().map(Enum::name).toList()
                         : List.of();
-                
+
                 List<OrganizationalTreeNodeDTO> childChildren = new ArrayList<>();
                 OrganizationalTreeNodeDTO childNode = new OrganizationalTreeNodeDTO(
                         appointeeId,
@@ -419,9 +412,9 @@ public class CompanyManagementService {
                         CompanyRole.Manager.name(),
                         false,
                         permissions,
-                        childChildren
-                );
-                // Attach the child node to the current node's list of appointees and enqueue it for further processing.
+                        childChildren);
+                // Attach the child node to the current node's list of appointees and enqueue it
+                // for further processing.
                 current.appointedByThisUser().add(childNode);
                 queue.add(childNode);
             }
