@@ -161,14 +161,14 @@ class CheckoutServiceTest {
     @Test
     void GivenMissingToken_WhenCheckout_ThenThrowException() {
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout("", IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember("", IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
     @Test
     void GivenNullToken_WhenCheckout_ThenThrowException() {
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(null, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(null, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
@@ -177,7 +177,7 @@ class CheckoutServiceTest {
         when(mockiSessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
 
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(INVALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(INVALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
@@ -186,7 +186,7 @@ class CheckoutServiceTest {
         when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(null);
 
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
@@ -198,7 +198,7 @@ class CheckoutServiceTest {
         );
 
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
     //////////////////////////////////////////////////////////added test for expired order with multiple tickets scenario after check1
@@ -229,7 +229,7 @@ void GivenExpiredOrderWithMultipleTickets_WhenCheckout_ThenClearCartAndReturnTic
     });
 
     assertThrows(RuntimeException.class, () ->
-            checkoutService.checkout(
+            checkoutService.checkoutMember(
                     VALID_TOKEN,
                     IDEMPOTENCY_KEY,
                     CURRENCY,
@@ -254,7 +254,7 @@ void GivenExpiredOrderWithMultipleTickets_WhenCheckout_ThenClearCartAndReturnTic
         when(mockOrder.ReturnToStock()).thenReturn(List.of());
 
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
@@ -281,7 +281,7 @@ void GivenOrderCannotCheckout_WhenCheckout_ThenClearCartAndReturnTicketsToStock(
     });
 
     assertThrows(RuntimeException.class, () ->
-            checkoutService.checkout(
+            checkoutService.checkoutMember(
                     VALID_TOKEN,
                     IDEMPOTENCY_KEY,
                     CURRENCY,
@@ -324,7 +324,7 @@ void GivenPaymentFails_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
     });
 
     assertThrows(RuntimeException.class, () ->
-            checkoutService.checkout(
+            checkoutService.checkoutMember(
                     VALID_TOKEN,
                     IDEMPOTENCY_KEY,
                     CURRENCY,
@@ -378,7 +378,7 @@ void GivenTicketIssuanceFailsAfterPayment_WhenCheckout_ThenClearCartAndReturnTic
     });
 
     assertThrows(RuntimeException.class, () ->
-            checkoutService.checkout(
+            checkoutService.checkoutMember(
                     VALID_TOKEN,
                     IDEMPOTENCY_KEY,
                     CURRENCY,
@@ -440,7 +440,7 @@ void GivenTicketIssuanceReturnsNullBarcodes_WhenCheckout_ThenClearCartAndReturnT
     });
 
     assertThrows(RuntimeException.class, () ->
-            checkoutService.checkout(
+            checkoutService.checkoutMember(
                     VALID_TOKEN,
                     IDEMPOTENCY_KEY,
                     CURRENCY,
@@ -500,7 +500,7 @@ void GivenTicketIssuanceReturnsEmptyBarcodes_WhenCheckout_ThenClearCartAndReturn
     });
 
     assertThrows(RuntimeException.class, () ->
-            checkoutService.checkout(
+            checkoutService.checkoutMember(
                     VALID_TOKEN,
                     IDEMPOTENCY_KEY,
                     CURRENCY,
@@ -579,7 +579,7 @@ void GivenMultipleTicketsButIssuerReturnsLessBarcodes_WhenCheckout_ThenClearCart
     });
 
     assertThrows(RuntimeException.class, () ->
-            checkoutService.checkout(
+            checkoutService.checkoutMember(
                     VALID_TOKEN,
                     IDEMPOTENCY_KEY,
                     CURRENCY,
@@ -645,7 +645,7 @@ void GivenPaymentRefundFails_WhenCheckout_ThenClearCartReturnTicketsToStockAndTh
             .refund(PAYMENT_TRANSACTION_ID, 100.0);
 
     assertThrows(RuntimeException.class, () ->
-            checkoutService.checkout(
+            checkoutService.checkoutMember(
                     VALID_TOKEN,
                     IDEMPOTENCY_KEY,
                     CURRENCY,
@@ -682,7 +682,7 @@ void GivenTicketFromDifferentEventDoesNotExist_WhenCheckout_ThenClearCartAndRetu
     });
 
     assertThrows(RuntimeException.class, () ->
-            checkoutService.checkout(
+            checkoutService.checkoutMember(
                     VALID_TOKEN,
                     IDEMPOTENCY_KEY,
                     CURRENCY,
@@ -729,7 +729,7 @@ void GivenValidCheckout_WhenCheckout_ThenReturnCheckoutResultAndSaveTicketAndRec
     when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
             .thenReturn(issuanceResult);
 
-    CheckoutResultDTO result = checkoutService.checkout(
+    CheckoutResultDTO result = checkoutService.checkoutMember(
             VALID_TOKEN,
             IDEMPOTENCY_KEY,
             CURRENCY,
@@ -796,7 +796,7 @@ void GivenValidCheckoutWithCalculatedPrice_WhenCheckout_ThenReturnCalculatedTota
     when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
             .thenReturn(issuanceResult);
 
-    CheckoutResultDTO result = checkoutService.checkout(
+    CheckoutResultDTO result = checkoutService.checkoutMember(
             VALID_TOKEN,
             IDEMPOTENCY_KEY,
             CURRENCY,
@@ -860,7 +860,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
     when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
             .thenReturn(issuanceResult);
 
-    CheckoutResultDTO result = checkoutService.checkout(
+    CheckoutResultDTO result = checkoutService.checkoutMember(
             VALID_TOKEN,
             IDEMPOTENCY_KEY,
             CURRENCY,
@@ -941,7 +941,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
            when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
                            .thenReturn(issuanceResult);
 
-           CheckoutResultDTO result = checkoutService.checkout(
+           CheckoutResultDTO result = checkoutService.checkoutMember(
                            VALID_TOKEN,
                            IDEMPOTENCY_KEY,
                            CURRENCY,
@@ -1023,7 +1023,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                 when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
                 when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
 
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 
                 ArgumentCaptor<IssuanceRequestDTO> issuanceCaptor = ArgumentCaptor.forClass(IssuanceRequestDTO.class);
                 verify(mockTicketIssuer).issue(issuanceCaptor.capture());
@@ -1076,7 +1076,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                 when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
                 when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
 
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 
                 ArgumentCaptor<IssuanceRequestDTO> issuanceCaptor = ArgumentCaptor.forClass(IssuanceRequestDTO.class);
                 verify(mockTicketIssuer).issue(issuanceCaptor.capture());
@@ -1123,7 +1123,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                 when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
                 when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
 
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 
                 assertEquals(SeatStatus.SOLD, seatedZone.getSeat("A1").getStatus());
                 assertTrue(activeOrder.isEmpty());
@@ -1221,7 +1221,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                 when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
                 when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
 
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 
                 ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
                 verify(mockTicketRepo, times(2)).save(ticketCaptor.capture());
@@ -1280,12 +1280,12 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                 doThrow(new RuntimeException("DB error on receipt save"))
                                 .when(mockOrderReceiptRepo).save(any(OrderReceipt.class));
 
-                assertThrows(RuntimeException.class, () -> checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY,
+                assertThrows(RuntimeException.class, () -> checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY,
                                 CURRENCY, PAYMENT_METHOD_TOKEN));
                                 
                 assertEquals(SeatStatus.SOLD, seatedZone.getSeat("A1").getStatus());
                 assertFalse(activeOrder.isEmpty());
-                assertThrows(RuntimeException.class, () -> checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN));
+                assertThrows(RuntimeException.class, () -> checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN));
         }
 
 

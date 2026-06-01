@@ -188,14 +188,6 @@ public class Event implements InvariantChecked {
 
 
 
-    // TODO: might need to implement in EventManagementService or in Event or we can say seated layout is immutable after venue configuration.
-    // public void addSeatToSeatedZone(...){
-    // TODO: might need to add a seat ID generator in VenueMap or SeatedZone to ensure unique seat IDs within the zone; or we can require the client to provide unique seat IDs in the request.
-    // }
-
-    // public void removeSeatFromSeatedZone(...){
-    // TODO: might need to check if the seat is already reserved/sold before allowing removal, and handle that accordingly (e.g. prevent removal, or allow removal but mark any affected reservations as invalid and notify users, etc.)
-    // }
 
 
 

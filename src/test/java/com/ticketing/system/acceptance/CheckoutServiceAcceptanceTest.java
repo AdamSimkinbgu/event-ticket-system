@@ -220,7 +220,7 @@ public class CheckoutServiceAcceptanceTest {
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(order);
         validPaymentAndIssuance(1);
 
-        CheckoutResultDTO result = checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+        CheckoutResultDTO result = checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 
         assertEquals(10.0, result.totalCharged());
     }
@@ -236,7 +236,7 @@ public class CheckoutServiceAcceptanceTest {
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(order);
         validPaymentAndIssuance(2);
 
-        CheckoutResultDTO result = checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+        CheckoutResultDTO result = checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 
         assertEquals(20.0, result.totalCharged());
     }
@@ -252,7 +252,7 @@ public class CheckoutServiceAcceptanceTest {
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(order);
         validPaymentAndIssuance(2);
 
-        CheckoutResultDTO result = checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+        CheckoutResultDTO result = checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 
         assertEquals(20.0, result.totalCharged());
     }
@@ -268,7 +268,7 @@ public class CheckoutServiceAcceptanceTest {
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(order);
         validPaymentAndIssuance(2);
 
-        CheckoutResultDTO result = checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+        CheckoutResultDTO result = checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 
         assertEquals(30.0, result.totalCharged());
     }
@@ -276,7 +276,7 @@ public class CheckoutServiceAcceptanceTest {
     @Test
     void GivenNullToken_WhenCheckout_ThenThrowException() {
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(null, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(null, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -285,7 +285,7 @@ public class CheckoutServiceAcceptanceTest {
     @Test
     void GivenBlankToken_WhenCheckout_ThenThrowException() {
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(" ", IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(" ", IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -296,7 +296,7 @@ public class CheckoutServiceAcceptanceTest {
         when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(INVALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(INVALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -307,7 +307,7 @@ public class CheckoutServiceAcceptanceTest {
         when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(false);
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -318,7 +318,7 @@ public class CheckoutServiceAcceptanceTest {
         validSession();
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, null, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, null, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -329,7 +329,7 @@ public class CheckoutServiceAcceptanceTest {
         validSession();
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, " ", CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, " ", CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -340,7 +340,7 @@ public class CheckoutServiceAcceptanceTest {
         validSession();
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, null, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, null, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -351,7 +351,7 @@ public class CheckoutServiceAcceptanceTest {
         validSession();
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, " ", PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, " ", PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -362,7 +362,7 @@ public class CheckoutServiceAcceptanceTest {
         validSession();
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, null)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, null)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -373,7 +373,7 @@ public class CheckoutServiceAcceptanceTest {
         validSession();
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, " ")
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, " ")
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -385,7 +385,7 @@ public class CheckoutServiceAcceptanceTest {
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(null);
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -398,7 +398,7 @@ public class CheckoutServiceAcceptanceTest {
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(order);
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -411,7 +411,7 @@ public class CheckoutServiceAcceptanceTest {
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(order);
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -424,7 +424,7 @@ public class CheckoutServiceAcceptanceTest {
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(order);
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -438,7 +438,7 @@ public class CheckoutServiceAcceptanceTest {
         when(eventRepository.findById(EVENT_ID_1)).thenReturn(null);
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -456,7 +456,7 @@ public class CheckoutServiceAcceptanceTest {
         when(eventRepository.findById(EVENT_ID_2)).thenReturn(null);
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -472,7 +472,7 @@ public class CheckoutServiceAcceptanceTest {
         when(paymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(null);
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals(1, returnedTickets.get());
@@ -489,7 +489,7 @@ public class CheckoutServiceAcceptanceTest {
         when(paymentGateway.charge(any(PaymentRequestDTO.class))).thenThrow(new RuntimeException("payment failed"));
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals(1, returnedTickets.get());
@@ -508,7 +508,7 @@ public class CheckoutServiceAcceptanceTest {
         when(ticketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(null);
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals(true, refundRequested.get());
@@ -528,7 +528,7 @@ public class CheckoutServiceAcceptanceTest {
         when(ticketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult(0));
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals(true, refundRequested.get());
@@ -552,7 +552,7 @@ public class CheckoutServiceAcceptanceTest {
         when(ticketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult(1));
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals(true, refundRequested.get());
@@ -572,7 +572,7 @@ public class CheckoutServiceAcceptanceTest {
         when(ticketIssuer.issue(any(IssuanceRequestDTO.class))).thenThrow(new RuntimeException("issuer failed"));
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals(true, refundRequested.get());
@@ -592,7 +592,7 @@ public class CheckoutServiceAcceptanceTest {
         doThrow(new RuntimeException("save ticket failed")).when(ticketRepository).save(any(Ticket.class));
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals(true, refundRequested.get());
@@ -612,7 +612,7 @@ public class CheckoutServiceAcceptanceTest {
         doThrow(new RuntimeException("save receipt failed")).when(orderReceiptRepository).save(any(OrderReceipt.class));
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals(true, refundRequested.get());
@@ -635,7 +635,7 @@ public class CheckoutServiceAcceptanceTest {
                 .notifyPurchaseCompleted(anyInt(), anyDouble(), anyList());
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals(true, refundRequested.get());
@@ -661,7 +661,7 @@ public class CheckoutServiceAcceptanceTest {
         Callable<Boolean> task = () -> {
             start.await();
             try {
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
                 return true;
             } catch (RuntimeException e) {
                 return false;
@@ -703,7 +703,7 @@ public class CheckoutServiceAcceptanceTest {
         Callable<Boolean> task = () -> {
             start.await();
             try {
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
                 return true;
             } catch (RuntimeException e) {
                 return false;
@@ -738,7 +738,7 @@ public class CheckoutServiceAcceptanceTest {
         when(ticketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(null);
 
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals(true, refundRequested.get());
@@ -753,7 +753,7 @@ public class CheckoutServiceAcceptanceTest {
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(order);
 
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals(false, refundRequested.get());
@@ -769,7 +769,7 @@ public class CheckoutServiceAcceptanceTest {
         when(paymentGateway.charge(any(PaymentRequestDTO.class))).thenThrow(new RuntimeException("payment failed"));
 
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
         assertEquals(1, returnedTickets.get());
@@ -790,7 +790,7 @@ public class CheckoutServiceAcceptanceTest {
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(order);
         validPaymentAndIssuance(1);
 
-        checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+        checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 
         assertEquals(true, orderBought.get());
     }
@@ -809,7 +809,7 @@ public class CheckoutServiceAcceptanceTest {
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(order);
         validPaymentAndIssuance(1);
 
-        checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+        checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 
         assertEquals(true, ticketSaved.get());
     }
@@ -828,7 +828,7 @@ public class CheckoutServiceAcceptanceTest {
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(order);
         validPaymentAndIssuance(1);
 
-        checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+        checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 
         assertEquals(true, receiptSaved.get());
     }
@@ -847,7 +847,7 @@ public class CheckoutServiceAcceptanceTest {
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(order);
         validPaymentAndIssuance(1);
 
-        checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+        checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 
         assertEquals(true, userNotified.get());
     }
