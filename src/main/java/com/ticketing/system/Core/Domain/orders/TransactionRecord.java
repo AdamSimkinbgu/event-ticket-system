@@ -50,6 +50,9 @@ public final class TransactionRecord implements InvariantChecked {
             String currency,
             LocalDateTime chargedAt
     ) {
+        if (paymentTransactionId <= 0) {
+            throw new IllegalArgumentException("paymentTransactionId must be positive");
+        }
         return new TransactionRecord(
                 TransactionType.PAYMENT_CHARGE,
                 gatewayName,
@@ -133,6 +136,9 @@ public final class TransactionRecord implements InvariantChecked {
         }
         if (timestamp == null) {
             throw new IllegalStateException("TransactionRecord invariant violated: timestamp must not be null");
+        }
+        if (providerName == null || providerName.isBlank()) {
+            throw new IllegalStateException("TransactionRecord invariant violated: providerName must not be blank");
         }
     }
 }

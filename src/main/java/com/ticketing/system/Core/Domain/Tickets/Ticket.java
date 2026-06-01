@@ -1,7 +1,6 @@
 package com.ticketing.system.Core.Domain.Tickets;
 
 
-import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.TicketRecordDTO;
 import com.ticketing.system.Core.Domain.exceptions.TicketNotAvailableException;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 

@@ -46,6 +46,10 @@ public class OrderReceipt implements InvariantChecked {
             throw new IllegalArgumentException("receiptLines must not be null");
         }
 
+        if (receiptLines.isEmpty()) {
+            throw new IllegalArgumentException("receiptLines must not be empty");
+        }
+
         boolean memberIdentity = userid != null;
         boolean guestIdentity = guestEmail != null && !guestEmail.isBlank()
                 && guestSessionId != null && !guestSessionId.isBlank();
@@ -210,6 +214,10 @@ public class OrderReceipt implements InvariantChecked {
 
         if (transactionRecords == null) {
             throw new IllegalStateException("OrderReceipt invariant violated: transactionRecords must not be null");
+        }
+
+        if (receiptLines.isEmpty()) {
+            throw new IllegalStateException("OrderReceipt invariant violated: receiptLines must not be empty");
         }
 
         boolean isMember = userid != null;
