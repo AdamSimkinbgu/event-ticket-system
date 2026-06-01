@@ -1,6 +1,6 @@
 package com.ticketing.system.Core.Domain.events;
 
-import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 /**
@@ -67,11 +67,11 @@ public abstract class InventoryZone implements InvariantChecked {
 
     public abstract boolean checkAvailability(int quantity);
 
-    public abstract boolean reserve(InventorySelectionDTO selection);
+    public abstract boolean reserve(InventorySelection selection);
 
-    public abstract boolean release(InventorySelectionDTO selection);
+    public abstract boolean release(InventorySelection selection);
 
-    public abstract boolean confirmSale(InventorySelectionDTO selection);
+    public abstract boolean confirmSale(InventorySelection selection);
 
     public abstract int getSoldAmount();
 

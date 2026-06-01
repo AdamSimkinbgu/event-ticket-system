@@ -27,6 +27,7 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
@@ -408,9 +409,9 @@ class CatalogServiceTest {
                 )
         );
 
-        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1")));
-        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A2")));
-        seatedZone.confirmSale(InventorySelectionDTO.seated(List.of("A2")));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+        seatedZone.reserve(InventorySelection.seated(List.of("A2")));
+        seatedZone.confirmSale(InventorySelection.seated(List.of("A2")));
 
         VenueMap venueMap = new VenueMap(
                 1,
@@ -466,7 +467,7 @@ class CatalogServiceTest {
     @Test
     void givenStandingZone_whenGetVenueMap_thenZoneCountAvailabilityReturned() {
         StandingZone standingZone = new StandingZone(5, "General Admission", 10, 50.0);
-        standingZone.reserve(InventorySelectionDTO.standing(3));
+        standingZone.reserve(InventorySelection.standing(3));
 
         VenueMap venueMap = new VenueMap(
                 1,

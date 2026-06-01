@@ -13,6 +13,7 @@ import com.ticketing.system.Core.Application.dto.BuyerContextDTO;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
@@ -49,20 +50,28 @@ public class ReservationService {
     // Public API - use these methods from new code/controllers/tests
     // ---------------------------------------------------------------------
 
-    public ReservationResultDTO reserveForMember(String token, int eventId, int zoneId, InventorySelectionDTO selection) {
-        return reserve(authenticateMember(token), eventId, zoneId, selection);
+    public ReservationResultDTO reserveForMember(String token, int eventId, int zoneId, InventorySelectionDTO selectionDto) {
+        return reserve(authenticateMember(token), eventId, zoneId, toDomainSelection(selectionDto));
     }
 
-    public ReservationResultDTO reserveForGuest(String sessionId, int eventId, int zoneId, InventorySelectionDTO selection) {
-        return reserve(authenticateGuest(sessionId), eventId, zoneId, selection);
+    public ReservationResultDTO reserveForGuest(String sessionId, int eventId, int zoneId, InventorySelectionDTO selectionDto) {
+        return reserve(authenticateGuest(sessionId), eventId, zoneId, toDomainSelection(selectionDto));
     }
 
-    public ReservationResultDTO removeForMember(String token, int eventId, int zoneId, InventorySelectionDTO selection) {
-        return remove(authenticateMember(token), eventId, zoneId, selection);
+    public ReservationResultDTO removeForMember(String token, int eventId, int zoneId, InventorySelectionDTO selectionDto) {
+        return remove(authenticateMember(token), eventId, zoneId, toDomainSelection(selectionDto));
     }
 
-    public ReservationResultDTO removeForGuest(String sessionId, int eventId, int zoneId, InventorySelectionDTO selection) {
-        return remove(authenticateGuest(sessionId), eventId, zoneId, selection);
+    public ReservationResultDTO removeForGuest(String sessionId, int eventId, int zoneId, InventorySelectionDTO selectionDto) {
+        return remove(authenticateGuest(sessionId), eventId, zoneId, toDomainSelection(selectionDto));
+    }
+
+    private InventorySelection toDomainSelection(InventorySelectionDTO selectionDto) {
+        if (selectionDto == null) {
+            throw new IllegalArgumentException("Inventory selection is required");
+        }
+
+        return selectionDto.toDomainSelection();
     }
 
 
@@ -122,7 +131,7 @@ public class ReservationService {
     // ---------------------------------------------------------------------
 
 
-    private ReservationResultDTO reserve(BuyerContextDTO buyer, int eventId, int zoneId, InventorySelectionDTO selection) {
+    private ReservationResultDTO reserve(BuyerContextDTO buyer, int eventId, int zoneId, InventorySelection selection) {
         log.info("Entered reserve: buyerType={}, eventId={}, zoneId={}, quantity={}, seats={}",
                 buyer.isMember() ? "MEMBER" : "GUEST",
                 eventId,
@@ -136,6 +145,13 @@ public class ReservationService {
         ActiveOrder activeOrder = null;
         boolean inventoryReserved = false;
         boolean orderModified = false;
+
+        String orderLockKey = buyer.isMember()
+                ? "user:" + buyer.userId()
+                : "sess:" + buyer.sessionId();
+
+        activeOrderRepository.lockForUpdate(orderLockKey);
+        eventRepository.lockForUpdate(eventId);
 
         try {
             event = getEventOrThrow(eventId);
@@ -158,24 +174,28 @@ public class ReservationService {
             return buildReservationResult(eventId, zoneId, selection);
 
         } catch (RuntimeException e) {
-            rollbackReservationIfNeeded(event, activeOrder, eventId, zoneId, selection, inventoryReserved, orderModified);
+            rollbackReservationIfNeeded(event, activeOrder, eventId, zoneId, selection, inventoryReserved,
+                    orderModified);
 
             notifyReservationFailureIfMember(buyer, eventId, zoneId, "Reservation failed: " + e.getMessage());
 
             log.warn("reserve failed: eventId={}, zoneId={}, selectionQuantity={}, seats={}, reason={}",
                     eventId, zoneId,
-                    selection == null ? null : selection.getQuantity(), selection == null ? null : selection.getSeatNumbers(),
+                    selection == null ? null : selection.getQuantity(),
+                    selection == null ? null : selection.getSeatNumbers(),
                     e.getMessage());
 
             throw e;
+        } finally {
+            eventRepository.unlock(eventId);
+            activeOrderRepository.unlock(orderLockKey);
         }
     }
 
     
 
 
-    private ReservationResultDTO remove(BuyerContextDTO buyer, int eventId, int zoneId,
-            InventorySelectionDTO selection) {
+    private ReservationResultDTO remove(BuyerContextDTO buyer, int eventId, int zoneId, InventorySelection selection) {
         log.info("Entered remove: buyerType={}, eventId={}, zoneId={}, quantity={}, seats={}",
                 buyer.isMember() ? "MEMBER" : "GUEST",
                 eventId,
@@ -184,6 +204,13 @@ public class ReservationService {
                 selection == null ? null : selection.getSeatNumbers());
 
         validateReservationArguments(eventId, zoneId, selection);
+
+        String orderLockKey = buyer.isMember()
+                ? "user:" + buyer.userId()
+                : "sess:" + buyer.sessionId();
+
+        activeOrderRepository.lockForUpdate(orderLockKey);
+        eventRepository.lockForUpdate(eventId);
 
         try {
             Event event = getEventOrThrow(eventId);
@@ -213,6 +240,9 @@ public class ReservationService {
                     e.getMessage());
 
             throw e;
+        } finally {
+            eventRepository.unlock(eventId);
+            activeOrderRepository.unlock(orderLockKey);
         }
     }
 
@@ -273,21 +303,29 @@ public class ReservationService {
     
 
 
-    private void validateReservationArguments(int eventId, int zoneId, InventorySelectionDTO selection) {
+    private void validateReservationArguments(int eventId, int zoneId, InventorySelection selection) {
         if (eventId <= 0) {
             throw new IllegalArgumentException("eventId must be positive");
         }
+
         if (zoneId <= 0) {
             throw new IllegalArgumentException("zoneId must be positive");
         }
+
         if (selection == null) {
             throw new IllegalArgumentException("Inventory selection is required");
         }
+
         if (selection.getQuantity() <= 0) {
             throw new IllegalArgumentException("Quantity must be positive");
         }
-        if (selection.getSeatNumbers() != null && selection.getSeatNumbers().isEmpty()) {
-            throw new IllegalArgumentException("Seat numbers list cannot be empty");
+
+        if (selection.isSeatedSelection()) {
+            for (String seatNumber : selection.getSeatNumbers()) {
+                if (seatNumber == null || seatNumber.isBlank()) {
+                    throw new IllegalArgumentException("Seat number must be non-blank");
+                }
+            }
         }
     }
 
@@ -362,7 +400,7 @@ public class ReservationService {
 
 
     private void rollbackReservationIfNeeded(Event event, ActiveOrder activeOrder, int eventId, int zoneId,
-                    InventorySelectionDTO selection, boolean inventoryReserved, boolean orderModified) {
+                    InventorySelection selection, boolean inventoryReserved, boolean orderModified) {
 
         if (!inventoryReserved) {
             return;
@@ -418,7 +456,7 @@ public class ReservationService {
     }
 
 
-    private ReservationResultDTO buildReservationResult(int eventId, int zoneId, InventorySelectionDTO selection) {
+    private ReservationResultDTO buildReservationResult(int eventId, int zoneId, InventorySelection selection) {
         return new ReservationResultDTO(
                 eventId,
                 zoneId,
@@ -484,9 +522,9 @@ public class ReservationService {
                 try {
                     Event event = eventRepository.findById(line.eventId());
                     if (event != null) {
-                        InventorySelectionDTO selection = (line.seatNumber() != null)
-                                ? InventorySelectionDTO.seated(List.of(line.seatNumber()))
-                                : InventorySelectionDTO.standing(1);
+                        InventorySelection selection = (line.seatNumber() != null)
+                                ? InventorySelection.seated(List.of(line.seatNumber()))
+                                : InventorySelection.standing(1);
                         event.releaseInventory(line.zoneId(), selection);
                         eventRepository.save(event);
                     }

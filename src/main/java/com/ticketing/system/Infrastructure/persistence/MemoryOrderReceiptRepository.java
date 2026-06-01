@@ -98,12 +98,12 @@ public class MemoryOrderReceiptRepository implements IOrderReceiptRepository {
      * A receipt repository cannot correctly know company ownership by itself.
      * Use EventRepository.findIdsByCompany(companyId), then call findByEventIds(...).
      */
-    @Override
-    @Deprecated
-    public List<OrderReceipt> findByCompanyId(int companyId) {
-        //TODO: LOOK INTO THIS AND LATER DELETE THIS FUNCTION */
-        throw new UnsupportedOperationException("Use eventRepository.findIdsByCompany(companyId) and then findByEventIds(eventIds)");
-    }
+    // @Override
+    // @Deprecated
+    // public List<OrderReceipt> findByCompanyId(int companyId) {
+    //     //TODO: LOOK INTO THIS AND LATER DELETE THIS FUNCTION */
+    //     throw new UnsupportedOperationException("Use eventRepository.findIdsByCompany(companyId) and then findByEventIds(eventIds)");
+    // }
     
 
 

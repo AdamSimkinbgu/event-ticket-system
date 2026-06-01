@@ -13,12 +13,12 @@ import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
 import com.ticketing.system.Core.Application.dto.PaymentRequestDTO;
-import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.dto.PaymentResultDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
@@ -75,36 +75,63 @@ public class CheckoutService {
     
     public CheckoutResultDTO checkoutMember(String token, String idempotencyKey, String currency, String paymentMethodToken) {
         log.info("Entered checkout function");
+
         int userId = -1;
         ActiveOrder order = null;
         PaymentResultDTO paymentResult = null;
         double totalPrice = 0;
+        boolean inventorySaleConfirmationStarted = false;
 
         try {
-
             userId = authenticateAndGetUserId(token);
+
             order = activeOrderRepository.getByUserId(userId);
+
             validatePaymentInput(idempotencyKey, currency, paymentMethodToken, userId);
             validateOrderForCheckout(order, userId);
 
             List<CartLineItem> boughtItems = order.getItems();
+
             log.info("Checkout order validated. userId={}, itemCount={}", userId, boughtItems.size());
 
             totalPrice = calculateTotalPrice(order);
+
             log.info("Checkout total price calculated. userId={}, totalPrice={}", userId, totalPrice);
 
-            paymentResult = chargePayment(userId, null, totalPrice, idempotencyKey, currency, paymentMethodToken);
+            paymentResult = chargePayment(
+                    userId,
+                    null,
+                    totalPrice,
+                    idempotencyKey,
+                    currency,
+                    paymentMethodToken);
 
             IssuanceResultDTO issuanceResult = issueTickets(userId, null, boughtItems);
-            validateIssuanceResult(issuanceResult, boughtItems, userId);
-            
-            int orderReceiptId = orderReceiptRepository.nextId();
-            List<ReceiptLine> receiptLines = saveTicketsAndBuildReceiptLines(userId, orderReceiptId, boughtItems, issuanceResult);
 
+            validateIssuanceResult(issuanceResult, boughtItems, userId);
+
+            int orderReceiptId = orderReceiptRepository.nextId();
+
+            List<ReceiptLine> receiptLines = saveTicketsAndBuildReceiptLines(
+                    userId,
+                    orderReceiptId,
+                    boughtItems,
+                    issuanceResult);
+
+            inventorySaleConfirmationStarted = true;
             confirmInventorySale(boughtItems);
 
-            saveMemberReceipt(userId, orderReceiptId, totalPrice, receiptLines, paymentResult, issuanceResult);
+            saveMemberReceipt(
+                    userId,
+                    orderReceiptId,
+                    totalPrice,
+                    receiptLines,
+                    paymentResult,
+                    issuanceResult);
+
             order.buy();
+            activeOrderRepository.save(order);
+
             log.info("Order marked as bought. userId={}", userId);
 
             notifyPurchaseCompleted(userId, totalPrice, receiptLines);
@@ -118,79 +145,91 @@ public class CheckoutService {
             return buildCheckoutResult(totalPrice, orderReceiptId, paymentResult, issuanceResult);
 
         } catch (Exception e) {
-            handleCheckoutFailure(userId, order, paymentResult, totalPrice, e);
-            throw new RuntimeException("Checkout failed, tickets returned to stock", e);
+            handleCheckoutFailure(userId, order, paymentResult, totalPrice, inventorySaleConfirmationStarted, e);
+            throw new RuntimeException("Checkout failed", e);
         }
     }
 
 
 
 
+
+
+
     
+    
+
+
+
+
+
+
     public CheckoutResultDTO checkoutGuest(String guestSessionId, String guestEmail, String idempotencyKey, String currency, String paymentMethodToken) {
-            log.info("Entered guest checkout function. guestSessionId={}", guestSessionId);
+        log.info("Entered guest checkout function. guestSessionId={}", guestSessionId);
 
-            ActiveOrder order = null;
-            PaymentResultDTO paymentResult = null;
-            double totalPrice = 0;
+        ActiveOrder order = null;
+        PaymentResultDTO paymentResult = null;
+        double totalPrice = 0;
+        boolean inventorySaleConfirmationStarted = false;
 
-            try {
-                validateGuestCheckoutIdentity(guestSessionId, guestEmail);
+        try {
+            validateGuestCheckoutIdentity(guestSessionId, guestEmail);
 
-                order = activeOrderRepository.getBySessionId(guestSessionId)
-                        .orElseThrow(() -> new IllegalStateException("Active guest order not found"));
+            order = activeOrderRepository.getBySessionId(guestSessionId)
+                    .orElseThrow(() -> new IllegalStateException("Active guest order not found"));
 
-                validatePaymentInput(idempotencyKey, currency, paymentMethodToken, null);
-                validateOrderForCheckout(order, null);
+            validatePaymentInput(idempotencyKey, currency, paymentMethodToken, null);
+            validateOrderForCheckout(order, null);
 
-                List<CartLineItem> boughtItems = order.getItems();
+            List<CartLineItem> boughtItems = order.getItems();
 
-                totalPrice = calculateTotalPrice(order);
+            totalPrice = calculateTotalPrice(order);
 
-                paymentResult = chargePayment(
-                        null,
-                        guestEmail,
-                        totalPrice,
-                        idempotencyKey,
-                        currency,
-                        paymentMethodToken);
+            paymentResult = chargePayment(
+                    null,
+                    guestEmail,
+                    totalPrice,
+                    idempotencyKey,
+                    currency,
+                    paymentMethodToken);
 
-                IssuanceResultDTO issuanceResult = issueTickets(
-                        null,
-                        guestEmail,
-                        boughtItems);
+            IssuanceResultDTO issuanceResult = issueTickets(
+                    null,
+                    guestEmail,
+                    boughtItems);
 
-                validateIssuanceResult(issuanceResult, boughtItems, null);
+            validateIssuanceResult(issuanceResult, boughtItems, null);
 
-                int orderReceiptId = orderReceiptRepository.nextId();
+            int orderReceiptId = orderReceiptRepository.nextId();
 
-                List<ReceiptLine> receiptLines = saveTicketsAndBuildReceiptLines(
-                        null,
-                        orderReceiptId,
-                        boughtItems,
-                        issuanceResult);
+            List<ReceiptLine> receiptLines = saveTicketsAndBuildReceiptLines(
+                    null,
+                    orderReceiptId,
+                    boughtItems,
+                    issuanceResult);
 
-                confirmInventorySale(boughtItems);
+            inventorySaleConfirmationStarted = true;
+            confirmInventorySale(boughtItems);
 
-                saveGuestReceipt(
-                        guestEmail,
-                        guestSessionId,
-                        orderReceiptId,
-                        totalPrice,
-                        receiptLines,
-                        paymentResult,
-                        issuanceResult);
+            saveGuestReceipt(
+                    guestEmail,
+                    guestSessionId,
+                    orderReceiptId,
+                    totalPrice,
+                    receiptLines,
+                    paymentResult,
+                    issuanceResult);
 
-                order.buy();
+            order.buy();
+            activeOrderRepository.save(order);
 
-                return buildCheckoutResult(totalPrice, orderReceiptId, paymentResult, issuanceResult);
+            return buildCheckoutResult(totalPrice, orderReceiptId, paymentResult, issuanceResult);
 
-            } catch (Exception e) {
-                // notification service is member-user-id based, so guests should either receive email later or no notification
-                handleGuestCheckoutFailure(guestSessionId, order, paymentResult, totalPrice, e);
-                throw new RuntimeException("Guest checkout failed, tickets returned to stock", e);
-            }
+        } catch (Exception e) {
+            handleGuestCheckoutFailure(guestSessionId, order, paymentResult, totalPrice, inventorySaleConfirmationStarted, e);
+            throw new RuntimeException("Guest checkout failed", e);
         }
+    }
 
 
 
@@ -207,13 +246,11 @@ public class CheckoutService {
     // so we need to group the bought items by event and zone to know how many tickets to confirm for each zone, and which seat numbers for seated zones.
     private void confirmInventorySale(List<CartLineItem> boughtItems) {
         // we need to group the bought items by event and zone to know how many tickets to confirm for each zone, and which seat numbers for seated zones, so we can call the appropriate confirmSale method on the event's venue map.
-        Map<Integer, Map<Integer, List<CartLineItem>>> grouped =
-                boughtItems.stream()
-                        .collect(Collectors.groupingBy(
-                                CartLineItem::geteventId,
-                                Collectors.groupingBy(CartLineItem::getzoneId)
-                        ));
-        
+        Map<Integer, Map<Integer, List<CartLineItem>>> grouped = boughtItems.stream()
+                .collect(Collectors.groupingBy(
+                        CartLineItem::geteventId,
+                        Collectors.groupingBy(CartLineItem::getzoneId)));
+
         // then we iterate over the grouped items and call confirmSale on the event's venue map for each zone, passing the quantity for standing zones and the seat numbers for seated zones.
         for (Map.Entry<Integer, Map<Integer, List<CartLineItem>>> eventEntry : grouped.entrySet()) {
             Event event = eventRepository.findById(eventEntry.getKey());
@@ -228,12 +265,48 @@ public class CheckoutService {
                         .toList();
 
                 if (seatNumbers.isEmpty()) {
-                    event.confirmInventorySale(zoneId, InventorySelectionDTO.standing(zoneItems.size()));
+                    event.confirmInventorySale(zoneId, InventorySelection.standing(zoneItems.size()));
                 } else {
-                    event.confirmInventorySale(zoneId, InventorySelectionDTO.seated(seatNumbers));
+                    event.confirmInventorySale(zoneId, InventorySelection.seated(seatNumbers));
                 }
             }
             // after confirming the sale for all zones of the event, we save the event to persist the changes to the inventory.
+            eventRepository.save(event);
+        }
+    }
+    
+
+
+
+    //TODO: check this function if it's good   <<<===============================     <<=========================================    <<============================
+    // function to move inventory back to available stock in case of checkout failure after payment, we call releaseInventory on the event's venue map for each zone, passing the quantity for standing zones and the seat numbers for seated zones, to return the tickets to stock.
+    // so moves from sold -> reserved -> available instead of directly from sold -> available, to keep the inventory state consistent and allow for better tracking and potential analytics on reservation vs actual sales.
+    private void reverseConfirmInventorySale(List<CartLineItem> boughtItems) {
+        // this is the reverse of confirmInventorySale, we call releaseInventory on the event's venue map for each zone, passing the quantity for standing zones and the seat numbers for seated zones, to return the tickets to stock in case of checkout failure after payment.
+        // we need to group the bought items by event and zone to know how many tickets to release for each zone, and which seat numbers for seated zones, so we can call the appropriate releaseInventory method on the event's venue map.
+        Map<Integer, Map<Integer, List<CartLineItem>>> grouped = boughtItems.stream()
+                .collect(Collectors.groupingBy(
+                        CartLineItem::geteventId,
+                        Collectors.groupingBy(CartLineItem::getzoneId)));
+        // then we iterate over the grouped items and call releaseInventory on the event's venue map for each zone, passing the quantity for standing zones and the seat numbers for seated zones, to return the tickets to stock in case of checkout failure after payment.
+        for (Map.Entry<Integer, Map<Integer, List<CartLineItem>>> eventEntry : grouped.entrySet()) {
+            Event event = eventRepository.findById(eventEntry.getKey());
+            // we can assume that all items in the same zone for the same event are either standing or seated, because the reservation process should not allow mixing them in the same order.
+            for (Map.Entry<Integer, List<CartLineItem>> zoneEntry : eventEntry.getValue().entrySet()) {
+                int zoneId = zoneEntry.getKey();
+                List<CartLineItem> zoneItems = zoneEntry.getValue();
+                // we extract the seat numbers for seated zones, if there are any, to pass to the releaseInventory method on the event's venue map, if there are no seat numbers it means it's a standing zone and we just pass the quantity.
+                List<String> seatNumbers = zoneItems.stream()
+                        .map(CartLineItem::getSeatNumber)
+                        .filter(s -> s != null)
+                        .toList();
+
+                if (seatNumbers.isEmpty()) {
+                    event.releaseInventory(zoneId, InventorySelection.standing(zoneItems.size()));
+                } else {
+                    event.releaseInventory(zoneId, InventorySelection.seated(seatNumbers));
+                }
+            }
             eventRepository.save(event);
         }
     }
@@ -288,15 +361,31 @@ public class CheckoutService {
 
 
 
-    private void handleGuestCheckoutFailure(String guestSessionId, ActiveOrder order, PaymentResultDTO paymentResult, double totalPrice, Exception e) {
+    private void handleGuestCheckoutFailure(
+        String guestSessionId,
+        ActiveOrder order,
+        PaymentResultDTO paymentResult,
+        double totalPrice,
+        boolean inventorySaleConfirmationStarted,
+        Exception e
+    ) {
         log.error(
-                "Guest checkout failed. guestSessionId={}, totalPrice={}, paymentDone={}",
+                "Guest checkout failed. guestSessionId={}, totalPrice={}, paymentDone={}, inventorySaleConfirmationStarted={}",
                 guestSessionId,
                 totalPrice,
                 paymentResult != null,
+                inventorySaleConfirmationStarted,
                 e);
 
-        returnTicketsToStock(order);
+        if (!inventorySaleConfirmationStarted) {
+            returnTicketsToStock(order);
+            log.info("Guest checkout rollback: reserved tickets returned to stock. guestSessionId={}", guestSessionId);
+        } else {
+            log.error(
+                    "Guest checkout failed after inventory sale confirmation started. " +
+                            "Inventory may already be SOLD, so it is NOT safe to call releaseInventory. guestSessionId={}",
+                    guestSessionId);
+        }
 
         if (paymentResult != null) {
             log.info(
@@ -308,6 +397,8 @@ public class CheckoutService {
             paymentGateway.refund(paymentResult.paymentTransactionId(), totalPrice);
         }
     }
+
+
 
 
 
@@ -347,10 +438,9 @@ public class CheckoutService {
         if (order == null) {
             return;
         }
-        
+
         List<CartLineItem> returnToStock = order.getItems();
-        
-        // now we release inventory first...
+
         Map<Integer, Map<Integer, List<CartLineItem>>> grouped = returnToStock.stream()
                 .collect(Collectors.groupingBy(
                         CartLineItem::geteventId,
@@ -369,19 +459,19 @@ public class CheckoutService {
 
                 List<String> seatNumbers = zoneItems.stream()
                         .map(CartLineItem::getSeatNumber)
-                        .filter(s -> s != null)
+                        .filter(seatNumber -> seatNumber != null)
                         .toList();
 
                 if (seatNumbers.isEmpty()) {
-                    event.releaseInventory(zoneId, InventorySelectionDTO.standing(zoneItems.size()));
+                    event.releaseInventory(zoneId, InventorySelection.standing(zoneItems.size()));
                 } else {
-                    event.releaseInventory(zoneId, InventorySelectionDTO.seated(seatNumbers));
+                    event.releaseInventory(zoneId, InventorySelection.seated(seatNumbers));
                 }
             }
+
             eventRepository.save(event);
         }
 
-        // now we clear the order
         order.clear();
         activeOrderRepository.save(order);
     }
@@ -671,41 +761,59 @@ private PaymentResultDTO chargePayment(
                 issuanceResult.barcodes()
                         .stream()
                         .map(barcode -> barcode.ticketId())
-                        .toList()
-        );
+                        .toList());
     }
 
-    private void handleCheckoutFailure(int userId, ActiveOrder order, PaymentResultDTO paymentResult, double totalPrice, Exception e) {
+    
+
+    private void handleCheckoutFailure(
+        int userId,
+        ActiveOrder order,
+        PaymentResultDTO paymentResult,
+        double totalPrice,
+        boolean inventorySaleConfirmationStarted,
+        Exception e
+    ) {
         log.error(
-                "Checkout failed. userId={}, totalPrice={}, paymentDone={}",
+                "Checkout failed. userId={}, totalPrice={}, paymentDone={}, inventorySaleConfirmationStarted={}",
                 userId,
                 totalPrice,
                 paymentResult != null,
-                e
-        );
+                inventorySaleConfirmationStarted,
+                e);
 
-        returnTicketsToStock(order);
-        log.info("Checkout rollback: tickets returned to stock. userId={}", userId);
+        if (!inventorySaleConfirmationStarted) {
+            returnTicketsToStock(order);
+            log.info("Checkout rollback: reserved tickets returned to stock. userId={}", userId);
+        } else {
+            log.error(
+                    "Checkout failed after inventory sale confirmation started. " +
+                            "Inventory may already be SOLD, so it is NOT safe to call releaseInventory. userId={}",
+                    userId);
+        }
 
         if (paymentResult != null) {
-            notificationService.notifyPurchaseFailed(
-                    userId,
-                    "Checkout failed, we want give you back the money"
-            );
+            if (userId > 0) {
+                notificationService.notifyPurchaseFailed(
+                        userId,
+                        "Checkout failed. A refund was requested.");
+            }
 
             log.info(
                     "Refund requested. userId={}, transactionId={}, amount={}",
                     userId,
                     paymentResult.paymentTransactionId(),
-                    totalPrice
-            );
+                    totalPrice);
 
             paymentGateway.refund(paymentResult.paymentTransactionId(), totalPrice);
         }
 
-        notificationService.notifyPurchaseFailed(
-                userId,
-                "Checkout failed. Tickets were returned to stock."
-        );
+        if (userId > 0) {
+            notificationService.notifyPurchaseFailed(
+                    userId,
+                    "Checkout failed.");
+        }
     }
+
+
 }

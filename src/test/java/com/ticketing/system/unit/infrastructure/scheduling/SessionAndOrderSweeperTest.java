@@ -25,6 +25,7 @@ import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.Session;
 import com.ticketing.system.Infrastructure.scheduling.SessionAndOrderSweeper;
@@ -254,7 +255,7 @@ class SessionAndOrderSweeperTest {
                         new Seat("A2", 1, 0),
                         new Seat("A3", 2, 0)));
 
-        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1", "A2")));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2")));
 
         Event event = createEventWithZones(2, List.of(seatedZone));
 
@@ -272,9 +273,9 @@ class SessionAndOrderSweeperTest {
         int cleaned = sweeper.sweepExpiredOrders();
 
         assertEquals(1, cleaned);
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A1").getStatus());
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A2").getStatus());
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A3").getStatus());
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A2"));
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A3"));
 
         verify(orderRepo).delete(expiredCart);
         verify(eventRepo).save(event);
@@ -293,8 +294,8 @@ class SessionAndOrderSweeperTest {
                         new Seat("A1", 0, 0),
                         new Seat("A2", 1, 0)));
 
-        standingZone.reserve(InventorySelectionDTO.standing(2));
-        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1")));
+        standingZone.reserve(InventorySelection.standing(2));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
 
         Event event = createEventWithZones(1, List.of(standingZone, seatedZone));
 
@@ -310,8 +311,8 @@ class SessionAndOrderSweeperTest {
         assertEquals(5, standingZone.getAvailableAmount());
         assertEquals(0, standingZone.getReservedAmount());
 
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A1").getStatus());
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A2").getStatus());
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A2"));
 
         verify(orderRepo).delete(expiredCart);
         verify(eventRepo).save(event);
@@ -334,7 +335,7 @@ class SessionAndOrderSweeperTest {
                 )
         );
 
-        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1")));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
 
         Event event = createEventWithZones(1, List.of(seatedZone));
 
@@ -347,8 +348,8 @@ class SessionAndOrderSweeperTest {
         int cleaned = sweeper.sweepExpiredSessions(T0);
 
         assertEquals(1, cleaned);
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A1").getStatus());
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A2").getStatus());
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A2"));
 
         verify(orderRepo).delete(cart);
         verify(sessionRepo).delete("guest-seated-sid");

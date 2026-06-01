@@ -59,7 +59,7 @@ public class MemberAccountService {
             OrderReceiptMapper receiptMapper = new OrderReceiptMapper();
             for (OrderReceipt receipt : receipts) {
                 // pass repositories to mapper for richer DTOs without bloating service logic. Mapper handles all data fetching for the DTO construction.
-                purchaseRecords.add(receiptMapper.OrderReceiptToPurchaseRecordDTO(receipt, ticketRepository));
+                purchaseRecords.add(receiptMapper.toPurchaseRecordDTO(receipt, ticketRepository));
             }
 
             log.info("Successfully retrieved purchase history for userId={}, recordsCount={}", userId,

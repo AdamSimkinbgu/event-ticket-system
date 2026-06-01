@@ -1,39 +1,41 @@
-package com.ticketing.system.Core.Application.dto;
+package com.ticketing.system.Core.Domain.events;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import com.ticketing.system.Core.Domain.events.InventorySelection;
-
 /**
- * Application-layer DTO for inventory selection input.
+ * Domain value object representing a buyer's inventory selection.
  *
- * This DTO is allowed to exist in the application layer, but domain classes
- * should not import it. Application services should convert it into the domain
- * value object InventorySelection before calling domain behavior.
+ * Two legal modes:
+ * 1. Standing-zone selection: quantity > 0 and seatNumbers is empty.
+ * 2. Seated-zone selection: seatNumbers is non-empty and quantity == seatNumbers.size().
+ *
+ * This class belongs in the domain because Event, VenueMap, InventoryZone,
+ * StandingZone, SeatedZone, and ActiveOrder all need to reason about this
+ * concept as part of business logic.
  */
 // This avoids passing random combinations of: quantity, ticketId, seatNumber and seatNumbers, all over the system.
-public class InventorySelectionDTO {
+public final class InventorySelection {
 
-    private final int quantity;                  // tickets quantity, For standing zones, this is the only relevant field.
-    private final List<String> seatNumbers;      // only non-empty For seated zones, must contain no duplicates.
+    private final int quantity;                // tickets quantity, For standing zones, this is the only relevant field.
+    private final List<String> seatNumbers;    // only non-empty For seated zones, must contain no duplicates.
 
-    public InventorySelectionDTO(int quantity, List<String> seatNumbers) {
+    private InventorySelection(int quantity, List<String> seatNumbers) {
         this.quantity = quantity;
         this.seatNumbers = seatNumbers == null ? List.of() : List.copyOf(seatNumbers);
     }
 
-    public static InventorySelectionDTO standing(int quantity) {
+    public static InventorySelection standing(int quantity) {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be positive");
         }
 
-        return new InventorySelectionDTO(quantity, List.of());
+        return new InventorySelection(quantity, List.of());
     }
 
-    public static InventorySelectionDTO seated(List<String> seatNumbers) {
+    public static InventorySelection seated(List<String> seatNumbers) {
         if (seatNumbers == null || seatNumbers.isEmpty()) {
             throw new IllegalArgumentException("Seat numbers must be non-empty");
         }
@@ -49,15 +51,7 @@ public class InventorySelectionDTO {
             }
         }
 
-        return new InventorySelectionDTO(seatNumbers.size(), new ArrayList<>(seatNumbers));
-    }
-
-    public InventorySelection toDomainSelection() {
-        if (isStandingSelection()) {
-            return InventorySelection.standing(quantity);
-        }
-
-        return InventorySelection.seated(seatNumbers);
+        return new InventorySelection(seatNumbers.size(), new ArrayList<>(seatNumbers));
     }
 
     public int getQuantity() {

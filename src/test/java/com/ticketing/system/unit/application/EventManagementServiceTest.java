@@ -25,6 +25,7 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
@@ -258,7 +259,7 @@ class EventManagementServiceTest {
 
     @Test
     public void GivenReservedTicketsMoreThanNewCapacity_WhenUpdateZoneCapacity_ThenThrowException() {
-        zone.reserve(InventorySelectionDTO.standing(8));
+        zone.reserve(InventorySelection.standing(8));
 
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
@@ -362,8 +363,8 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
 
-        Ticket paidTicket = new Ticket(EVENT_ID, ZONE_ID, ORDER_RECEIPT_ID, 100.0, 1, "BARCODE123");
-        
+        Ticket paidTicket = new Ticket(EVENT_ID, ZONE_ID, ORDER_RECEIPT_ID, null, 100.0, 1, "BARCODE123");
+        // paidTicket.markPaid();
         when(mockTicketRepo.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of(paidTicket));
 
         eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
@@ -380,7 +381,7 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
 
-        Ticket issuedTicket = new Ticket(EVENT_ID, ZONE_ID, ORDER_RECEIPT_ID, 100.0, 1, "BARCODE123");
+        Ticket issuedTicket = new Ticket(EVENT_ID, ZONE_ID, ORDER_RECEIPT_ID, null, 100.0, 1, "BARCODE123");
         
         issuedTicket.markIssued("BARCODE123"); 
         
@@ -399,7 +400,7 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
 
-        Ticket availableTicket = new Ticket(EVENT_ID, ZONE_ID, ORDER_RECEIPT_ID, 100.0, 1, "BARCODE123");
+        Ticket availableTicket = new Ticket(EVENT_ID, ZONE_ID, ORDER_RECEIPT_ID, null, 100.0, 1, "BARCODE123");
 
         availableTicket.release();
 

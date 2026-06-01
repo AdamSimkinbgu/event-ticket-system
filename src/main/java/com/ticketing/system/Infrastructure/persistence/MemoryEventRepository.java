@@ -22,7 +22,7 @@ public class MemoryEventRepository implements IEventRepository {
 
     private final ConcurrentHashMap<Integer, Event> events = new ConcurrentHashMap<>();
     private final AtomicInteger idSequence = new AtomicInteger(1);
-    private final RepositoryLocks<Integer> locks = new RepositoryLocks<>();
+    private final RepositoryLocks<Integer> locks = new RepositoryLocks<>();    // Key is eventId for event-level locks.
 
     @Override
     public void lockForUpdate(Integer id) { locks.lock(id); }

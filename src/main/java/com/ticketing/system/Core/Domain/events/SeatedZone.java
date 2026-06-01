@@ -7,9 +7,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
-import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 
 /**
  * Zone with addressable, named seats. Replaces the bare counter of
@@ -26,16 +27,16 @@ import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
  */
 public class SeatedZone extends InventoryZone {
 
-    private final Map<String, Seat> seats;
-    private final Map<String, ReentrantLock> seatLocks;
+    private final ConcurrentHashMap<String, Seat> seats;
+    private final ConcurrentHashMap<String, ReentrantLock> seatLocks;
 
     public SeatedZone(int id, String name, double price, List<Seat> initialSeats) {
         super(id, name, price);
         if (initialSeats == null) {
             throw new IllegalArgumentException("initialSeats must not be null");
         }
-        this.seats = new HashMap<>();
-        this.seatLocks = new HashMap<>();
+        this.seats = new ConcurrentHashMap<>();
+        this.seatLocks = new ConcurrentHashMap<>();
         for (Seat seat : initialSeats) {
             if (this.seats.containsKey(seat.getLabel())) {
                 throw new IllegalArgumentException("Duplicate seat label: " + seat.getLabel());
@@ -50,9 +51,20 @@ public class SeatedZone extends InventoryZone {
         return new ArrayList<>(seats.values());
     }
 
-    /** Lookup a single seat by label, or {@code null} if not present. */
-    public Seat getSeat(String label) {
-        return seats.get(label);
+    // /** Lookup a single seat by label, or {@code null} if not present. */
+    // public Seat getSeat(String label) {
+    //     return seats.get(label);
+    // }
+    
+    
+    
+    
+    public SeatStatus getSeatStatus(String label) {
+        Seat seat = seats.get(label);
+        if (seat == null) {
+            throw new IllegalArgumentException("Seat not found: " + label);
+        }
+        return seat.getStatus();
     }
 
 
@@ -61,7 +73,12 @@ public class SeatedZone extends InventoryZone {
 
 
 
-    
+
+
+
+
+
+
     /**
      * Reserve the given seats atomically. Either all flip to RESERVED or none do.
      *
@@ -69,11 +86,11 @@ public class SeatedZone extends InventoryZone {
      * @throws IllegalStateException    if any requested seat is not AVAILABLE
      */
     @Override
-    public boolean reserve(InventorySelectionDTO selection) {
+    public boolean reserve(InventorySelection selection) {
         if (!selection.isSeatedSelection()) {
             throw new IllegalArgumentException("Seated zone requires selected seat numbers");
         }
-        
+
         List<String> labels = selection.getSeatNumbers();
 
         if (labels == null || labels.isEmpty()) {
@@ -114,13 +131,6 @@ public class SeatedZone extends InventoryZone {
         return true;
     }
 
-
-
-
-
-
-
-
     /**
      * Release the given seats back to AVAILABLE. Same locking discipline as
      * {@link #reserveSeats}.
@@ -128,7 +138,7 @@ public class SeatedZone extends InventoryZone {
      * @throws IllegalStateException if any seat is not RESERVED
      */
     @Override
-    public boolean release(InventorySelectionDTO selection) {
+    public boolean release(InventorySelection selection) {
         if (!selection.isSeatedSelection()) {
             throw new IllegalArgumentException("Seated zone requires selected seat numbers");
         }
@@ -170,17 +180,13 @@ public class SeatedZone extends InventoryZone {
         return true;
     }
 
-
-
-
-
     /**
      * Mark seats as SOLD (e.g. after successful checkout). Same locking discipline.
      *
      * @throws IllegalStateException if any seat is not RESERVED
      */
     @Override
-    public boolean confirmSale(InventorySelectionDTO selection) {
+    public boolean confirmSale(InventorySelection selection) {
         if (!selection.isSeatedSelection()) {
             throw new IllegalArgumentException("Seated zone requires selected seat numbers");
         }
@@ -222,18 +228,6 @@ public class SeatedZone extends InventoryZone {
         return true;
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
     private List<String> validateAndSortLabels(List<String> labels) {
         if (labels == null || labels.isEmpty()) {
             throw new IllegalArgumentException("labels must be non-empty");
@@ -249,13 +243,8 @@ public class SeatedZone extends InventoryZone {
         return sorted;
     }
 
-
-
-
-
-
     @Override
-    public boolean checkAvailability(int quantity){
+    public boolean checkAvailability(int quantity) {
         // check if there are at least 'quantity' available seats in this zone
         int available = getAvailableAmount();
         if (available < quantity) {
@@ -264,12 +253,10 @@ public class SeatedZone extends InventoryZone {
         return true;
     }
 
-
     @Override
     public ZoneType getZoneType() {
         return ZoneType.SEATED;
     }
-
 
     @Override
     public int getCapacity() {
@@ -291,7 +278,6 @@ public class SeatedZone extends InventoryZone {
         return (int) seats.values().stream().filter(s -> s.getStatus() == SeatStatus.SOLD).count();
     }
 
-    
     @Override
     public void checkInvariants() {
         if (name == null || name.isBlank()) {
@@ -320,7 +306,8 @@ public class SeatedZone extends InventoryZone {
                 throw new IllegalStateException("SeatedZone invariant violated: null seat for key " + key);
             }
             if (!key.equals(seat.getLabel())) {
-                throw new IllegalStateException("SeatedZone invariant violated: map key '" + key + "' does not match seat label '" + seat.getLabel() + "'");
+                throw new IllegalStateException("SeatedZone invariant violated: map key '" + key
+                        + "' does not match seat label '" + seat.getLabel() + "'");
             }
             seat.checkInvariants();
         }

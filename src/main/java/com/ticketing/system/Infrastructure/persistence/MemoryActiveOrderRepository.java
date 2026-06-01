@@ -24,7 +24,7 @@ import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 public class MemoryActiveOrderRepository implements IActiveOrderRepository {
 
     private final List<ActiveOrder> carts = new CopyOnWriteArrayList<>();
-    private final RepositoryLocks<String> locks = new RepositoryLocks<>();
+    private final RepositoryLocks<String> locks = new RepositoryLocks<>();   // Key is "user:{userId}" for Member carts, "sess:{sessionId}" for Guest carts.
 
     @Override
     public void lockForUpdate(String id) { locks.lock(id); }

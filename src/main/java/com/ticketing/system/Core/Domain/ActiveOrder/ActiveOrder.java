@@ -7,7 +7,7 @@ import java.util.HashSet;
 import java.util.List;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
-import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 /**
@@ -59,7 +59,7 @@ public class ActiveOrder implements InvariantChecked {
      * Standing/seated branching stays inside the domain object instead of being
      * duplicated in ReservationService.
      */
-    public void addReservation(int eventId, int zoneId, InventorySelectionDTO selection, double price,
+    public void addReservation(int eventId, int zoneId, InventorySelection selection, double price,
             LocalDateTime addedAt) {
         if (selection == null) {
             throw new IllegalArgumentException("Inventory selection is required");
@@ -76,7 +76,7 @@ public class ActiveOrder implements InvariantChecked {
     /**
      * Generic removal entry point used by application services.
      */
-    public void removeReservation(int eventId, int zoneId, InventorySelectionDTO selection) {
+    public void removeReservation(int eventId, int zoneId, InventorySelection selection) {
         if (selection == null) {
             throw new IllegalArgumentException("Inventory selection is required");
         }
@@ -272,7 +272,7 @@ public class ActiveOrder implements InvariantChecked {
      * Validation-only method. This is useful before releasing inventory from the event,
      * so a bad remove request does not accidentally put tickets back in stock.
      */
-    public void validateContainsReservation(int eventId, int zoneId, InventorySelectionDTO selection) {
+    public void validateContainsReservation(int eventId, int zoneId, InventorySelection selection) {
         if (selection == null) {
             throw new IllegalArgumentException("Inventory selection is required");
         }

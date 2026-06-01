@@ -8,7 +8,7 @@ public class Ticket implements InvariantChecked {
 
     private int zoneid;
     private int eventId;
-    private String seatNumber;
+    private String seatNumber;   // nullable for standing zones, non-null for seated zones. Represents the seat label this ticket refers to inside its zone.
     private double price;
     private int ticketId;
     private int orderReceiptId;

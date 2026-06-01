@@ -23,8 +23,8 @@ public interface IOrderReceiptRepository extends IRepository<OrderReceipt, Integ
 
     // UC-22 — company-scoped sales (filtered down to the company's events).
     // Because this method(findByCompanyId) is conceptually in the wrong place. A receipt does not know company ownership directly.
-    @Deprecated
-    List<OrderReceipt> findByCompanyId(int companyId);
+    // @Deprecated
+    // List<OrderReceipt> findByCompanyId(int companyId);
 
     // UC-31 — global view with filters (admin only).
     List<OrderReceipt> findGlobal(GlobalHistoryFiltersDTO filters);

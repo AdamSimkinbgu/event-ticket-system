@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
@@ -21,7 +22,7 @@ import com.ticketing.system.support.BaseDomainTest;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.time.LocalDateTime;
-import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.PurchasePolicy;
 import com.ticketing.system.Core.Domain.events.Seat;
@@ -108,7 +109,7 @@ class EventTest extends BaseDomainTest {
         StandingZone standingZone = track(new StandingZone(1, "General Admission", 10, 50.0));
         Event event = createEventWithZones(List.of(standingZone));
 
-        event.reserveInventory(1, InventorySelectionDTO.standing(3));
+        event.reserveInventory(1, InventorySelection.standing(3));
 
         assertEquals(7, standingZone.getAvailableAmount());
         assertEquals(3, standingZone.getReservedAmount());
@@ -126,11 +127,11 @@ class EventTest extends BaseDomainTest {
                         new Seat("A3", 2, 0))));
         Event event = createEventWithZones(List.of(seatedZone));
 
-        event.reserveInventory(2, InventorySelectionDTO.seated(List.of("A1", "A2")));
+        event.reserveInventory(2, InventorySelection.seated(List.of("A1", "A2")));
 
-        assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("A1").getStatus());
-        assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("A2").getStatus());
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A3").getStatus());
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A1"));
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A2"));
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A3"));
     }
 
     @Test
@@ -144,11 +145,11 @@ class EventTest extends BaseDomainTest {
                         new Seat("A2", 1, 0))));
         Event event = createEventWithZones(List.of(seatedZone));
 
-        event.reserveInventory(2, InventorySelectionDTO.seated(List.of("A1", "A2")));
-        event.releaseInventory(2, InventorySelectionDTO.seated(List.of("A1")));
+        event.reserveInventory(2, InventorySelection.seated(List.of("A1", "A2")));
+        event.releaseInventory(2, InventorySelection.seated(List.of("A1")));
 
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A1").getStatus());
-        assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("A2").getStatus());
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A2"));
     }
 
     @Test
@@ -162,11 +163,11 @@ class EventTest extends BaseDomainTest {
                         new Seat("A2", 1, 0))));
         Event event = createEventWithZones(List.of(seatedZone));
 
-        event.reserveInventory(2, InventorySelectionDTO.seated(List.of("A1")));
-        event.confirmInventorySale(2, InventorySelectionDTO.seated(List.of("A1")));
+        event.reserveInventory(2, InventorySelection.seated(List.of("A1")));
+        event.confirmInventorySale(2, InventorySelection.seated(List.of("A1")));
 
-        assertEquals(SeatStatus.SOLD, seatedZone.getSeat("A1").getStatus());
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A2").getStatus());
+        assertEquals(SeatStatus.SOLD, seatedZone.getSeatStatus("A1"));
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A2"));
     }
 
     @Test
@@ -215,7 +216,7 @@ class EventTest extends BaseDomainTest {
                 rejectingPolicy,
                 noDiscountPolicy()));
 
-        assertThrows(IllegalStateException.class, () -> event.reserveInventory(1, InventorySelectionDTO.standing(1)));
+        assertThrows(IllegalStateException.class, () -> event.reserveInventory(1, InventorySelection.standing(1)));
 
         assertEquals(10, standingZone.getAvailableAmount());
         assertEquals(0, standingZone.getReservedAmount());

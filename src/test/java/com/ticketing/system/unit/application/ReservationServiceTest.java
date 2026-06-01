@@ -8,6 +8,7 @@ import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import java.util.concurrent.CountDownLatch;
@@ -286,7 +287,7 @@ void GivenZoneDoesNotExist_WhenreserveStandingTicketsForMember_ThenThrowExceptio
         when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(false);
 
         doThrow(new IllegalStateException("remaining 1 tickets available"))
-                .when(event).reserveInventory(eq(ZONE_ID), InventorySelectionDTO.standing(QUANTITY));
+                .when(event).reserveInventory(eq(ZONE_ID), InventorySelection.standing(QUANTITY));
 
         assertThrows(IllegalStateException.class,
                 () -> reservationService.reserveForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, InventorySelectionDTO.standing(QUANTITY)));
@@ -384,7 +385,7 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForGuest_ThenThrowException
     when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(false);
 
     doThrow(new IllegalStateException("remaining 1 tickets available"))
-            .when(event).reserveInventory(eq(ZONE_ID), InventorySelectionDTO.standing(QUANTITY));
+            .when(event).reserveInventory(eq(ZONE_ID), InventorySelection.standing(QUANTITY));
 
     Exception exception = assertThrows(IllegalStateException.class, () ->
             reservationService.reserveForGuest(sessionId, EVENT_ID, ZONE_ID, InventorySelectionDTO.standing(QUANTITY))
@@ -422,9 +423,9 @@ void GivenManyGuestsReserveSameZoneConcurrently_WhenreserveStandingTicketsForGue
     when(event.getVenueMap().getZone(ZONE_ID)).thenReturn(realZone);
     doAnswer(inv -> {
         int qty = inv.getArgument(1);
-        realZone.reserve(InventorySelectionDTO.standing(qty));
+        realZone.reserve(InventorySelection.standing(qty));
         return true;
-    }).when(event).reserveInventory(eq(ZONE_ID), InventorySelectionDTO.standing(anyInt()));
+    }).when(event).reserveInventory(eq(ZONE_ID), InventorySelection.standing(anyInt()));
 
     ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
     CountDownLatch readyLatch = new CountDownLatch(numberOfThreads);
@@ -483,9 +484,9 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
     when(event.getVenueMap().getZone(ZONE_ID)).thenReturn(realZone);
     doAnswer(inv -> {
         int qty = inv.getArgument(1);
-        realZone.reserve(InventorySelectionDTO.standing(qty));
+        realZone.reserve(InventorySelection.standing(qty));
         return true;
-    }).when(event).reserveInventory(eq(ZONE_ID), InventorySelectionDTO.standing(anyInt()));
+    }).when(event).reserveInventory(eq(ZONE_ID), InventorySelection.standing(anyInt()));
 
     ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
     CountDownLatch readyLatch = new CountDownLatch(numberOfThreads);
@@ -545,7 +546,7 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         int quantityPerRemove = 1;
 
         InventoryZone realZone = new StandingZone(ZONE_ID, "VIP", capacity, 100.0);
-        realZone.reserve(InventorySelectionDTO.standing(initialReservedTickets));
+        realZone.reserve(InventorySelection.standing(initialReservedTickets));
 
         ActiveOrder realActiveOrder = new ActiveOrder(USER_ID);
         realActiveOrder.addStandingReservation(
@@ -561,9 +562,9 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         when(event.getVenueMap().getZone(ZONE_ID)).thenReturn(realZone);
         doAnswer(inv -> {
             int qty = inv.getArgument(1);
-            realZone.release(InventorySelectionDTO.standing(qty));
+            realZone.release(InventorySelection.standing(qty));
             return true;
-        }).when(event).releaseInventory(eq(ZONE_ID), InventorySelectionDTO.standing(anyInt()));
+        }).when(event).releaseInventory(eq(ZONE_ID), InventorySelection.standing(anyInt()));
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(realActiveOrder);
 
         ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
@@ -640,9 +641,9 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         assertEquals(2, result.getQuantity());
         assertEquals(List.of("A1", "A2"), result.getSeatNumbers());
 
-        assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("A1").getStatus());
-        assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("A2").getStatus());
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A3").getStatus());
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A1"));
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A2"));
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A3"));
 
         ArgumentCaptor<ActiveOrder> orderCaptor = ArgumentCaptor.forClass(ActiveOrder.class);
         verify(activeOrderRepository).save(orderCaptor.capture());
@@ -679,8 +680,8 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         assertEquals(2, result.getQuantity());
         assertEquals(List.of("B1", "B2"), result.getSeatNumbers());
 
-        assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("B1").getStatus());
-        assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("B2").getStatus());
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("B1"));
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("B2"));
 
         ArgumentCaptor<ActiveOrder> orderCaptor = ArgumentCaptor.forClass(ActiveOrder.class);
         verify(activeOrderRepository).save(orderCaptor.capture());
@@ -729,7 +730,7 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
                 reservationService.reserveForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, InventorySelectionDTO.standing(1))
         );
 
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A1").getStatus());
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
         verify(activeOrderRepository, never()).save(any());
     }
 
@@ -756,8 +757,8 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
                 reservationService.reserveForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, InventorySelectionDTO.seated(List.of("A1", "A2")))
         );
 
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A1").getStatus());
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A2").getStatus());
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A2"));
     }
 
     @Test
@@ -773,7 +774,7 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
                 )
         );
         Event realEvent = createEventWithZone(seatedZone);
-        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1", "A2", "A3")));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2", "A3")));
 
         ActiveOrder realOrder = new ActiveOrder(USER_ID);
         realOrder.addSeatedReservation(EVENT_ID, ZONE_ID, List.of("A1", "A2", "A3"), 120.0, LocalDateTime.now());
@@ -789,9 +790,9 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         assertEquals(1, result.getQuantity());
         assertEquals(List.of("A2"), result.getSeatNumbers());
 
-        assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("A1").getStatus());
-        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A2").getStatus());
-        assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("A3").getStatus());
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A1"));
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A2"));
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A3"));
 
         assertEquals(List.of("A1", "A3"),
                 realOrder.getItems().stream().map(CartLineItem::getSeatNumber).toList());

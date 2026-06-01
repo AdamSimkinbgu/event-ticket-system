@@ -61,14 +61,16 @@ public class EventManagementService {
         this.paymentGateway = paymentGateway;
     }
 
-    // flows:
+    
+    // Flow:
 
-    //addEvent(...)
-    // → creates event with no zones / draft venue
+    // addEvent adds an event in DRAFT state; venue map and inventory configuration come later in UC-20.
+    
+    // Note: we could combine addEvent and configureVenueMap into a single UC-19 method that takes a more complex DTO, but separating them allows for a cleaner separation of concerns and 
+    // more focused validation (e.g. addEvent doesn't need to worry about venue map details at all).
 
-    // configureVenueMap(...)
-    // → creates StandingZone and SeatedZone objects from VenueMapConfigDTO
-    // → attaches VenueMap to Event
+    // configureVenueMap is a separate method that can be called multiple times to update the venue map and inventory zones *before* the event goes live. 
+    // It also allows for a more iterative setup process where the owner/manager can first create the event with basic details and then configure the venue map in a second step.
 
 
 
@@ -88,13 +90,13 @@ public class EventManagementService {
 
         company.checkowner(ownerId);
         int newEventId = eventRepository.nextId();
-        VenueMap venueMap = new VenueMap(3, request.location(), List.of());
-        DiscountPolicy discountPolicy = new DiscountPolicy(10.0);   // Note: support policies later
-        PurchasePolicy purchasePolicy = new PurchasePolicy(10);                  // Note: support policies later
+        VenueMap venueMap = new VenueMap(3, request.location(), List.of()); //TODO: need an incremantal ID counter for venue maps
+        DiscountPolicy discountPolicy = new DiscountPolicy(10.0); // Note: support policies later
+        PurchasePolicy purchasePolicy = new PurchasePolicy(10); // Note: support policies later
 
         Event newEvent = new Event(
                 newEventId, request.name(), 5.00, List.of("sss", "ddd"),
-                request.category(), request.companyId(), EventStatus.SCHEDULED,
+                request.category(), request.companyId(), EventStatus.DRAFT,
                 venueMap, request.showDates(), purchasePolicy, discountPolicy);
         eventRepository.save(newEvent);
 
@@ -111,12 +113,111 @@ public class EventManagementService {
                 newEvent.getStatus(),
                 newEvent.getShowDates());
     }
+    
+
+
+
+
+
+
+
+
+
+
+
+
+    // configureVenueMap is a separate method that can be called multiple times to update the venue map and inventory zones *before* the event goes live. 
+    // It also allows for a more iterative setup process where the owner/manager can first create the event with basic details and then configure the venue map in a second step.
+    
+    public void configureVenueMap(String token, int companyId, VenueMapConfigDTO config) {
+        if (!sessionManager.validateToken(token)) {
+            throw new RuntimeException("Invalid token");
+        }
+
+        int userId = sessionManager.extractUserId(token);
+        log.info("Configuring venue map for company {}, event {}, by user {}", companyId, config.eventId(), userId);
+
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null) {
+            throw new RuntimeException("Company not found");
+        }
+
+        company.ValidateManagerOrOwnerForConfigureVenue(userId);
+
+        Event event = eventRepository.findById(Integer.parseInt(config.eventId()));
+        if (event == null) {
+            throw new RuntimeException("Event not found");
+        }
+
+        List<InventoryZone> zones = new ArrayList<>();
+        int nextZoneId = 1;
+
+        for (VenueMapConfigDTO.ZoneConfigDTO zoneConfig : config.zones()) {
+            if (zoneConfig.seated()) {
+
+                if (zoneConfig.seats() == null || zoneConfig.seats().isEmpty()) {
+                    throw new IllegalArgumentException("Seated zone must contain seats");
+                }
+
+                List<Seat> seats = zoneConfig.seats().stream()
+                        .map(seatConfig -> new Seat(seatConfig.label(), seatConfig.x(), seatConfig.y()))
+                        .toList();
+
+                zones.add(new SeatedZone(
+                        nextZoneId,
+                        zoneConfig.zoneName(),
+                        zoneConfig.pricePerTicket(),
+                        seats
+                ));
+            } else {
+
+                if (zoneConfig.capacity() == null || zoneConfig.capacity() <= 0) {
+                    throw new IllegalArgumentException("Standing zone capacity must be positive");
+                }
+
+                zones.add(new StandingZone(
+                        nextZoneId,
+                        zoneConfig.zoneName(),
+                        zoneConfig.capacity(),
+                        zoneConfig.pricePerTicket()
+                ));
+            }
+
+            nextZoneId++;
+        }
+
+        VenueMap venueMap = new VenueMap(
+                event.getVenueMap() != null ? event.getVenueMap().getId() : 1,
+                event.getVenueMap() != null ? event.getVenueMap().getLocation() : null,
+                zones
+        );
+
+        event.configureVenueMap(venueMap, companyId);
+        eventRepository.save(event);
+        log.info("Venue map for event {} configured successfully", event.getId());
+    }
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
 
         
 
 
     // UC-19 — partial update; immutability rules per II.3.5.2 enforced inside Event.
-    public void editEvent(String token, EventUpdateDTO update) {
+    public void editEventDetails(String token, EventUpdateDTO update) {
         throw new UnsupportedOperationException("UC-19: not implemented");
     }
 
@@ -190,7 +291,6 @@ public class EventManagementService {
             }
         }
 
-        // event.setCanceled(true);
         event.transitionToCanceled("Event canceled by owner/manager");
         eventRepository.save(event);
 
@@ -202,75 +302,8 @@ public class EventManagementService {
 
 
 
-    // function for 
-    public void configureVenueMap(String token, int companyId, VenueMapConfigDTO config) {
-        if (!sessionManager.validateToken(token)) {
-            throw new RuntimeException("Invalid token");
-        }
 
-        int userId = sessionManager.extractUserId(token);
-        log.info("Configuring venue map for company {}, event {}, by user {}", companyId, config.eventId(), userId);
-
-        ProductionCompany company = companyRepository.getCompanyById(companyId);
-        if (company == null) {
-            throw new RuntimeException("Company not found");
-        }
-
-        company.ValidateManagerOrOwnerForConfigureVenue(userId);
-
-        Event event = eventRepository.findById(Integer.parseInt(config.eventId()));
-        if (event == null) {
-            throw new RuntimeException("Event not found");
-        }
-
-        List<InventoryZone> zones = new ArrayList<>();
-        int nextZoneId = 1;
-
-        for (VenueMapConfigDTO.ZoneConfigDTO zoneConfig : config.zones()) {
-            if (zoneConfig.seated()) {
-
-                if (zoneConfig.seats() == null || zoneConfig.seats().isEmpty()) {
-                    throw new IllegalArgumentException("Seated zone must contain seats");
-                }
-
-                List<Seat> seats = zoneConfig.seats().stream()
-                        .map(seatConfig -> new Seat(seatConfig.label(), seatConfig.x(), seatConfig.y()))
-                        .toList();
-
-                zones.add(new SeatedZone(
-                        nextZoneId,
-                        zoneConfig.zoneName(),
-                        zoneConfig.pricePerTicket(),
-                        seats
-                ));
-            } else {
-
-                if (zoneConfig.capacity() == null || zoneConfig.capacity() <= 0) {
-                    throw new IllegalArgumentException("Standing zone capacity must be positive");
-                }
-
-                zones.add(new StandingZone(
-                        nextZoneId,
-                        zoneConfig.zoneName(),
-                        zoneConfig.capacity(),
-                        zoneConfig.pricePerTicket()
-                ));
-            }
-
-            nextZoneId++;
-        }
-
-        VenueMap venueMap = new VenueMap(
-                event.getVenueMap() != null ? event.getVenueMap().getId() : 1,
-                event.getVenueMap() != null ? event.getVenueMap().getLocation() : null,
-                zones
-        );
-
-        event.configureVenueMap(venueMap, companyId);
-        eventRepository.save(event);
-        log.info("Venue map for event {} configured successfully", event.getId());
-    }
-
+    
 
 
 

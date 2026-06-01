@@ -208,7 +208,7 @@ public class CheckoutServiceAcceptanceTest {
             InventorySelectionDTO selection = invocation.getArgument(1);
             returnedTickets.addAndGet(selection.getQuantity());
             return false;
-        }).when(event).releaseInventory(eq(zoneId), any(InventorySelectionDTO.class));
+        }).when(event).releaseInventory(eq(zoneId), any(InventorySelection.class));
 
         return returnedTickets;
     }
