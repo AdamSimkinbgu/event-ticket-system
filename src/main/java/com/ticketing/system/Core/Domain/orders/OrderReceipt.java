@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
@@ -25,15 +26,8 @@ public class OrderReceipt implements InvariantChecked {
 
     private boolean isRefunded = false;
 
-    private OrderReceipt(
-            int receiptId,
-            Integer userid,
-            String guestEmail,
-            String guestSessionId,
-            double totalPrice,
-            List<ReceiptLine> receiptLines,
-            List<TransactionRecord> transactionRecords
-    ) {
+    private OrderReceipt(int receiptId, Integer userid, String guestEmail, String guestSessionId, double totalPrice,
+            List<ReceiptLine> receiptLines, List<TransactionRecord> transactionRecords) {
         if (receiptId <= 0) {
             throw new IllegalArgumentException("receiptId must be positive");
         }
@@ -104,14 +98,8 @@ public class OrderReceipt implements InvariantChecked {
         return forGuest(guestEmail, guestSessionId, receiptId, totalAmount, receiptLines, List.of());
     }
 
-    public static OrderReceipt forGuest(
-            String guestEmail,
-            String guestSessionId,
-            int receiptId,
-            double totalAmount,
-            List<ReceiptLine> receiptLines,
-            List<TransactionRecord> transactionRecords
-    ) {
+    public static OrderReceipt forGuest(String guestEmail, String guestSessionId, int receiptId,
+            double totalAmount, List<ReceiptLine> receiptLines, List<TransactionRecord> transactionRecords) {
         return new OrderReceipt(
                 receiptId,
                 null,
@@ -187,6 +175,39 @@ public class OrderReceipt implements InvariantChecked {
     public List<TransactionRecord> getTransactionRecords() {
         return List.copyOf(transactionRecords);
     }
+
+
+
+    // Helper methods to extract specific transaction info from the list of transaction records. These are not strictly necessary but can be convenient for common queries.
+
+    // For simplicity we assume there is at most one payment charge per receipt. In a real system we might want to enforce this or handle multiple charges more robustly.
+    public Optional<Integer> getPaymentTransactionId() {
+        return transactionRecords.stream()
+                .filter(record -> record.getType() == TransactionRecord.TransactionType.PAYMENT_CHARGE)
+                .map(TransactionRecord::getExternalTransactionId)
+                .map(Integer::parseInt)
+                .findFirst();
+    }
+
+    // For simplicity, we assume all payment charges for a receipt use the same currency. In a real system we might want to enforce this or handle multiple currencies more robustly.
+    public String getPaymentCurrency() {
+        return transactionRecords.stream()
+                .filter(record -> record.getType() == TransactionRecord.TransactionType.PAYMENT_CHARGE)
+                .map(TransactionRecord::getCurrency)
+                .filter(currency -> currency != null && !currency.isBlank())
+                .findFirst()
+                .orElse("ILS");
+    }
+
+    // For simplicity we assume there is at most one ticket issuance per receipt. In a real system we might want to enforce this or handle multiple issuances more robustly.
+    public void markRefunded(TransactionRecord refundRecord) {
+        addTransaction(refundRecord);
+        this.isRefunded = true;
+    }
+
+
+
+
 
     public void addTransaction(TransactionRecord record) {
         Objects.requireNonNull(record, "transaction record must not be null");

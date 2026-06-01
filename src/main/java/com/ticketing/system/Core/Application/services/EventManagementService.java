@@ -8,6 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 // UC-19 (Manage Event Catalog), UC-20 (Configure Venue Map & Inventory), UC-21 (Configure Policies).
 import org.springframework.stereotype.Service;
 
+import com.ticketing.system.Core.Application.dto.RefundResultDTO;
+import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
+import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Application.dto.EventCreationDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
@@ -90,7 +93,7 @@ public class EventManagementService {
 
         company.checkowner(ownerId);
         int newEventId = eventRepository.nextId();
-        VenueMap venueMap = new VenueMap(3, request.location(), List.of()); //TODO: need an incremantal ID counter for venue maps
+        VenueMap venueMap = new VenueMap(1, request.location(), List.of()); //TODO: need an incremantal ID counter for venue maps
         DiscountPolicy discountPolicy = new DiscountPolicy(10.0); // Note: support policies later
         PurchasePolicy purchasePolicy = new PurchasePolicy(10); // Note: support policies later
 
@@ -229,79 +232,108 @@ public class EventManagementService {
     public void cancelEventAndRefund(String token, int eventId) {
 
         if (!sessionManager.validateToken(token)) {
-            log.warn("Invalid token provided for inviting manager");
             throw new RuntimeException("Invalid token");
         }
+
         int ownerId = sessionManager.extractUserId(token);
-        Event event = eventRepository.findById(eventId);
-        if (event == null) {
-            log.warn("Event {} not found", eventId);
-            throw new RuntimeException("Event not found");
-        }
+        // We lock the event for update to prevent concurrent modifications during the cancellation and refund process. This ensures that we have a consistent view of the event's state
+        eventRepository.lockForUpdate(eventId);
 
-        if (event.getStatus() == EventStatus.CANCELED) {
-            log.warn("Event {} is already canceled", eventId);
-            return;
-        }
-
-        ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
-        if (company == null) {
-            log.warn("Company {} not found", event.getCompanyId());
-            throw new RuntimeException("Company not found");
-        }
-        company.checkowner(ownerId);
-
-        List<Ticket> tickets = ticketRepository.findByEventId(String.valueOf(eventId));
-        List<OrderReceipt> orderReceipts = orderReceiptRepository.findByEventId(eventId);
-        for (OrderReceipt receipt : orderReceipts) {
-            if (receipt.wasRefunded()) {
-                continue;
+        try {
+            Event event = eventRepository.findById(eventId);
+            if (event == null) {
+                throw new RuntimeException("Event not found");
             }
 
-            double totalRefundForReceipt = 0.0;
-            boolean requiresRefund = false;
+            if (event.getStatus() == EventStatus.CANCELED) {
+                return;
+            }
+            // Authorization: only the owner of the event can cancel it and trigger refunds. We enforce this by checking the requester’s user ID against the owner ID of the production company that owns the event. If the requester is not the owner, we throw an exception and abort the cancellation process.
+            ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
+            if (company == null) {
+                throw new RuntimeException("Company not found");
+            }
 
-            for (ReceiptLine line : receipt.getReceiptLines()) {
-                if (line.getEventId() == eventId) {
-                    totalRefundForReceipt += line.getPriceAtReservation();
-                    requiresRefund = true;
+            company.checkowner(ownerId);
+
+            List<OrderReceipt> orderReceipts = orderReceiptRepository.findByEventId(eventId);
+            // For each receipt, we calculate the total refund amount for the lines related to the canceled event, call the payment gateway to process the refund, validate the refund result, and then update our domain state accordingly (marking the receipt as refunded and updating ticket statuses). We also handle various edge cases and potential errors along the way to ensure a robust refund process.
+            for (OrderReceipt receipt : orderReceipts) {
+                double totalRefundForReceipt = receipt.getReceiptLines().stream()
+                        .filter(line -> line.getEventId() == eventId)
+                        .mapToDouble(ReceiptLine::getPriceAtReservation)
+                        .sum();
+
+                if (totalRefundForReceipt <= 0) {
+                    continue;
                 }
-            }
+                // Extract the payment transaction ID from the receipt's transaction records. This is necessary to tell the payment gateway which transaction we want to refund. If we can't find a valid payment transaction ID, we throw an exception and skip this receipt since we don't want to risk refunding without a valid reference to the original charge.
+                int paymentTransactionId = receipt.getPaymentTransactionId()
+                        .orElseThrow(() -> new RefundFailedException(
+                                receipt.getId(),
+                                "receipt does not contain a payment transaction"
+                        ));
+                // Call the payment gateway to process the refund. This is a critical step that must succeed before we make any changes to our domain state (e.g. marking tickets as refunded or canceling the event) since we want to avoid inconsistencies where we think we've refunded a customer but the payment gateway disagrees.
+                RefundResultDTO refundResult = paymentGateway.refund(
+                        paymentTransactionId,
+                        totalRefundForReceipt
+                );
+                // Validate the refund result before proceeding. If the refund failed for some reason, we want to throw an exception and avoid making any changes to our domain state (e.g. marking tickets as refunded or canceling the event) since that could lead to inconsistencies.
+                validateRefundResult(receipt.getId(), totalRefundForReceipt, refundResult);
 
-            if (requiresRefund && totalRefundForReceipt > 0) {
-                // paymentGateway.refund(
-                //     receipt.getHolderUserId(),         <<------------
-                //      totalRefundForReceipt 
-                //     // "Refund for canceled event: " + event.getId()
-                // );
-                //TODO: do the refund through the payment gateway and handle potential failures
-                receipt.markRefunded();
+                // If we reach this point, the refund was successful and we can update our domain state accordingly.
+                receipt.markRefunded(TransactionRecord.refund(
+                        refundResult.refundTransactionId(),
+                        paymentGateway.getId(),
+                        refundResult.totalRefunded(),
+                        receipt.getPaymentCurrency(),
+                        refundResult.refundedAt()
+                ));
+
                 orderReceiptRepository.save(receipt);
             }
-        }
-
-        for (Ticket ticket : tickets) {
-            if (ticket.getEventId() == eventId
-                    && (ticket.getStatus() == TicketStatus.PAID || ticket.getStatus() == TicketStatus.ISSUED)) {
-                ticket.markRefunded();
-                ticketRepository.save(ticket);
-            } else {
-                ticket.markVoided();
+            // After processing refunds for all receipts, we need to update the status of all tickets for the event. For simplicity, we assume that if a ticket was PAID or ISSUED, it should be marked as REFUNDED; otherwise, it can be marked as VOIDED. In a real system, we might want to handle this more robustly (e.g. consider different ticket statuses, handle partial refunds, etc.).
+            List<Ticket> tickets = ticketRepository.findByEventId(String.valueOf(eventId));
+            // Note: we update ticket statuses after processing refunds to avoid complications where we mark tickets as refunded but then encounter an error during the refund process. By only updating ticket statuses after we've successfully processed refunds, we can ensure that our domain state remains consistent with the actual refund status of each order receipt.
+            for (Ticket ticket : tickets) {
+                if (ticket.getStatus() == TicketStatus.PAID || ticket.getStatus() == TicketStatus.ISSUED) {
+                    ticket.markRefunded();
+                } else {
+                    ticket.markVoided();
+                }
                 ticketRepository.save(ticket);
             }
+            // Finally, we mark the event as canceled. This is a soft cancel that allows us to keep the event in our system for historical and reporting purposes while preventing any future purchases or interactions with it. The event's status will be used in various parts of the system (e.g. purchase flow, event listings) to enforce the fact that it's canceled and should not be available for purchase.
+            event.transitionToCanceled("Event canceled by owner");
+            eventRepository.save(event);
+
+            log.info("Event {} canceled and refund flow completed", eventId);
+
+        } finally {
+            eventRepository.unlock(eventId);
         }
-
-        event.transitionToCanceled("Event canceled by owner/manager");
-        eventRepository.save(event);
-
-        log.info("Event {} canceled successfully", eventId);
-
     }
 
 
 
+    // helper function for cancelEventAndRefund to validate refund results from the payment gateway and throw domain-specific exceptions if something looks wrong. This keeps the main flow cleaner and centralizes refund validation logic.
+    private void validateRefundResult(int receiptId, double expectedRefundAmount, RefundResultDTO refundResult) {
+        if (refundResult == null) {
+            throw new RefundFailedException(receiptId, "payment gateway returned null refund result");
+        }
 
+        if (refundResult.refundTransactionId() == null || refundResult.refundTransactionId().isBlank()) {
+            throw new RefundFailedException(receiptId, "refund transaction id is missing");
+        }
 
+        if (Math.abs(refundResult.totalRefunded() - expectedRefundAmount) > 0.0001) {
+            throw new RefundFailedException(receiptId, "refund amount mismatch");
+        }
+
+        if (refundResult.refundedAt() == null) {
+            throw new RefundFailedException(receiptId, "refund timestamp is missing");
+        }
+    }
 
     
 

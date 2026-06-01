@@ -26,14 +26,7 @@ public final class TransactionRecord implements InvariantChecked {
     private final String currency;
     private final LocalDateTime timestamp;
 
-    private TransactionRecord(
-            TransactionType type,
-            String providerName,
-            String externalTransactionId,
-            double amount,
-            String currency,
-            LocalDateTime timestamp
-    ) {
+    private TransactionRecord(TransactionType type, String providerName, String externalTransactionId, double amount, String currency, LocalDateTime timestamp) {
         this.type = type;
         this.providerName = providerName;
         this.externalTransactionId = externalTransactionId;
@@ -43,13 +36,7 @@ public final class TransactionRecord implements InvariantChecked {
         checkInvariants();
     }
 
-    public static TransactionRecord paymentCharge(
-            int paymentTransactionId,
-            String gatewayName,
-            double amount,
-            String currency,
-            LocalDateTime chargedAt
-    ) {
+    public static TransactionRecord paymentCharge(int paymentTransactionId, String gatewayName, double amount, String currency, LocalDateTime chargedAt) {
         if (paymentTransactionId <= 0) {
             throw new IllegalArgumentException("paymentTransactionId must be positive");
         }
@@ -63,11 +50,7 @@ public final class TransactionRecord implements InvariantChecked {
         );
     }
 
-    public static TransactionRecord ticketIssuance(
-            String issuanceTransactionId,
-            String issuerName,
-            LocalDateTime issuedAt
-    ) {
+    public static TransactionRecord ticketIssuance(String issuanceTransactionId, String issuerName, LocalDateTime issuedAt) {
         return new TransactionRecord(
                 TransactionType.TICKET_ISSUANCE,
                 issuerName,
@@ -78,13 +61,7 @@ public final class TransactionRecord implements InvariantChecked {
         );
     }
 
-    public static TransactionRecord refund(
-            String refundTransactionId,
-            String gatewayName,
-            double amount,
-            String currency,
-            LocalDateTime refundedAt
-    ) {
+    public static TransactionRecord refund(String refundTransactionId, String gatewayName, double amount, String currency, LocalDateTime refundedAt) {
         return new TransactionRecord(
                 TransactionType.REFUND,
                 gatewayName,

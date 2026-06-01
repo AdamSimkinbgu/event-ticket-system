@@ -190,41 +190,83 @@ public class Event implements InvariantChecked {
 
 
     // UC-19 / UC-32 — DRAFT/SCHEDULED -> ON_SALE when admin opens or owner publishes.
-    public void transitionToOnSale() {               //TODO        <<-----------------------------
+    public void transitionToOnSale() {
+        if (status == EventStatus.ON_SALE) {
+            return;
+        }
+
         if (venueMap == null || venueMap.getInventoryZones().isEmpty()) {
             throw new IllegalStateException("Cannot publish event without venue map and inventory");
         }
+
+        if (showDates.isEmpty()) {
+            throw new IllegalStateException("All show dates must be present before going on sale");
+        }
+
+        checkInvariants(); // enforce all invariants before allowing sales to start
+
+        //TODO:   <<------------------  see what more checks are needed to be added here
 
         if (status != EventStatus.SCHEDULED) {
             throw new IllegalStateException("Only scheduled events can go on sale");
         }
 
         this.status = EventStatus.ON_SALE;
-        throw new UnsupportedOperationException("UC-19/32: not implemented");
     }
+
 
 
 
     // UC-19 — soft cancel; fires EventCancelled event for UC-4.
-    public void transitionToCanceled(String reason) {        //TODO        <<-----------------------------
+    public void transitionToCanceled(String reason) {
+        if (status == EventStatus.CANCELED) {
+            return;
+        }
+
+        if (status == EventStatus.COMPLETED) {
+            throw new IllegalStateException("Cannot cancel a completed event");
+        }
+
         this.status = EventStatus.CANCELED;
-        throw new UnsupportedOperationException("UC-19: not implemented");
     }
+    
+
+
 
     // ON_SALE -> COMPLETED after the last show date.
-    public void transitionToCompleted() {         //TODO        <<-----------------------------
+    public void transitionToCompleted() {
+        if (status == EventStatus.COMPLETED) {
+            return;
+        }
+
+        if (status != EventStatus.ON_SALE) {
+            throw new IllegalStateException("Only on-sale events can be marked as completed");
+        }
+
         this.status = EventStatus.COMPLETED;
-        throw new UnsupportedOperationException("not implemented");
     }
+
+    
+
 
     // ON_SALE -> SOLD_OUT when no AVAILABLE tickets remain.
-    public void markSoldOut() {          //TODO        <<-----------------------------
+    public void markSoldOut() {
+        if (status == EventStatus.SOLD_OUT) {
+            return;
+        }
+
+        if (status != EventStatus.ON_SALE) {
+            throw new IllegalStateException("Only on-sale events can be marked as sold out");
+        }
+
         this.status = EventStatus.SOLD_OUT;
-        throw new UnsupportedOperationException("not implemented");
     }
 
+    
+
+
     // UC-19 — II.3.5.2 immutability check; returns false if 'field' is frozen by sales.
-    public boolean canBeEdited(String field) {         //TODO        <<-----------------------------
+    public boolean canBeEdited(String field) {  //TODO:     see what to do and if really needed        <<-----------------------------
         throw new UnsupportedOperationException("UC-19: not implemented");
     }
     
