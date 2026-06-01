@@ -1,4 +1,4 @@
-package com.ticketing.system.Core.Domain.events;
+package com.ticketing.system.Core.Application.dto;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -6,24 +6,24 @@ import java.util.List;
 import java.util.Set;
 
 // This avoids passing random combinations of: quantity, ticketId, seatNumber and seatNumbers, all over the system.
-public class InventorySelection {
+public class InventorySelectionDTO {
     private final int quantity;                  // tickets quantity, For standing zones, this is the only relevant field.
     private final List<String> seatNumbers;      // only non-empty For seated zones, must contain no duplicates.
 
-    private InventorySelection(int quantity, List<String> seatNumbers) {
+    public InventorySelectionDTO(int quantity, List<String> seatNumbers) {
         this.quantity = quantity;
         this.seatNumbers = seatNumbers == null ? List.of() : List.copyOf(seatNumbers);
     }
 
-    public static InventorySelection standing(int quantity) {
+    public static InventorySelectionDTO standing(int quantity) {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be positive");
         }
 
-        return new InventorySelection(quantity, List.of());
+        return new InventorySelectionDTO(quantity, List.of());
     }
 
-    public static InventorySelection seated(List<String> seatNumbers) {
+    public static InventorySelectionDTO seated(List<String> seatNumbers) {
         if (seatNumbers == null || seatNumbers.isEmpty()) {
             throw new IllegalArgumentException("Seat numbers must be non-empty");
         }
@@ -39,7 +39,7 @@ public class InventorySelection {
             }
         }
 
-        return new InventorySelection(seatNumbers.size(), new ArrayList<>(seatNumbers));
+        return new InventorySelectionDTO(seatNumbers.size(), new ArrayList<>(seatNumbers));
     }
 
     public int getQuantity() {

@@ -1,5 +1,7 @@
 package com.ticketing.system.Core.Domain.events;
 
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
+
 /**
  * Counter-based zone — no addressable seats, just "N tickets available".
  *
@@ -40,6 +42,7 @@ public class StandingZone extends InventoryZone {
         }
     }
 
+    @Override
     public int getSoldAmount() {
         synchronized (inventoryLock) {
             return soldAmount;
@@ -73,7 +76,7 @@ public class StandingZone extends InventoryZone {
 
 
     @Override
-    public boolean reserve(InventorySelection selection) {
+    public boolean reserve(InventorySelectionDTO selection) {
         if (!selection.isStandingSelection()) {
             throw new IllegalArgumentException("Standing zone cannot reserve specific seats");
         }
@@ -96,7 +99,7 @@ public class StandingZone extends InventoryZone {
 
 
     @Override
-    public boolean release(InventorySelection selection) {
+    public boolean release(InventorySelectionDTO selection) {
         if (!selection.isStandingSelection()) {
             throw new IllegalArgumentException("Standing zone cannot release specific seats");
         }
@@ -117,7 +120,7 @@ public class StandingZone extends InventoryZone {
 
     
     @Override
-    public boolean confirmSale(InventorySelection selection) {
+    public boolean confirmSale(InventorySelectionDTO selection) {
         if (!selection.isStandingSelection()) {
             throw new IllegalArgumentException("Standing zone cannot confirm specific seats");
         }

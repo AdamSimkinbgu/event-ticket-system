@@ -7,8 +7,8 @@ import java.util.List;
 //   - Specific seat:   seatNumbers populated, quantity ignored
 //   - Quantity-zone:   zoneId + quantity populated, seatNumbers null
 public record ReservationRequestDTO(
-        String eventId,
-        String zoneId,
+        int eventId,
+        int zoneId,
         Integer quantity,           // standing-zone reservation
         List<String> seatNumbers    // seated-zone reservation
 ) {}

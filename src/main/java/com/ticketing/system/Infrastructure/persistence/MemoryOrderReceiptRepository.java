@@ -95,7 +95,7 @@ public class MemoryOrderReceiptRepository implements IOrderReceiptRepository {
                         matches &= receipt.geteventId() == filters.companyId(); // Assuming eventId corresponds to companyId for simplicity; adjust as needed
                     }
                     if (filters.eventIds() != null) {
-                        matches &= filters.eventIds().contains(receipt.geteventId());
+                        matches &= filters.eventIds().contains(String.valueOf(receipt.geteventId()));
                     }
                     if (filters.fromDate() != null) {
                         matches &= !receipt.getPurchaseTime().isBefore(filters.fromDate().atStartOfDay());

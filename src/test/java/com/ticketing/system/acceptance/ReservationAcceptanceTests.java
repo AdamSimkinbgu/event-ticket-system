@@ -1,5 +1,6 @@
 package com.ticketing.system.acceptance;
 
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.dto.ReservationResultDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
@@ -8,7 +9,6 @@ import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
-import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +23,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 public class ReservationAcceptanceTests {
@@ -70,11 +72,11 @@ public class ReservationAcceptanceTests {
 
     @Test
     void GivenValidMemberReservation_WhenreserveStandingTicketsForMember_ThenReturnReservationResult() {
-        ReservationResultDTO result = reservationService.reserveStandingTicketsForMember(
+        ReservationResultDTO result = reservationService.reserveForMember(
                 "validToken",
                 100,
                 1,
-                2
+                InventorySelectionDTO.standing(2)
         );
 
         assertEquals(2, result.getQuantity());
@@ -87,11 +89,11 @@ public class ReservationAcceptanceTests {
         String result;
 
         try {
-            reservationService.reserveStandingTicketsForMember(
+            reservationService.reserveForMember(
                     "badToken",
                     100,
                     1,
-                    2
+                    InventorySelectionDTO.standing(2)
             );
 
             result = "NO_EXCEPTION";
@@ -108,11 +110,11 @@ public class ReservationAcceptanceTests {
         String result;
 
         try {
-            reservationService.reserveStandingTicketsForMember(
+            reservationService.reserveForMember(
                     "validToken",
                     100,
                     1,
-                    0
+                    InventorySelectionDTO.standing(0)
             );
 
             result = "NO_EXCEPTION";
@@ -131,11 +133,11 @@ public class ReservationAcceptanceTests {
         String result;
 
         try {
-            reservationService.reserveStandingTicketsForMember(
+            reservationService.reserveForMember(
                     "validToken",
                     100,
                     1,
-                    2
+                    InventorySelectionDTO.standing(2)
             );
 
             result = "NO_EXCEPTION";
@@ -154,11 +156,11 @@ public class ReservationAcceptanceTests {
         String result;
 
         try {
-            reservationService.reserveStandingTicketsForMember(
+            reservationService.reserveForMember(
                     "validToken",
                     100,
                     1,
-                    2
+                    InventorySelectionDTO.standing(2)
             );
 
             result = "NO_EXCEPTION";
@@ -174,16 +176,16 @@ public class ReservationAcceptanceTests {
    @Test
 void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowException() {
     doThrow(new IllegalStateException("Only 1 tickets left"))
-            .when(event).reserveStandingSpots(1, 2);
+            .when(event).reserveInventory(eq(1), argThat(s -> s.isStandingSelection() && s.getQuantity() == 2));
 
     String result;
 
     try {
-        reservationService.reserveStandingTicketsForMember(
+        reservationService.reserveForMember(
                 "validToken",
                 100,
                 1,
-                2
+                InventorySelectionDTO.standing(2)
         );
 
         result = "NO_EXCEPTION";
@@ -223,11 +225,11 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowExceptio
         when(activeOrderRepository.getBySessionId("guest-session"))
                 .thenReturn(Optional.empty());
 
-        ReservationResultDTO result = reservationService.reserveStandingTicketsForGuest(
+        ReservationResultDTO result = reservationService.reserveForGuest(
                 "guest-session",
                 100,
                 1,
-                3
+                InventorySelectionDTO.standing(3)
         );
 
         assertEquals(3, result.getQuantity());
@@ -238,11 +240,11 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowExceptio
         String result;
 
         try {
-            reservationService.reserveStandingTicketsForGuest(
+            reservationService.reserveForGuest(
                     "",
                     100,
                     1,
-                    3
+                    InventorySelectionDTO.standing(3)
             );
 
             result = "NO_EXCEPTION";
@@ -258,11 +260,11 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowExceptio
     void GivenValidReservedTickets_WhenremoveReservedStandingSpotsForMember_ThenReturnReservationResult() {
         activeOrder.addStandingReservation(100, 1, 3, 50.0, java.time.LocalDateTime.now());
 
-        ReservationResultDTO result = reservationService.removeReservedStandingSpotsForMember(
+        ReservationResultDTO result = reservationService.removeForMember(
                 "validToken",
                 100,
                 1,
-                2
+                InventorySelectionDTO.standing(2)
         );
 
         assertEquals(2, result.getQuantity());
@@ -273,11 +275,11 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowExceptio
         String result;
 
         try {
-            reservationService.removeReservedStandingSpotsForMember(
+            reservationService.removeForMember(
                     "validToken",
                     100,
                     1,
-                    0
+                    InventorySelectionDTO.standing(0)
             );
 
             result = "NO_EXCEPTION";
@@ -298,11 +300,11 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowExceptio
         String result;
 
         try {
-            reservationService.removeReservedStandingSpotsForMember(
+            reservationService.removeForMember(
                     "validToken",
                     100,
                     1,
-                    1
+                    InventorySelectionDTO.standing(1)
             );
 
             result = "NO_EXCEPTION";
@@ -319,11 +321,11 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowExceptio
         String result;
 
         try {
-            reservationService.removeReservedStandingSpotsForMember(
+            reservationService.removeForMember(
                     "validToken",
                     100,
                     1,
-                    1
+                    InventorySelectionDTO.standing(1)
             );
 
             result = "NO_EXCEPTION";
@@ -342,11 +344,11 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowExceptio
         String result;
 
         try {
-            reservationService.removeReservedStandingSpotsForMember(
+            reservationService.removeForMember(
                     "validToken",
                     100,
                     1,
-                    2
+                    InventorySelectionDTO.standing(2)
             );
 
             result = "NO_EXCEPTION";

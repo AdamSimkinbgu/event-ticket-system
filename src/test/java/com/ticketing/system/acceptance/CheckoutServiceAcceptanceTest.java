@@ -201,9 +201,10 @@ public class CheckoutServiceAcceptanceTest {
         AtomicInteger returnedTickets = new AtomicInteger(0);
 
         doAnswer(invocation -> {
-            returnedTickets.addAndGet(invocation.getArgument(1));
-            return null;
-        }).when(event).releaseStandingSpots(eq(zoneId), anyInt());
+            InventorySelectionDTO selection = invocation.getArgument(1);
+            returnedTickets.addAndGet(selection.getQuantity());
+            return false;
+        }).when(event).releaseInventory(eq(zoneId), any(InventorySelectionDTO.class));
 
         return returnedTickets;
     }

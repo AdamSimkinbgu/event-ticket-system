@@ -3,6 +3,8 @@ package com.ticketing.system.unit.infrastructure.scheduling;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -27,14 +29,12 @@ import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.Session;
 import com.ticketing.system.Infrastructure.scheduling.SessionAndOrderSweeper;
 
-import jakarta.persistence.criteria.CriteriaBuilder.In;
-
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.events.EventStatus;
-import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.PurchasePolicy;
@@ -103,7 +103,7 @@ class SessionAndOrderSweeperTest {
         assertEquals(1, cleaned);
         verify(orderRepo).delete(cart);
         verify(sessionRepo).delete("guest-sid");
-        verify(event).releaseStandingSpots(10, 2);     // 2 tickets in zone 10 released
+        verify(event).releaseInventory(eq(10), argThat(s -> s.isStandingSelection() && s.getQuantity() == 2));     // 2 tickets in zone 10 released
         verify(eventRepo).save(event);
     }
 
@@ -156,7 +156,7 @@ class SessionAndOrderSweeperTest {
 
         assertEquals(1, cleaned);
         verify(orderRepo).delete(expiredCart);
-        verify(event).releaseStandingSpots(20, 3);
+        verify(event).releaseInventory(eq(20), argThat(s -> s.isStandingSelection() && s.getQuantity() == 3));
         verify(eventRepo).save(event);
     }
 
@@ -175,9 +175,9 @@ class SessionAndOrderSweeperTest {
 
         sweeper.sweepExpiredOrders();
 
-        verify(event1).releaseStandingSpots(10, 2);
-        verify(event1).releaseStandingSpots(20, 1);
-        verify(event2).releaseStandingSpots(30, 1);
+        verify(event1).releaseInventory(eq(10), argThat(s -> s.isStandingSelection() && s.getQuantity() == 2));
+        verify(event1).releaseInventory(eq(20), argThat(s -> s.isStandingSelection() && s.getQuantity() == 1));
+        verify(event2).releaseInventory(eq(30), argThat(s -> s.isStandingSelection() && s.getQuantity() == 1));
         verify(eventRepo, times(1)).save(event1);  // saved once after both zones updated
         verify(eventRepo, times(1)).save(event2);
         verify(orderRepo).delete(cart);
@@ -218,7 +218,7 @@ class SessionAndOrderSweeperTest {
 
         verify(sessionRepo).delete("sid-g");
         verify(orderRepo).delete(expiredCart);
-        verify(event).releaseStandingSpots(10, 1);
+        verify(event).releaseInventory(eq(10), argThat(s -> s.isStandingSelection() && s.getQuantity() == 1));
     }
 
     @Test
@@ -254,7 +254,7 @@ class SessionAndOrderSweeperTest {
                         new Seat("A2", 1, 0),
                         new Seat("A3", 2, 0)));
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2")));
+        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1", "A2")));
 
         Event event = createEventWithZones(2, List.of(seatedZone));
 
@@ -293,8 +293,8 @@ class SessionAndOrderSweeperTest {
                         new Seat("A1", 0, 0),
                         new Seat("A2", 1, 0)));
 
-        standingZone.reserve(InventorySelection.standing(2));
-        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+        standingZone.reserve(InventorySelectionDTO.standing(2));
+        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1")));
 
         Event event = createEventWithZones(1, List.of(standingZone, seatedZone));
 
@@ -334,7 +334,7 @@ class SessionAndOrderSweeperTest {
                 )
         );
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1")));
 
         Event event = createEventWithZones(1, List.of(seatedZone));
 

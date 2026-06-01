@@ -12,12 +12,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
-import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.Session;
 
@@ -145,9 +145,9 @@ public class SessionAndOrderSweeper {
                         .toList();
                 // If there are no seat numbers, it's a standing reservation, so we release by quantity. Otherwise, we release specific seats.
                 if (seatNumbers.isEmpty()) {
-                    event.releaseStandingSpots(zoneId, items.size());
+                    event.releaseInventory(zoneId, InventorySelectionDTO.standing(items.size()));
                 } else {
-                    event.releaseSeats(zoneId, seatNumbers);
+                    event.releaseInventory(zoneId, InventorySelectionDTO.seated(seatNumbers));
                 }
             }
 

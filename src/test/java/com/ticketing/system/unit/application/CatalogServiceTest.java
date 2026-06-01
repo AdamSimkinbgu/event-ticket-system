@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapDTO;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.CatalogService;
@@ -41,7 +42,7 @@ import java.util.List;
 
 import com.ticketing.system.Core.Application.dto.InventoryZoneDTO;
 import com.ticketing.system.Core.Application.dto.SeatDTO;
-import com.ticketing.system.Core.Domain.events.InventorySelection;
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Domain.events.Seat;
 import com.ticketing.system.Core.Domain.events.SeatedZone;
 import com.ticketing.system.Core.Domain.events.SeatStatus;
@@ -407,9 +408,9 @@ class CatalogServiceTest {
                 )
         );
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
-        seatedZone.reserve(InventorySelection.seated(List.of("A2")));
-        seatedZone.confirmSale(InventorySelection.seated(List.of("A2")));
+        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1")));
+        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A2")));
+        seatedZone.confirmSale(InventorySelectionDTO.seated(List.of("A2")));
 
         VenueMap venueMap = new VenueMap(
                 1,
@@ -465,7 +466,7 @@ class CatalogServiceTest {
     @Test
     void givenStandingZone_whenGetVenueMap_thenZoneCountAvailabilityReturned() {
         StandingZone standingZone = new StandingZone(5, "General Admission", 10, 50.0);
-        standingZone.reserve(InventorySelection.standing(3));
+        standingZone.reserve(InventorySelectionDTO.standing(3));
 
         VenueMap venueMap = new VenueMap(
                 1,

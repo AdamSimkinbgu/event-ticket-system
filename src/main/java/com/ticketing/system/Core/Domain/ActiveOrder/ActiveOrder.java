@@ -7,6 +7,7 @@ import java.util.HashSet;
 import java.util.List;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 /**
@@ -35,7 +36,6 @@ public class ActiveOrder implements InvariantChecked {
     private final List<CartLineItem> items;
     private final LocalDateTime createdAt;
     private final Object itemsLock = new Object();
-     
 
     public ActiveOrder(Integer userId, String sessionId) {
         if (userId == null && sessionId == null) {
@@ -47,6 +47,74 @@ public class ActiveOrder implements InvariantChecked {
         this.items = new ArrayList<>();
         this.createdAt = LocalDateTime.now();
     }
+
+
+
+
+
+    
+
+    /**
+     * Generic reservation entry point used by application services.
+     * Standing/seated branching stays inside the domain object instead of being
+     * duplicated in ReservationService.
+     */
+    public void addReservation(int eventId, int zoneId, InventorySelectionDTO selection, double price,
+            LocalDateTime addedAt) {
+        if (selection == null) {
+            throw new IllegalArgumentException("Inventory selection is required");
+        }
+
+        if (selection.isStandingSelection()) {
+            addStandingReservation(eventId, zoneId, selection.getQuantity(), price, addedAt);
+        } else {
+            addSeatedReservation(eventId, zoneId, selection.getSeatNumbers(), price, addedAt);
+        }
+    }
+
+    
+    /**
+     * Generic removal entry point used by application services.
+     */
+    public void removeReservation(int eventId, int zoneId, InventorySelectionDTO selection) {
+        if (selection == null) {
+            throw new IllegalArgumentException("Inventory selection is required");
+        }
+
+        if (selection.isStandingSelection()) {
+            removeStandingSpots(eventId, zoneId, selection.getQuantity());
+        } else {
+            removeSeats(eventId, zoneId, selection.getSeatNumbers());
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     /**
      * Legacy convenience for existing Member-only callers. Equivalent to
@@ -116,6 +184,9 @@ public class ActiveOrder implements InvariantChecked {
     }
 
 
+    
+
+
 
 
 
@@ -182,6 +253,42 @@ public class ActiveOrder implements InvariantChecked {
                     // check just in case even though we already checked that the seat numbers do exist, to avoid silent failures if there's a bug in the validation logic.
                     throw new IllegalArgumentException("Seat not found in active order: " + seatNumber);
                 }
+            }
+        }
+    }
+
+
+    
+
+
+
+
+
+
+
+
+
+    /**
+     * Validation-only method. This is useful before releasing inventory from the event,
+     * so a bad remove request does not accidentally put tickets back in stock.
+     */
+    public void validateContainsReservation(int eventId, int zoneId, InventorySelectionDTO selection) {
+        if (selection == null) {
+            throw new IllegalArgumentException("Inventory selection is required");
+        }
+
+        synchronized (itemsLock) {
+            if (!hasReservationForEventWithoutLock(eventId)) {
+                throw new IllegalArgumentException("Active order does not contain this event");
+            }
+
+            if (selection.isStandingSelection()) {
+                int existingTickets = countStandingTicketsWithoutLock(eventId, zoneId);
+                if (existingTickets < selection.getQuantity()) {
+                    throw new IllegalArgumentException("Not enough reserved tickets to remove");
+                }
+            } else {
+                validateContainsSeats(eventId, zoneId, selection.getSeatNumbers());
             }
         }
     }
@@ -528,8 +635,7 @@ public class ActiveOrder implements InvariantChecked {
                     "ActiveOrder invariant violated: userId must be positive when set (was " + userId + ")");
         }
         if (sessionId != null && sessionId.isBlank()) {
-            throw new IllegalStateException(
-                    "ActiveOrder invariant violated: sessionId must be non-blank when set");
+            throw new IllegalStateException("ActiveOrder invariant violated: sessionId must be non-blank when set");
         }
         synchronized (itemsLock) {
             if (items == null) {
@@ -542,4 +648,6 @@ public class ActiveOrder implements InvariantChecked {
             }
         }
     }
+
+
 }

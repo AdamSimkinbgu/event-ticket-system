@@ -13,6 +13,7 @@ import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
 import com.ticketing.system.Core.Application.dto.PaymentRequestDTO;
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.dto.PaymentResultDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
@@ -26,7 +27,6 @@ import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
-import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
@@ -166,9 +166,9 @@ public class CheckoutService {
                         .toList();
 
                 if (seatNumbers.isEmpty()) {
-                    event.confirmStandingSpotSale(zoneId, zoneItems.size());
+                    event.confirmInventorySale(zoneId, InventorySelectionDTO.standing(zoneItems.size()));
                 } else {
-                    event.confirmSeatSale(zoneId, seatNumbers);
+                    event.confirmInventorySale(zoneId, InventorySelectionDTO.seated(seatNumbers));
                 }
             }
             // after confirming the sale for all zones of the event, we save the event to persist the changes to the inventory.
@@ -248,9 +248,9 @@ public class CheckoutService {
                         .toList();
 
                 if (seatNumbers.isEmpty()) {
-                    event.releaseStandingSpots(zoneId, zoneItems.size());
+                    event.releaseInventory(zoneId, InventorySelectionDTO.standing(zoneItems.size()));
                 } else {
-                    event.releaseSeats(zoneId, seatNumbers);
+                    event.releaseInventory(zoneId, InventorySelectionDTO.seated(seatNumbers));
                 }
             }
             eventRepository.save(event);

@@ -102,7 +102,7 @@ public class CompanyManagementService {
             throw new RuntimeException("Company not found");
         }
 
-        ManagementInvitation invitation = targetUser.acceptInvitation(companyId);
+        targetUser.acceptInvitation(companyId);
         company.acceptManagerInvitation(targetId);
         userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
@@ -291,7 +291,7 @@ public class CompanyManagementService {
 
     // UC-22 — Owner-side flat list of company sales.
     public List<PurchaseHistoryDTO> viewSalesHistory(String token, int companyId) {
-        this.log.info("Attempting to view sales history for company {}", companyId);
+        log.info("Attempting to view sales history for company {}", companyId);
 
         if (!sessionManager.validateToken(token)) {
             log.warn("Invalid token provided for viewing sales history");
@@ -333,7 +333,7 @@ public class CompanyManagementService {
 
     // UC-25 — recursive organizational tree (Owners only per II.4.15).
     public OrganizationalTreeNodeDTO viewOrganizationalTree(String token, int companyId) {
-        this.log.info("Attempting to view organizational tree for company {}", companyId);
+        log.info("Attempting to view organizational tree for company {}", companyId);
 
         if (!sessionManager.validateToken(token)) {
             log.warn("Invalid token provided for viewing organizational tree");

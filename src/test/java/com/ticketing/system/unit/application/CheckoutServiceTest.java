@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Application.dto.BarcodeDTO;
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
 import com.ticketing.system.Core.Application.dto.PaymentRequestDTO;
@@ -47,7 +48,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.events.EventStatus;
-import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.PurchasePolicy;
 import com.ticketing.system.Core.Domain.events.Seat;
@@ -201,8 +201,8 @@ void GivenExpiredOrderWithMultipleTickets_WhenCheckout_ThenClearCartAndReturnTic
     InventoryZone zone1 = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
     InventoryZone zone2 = new StandingZone(ZONE_ID_2, "REGULAR", 5, 150.0);
 
-    zone1.reserve(InventorySelection.standing(1));
-    zone2.reserve(InventorySelection.standing(1));
+    zone1.reserve(InventorySelectionDTO.standing(1));
+    zone2.reserve(InventorySelectionDTO.standing(1));
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
     activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now().minusMinutes(20));
@@ -212,13 +212,13 @@ void GivenExpiredOrderWithMultipleTickets_WhenCheckout_ThenClearCartAndReturnTic
 
     when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
 
-    when(event1.releaseStandingSpots(ZONE_ID_1, 1)).thenAnswer(invocation -> {
-        zone1.release(InventorySelection.standing(1));
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelectionDTO.standing(1))).thenAnswer(invocation -> {
+        zone1.release(InventorySelectionDTO.standing(1));
         return true;
     });
 
-    when(event1.releaseStandingSpots(ZONE_ID_2, 1)).thenAnswer(invocation -> {
-        zone2.release(InventorySelection.standing(1));
+    when(event1.releaseInventory(ZONE_ID_2, InventorySelectionDTO.standing(1))).thenAnswer(invocation -> {
+        zone2.release(InventorySelectionDTO.standing(1));
         return true;
     });
 
@@ -255,7 +255,7 @@ void GivenExpiredOrderWithMultipleTickets_WhenCheckout_ThenClearCartAndReturnTic
     @Test
 void GivenOrderCannotCheckout_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
     InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
-    zone.reserve(InventorySelection.standing(1));
+    zone.reserve(InventorySelectionDTO.standing(1));
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
     activeOrder.addStandingReservation(
@@ -269,8 +269,8 @@ void GivenOrderCannotCheckout_WhenCheckout_ThenClearCartAndReturnTicketsToStock(
     when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
     when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
 
-    when(event1.releaseStandingSpots(ZONE_ID_1, 1)).thenAnswer(invocation -> {
-        zone.release(InventorySelection.standing(1));
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelectionDTO.standing(1))).thenAnswer(invocation -> {
+        zone.release(InventorySelectionDTO.standing(1));
         return true;
     });
 
@@ -291,7 +291,7 @@ void GivenOrderCannotCheckout_WhenCheckout_ThenClearCartAndReturnTicketsToStock(
    @Test
 void GivenPaymentFails_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
     InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
-    zone.reserve(InventorySelection.standing(1));
+    zone.reserve(InventorySelectionDTO.standing(1));
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
     activeOrder.addStandingReservation(
@@ -312,8 +312,8 @@ void GivenPaymentFails_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
     when(mockPaymentGateway.charge(any(PaymentRequestDTO.class)))
             .thenReturn(null);
 
-    when(event1.releaseStandingSpots(ZONE_ID_1, 1)).thenAnswer(invocation -> {
-        zone.release(InventorySelection.standing(1));
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelectionDTO.standing(1))).thenAnswer(invocation -> {
+        zone.release(InventorySelectionDTO.standing(1));
         return true;
     });
 
@@ -333,7 +333,7 @@ void GivenPaymentFails_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
     @Test
 void GivenTicketIssuanceFailsAfterPayment_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
     InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
-    zone.reserve(InventorySelection.standing(1));
+    zone.reserve(InventorySelectionDTO.standing(1));
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
     activeOrder.addStandingReservation(
@@ -366,8 +366,8 @@ void GivenTicketIssuanceFailsAfterPayment_WhenCheckout_ThenClearCartAndReturnTic
     when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
             .thenReturn(null);
 
-    when(event1.releaseStandingSpots(ZONE_ID_1, 1)).thenAnswer(invocation -> {
-        zone.release(InventorySelection.standing(1));
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelectionDTO.standing(1))).thenAnswer(invocation -> {
+        zone.release(InventorySelectionDTO.standing(1));
         return true;
     });
 
@@ -388,7 +388,7 @@ void GivenTicketIssuanceFailsAfterPayment_WhenCheckout_ThenClearCartAndReturnTic
    @Test
 void GivenTicketIssuanceReturnsNullBarcodes_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
     InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
-    zone.reserve(InventorySelection.standing(1));
+    zone.reserve(InventorySelectionDTO.standing(1));
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
     activeOrder.addStandingReservation(
@@ -428,8 +428,8 @@ void GivenTicketIssuanceReturnsNullBarcodes_WhenCheckout_ThenClearCartAndReturnT
     when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
             .thenReturn(issuanceResult);
 
-    when(event1.releaseStandingSpots(ZONE_ID_1, 1)).thenAnswer(invocation -> {
-        zone.release(InventorySelection.standing(1));
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelectionDTO.standing(1))).thenAnswer(invocation -> {
+        zone.release(InventorySelectionDTO.standing(1));
         return true;
     });
 
@@ -448,7 +448,7 @@ void GivenTicketIssuanceReturnsNullBarcodes_WhenCheckout_ThenClearCartAndReturnT
 }@Test
 void GivenTicketIssuanceReturnsEmptyBarcodes_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
     InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
-    zone.reserve(InventorySelection.standing(1));
+    zone.reserve(InventorySelectionDTO.standing(1));
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
     activeOrder.addStandingReservation(
@@ -488,8 +488,8 @@ void GivenTicketIssuanceReturnsEmptyBarcodes_WhenCheckout_ThenClearCartAndReturn
     when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
             .thenReturn(issuanceResult);
 
-    when(event1.releaseStandingSpots(ZONE_ID_1, 1)).thenAnswer(invocation -> {
-        zone.release(InventorySelection.standing(1));
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelectionDTO.standing(1))).thenAnswer(invocation -> {
+        zone.release(InventorySelectionDTO.standing(1));
         return true;
     });
 
@@ -513,9 +513,9 @@ void GivenMultipleTicketsButIssuerReturnsLessBarcodes_WhenCheckout_ThenClearCart
     InventoryZone zone2 = new StandingZone(ZONE_ID_2, "REGULAR", 5, 150.0);
     InventoryZone zone3 = new StandingZone(ZONE_ID_3, "BALCONY", 5, 200.0);
 
-    zone1.reserve(InventorySelection.standing(1));
-    zone2.reserve(InventorySelection.standing(1));
-    zone3.reserve(InventorySelection.standing(1));
+    zone1.reserve(InventorySelectionDTO.standing(1));
+    zone2.reserve(InventorySelectionDTO.standing(1));
+    zone3.reserve(InventorySelectionDTO.standing(1));
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
     activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
@@ -557,18 +557,18 @@ void GivenMultipleTicketsButIssuerReturnsLessBarcodes_WhenCheckout_ThenClearCart
     when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
             .thenReturn(issuanceResult);
 
-    when(event1.releaseStandingSpots(ZONE_ID_1, 1)).thenAnswer(invocation -> {
-        zone1.release(InventorySelection.standing(1));
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelectionDTO.standing(1))).thenAnswer(invocation -> {
+        zone1.release(InventorySelectionDTO.standing(1));
         return true;
     });
 
-    when(event1.releaseStandingSpots(ZONE_ID_2, 1)).thenAnswer(invocation -> {
-        zone2.release(InventorySelection.standing(1));
+    when(event1.releaseInventory(ZONE_ID_2, InventorySelectionDTO.standing(1))).thenAnswer(invocation -> {
+        zone2.release(InventorySelectionDTO.standing(1));
         return true;
     });
 
-    when(event2.releaseStandingSpots(ZONE_ID_3, 1)).thenAnswer(invocation -> {
-        zone3.release(InventorySelection.standing(1));
+    when(event2.releaseInventory(ZONE_ID_3, InventorySelectionDTO.standing(1))).thenAnswer(invocation -> {
+        zone3.release(InventorySelectionDTO.standing(1));
         return true;
     });
 
@@ -596,7 +596,7 @@ void GivenMultipleTicketsButIssuerReturnsLessBarcodes_WhenCheckout_ThenClearCart
    @Test
 void GivenPaymentRefundFails_WhenCheckout_ThenClearCartReturnTicketsToStockAndThrowRefundException() {
     InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
-    zone.reserve(InventorySelection.standing(1));
+    zone.reserve(InventorySelectionDTO.standing(1));
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
     activeOrder.addStandingReservation(
@@ -629,8 +629,8 @@ void GivenPaymentRefundFails_WhenCheckout_ThenClearCartReturnTicketsToStockAndTh
     when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
             .thenReturn(null);
 
-    when(event1.releaseStandingSpots(ZONE_ID_1, 1)).thenAnswer(invocation -> {
-        zone.release(InventorySelection.standing(1));
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelectionDTO.standing(1))).thenAnswer(invocation -> {
+        zone.release(InventorySelectionDTO.standing(1));
         return true;
     });
 
@@ -656,8 +656,8 @@ void GivenTicketFromDifferentEventDoesNotExist_WhenCheckout_ThenClearCartAndRetu
     InventoryZone zone1 = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
     InventoryZone zone3 = new StandingZone(ZONE_ID_3, "BALCONY", 5, 200.0);
 
-    zone1.reserve(InventorySelection.standing(1));
-    zone3.reserve(InventorySelection.standing(1));
+    zone1.reserve(InventorySelectionDTO.standing(1));
+    zone3.reserve(InventorySelectionDTO.standing(1));
 
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
     activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
@@ -670,8 +670,8 @@ void GivenTicketFromDifferentEventDoesNotExist_WhenCheckout_ThenClearCartAndRetu
 
     when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone1);
 
-    when(event1.releaseStandingSpots(ZONE_ID_1, 1)).thenAnswer(invocation -> {
-        zone1.release(InventorySelection.standing(1));
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelectionDTO.standing(1))).thenAnswer(invocation -> {
+        zone1.release(InventorySelectionDTO.standing(1));
         return true;
     });
 
@@ -1087,7 +1087,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                                 120.0,
                                 List.of(new Seat("A1", 0, 0)));
 
-                seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+                seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1")));
 
                 Event realEvent = createRealEventWithZone(EVENT_ID_1, seatedZone);
 
@@ -1132,7 +1132,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                                 120.0,
                                 List.of(new Seat("A1", 0, 0)));
 
-                seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+                seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1")));
 
                 Event realEvent = createRealEventWithZone(EVENT_ID_1, seatedZone);
 
@@ -1242,7 +1242,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                                 "Orchestra",
                                 120.0,
                                 List.of(new Seat("A1", 0, 0)));
-                seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+                seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1")));
                 Event realEvent = createRealEventWithZone(EVENT_ID_1, seatedZone);
                 ActiveOrder activeOrder = new ActiveOrder(USER_ID);
 

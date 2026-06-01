@@ -1,6 +1,5 @@
 package com.ticketing.system.Core.Application.services;
 
-import java.lang.reflect.AccessFlag.Location;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -138,7 +137,8 @@ public class EventManagementService {
             log.warn("Event {} not found", eventId);
             throw new RuntimeException("Event not found");
         }
-        if (event.isCancelled()) {
+
+        if (event.getStatus() == EventStatus.CANCELED) {
             log.warn("Event {} is already canceled", eventId);
             return;
         }
@@ -190,7 +190,8 @@ public class EventManagementService {
             }
         }
 
-        event.setCanceled(true);
+        // event.setCanceled(true);
+        event.transitionToCanceled("Event canceled by owner/manager");
         eventRepository.save(event);
 
         log.info("Event {} canceled successfully", eventId);

@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
+
 /**
  * Zone with addressable, named seats. Replaces the bare counter of
  * {@link StandingZone} when the organizer wants to sell specific seats.
@@ -67,7 +69,7 @@ public class SeatedZone extends InventoryZone {
      * @throws IllegalStateException    if any requested seat is not AVAILABLE
      */
     @Override
-    public boolean reserve(InventorySelection selection) {
+    public boolean reserve(InventorySelectionDTO selection) {
         if (!selection.isSeatedSelection()) {
             throw new IllegalArgumentException("Seated zone requires selected seat numbers");
         }
@@ -126,7 +128,7 @@ public class SeatedZone extends InventoryZone {
      * @throws IllegalStateException if any seat is not RESERVED
      */
     @Override
-    public boolean release(InventorySelection selection) {
+    public boolean release(InventorySelectionDTO selection) {
         if (!selection.isSeatedSelection()) {
             throw new IllegalArgumentException("Seated zone requires selected seat numbers");
         }
@@ -178,7 +180,7 @@ public class SeatedZone extends InventoryZone {
      * @throws IllegalStateException if any seat is not RESERVED
      */
     @Override
-    public boolean confirmSale(InventorySelection selection) {
+    public boolean confirmSale(InventorySelectionDTO selection) {
         if (!selection.isSeatedSelection()) {
             throw new IllegalArgumentException("Seated zone requires selected seat numbers");
         }

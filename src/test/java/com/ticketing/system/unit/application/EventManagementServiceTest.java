@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -24,8 +23,8 @@ import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
-import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
@@ -51,7 +50,6 @@ class EventManagementServiceTest {
     private final String INVALID_TOKEN = "invalid-token";
 
     private final int COMPANY_ID = 100;
-    private final int OTHER_COMPANY_ID = 200;
     private final int EVENT_ID = 10;
     private final int OWNER_ID = 1;
     private final int MANAGER_ID = 2;
@@ -260,7 +258,7 @@ class EventManagementServiceTest {
 
     @Test
     public void GivenReservedTicketsMoreThanNewCapacity_WhenUpdateZoneCapacity_ThenThrowException() {
-        zone.reserve(InventorySelection.standing(8));
+        zone.reserve(InventorySelectionDTO.standing(8));
 
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
@@ -330,7 +328,7 @@ class EventManagementServiceTest {
     @Test
     public void GivenEventAlreadyCanceled_WhenCancelEventAndRefund_ThenReceiptStateRemainsUnchanged() {
         OrderReceipt receipt = setupStateBasedHappyPath();
-        event.setCanceled(true); // Manually cancel it beforehand
+        event.transitionToCanceled("cancelled");; // Manually cancel it beforehand
 
         eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
 
@@ -343,7 +341,7 @@ class EventManagementServiceTest {
 
         eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
 
-        assertTrue(event.isCancelled());
+        assertTrue(event.getStatus() == EventStatus.CANCELED);
     }
 
     @Test

@@ -1,13 +1,9 @@
 package com.ticketing.system.Core.Domain.orders;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
-import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
-import org.hibernate.query.spi.Limit;
 
 public class OrderReceipt implements InvariantChecked {
     // Dual identity (D5 / auth rework): Member receipts carry userid; Guest

@@ -1,7 +1,9 @@
 package com.ticketing.system.Core.Domain.events;
 
 import java.util.List;
-import java.util.Map;
+
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
+
 import java.util.ArrayList;
 
 public class VenueMap {
@@ -60,7 +62,7 @@ public class VenueMap {
     
     //// changed name from reserveTickets to reserveInventory and added InventorySelection parameter to support seated zones as well.
     // supports both standing and seated zones via the InventorySelection abstraction, simply don't include seat numbers for standing zones.
-    public void reserveInventory(int zoneId, InventorySelection selection) {
+    public void reserveInventory(int zoneId, InventorySelectionDTO selection) {
         InventoryZone zone = getZone(zoneId);
         zone.reserve(selection);
     }
@@ -68,13 +70,13 @@ public class VenueMap {
 
     //// changed name from releaseTickets to releaseInventory and added InventorySelection parameter to support seated zones as well.
     // supports both standing and seated zones via the InventorySelection abstraction, simply don't include seat numbers for standing zones.
-    public void releaseInventory(int zoneId, InventorySelection selection) {
+    public void releaseInventory(int zoneId, InventorySelectionDTO selection) {
         InventoryZone zone = getZone(zoneId);
         zone.release(selection);
     }
 
     // supports both standing and seated zones via the InventorySelection abstraction, simply don't include seat numbers for standing zones.
-    public void confirmSale(int zoneId, InventorySelection selection) {
+    public void confirmSale(int zoneId, InventorySelectionDTO selection) {
         InventoryZone zone = getZone(zoneId);
         zone.confirmSale(selection);
     }

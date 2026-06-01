@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.system.Core.Domain.events.InventorySelection;
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.Seat;
 import com.ticketing.system.Core.Domain.events.SeatStatus;
@@ -27,7 +27,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.Seat;
 import com.ticketing.system.Core.Domain.events.SeatStatus;
 import com.ticketing.system.Core.Domain.events.SeatedZone;
@@ -70,7 +69,7 @@ public class InventoryZoneTest extends BaseDomainTest {
                         readyLatch.countDown();
                         startLatch.await();
 
-                        realZone.reserve(InventorySelection.standing(quantityPerRequest));
+                        realZone.reserve(InventorySelectionDTO.standing(quantityPerRequest));
 
                         successCount.incrementAndGet();
 
@@ -109,16 +108,16 @@ public class InventoryZoneTest extends BaseDomainTest {
 
     @Test
     public void GivenLowerCapacityThanReserved_WhenSetStandingCapacity_ThenThrowsException() {
-        zone.reserve(InventorySelection.standing(5));
+        zone.reserve(InventorySelectionDTO.standing(5));
 
         assertThrows(IllegalArgumentException.class, () -> zone.setStandingCapacity(4));
     }
 
     @Test
     public void GivenValidQuantity_WhenReleaseStanding_ThenTicketsReturnedToAvailableAmount() {
-        zone.reserve(InventorySelection.standing(5));
+        zone.reserve(InventorySelectionDTO.standing(5));
 
-        zone.release(InventorySelection.standing(2));
+        zone.release(InventorySelectionDTO.standing(2));
 
         assertEquals(7, zone.getAvailableAmount());
         assertEquals(3, zone.getReservedAmount());
@@ -126,14 +125,14 @@ public class InventoryZoneTest extends BaseDomainTest {
 
     @Test
     public void GivenReleaseMoreThanReserved_WhenReleaseStanding_ThenThrowsException() {
-        zone.reserve(InventorySelection.standing(3));
+        zone.reserve(InventorySelectionDTO.standing(3));
 
-        assertThrows(IllegalStateException.class, () -> zone.release(InventorySelection.standing(4)));
+        assertThrows(IllegalStateException.class, () -> zone.release(InventorySelectionDTO.standing(4)));
     }
 
     @Test
     public void GivenInvalidQuantity_WhenReserveStanding_ThenThrowsException() {
-        assertThrows(IllegalArgumentException.class, () -> zone.reserve(InventorySelection.standing(0)));
+        assertThrows(IllegalArgumentException.class, () -> zone.reserve(InventorySelectionDTO.standing(0)));
     }
 
     
@@ -147,11 +146,11 @@ public class InventoryZoneTest extends BaseDomainTest {
                 100,
                 List.of(new Seat("A1", 0, 0)));
 
-        zone.reserve(InventorySelection.seated(List.of("A1")));
+        zone.reserve(InventorySelectionDTO.seated(List.of("A1")));
 
         assertThrows(
                 IllegalStateException.class,
-                () -> zone.reserve(InventorySelection.seated(List.of("A1"))));
+                () -> zone.reserve(InventorySelectionDTO.seated(List.of("A1"))));
     }
     
 
@@ -164,7 +163,7 @@ public class InventoryZoneTest extends BaseDomainTest {
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> zone.reserve(InventorySelection.seated(List.of("A1"))));
+                () -> zone.reserve(InventorySelectionDTO.seated(List.of("A1"))));
     }
     
 
@@ -222,7 +221,7 @@ public class InventoryZoneTest extends BaseDomainTest {
                 )
         ));
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2")));
+        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1", "A2")));
 
         assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("A1").getStatus());
         assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("A2").getStatus());
@@ -244,7 +243,7 @@ public class InventoryZoneTest extends BaseDomainTest {
         ));
 
         assertThrows(IllegalArgumentException.class, () ->
-                seatedZone.reserve(InventorySelection.seated(List.of("A1", "A1")))
+                seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1", "A1")))
         );
 
         assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A1").getStatus());
@@ -266,7 +265,7 @@ public class InventoryZoneTest extends BaseDomainTest {
         ));
 
         assertThrows(IllegalArgumentException.class, () ->
-                seatedZone.reserve(InventorySelection.seated(List.of("A1", "Z9")))
+                seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1", "Z9")))
         );
 
         assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A1").getStatus());
@@ -283,10 +282,10 @@ public class InventoryZoneTest extends BaseDomainTest {
                 List.of(new Seat("A1", 0, 0))
         ));
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1")));
 
         assertThrows(IllegalStateException.class, () ->
-                seatedZone.reserve(InventorySelection.seated(List.of("A1")))
+                seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1")))
         );
 
         assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("A1").getStatus());
@@ -304,8 +303,8 @@ public class InventoryZoneTest extends BaseDomainTest {
                 )
         ));
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2")));
-        seatedZone.release(InventorySelection.seated(List.of("A1")));
+        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1", "A2")));
+        seatedZone.release(InventorySelectionDTO.seated(List.of("A1")));
 
         assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A1").getStatus());
         assertEquals(SeatStatus.RESERVED, seatedZone.getSeat("A2").getStatus());
@@ -323,7 +322,7 @@ public class InventoryZoneTest extends BaseDomainTest {
         ));
 
         assertThrows(IllegalStateException.class, () ->
-                seatedZone.release(InventorySelection.seated(List.of("A1")))
+                seatedZone.release(InventorySelectionDTO.seated(List.of("A1")))
         );
 
         assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A1").getStatus());
@@ -342,8 +341,8 @@ public class InventoryZoneTest extends BaseDomainTest {
                 )
         ));
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2")));
-        seatedZone.confirmSale(InventorySelection.seated(List.of("A1", "A2")));
+        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1", "A2")));
+        seatedZone.confirmSale(InventorySelectionDTO.seated(List.of("A1", "A2")));
 
         assertEquals(SeatStatus.SOLD, seatedZone.getSeat("A1").getStatus());
         assertEquals(SeatStatus.SOLD, seatedZone.getSeat("A2").getStatus());
@@ -363,7 +362,7 @@ public class InventoryZoneTest extends BaseDomainTest {
         ));
 
         assertThrows(IllegalStateException.class, () ->
-                seatedZone.confirmSale(InventorySelection.seated(List.of("A1")))
+                seatedZone.confirmSale(InventorySelectionDTO.seated(List.of("A1")))
         );
 
         assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A1").getStatus());
@@ -374,7 +373,7 @@ public class InventoryZoneTest extends BaseDomainTest {
         StandingZone standingZone = track(new StandingZone(1, "General Admission", 100, 50.0));
 
         assertThrows(IllegalArgumentException.class, () ->
-                standingZone.reserve(InventorySelection.seated(List.of("A1")))
+                standingZone.reserve(InventorySelectionDTO.seated(List.of("A1")))
         );
 
         assertEquals(100, standingZone.getAvailableAmount());
@@ -390,7 +389,7 @@ public class InventoryZoneTest extends BaseDomainTest {
         ));
 
         assertThrows(IllegalArgumentException.class, () ->
-                seatedZone.reserve(InventorySelection.standing(1))
+                seatedZone.reserve(InventorySelectionDTO.standing(1))
         );
 
         assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeat("A1").getStatus());
@@ -424,7 +423,7 @@ public class InventoryZoneTest extends BaseDomainTest {
                         readyLatch.countDown();
                         startLatch.await();
 
-                        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+                        seatedZone.reserve(InventorySelectionDTO.seated(List.of("A1")));
                         successCount.incrementAndGet();
 
                     } catch (Exception e) {
@@ -459,8 +458,8 @@ public class InventoryZoneTest extends BaseDomainTest {
     void GivenStandingZoneReservedTickets_WhenConfirmSale_ThenReservedDecreasesAndSoldIncreases() {
         StandingZone zone = new StandingZone(1, "General", 100, 50);
 
-        zone.reserve(InventorySelection.standing(3));
-        zone.confirmSale(InventorySelection.standing(3));
+        zone.reserve(InventorySelectionDTO.standing(3));
+        zone.confirmSale(InventorySelectionDTO.standing(3));
 
         assertEquals(0, zone.getReservedAmount());
         assertEquals(3, zone.getSoldAmount());
