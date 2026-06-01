@@ -10,9 +10,6 @@ import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 // All bodies are stubs — owned by the team member assigned to UC-33.
 import org.springframework.stereotype.Component;
 
-
-import org.springframework.stereotype.Component;
-
 @Component
 public class StubPaymentGateway implements IPaymentGateway {
 
@@ -32,7 +29,8 @@ public class StubPaymentGateway implements IPaymentGateway {
     }
 
     @Override
-    public RefundResultDTO refund(int orderReceiptId, double amount) {
+    public RefundResultDTO refund(int paymentTransactionId, double amount) {
         throw new UnsupportedOperationException("UC-4: stub refund not implemented");
     }
+    
 }

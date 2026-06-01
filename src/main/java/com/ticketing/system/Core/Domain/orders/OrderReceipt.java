@@ -11,11 +11,11 @@ public class OrderReceipt implements InvariantChecked {
     private final int receiptId;
 
     // Member receipt identity
-    private final Integer userid;
+    private final Integer userid;          // nullable for guest receipts, positive integer for member receipts
 
     // Guest receipt identity
-    private final String guestEmail;
-    private final String guestSessionId;
+    private final String guestEmail;       // nullable for member receipts, non-null/non-blank for guest receipts 
+    private final String guestSessionId;   // nullable for member receipts, non-null/non-blank for guest receipts
 
     private final List<ReceiptLine> receiptLines;
     private final double totalPrice;

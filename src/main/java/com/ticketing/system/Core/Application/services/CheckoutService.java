@@ -185,11 +185,11 @@ public class CheckoutService {
                 return buildCheckoutResult(totalPrice, paymentResult, issuanceResult);
 
             } catch (Exception e) {
+                // notification service is member-user-id based, so guests should either receive email later or no notification
                 handleGuestCheckoutFailure(guestSessionId, order, paymentResult, totalPrice, e);
                 throw new RuntimeException("Guest checkout failed, tickets returned to stock", e);
             }
         }
-
 
 
 
@@ -260,6 +260,30 @@ public class CheckoutService {
 
 
 
+
+
+
+
+    private void handleGuestCheckoutFailure(String guestSessionId, ActiveOrder order, PaymentResultDTO paymentResult, double totalPrice, Exception e) {
+        log.error(
+                "Guest checkout failed. guestSessionId={}, totalPrice={}, paymentDone={}",
+                guestSessionId,
+                totalPrice,
+                paymentResult != null,
+                e);
+
+        returnTicketsToStock(order);
+
+        if (paymentResult != null) {
+            log.info(
+                    "Guest refund requested. guestSessionId={}, transactionId={}, amount={}",
+                    guestSessionId,
+                    paymentResult.paymentTransactionId(),
+                    totalPrice);
+
+            paymentGateway.refund(paymentResult.paymentTransactionId(), totalPrice);
+        }
+    }
 
 
 
@@ -355,39 +379,39 @@ public class CheckoutService {
     return iSessionManager.extractUserId(token);
 }
 
-private void validatePaymentInput(
-        String idempotencyKey,
-        String currency,
-        String paymentMethodToken,
-        int userId
-) {
-    if (idempotencyKey == null || idempotencyKey.isBlank()) {
-        log.warn("Checkout rejected: missing idempotency key. userId={}", userId);
-        throw new IllegalArgumentException("Missing idempotency key");
+    private void validatePaymentInput(
+            String idempotencyKey,
+            String currency,
+            String paymentMethodToken,
+            Integer userId
+    ) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            log.warn("Checkout rejected: missing idempotency key. userId={}", userId);
+            throw new IllegalArgumentException("Missing idempotency key");
+        }
+
+        if (currency == null || currency.isBlank()) {
+            log.warn("Checkout rejected: missing currency. userId={}", userId);
+            throw new IllegalArgumentException("Missing currency");
+        }
+
+        if (paymentMethodToken == null || paymentMethodToken.isBlank()) {
+            log.warn("Checkout rejected: missing payment method token. userId={}", userId);
+            throw new IllegalArgumentException("Missing payment method token");
+        }
     }
 
-    if (currency == null || currency.isBlank()) {
-        log.warn("Checkout rejected: missing currency. userId={}", userId);
-        throw new IllegalArgumentException("Missing currency");
-    }
+    private void validateOrderForCheckout(ActiveOrder order, Integer userId) {
+        if (order == null) {
+            log.warn("Checkout rejected: active order not found. userId={}", userId);
+            throw new IllegalStateException("Active order not found");
+        }
 
-    if (paymentMethodToken == null || paymentMethodToken.isBlank()) {
-        log.warn("Checkout rejected: missing payment method token. userId={}", userId);
-        throw new IllegalArgumentException("Missing payment method token");
+        if (!order.validateCanCheckout()) {
+            log.warn("Checkout rejected: order cannot checkout. userId={}", userId);
+            throw new IllegalStateException("Order cannot checkout");
+        }
     }
-}
-
-private void validateOrderForCheckout(ActiveOrder order, int userId) {
-    if (order == null) {
-        log.warn("Checkout rejected: active order not found. userId={}", userId);
-        throw new IllegalStateException("Active order not found");
-    }
-
-    if (!order.validateCanCheckout()) {
-        log.warn("Checkout rejected: order cannot checkout. userId={}", userId);
-        throw new IllegalStateException("Order cannot checkout");
-    }
-}
 
 private PaymentResultDTO chargePayment(
         Integer buyerUserId,
@@ -452,8 +476,7 @@ private PaymentResultDTO chargePayment(
         return ticketIssuer.issue(issuanceRequest);
     }
 
-    private void validateIssuanceResult( IssuanceResultDTO issuanceResult,  List<CartLineItem> boughtItems,  int userId
-    ) {
+    private void validateIssuanceResult(IssuanceResultDTO issuanceResult, List<CartLineItem> boughtItems, Integer userId) {
         if (issuanceResult == null || issuanceResult.barcodes() == null || issuanceResult.barcodes().isEmpty()) {
             log.error("Ticket issuance failed. userId={}, itemCount={}", userId, boughtItems.size());
             throw new IllegalStateException("Ticket issuance failed");

@@ -315,10 +315,14 @@ public class CompanyManagementService {
             throw new RuntimeException("Insufficient permissions");
         }
 
-        List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByCompanyId(companyId).stream()
+        List<Integer> companyEventIds = eventRepository.findIdsByCompany(companyId);
+        // The company owns events. Receipts contain event ids through receipt lines. We can find all receipts that have lines with those event ids to get the company's sales history.
+        // flow: companyId -> eventIds -> receipts containing those eventIds
+        List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByEventIds(companyEventIds).stream()
                 .map(sale -> new PurchaseHistoryDTO(
-                    List.of(new OrderReceiptMapper().OrderReceiptToPurchaseRecordDTO(sale, ticketRepository, eventRepository))))
-                .toList();
+                        List.of(new OrderReceiptMapper().OrderReceiptToPurchaseRecordDTO(
+                                sale, ticketRepository, eventRepository))
+                    )).toList();
 
         log.info("Successfully retrieved sales history for company {}", companyId);
         return salesHistory;
