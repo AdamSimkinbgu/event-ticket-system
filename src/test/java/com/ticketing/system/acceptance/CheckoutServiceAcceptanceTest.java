@@ -85,7 +85,11 @@ public class CheckoutServiceAcceptanceTest {
         activeOrderRepository = mock(IActiveOrderRepository.class);
         eventRepository = mock(IEventRepository.class);
         ticketRepository = mock(ITicketRepository.class);
+
         orderReceiptRepository = mock(IOrderReceiptRepository.class);
+        AtomicInteger receiptIds = new AtomicInteger(1);
+        when(orderReceiptRepository.nextId()).thenAnswer(invocation -> receiptIds.getAndIncrement());
+
         ticketIssuer = mock(ITicketIssuer.class);
         paymentGateway = mock(IPaymentGateway.class);
         notificationService = mock(INotificationService.class);

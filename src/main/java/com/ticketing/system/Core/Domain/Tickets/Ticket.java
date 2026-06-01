@@ -20,14 +20,6 @@ public class Ticket implements InvariantChecked {
     // ITicketRepository.findByHolderUserId(int) in a single hop.
     private Integer holderUserId;
 
-    /**
-     * Standing-zone ticket constructor — {@code seatLabel} stays {@code null}.
-     * Preserved for existing callers (CheckoutService, tests) that don't carry
-     * seat identity.
-     */
-    public Ticket(int eventId, int zoneid, int orderReceiptId, double price, int ticketId, String barcodeValue) {
-        this(eventId, zoneid, orderReceiptId, null, price, ticketId, barcodeValue);
-    }
 
     /**
      * Seated-zone ticket constructor — {@code seatLabel} is the label of the
@@ -38,12 +30,15 @@ public class Ticket implements InvariantChecked {
     public Ticket(int eventId, int zoneid, int orderReceiptId, String seatLabel, double price, int ticketId, String barcodeValue) {
         this.eventId = eventId;
         this.zoneid = zoneid;
-        this.seatNumber = seatLabel;
+        this.seatNumber = seatLabel;    // nullable for standing zones, non-null for seated zones
         this.price = price;
         this.ticketId = ticketId;
+        if (orderReceiptId <= 0) {
+            throw new IllegalArgumentException("orderReceiptId must be positive");
+        }
         this.orderReceiptId = orderReceiptId;
         this.barcodeValue = barcodeValue;
-        this.status = TicketStatus.PAID; // Default initial status
+        this.status = TicketStatus.PAID; // Default initial status, because tickets are created at payment time in the current design. Adjust as needed if creation timing changes.
         this.holderUserId = null;
     }
 
@@ -66,6 +61,9 @@ public class Ticket implements InvariantChecked {
     }
 
     public void setOrderReceiptId(int orderReceiptId) {
+        if (orderReceiptId <= 0) {
+            throw new IllegalArgumentException("orderReceiptId must be positive");
+        }
         this.orderReceiptId = orderReceiptId;
     }
 
@@ -194,13 +192,16 @@ public class Ticket implements InvariantChecked {
 
     
     
+
     @Override
     public void checkInvariants() {
         if (ticketId <= 0) {
-            throw new IllegalStateException("Ticket invariant violated: ticketId must be positive (was " + ticketId + ")");
+            throw new IllegalStateException(
+                    "Ticket invariant violated: ticketId must be positive (was " + ticketId + ")");
         }
         if (eventId <= 0) {
-            throw new IllegalStateException("Ticket invariant violated: eventId must be positive (was " + eventId + ")");
+            throw new IllegalStateException(
+                    "Ticket invariant violated: eventId must be positive (was " + eventId + ")");
         }
         if (zoneid < 0) {
             throw new IllegalStateException("Ticket invariant violated: zoneId must be >= 0 (was " + zoneid + ")");
@@ -212,7 +213,11 @@ public class Ticket implements InvariantChecked {
             throw new IllegalStateException("Ticket invariant violated: status must not be null");
         }
         if (holderUserId != null && holderUserId <= 0) {
-            throw new IllegalStateException("Ticket invariant violated: holderUserId must be positive when set (was " + holderUserId + ")");
+            throw new IllegalStateException(
+                    "Ticket invariant violated: holderUserId must be positive when set (was " + holderUserId + ")");
+        }
+        if (orderReceiptId <= 0) {
+            throw new IllegalStateException("Ticket invariant violated: orderReceiptId must be positive (was " + orderReceiptId + ")");
         }
         // seatNumber (aka seatLabel) is nullable: standing-zone tickets have null,
         // seated-zone tickets carry the seat label they reference. If set, must be non-blank.
@@ -220,4 +225,6 @@ public class Ticket implements InvariantChecked {
             throw new IllegalStateException("Ticket invariant violated: seatLabel must be non-blank when set");
         }
     }
+    
+
 }

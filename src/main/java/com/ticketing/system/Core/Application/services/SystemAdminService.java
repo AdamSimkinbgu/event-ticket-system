@@ -92,7 +92,7 @@ public class SystemAdminService {
 
         List<PurchaseHistoryDTO.PurchaseRecordDTO> records = orderReceiptRepository.findGlobal(filters)
                 .stream()
-                .map(receipt -> mapper.OrderReceiptToPurchaseRecordDTO(receipt, ticketRepository, eventRepository))
+                .map(receipt -> mapper.OrderReceiptToPurchaseRecordDTO(receipt, ticketRepository))
                 .toList();
 
         log.info("Found {} records for global purchase history with filters: {}", records.size(), filters);

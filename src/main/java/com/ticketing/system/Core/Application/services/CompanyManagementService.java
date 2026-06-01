@@ -6,6 +6,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
+
 import lombok.extern.slf4j.Slf4j;
 
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
@@ -316,13 +318,31 @@ public class CompanyManagementService {
         }
 
         List<Integer> companyEventIds = eventRepository.findIdsByCompany(companyId);
-        // The company owns events. Receipts contain event ids through receipt lines. We can find all receipts that have lines with those event ids to get the company's sales history.
-        // flow: companyId -> eventIds -> receipts containing those eventIds
+
+        if (companyEventIds == null || companyEventIds.isEmpty()) {
+            return List.of();
+        }
+
+        Set<Integer> companyEventIdSet = Set.copyOf(companyEventIds);
+        OrderReceiptMapper mapper = new OrderReceiptMapper();
+
         List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByEventIds(companyEventIds).stream()
-                .map(sale -> new PurchaseHistoryDTO(
-                        List.of(new OrderReceiptMapper().OrderReceiptToPurchaseRecordDTO(
-                                sale, ticketRepository, eventRepository))
-                    )).toList();
+                .map(receipt -> {
+                    List<Ticket> companyTickets = ticketRepository.findByOrderReceiptId(receipt.getId()).stream()
+                            .filter(ticket -> companyEventIdSet.contains(ticket.getEventId()))
+                            .toList();
+
+                    return new PurchaseHistoryDTO(
+                            List.of(mapper.OrderReceiptToPurchaseRecordDTO(receipt, companyTickets))  // use overloaded mapper to pass the filtered list of tickets for richer DTO construction without bloating service logic
+                    );
+                })
+                .toList();
+        
+        // This is the correct responsibility split.
+        // The repository finds receipts related to company events.
+        // The service filters the tickets to only this company’s events.
+        // The mapper maps the receipt and the selected tickets into DTOs.
+
 
         log.info("Successfully retrieved sales history for company {}", companyId);
         return salesHistory;

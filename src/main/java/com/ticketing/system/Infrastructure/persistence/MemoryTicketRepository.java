@@ -53,10 +53,15 @@ public class MemoryTicketRepository implements ITicketRepository {
         }
         List<Ticket> result = new ArrayList<>();
         for (Ticket t : ticketsById.values()) {
-            if (t.getEventId() == target) result.add(t);
+            if (t.getEventId() == target)
+                result.add(t);
         }
         return result;
     }
+
+    
+
+
 
     @Override
     public List<Ticket> findAvailableInZone(String eventId, String zoneId, int quantity) {
@@ -72,6 +77,7 @@ public class MemoryTicketRepository implements ITicketRepository {
         for (Ticket t : ticketsById.values()) {
             if (t.getEventId() == eventTarget
                     && t.getZoneId() == zoneTarget
+                    && t.isAvailable()
                     && quantity > result.size()) {
                 result.add(t);
             }
@@ -91,10 +97,15 @@ public class MemoryTicketRepository implements ITicketRepository {
         }
         int count = 0;
         for (Ticket t : ticketsById.values()) {
-            if (t.getEventId() == eventTarget && t.getZoneId() == zoneTarget) count++;
+            if (t.getEventId() == eventTarget && t.getZoneId() == zoneTarget && t.isAvailable())
+                count++;
         }
         return count;
     }
+    
+
+
+
 
     @Override
     public List<Ticket> findByOrderReceiptId(int orderReceiptId) {

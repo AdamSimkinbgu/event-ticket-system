@@ -21,6 +21,8 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import com.ticketing.system.Core.Application.dto.BarcodeDTO;
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
@@ -103,7 +105,11 @@ class CheckoutServiceTest {
         mockActiveOrderRepo = mock(IActiveOrderRepository.class);
         mockEventRepo = mock(IEventRepository.class);
         mockTicketRepo = mock(ITicketRepository.class);
+        
         mockOrderReceiptRepo = mock(IOrderReceiptRepository.class);
+        AtomicInteger receiptIds = new AtomicInteger(1);
+        when(mockOrderReceiptRepo.nextId()).thenAnswer(invocation -> receiptIds.getAndIncrement());
+
         mockTicketIssuer = mock(ITicketIssuer.class);
         mockPaymentGateway = mock(IPaymentGateway.class);
         mockNotificationService = mock(INotificationService.class);
