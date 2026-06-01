@@ -172,23 +172,10 @@ public class Ticket implements InvariantChecked {
     }
 
     public void setTicketId(int ticketId) {
-       this.ticketId = ticketId;
-         
+        this.ticketId = ticketId;
+
     }
-
-
-
-    public TicketRecordDTO toTicketRecordDTO() {
-        TicketRecordDTO dto = new TicketRecordDTO(
-                this.getId(),
-                this.getZoneId(),
-                this.getEventId(),
-                this.getOrderReceiptId(),
-                this.getSeatNumber(), // nullable for standing zones
-                this.getPrice(),
-                this.getStatus());
-        return dto;
-    }
+    
 
     
     

@@ -9,13 +9,27 @@ import java.util.List;
 // Shape is reusable for UC-22 (company sales) and UC-31 (admin global) views.
 // Immutable per II.3.5.2 — fields reflect the data at time of purchase, not current.
 public record PurchaseHistoryDTO(List<PurchaseRecordDTO> records) {
-    
-    // PurchaseRecordDTO is a snapshot of an OrderReceipt at time of purchase, with relevant ticket details.
+
+    // PurchaseRecordDTO is a read-model snapshot of an OrderReceipt.
+    // It is not the OrderReceipt domain object itself.
     public record PurchaseRecordDTO(
         int orderReceiptId,
+        Integer buyerUserId,       // null for guest purchases
+        String guestEmail,         // null for member purchases
         LocalDateTime purchasedAt,
         double totalPaid,
+        boolean refunded,
+        List<TransactionRecordDTO> transactions,
         List<TicketRecordDTO> tickets
+    ) {}
+    
+    public record TransactionRecordDTO(
+        String type,
+        String providerName,
+        String externalTransactionId,
+        double amount,
+        String currency,
+        LocalDateTime timestamp
     ) {}
 
     public record TicketRecordDTO(

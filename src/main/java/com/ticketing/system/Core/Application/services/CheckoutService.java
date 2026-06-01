@@ -30,6 +30,7 @@ import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
+import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 
 @Service
 @Slf4j
@@ -71,8 +72,7 @@ public class CheckoutService {
 
 
 
-    //TODO: currently this seems to be only for members, as it requires authentication and saves receipts with userId. 
-    // We might want to add a guest checkout flow that doesn't require authentication, saves receipts with guestEmail instead of userId.
+    
     public CheckoutResultDTO checkoutMember(String token, String idempotencyKey, String currency, String paymentMethodToken) {
         log.info("Entered checkout function");
         int userId = -1;
@@ -103,7 +103,7 @@ public class CheckoutService {
 
             confirmInventorySale(boughtItems);
 
-            saveMemberReceipt(userId, orderReceiptId, totalPrice, receiptLines);
+            saveMemberReceipt(userId, orderReceiptId, totalPrice, receiptLines, paymentResult, issuanceResult);
             order.buy();
             log.info("Order marked as bought. userId={}", userId);
 
@@ -115,7 +115,7 @@ public class CheckoutService {
                     paymentResult.paymentTransactionId(),
                     issuanceResult.barcodes().size());
 
-            return buildCheckoutResult(totalPrice, paymentResult, issuanceResult);
+            return buildCheckoutResult(totalPrice, orderReceiptId, paymentResult, issuanceResult);
 
         } catch (Exception e) {
             handleCheckoutFailure(userId, order, paymentResult, totalPrice, e);
@@ -126,8 +126,7 @@ public class CheckoutService {
 
 
 
-    //TODO: maybe add a checkout for guest users that doesn't require authentication, but requires email and sessionId for receipt purposes, and  saves it with a null userId.
-    // The flow would be the same, but the userId would be null and the email would be used for notifications instead of userId. This would allow guest users to checkout without creating an account, but still receive notifications and have a record of their purchase.
+    
     public CheckoutResultDTO checkoutGuest(String guestSessionId, String guestEmail, String idempotencyKey, String currency, String paymentMethodToken) {
             log.info("Entered guest checkout function. guestSessionId={}", guestSessionId);
 
@@ -178,11 +177,13 @@ public class CheckoutService {
                         guestSessionId,
                         orderReceiptId,
                         totalPrice,
-                        receiptLines);
+                        receiptLines,
+                        paymentResult,
+                        issuanceResult);
 
                 order.buy();
 
-                return buildCheckoutResult(totalPrice, paymentResult, issuanceResult);
+                return buildCheckoutResult(totalPrice, orderReceiptId, paymentResult, issuanceResult);
 
             } catch (Exception e) {
                 // notification service is member-user-id based, so guests should either receive email later or no notification
@@ -241,6 +242,29 @@ public class CheckoutService {
 
 
 
+
+
+    private List<TransactionRecord> buildPurchaseTransactions(PaymentResultDTO paymentResult, IssuanceResultDTO issuanceResult) {
+        List<TransactionRecord> transactions = new ArrayList<>();
+
+        if (paymentResult != null) {
+            transactions.add(TransactionRecord.paymentCharge(
+                    paymentResult.paymentTransactionId(),
+                    paymentResult.gatewayName(),
+                    paymentResult.chargedAmount(),
+                    paymentResult.currency(),
+                    paymentResult.chargedAt()));
+        }
+
+        if (issuanceResult != null) {
+            transactions.add(TransactionRecord.ticketIssuance(
+                    issuanceResult.issuanceTransactionId(),
+                    issuanceResult.issuerName(),
+                    issuanceResult.issuedAt()));
+        }
+
+        return transactions;
+    }
 
 
     private void validateGuestCheckoutIdentity(String guestSessionId, String guestEmail) {
@@ -556,12 +580,20 @@ private PaymentResultDTO chargePayment(
 
 
 
-    private void saveMemberReceipt(int userId, int receiptId, double totalPrice, List<ReceiptLine> receiptLines) {
+    private void saveMemberReceipt(
+            int userId,
+            int receiptId,
+            double totalPrice,
+            List<ReceiptLine> receiptLines,
+            PaymentResultDTO paymentResult,
+            IssuanceResultDTO issuanceResult
+    ) {
         OrderReceipt receipt = OrderReceipt.forMember(
                 receiptId,
                 userId,
                 totalPrice,
-                receiptLines);
+                receiptLines,
+                buildPurchaseTransactions(paymentResult, issuanceResult));
 
         orderReceiptRepository.save(receipt);
 
@@ -574,14 +606,22 @@ private PaymentResultDTO chargePayment(
     }
 
     
-    private void saveGuestReceipt(String guestEmail, String guestSessionId, int receiptId, double totalPrice,
-            List<ReceiptLine> receiptLines) {
+    private void saveGuestReceipt(
+            String guestEmail,
+            String guestSessionId,
+            int receiptId,
+            double totalPrice,
+            List<ReceiptLine> receiptLines,
+            PaymentResultDTO paymentResult,
+            IssuanceResultDTO issuanceResult
+    ) {
         OrderReceipt receipt = OrderReceipt.forGuest(
                 guestEmail,
                 guestSessionId,
                 receiptId,
                 totalPrice,
-                receiptLines);
+                receiptLines,
+                buildPurchaseTransactions(paymentResult, issuanceResult));
 
         orderReceiptRepository.save(receipt);
 
@@ -620,11 +660,13 @@ private PaymentResultDTO chargePayment(
 
     private CheckoutResultDTO buildCheckoutResult(
             double totalPrice,
+            int orderReceiptId,
             PaymentResultDTO paymentResult,
             IssuanceResultDTO issuanceResult
     ) {
         return new CheckoutResultDTO(
                 totalPrice,
+                orderReceiptId,
                 paymentResult.paymentTransactionId(),
                 issuanceResult.barcodes()
                         .stream()

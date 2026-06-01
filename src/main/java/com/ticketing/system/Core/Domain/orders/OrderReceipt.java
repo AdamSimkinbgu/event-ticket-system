@@ -1,6 +1,7 @@
 package com.ticketing.system.Core.Domain.orders;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -14,16 +15,25 @@ public class OrderReceipt implements InvariantChecked {
     private final Integer userid;          // nullable for guest receipts, positive integer for member receipts
 
     // Guest receipt identity
-    private final String guestEmail;       // nullable for member receipts, non-null/non-blank for guest receipts 
+    private final String guestEmail;       // nullable for member receipts, non-null/non-blank for guest receipts
     private final String guestSessionId;   // nullable for member receipts, non-null/non-blank for guest receipts
 
     private final List<ReceiptLine> receiptLines;
+    private final List<TransactionRecord> transactionRecords;
     private final double totalPrice;
     private final LocalDateTime purchaseTime;
 
-    private Boolean isRefunded = false;
+    private boolean isRefunded = false;
 
-    private OrderReceipt(int receiptId, Integer userid, String guestEmail, String guestSessionId, double totalPrice, List<ReceiptLine> receiptLines) {
+    private OrderReceipt(
+            int receiptId,
+            Integer userid,
+            String guestEmail,
+            String guestSessionId,
+            double totalPrice,
+            List<ReceiptLine> receiptLines,
+            List<TransactionRecord> transactionRecords
+    ) {
         if (receiptId <= 0) {
             throw new IllegalArgumentException("receiptId must be positive");
         }
@@ -37,7 +47,8 @@ public class OrderReceipt implements InvariantChecked {
         }
 
         boolean memberIdentity = userid != null;
-        boolean guestIdentity = guestEmail != null && !guestEmail.isBlank() && guestSessionId != null && !guestSessionId.isBlank();
+        boolean guestIdentity = guestEmail != null && !guestEmail.isBlank()
+                && guestSessionId != null && !guestSessionId.isBlank();
 
         if (memberIdentity == guestIdentity) {
             throw new IllegalArgumentException("OrderReceipt must belong to exactly one buyer type: member OR guest");
@@ -53,30 +64,58 @@ public class OrderReceipt implements InvariantChecked {
         this.guestSessionId = guestSessionId;
         this.totalPrice = totalPrice;
         this.receiptLines = List.copyOf(receiptLines);
+        this.transactionRecords = new ArrayList<>();
         this.purchaseTime = LocalDateTime.now();
+
+        if (transactionRecords != null) {
+            transactionRecords.forEach(this::addTransaction);
+        }
 
         checkInvariants();
     }
 
     public static OrderReceipt forMember(int receiptId, int userId, double totalAmount, List<ReceiptLine> receiptLines) {
+        return forMember(receiptId, userId, totalAmount, receiptLines, List.of());
+    }
+
+    public static OrderReceipt forMember(
+            int receiptId,
+            int userId,
+            double totalAmount,
+            List<ReceiptLine> receiptLines,
+            List<TransactionRecord> transactionRecords
+    ) {
         return new OrderReceipt(
                 receiptId,
                 userId,
                 null,
                 null,
                 totalAmount,
-                receiptLines
+                receiptLines,
+                transactionRecords
         );
     }
 
     public static OrderReceipt forGuest(String guestEmail, String guestSessionId, int receiptId, double totalAmount, List<ReceiptLine> receiptLines) {
+        return forGuest(guestEmail, guestSessionId, receiptId, totalAmount, receiptLines, List.of());
+    }
+
+    public static OrderReceipt forGuest(
+            String guestEmail,
+            String guestSessionId,
+            int receiptId,
+            double totalAmount,
+            List<ReceiptLine> receiptLines,
+            List<TransactionRecord> transactionRecords
+    ) {
         return new OrderReceipt(
                 receiptId,
                 null,
                 guestEmail,
                 guestSessionId,
                 totalAmount,
-                receiptLines
+                receiptLines,
+                transactionRecords
         );
     }
 
@@ -142,64 +181,56 @@ public class OrderReceipt implements InvariantChecked {
     }
 
     public List<TransactionRecord> getTransactionRecords() {
-        throw new UnsupportedOperationException("not implemented yet");
+        return List.copyOf(transactionRecords);
     }
 
     public void addTransaction(TransactionRecord record) {
-        throw new UnsupportedOperationException("not implemented yet");
+        Objects.requireNonNull(record, "transaction record must not be null");
+        record.checkInvariants();
+        transactionRecords.add(record);
     }
 
     @Override
     public void checkInvariants() {
         if (receiptId <= 0) {
-            throw new IllegalStateException(
-                    "OrderReceipt invariant violated: receiptId must be positive"
-            );
+            throw new IllegalStateException("OrderReceipt invariant violated: receiptId must be positive");
         }
 
         if (totalPrice < 0) {
-            throw new IllegalStateException(
-                    "OrderReceipt invariant violated: totalPrice must be non-negative"
-            );
+            throw new IllegalStateException("OrderReceipt invariant violated: totalPrice must be non-negative");
         }
 
         if (purchaseTime == null) {
-            throw new IllegalStateException(
-                    "OrderReceipt invariant violated: purchaseTime must not be null"
-            );
+            throw new IllegalStateException("OrderReceipt invariant violated: purchaseTime must not be null");
         }
 
         if (receiptLines == null) {
-            throw new IllegalStateException(
-                    "OrderReceipt invariant violated: receiptLines must not be null"
-            );
+            throw new IllegalStateException("OrderReceipt invariant violated: receiptLines must not be null");
+        }
+
+        if (transactionRecords == null) {
+            throw new IllegalStateException("OrderReceipt invariant violated: transactionRecords must not be null");
         }
 
         boolean isMember = userid != null;
-        boolean isGuest = guestEmail != null && !guestEmail.isBlank()
-                && guestSessionId != null && !guestSessionId.isBlank();
+        boolean isGuest = guestEmail != null && !guestEmail.isBlank() && guestSessionId != null && !guestSessionId.isBlank();
 
         if (isMember == isGuest) {
-            throw new IllegalStateException(
-                    "OrderReceipt invariant violated: must be exactly member OR guest"
-            );
+            throw new IllegalStateException("OrderReceipt invariant violated: must be exactly member OR guest");
         }
 
         if (isMember && userid <= 0) {
-            throw new IllegalStateException(
-                    "OrderReceipt invariant violated: userid must be positive"
-            );
-        }
-
-        if (isRefunded == null) {
-            throw new IllegalStateException(
-                    "OrderReceipt invariant violated: isRefunded must not be null"
-            );
+            throw new IllegalStateException("OrderReceipt invariant violated: userid must be positive");
         }
 
         for (ReceiptLine line : receiptLines) {
             Objects.requireNonNull(line, "OrderReceipt invariant violated: receipt line must not be null");
             line.checkInvariants();
+        }
+
+        for (TransactionRecord record : transactionRecords) {
+            Objects.requireNonNull(record, "OrderReceipt invariant violated: transaction record must not be null");
+            record.checkInvariants();
         }
     }
 }
