@@ -322,11 +322,18 @@ public class ReservationService {
             throw new IllegalStateException("Venue map is not configured for event: " + event.getId());
         }
 
+        InventoryZone zone;
         try {
-            return event.getVenueMap().getZone(zoneId);
+            zone = event.getVenueMap().getZone(zoneId);
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Zone not found: " + zoneId);
         }
+
+        if (zone == null) {
+            throw new IllegalArgumentException("Zone not found: " + zoneId);
+        }
+
+        return zone;
     }
 
     // For members, we get or create an active order based on their user ID. For guests, we get or create an active order based on their session ID. This method abstracts away the logic of determining whether to use user ID or session ID and ensures that we always have an active order to work with in the main flows, which simplifies the logic in those flows and keeps them focused on the reservation and removal logic rather than the details of how we manage active orders for different types of buyers.

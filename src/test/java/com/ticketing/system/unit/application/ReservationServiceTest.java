@@ -172,7 +172,7 @@ void GivenOrderDoesNotContainEvent_WhenremoveReservedStandingSpots_ThenThrowExce
 
     doThrow(new IllegalArgumentException("Active order does not contain this event"))
             .when(activeOrder)
-            .removeStandingSpots(EVENT_ID, ZONE_ID, QUANTITY);
+            .validateContainsReservation(eq(EVENT_ID), eq(ZONE_ID), any(InventorySelection.class));
 
     Exception exception = assertThrows(IllegalArgumentException.class, () ->
             reservationService.removeForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, InventorySelectionDTO.standing(QUANTITY))
@@ -191,7 +191,7 @@ void GivenNotEnoughReservedTickets_WhenremoveReservedStandingSpots_ThenThrowExce
 
     doThrow(new IllegalArgumentException("Not enough reserved tickets to remove"))
             .when(activeOrder)
-            .removeStandingSpots(EVENT_ID, ZONE_ID, QUANTITY);
+            .validateContainsReservation(eq(EVENT_ID), eq(ZONE_ID), any(InventorySelection.class));
 
     Exception exception = assertThrows(IllegalArgumentException.class, () ->
             reservationService.removeForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, InventorySelectionDTO.standing(QUANTITY))
@@ -287,7 +287,7 @@ void GivenZoneDoesNotExist_WhenreserveStandingTicketsForMember_ThenThrowExceptio
         when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(false);
 
         doThrow(new IllegalStateException("remaining 1 tickets available"))
-                .when(event).reserveInventory(eq(ZONE_ID), InventorySelection.standing(QUANTITY));
+                .when(event).reserveInventory(eq(ZONE_ID), any(InventorySelection.class));
 
         assertThrows(IllegalStateException.class,
                 () -> reservationService.reserveForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, InventorySelectionDTO.standing(QUANTITY)));
@@ -385,8 +385,7 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForGuest_ThenThrowException
     when(activeOrder.hasReservationForEvent(EVENT_ID)).thenReturn(false);
 
     doThrow(new IllegalStateException("remaining 1 tickets available"))
-            .when(event).reserveInventory(eq(ZONE_ID), InventorySelection.standing(QUANTITY));
-
+                .when(event).reserveInventory(eq(ZONE_ID), any(InventorySelection.class));
     Exception exception = assertThrows(IllegalStateException.class, () ->
             reservationService.reserveForGuest(sessionId, EVENT_ID, ZONE_ID, InventorySelectionDTO.standing(QUANTITY))
     );
@@ -422,10 +421,10 @@ void GivenManyGuestsReserveSameZoneConcurrently_WhenreserveStandingTicketsForGue
     when(eventRepository.findById(EVENT_ID)).thenReturn(event);
     when(event.getVenueMap().getZone(ZONE_ID)).thenReturn(realZone);
     doAnswer(inv -> {
-        int qty = inv.getArgument(1);
-        realZone.reserve(InventorySelection.standing(qty));
-        return true;
-    }).when(event).reserveInventory(eq(ZONE_ID), InventorySelection.standing(anyInt()));
+        InventorySelection selection = inv.getArgument(1);
+        realZone.reserve(selection);
+        return null;
+    }).when(event).reserveInventory(eq(ZONE_ID), any(InventorySelection.class));
 
     ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
     CountDownLatch readyLatch = new CountDownLatch(numberOfThreads);
@@ -483,10 +482,10 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
     when(eventRepository.findById(EVENT_ID)).thenReturn(event);
     when(event.getVenueMap().getZone(ZONE_ID)).thenReturn(realZone);
     doAnswer(inv -> {
-        int qty = inv.getArgument(1);
-        realZone.reserve(InventorySelection.standing(qty));
-        return true;
-    }).when(event).reserveInventory(eq(ZONE_ID), InventorySelection.standing(anyInt()));
+        InventorySelection selection = inv.getArgument(1);
+        realZone.reserve(selection);
+        return null;
+    }).when(event).reserveInventory(eq(ZONE_ID), any(InventorySelection.class));
 
     ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
     CountDownLatch readyLatch = new CountDownLatch(numberOfThreads);
@@ -561,10 +560,10 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         when(eventRepository.findById(EVENT_ID)).thenReturn(event);
         when(event.getVenueMap().getZone(ZONE_ID)).thenReturn(realZone);
         doAnswer(inv -> {
-            int qty = inv.getArgument(1);
-            realZone.release(InventorySelection.standing(qty));
-            return true;
-        }).when(event).releaseInventory(eq(ZONE_ID), InventorySelection.standing(anyInt()));
+            InventorySelection selection = inv.getArgument(1);
+            realZone.release(selection);
+            return null;
+        }).when(event).releaseInventory(eq(ZONE_ID), any(InventorySelection.class));
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(realActiveOrder);
 
         ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);

@@ -69,4 +69,19 @@ public final class InventorySelection {
     public boolean isSeatedSelection() {
         return !seatNumbers.isEmpty();
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof InventorySelection)) return false;
+        InventorySelection other = (InventorySelection) o;
+        return quantity == other.quantity && seatNumbers.equals(other.seatNumbers);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = quantity;
+        result = 31 * result + seatNumbers.hashCode();
+        return result;
+    }
 }

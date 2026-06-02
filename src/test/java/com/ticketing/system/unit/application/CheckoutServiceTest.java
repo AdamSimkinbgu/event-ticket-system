@@ -730,6 +730,10 @@ void GivenValidCheckout_WhenCheckout_ThenReturnCheckoutResultAndSaveTicketAndRec
     when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
             .thenReturn(issuanceResult);
 
+    StandingZone zone1 = new StandingZone(ZONE_ID_1, "General", 100, 100.0);
+    zone1.reserve(InventorySelection.standing(1));
+    when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone1);
+
     CheckoutResultDTO result = checkoutService.checkoutMember(
             VALID_TOKEN,
             IDEMPOTENCY_KEY,
@@ -740,7 +744,7 @@ void GivenValidCheckout_WhenCheckout_ThenReturnCheckoutResultAndSaveTicketAndRec
     assertEquals(
             new CheckoutResultDTO(
                         100.0,
-                        2,
+                        1,
                     PAYMENT_TRANSACTION_ID,
                     List.of(TICKET_ID_1)
             ),
@@ -797,6 +801,10 @@ void GivenValidCheckoutWithCalculatedPrice_WhenCheckout_ThenReturnCalculatedTota
 
     when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
             .thenReturn(issuanceResult);
+
+    StandingZone zone2 = new StandingZone(ZONE_ID_2, "General", 100, 150.0);
+    zone2.reserve(InventorySelection.standing(1));
+    when(event1.getVenueMap().getZone(ZONE_ID_2)).thenReturn(zone2);
 
     CheckoutResultDTO result = checkoutService.checkoutMember(
             VALID_TOKEN,
@@ -862,6 +870,13 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
     when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
             .thenReturn(issuanceResult);
 
+    StandingZone zone1 = new StandingZone(ZONE_ID_1, "General", 100, 100.0);
+    zone1.reserve(InventorySelection.standing(1));
+    when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone1);
+    StandingZone zone2 = new StandingZone(ZONE_ID_2, "General", 100, 150.0);
+    zone2.reserve(InventorySelection.standing(1));
+    when(event1.getVenueMap().getZone(ZONE_ID_2)).thenReturn(zone2);
+
     CheckoutResultDTO result = checkoutService.checkoutMember(
             VALID_TOKEN,
             IDEMPOTENCY_KEY,
@@ -872,7 +887,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
     assertEquals(
             new CheckoutResultDTO(
                                     250.0,
-                                    2,
+                                    1,
                     PAYMENT_TRANSACTION_ID,
                     List.of(TICKET_ID_1, TICKET_ID_2)
             ),
@@ -944,6 +959,13 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
            when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
                            .thenReturn(issuanceResult);
 
+           StandingZone zone1 = new StandingZone(ZONE_ID_1, "General", 100, 100.0);
+           zone1.reserve(InventorySelection.standing(1));
+           when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone1);
+           StandingZone zone3 = new StandingZone(ZONE_ID_3, "General", 100, 200.0);
+           zone3.reserve(InventorySelection.standing(1));
+           when(event2.getVenueMap().getZone(ZONE_ID_3)).thenReturn(zone3);
+
            CheckoutResultDTO result = checkoutService.checkoutMember(
                            VALID_TOKEN,
                            IDEMPOTENCY_KEY,
@@ -953,7 +975,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
            assertEquals(
                            new CheckoutResultDTO(
                                            300.0,
-                                        2,
+                                           1,
                                            PAYMENT_TRANSACTION_ID,
                                            List.of(TICKET_ID_1, TICKET_ID_3)),
                            result);
@@ -1027,6 +1049,10 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                 when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
                 when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
 
+                SeatedZone seatedZoneA1 = new SeatedZone(ZONE_ID_1, "Orchestra", 120.0, List.of(new Seat("A1", 0, 0)));
+                seatedZoneA1.reserve(InventorySelection.seated(List.of("A1")));
+                when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(seatedZoneA1);
+
                 checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 
                 ArgumentCaptor<IssuanceRequestDTO> issuanceCaptor = ArgumentCaptor.forClass(IssuanceRequestDTO.class);
@@ -1079,6 +1105,10 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
 
                 when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
                 when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+
+                StandingZone standingZone1 = new StandingZone(ZONE_ID_1, "General", 100, 100.0);
+                standingZone1.reserve(InventorySelection.standing(1));
+                when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(standingZone1);
 
                 checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 
@@ -1224,6 +1254,15 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
 
                 when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
                 when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+
+                StandingZone standingZone = new StandingZone(ZONE_ID_1, "Standing", 100, 50.0);
+                standingZone.reserve(InventorySelection.standing(1));
+
+                SeatedZone seatedZone = new SeatedZone(ZONE_ID_2, "Seated", 120.0, List.of(new Seat("B7", 0, 0)));
+                seatedZone.reserve(InventorySelection.seated(List.of("B7")));
+
+                when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(standingZone);
+                when(event1.getVenueMap().getZone(ZONE_ID_2)).thenReturn(seatedZone);
 
                 checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
 

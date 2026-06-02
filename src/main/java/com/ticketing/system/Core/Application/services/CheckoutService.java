@@ -188,7 +188,7 @@ public class CheckoutService {
         } catch (Exception e) {
             // Handle any exceptions that occur during the checkout process. This includes rolling back any actions that were taken (e.g. releasing inventory reservations, refunding payments if they were processed, etc.) and logging the error for monitoring and debugging purposes. We also rethrow a generic exception to indicate that the checkout failed, which can be caught by higher-level handlers (e.g. in the controller) to return an appropriate error response to the client.
             handleCheckoutFailure(userId, order, paymentResult, totalPrice, inventorySaleConfirmed, e);
-            throw new RuntimeException("Checkout failed", e);
+            throw new RuntimeException("Checkout failed, tickets returned to stock", e);
         } finally {
             unlockEvents(lockedEventIds);
             if (orderLockKey != null) {
@@ -882,9 +882,9 @@ public class CheckoutService {
                 inventorySaleConfirmed,
                 originalFailure);
 
-        if (!inventorySaleConfirmed) {
-            safelyReturnTicketsToStock(order);
-        } else {
+        safelyReturnTicketsToStock(order);
+
+        if (inventorySaleConfirmed) {
             log.error(
                     "Checkout failed after inventory was confirmed as SOLD. Manual recovery may be required. userId={}",
                     userId);

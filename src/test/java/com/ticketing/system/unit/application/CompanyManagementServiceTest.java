@@ -30,6 +30,7 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
+import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
@@ -813,13 +814,17 @@ public class CompanyManagementServiceTest {
         when(managerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(false);
         when(managerUser.hasPermissionInCompany(COMPANY_ID, Permission.VIEW_SALES)).thenReturn(true);
 
-        // when(mockOrderReceiptRepo.findByCompanyId(COMPANY_ID)).thenReturn(List.of(mockReceipt));
         when(mockReceipt.getId()).thenReturn(42);
-        // when(mockReceipt.geteventId()).thenReturn(1);
         when(mockReceipt.getPurchaseTime()).thenReturn(LocalDateTime.now());
+        ReceiptLine mockLine = mock(ReceiptLine.class);
+        when(mockLine.getTicketId()).thenReturn(10);
+        when(mockLine.getPriceAtReservation()).thenReturn(50.0);
+        when(mockReceipt.getReceiptLines()).thenReturn(List.of(mockLine));
         when(ticketRepository.findByOrderReceiptId(42)).thenReturn(List.of(ticket));
         when(eventRepository.findById(1)).thenReturn(mockEvent);
         when(mockEvent.getName()).thenReturn("Rock Concert");
+        when(eventRepository.findIdsByCompany(COMPANY_ID)).thenReturn(List.of(1));
+        when(mockOrderReceiptRepo.findByEventIds(List.of(1))).thenReturn(List.of(mockReceipt));
 
         List<PurchaseHistoryDTO> result = companyService.viewSalesHistory(TARGET_TOKEN, COMPANY_ID);
 
@@ -847,7 +852,6 @@ public class CompanyManagementServiceTest {
         when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(ownerUser);
         when(ownerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(true);
 
-        // when(mockOrderReceiptRepo.findByCompanyId(COMPANY_ID)).thenReturn(List.of(mockReceipt1, mockReceipt2));
         when(mockEvent.getName()).thenReturn("Summer Festival");
 
         when(mockReceipt1.getId()).thenReturn(1);
@@ -858,12 +862,13 @@ public class CompanyManagementServiceTest {
         when(mockReceipt2.getId()).thenReturn(2);
         when(mockReceipt2.getPurchaseTime()).thenReturn(LocalDateTime.now());
         when(ticketRepository.findByOrderReceiptId(2)).thenReturn(new ArrayList<>());
+        when(eventRepository.findIdsByCompany(COMPANY_ID)).thenReturn(List.of(10));
+        when(mockOrderReceiptRepo.findByEventIds(List.of(10))).thenReturn(List.of(mockReceipt1, mockReceipt2));
 
         List<PurchaseHistoryDTO> result = companyService.viewSalesHistory(OWNER_TOKEN, COMPANY_ID);
 
         assertNotNull(result);
         assertEquals(2, result.size());
-        // verify(mockOrderReceiptRepo, times(1)).findByCompanyId(COMPANY_ID);
     }
 
     @Test

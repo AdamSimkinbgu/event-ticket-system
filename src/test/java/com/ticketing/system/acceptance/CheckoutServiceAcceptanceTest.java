@@ -126,6 +126,18 @@ public class CheckoutServiceAcceptanceTest {
 
         when(eventRepository.findById(EVENT_ID_1)).thenReturn(event1);
         when(eventRepository.findById(EVENT_ID_2)).thenReturn(event2);
+
+        VenueMap venueMap1 = mock(VenueMap.class);
+        InventoryZone mockZone1 = mock(InventoryZone.class);
+        when(mockZone1.getReservedAmount()).thenReturn(Integer.MAX_VALUE);
+        when(venueMap1.getZone(anyInt())).thenReturn(mockZone1);
+        when(event1.getVenueMap()).thenReturn(venueMap1);
+
+        VenueMap venueMap2 = mock(VenueMap.class);
+        InventoryZone mockZone2 = mock(InventoryZone.class);
+        when(mockZone2.getReservedAmount()).thenReturn(Integer.MAX_VALUE);
+        when(venueMap2.getZone(anyInt())).thenReturn(mockZone2);
+        when(event2.getVenueMap()).thenReturn(venueMap2);
     }
 
     private void validSession() {
@@ -196,7 +208,10 @@ public class CheckoutServiceAcceptanceTest {
     return refundRequested;
 }
     private void validPaymentAndIssuance(int ticketCount) {
-        when(paymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult());
+        when(paymentGateway.charge(any(PaymentRequestDTO.class))).thenAnswer(invocation -> {
+            PaymentRequestDTO request = invocation.getArgument(0);
+            return new PaymentResultDTO(123, "MockGateway", request.amount(), CURRENCY, LocalDateTime.now());
+        });
         when(ticketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult(ticketCount));
     }
 
@@ -205,7 +220,7 @@ public class CheckoutServiceAcceptanceTest {
         AtomicInteger returnedTickets = new AtomicInteger(0);
 
         doAnswer(invocation -> {
-            InventorySelectionDTO selection = invocation.getArgument(1);
+            InventorySelection selection = invocation.getArgument(1);
             returnedTickets.addAndGet(selection.getQuantity());
             return false;
         }).when(event).releaseInventory(eq(zoneId), any(InventorySelection.class));
