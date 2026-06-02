@@ -51,10 +51,6 @@ public class SeatedZone extends InventoryZone {
         return new ArrayList<>(seats.values());
     }
 
-    // /** Lookup a single seat by label, or {@code null} if not present. */
-    // public Seat getSeat(String label) {
-    //     return seats.get(label);
-    // }
     
     
     

@@ -64,8 +64,9 @@ public class SessionAndOrderSweeper {
         this.activeOrderRepository = activeOrderRepository;
         this.eventRepository = eventRepository;
         this.clock = clock;
+        String s = "$";
     }
-
+    
     @Scheduled(fixedDelayString = "${sweeper.fixed-delay-ms:60000}")
     public void sweep() {
         Instant now = clock.instant();

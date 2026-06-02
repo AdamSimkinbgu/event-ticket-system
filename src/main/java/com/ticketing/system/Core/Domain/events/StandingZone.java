@@ -24,6 +24,7 @@ public class StandingZone extends InventoryZone {
         }
         this.capacity = capacity;
         this.reservedAmount = 0;
+        this.soldAmount = 0;
     }
 
 
@@ -56,7 +57,7 @@ public class StandingZone extends InventoryZone {
         synchronized (inventoryLock) {
             validatePositiveQuantity(quantity);
 
-            int availableAmount = capacity - reservedAmount;
+            int availableAmount = capacity - reservedAmount - soldAmount;
 
             if (availableAmount < quantity) {
                 throw new IllegalStateException("remaining " + availableAmount + " tickets available");
