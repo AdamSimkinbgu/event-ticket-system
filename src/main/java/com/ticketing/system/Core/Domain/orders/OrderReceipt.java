@@ -2,111 +2,166 @@ package com.ticketing.system.Core.Domain.orders;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
-import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
-import org.hibernate.query.spi.Limit;
 
 public class OrderReceipt implements InvariantChecked {
-    // Dual identity (D5 / auth rework): Member receipts carry userid; Guest
-    // receipts carry guestEmail + guestSessionId. Exactly one branch is set.
-    private Integer userid;
-    private String guestEmail;
-    private String guestSessionId;
-    List<ReceiptLine> ReceiptLine;
-    private int receiptId;
-    private int eventId;
-    private int zoneId;
-    private double totalPrice;
-    private LocalDateTime purchaseTime;
-    private Boolean isRefunded = false;
 
+    private final int receiptId;
 
-    /**
-     * Legacy Member-only constructor. {@code _userid} is autoboxed into the
-     * {@code Integer} field. Equivalent to {@link #forMember(int, double, List)}.
-     */
-    public OrderReceipt(int _userid, double priceAtReservation, List<ReceiptLine> receiptLines) {
-        this.userid= _userid;
-        this.totalPrice = priceAtReservation;
-        this.ReceiptLine=receiptLines;
+    // Member receipt identity
+    private final Integer userid;          // nullable for guest receipts, positive integer for member receipts
+
+    // Guest receipt identity
+    private final String guestEmail;       // nullable for member receipts, non-null/non-blank for guest receipts
+    private final String guestSessionId;   // nullable for member receipts, non-null/non-blank for guest receipts
+
+    private final List<ReceiptLine> receiptLines;
+    private final List<TransactionRecord> transactionRecords;
+    private final double totalPrice;
+    private final LocalDateTime purchaseTime;
+
+    private boolean isRefunded = false;
+
+    private OrderReceipt(int receiptId, Integer userid, String guestEmail, String guestSessionId, double totalPrice,
+            List<ReceiptLine> receiptLines, List<TransactionRecord> transactionRecords) {
+        if (receiptId <= 0) {
+            throw new IllegalArgumentException("receiptId must be positive");
+        }
+
+        if (totalPrice < 0) {
+            throw new IllegalArgumentException("totalPrice must be non-negative");
+        }
+
+        if (receiptLines == null) {
+            throw new IllegalArgumentException("receiptLines must not be null");
+        }
+
+        if (receiptLines.isEmpty()) {
+            throw new IllegalArgumentException("receiptLines must not be empty");
+        }
+
+        boolean memberIdentity = userid != null;
+        boolean guestIdentity = guestEmail != null && !guestEmail.isBlank()
+                && guestSessionId != null && !guestSessionId.isBlank();
+
+        if (memberIdentity == guestIdentity) {
+            throw new IllegalArgumentException("OrderReceipt must belong to exactly one buyer type: member OR guest");
+        }
+
+        if (memberIdentity && userid <= 0) {
+            throw new IllegalArgumentException("userid must be positive");
+        }
+
+        this.receiptId = receiptId;
+        this.userid = userid;
+        this.guestEmail = guestEmail;
+        this.guestSessionId = guestSessionId;
+        this.totalPrice = totalPrice;
+        this.receiptLines = List.copyOf(receiptLines);
+        this.transactionRecords = new ArrayList<>();
         this.purchaseTime = LocalDateTime.now();
-    }
 
-    /** Member receipt — explicit construction. */
-    public static OrderReceipt forMember(int userId, double totalAmount, List<ReceiptLine> receiptLines) {
-        return new OrderReceipt(userId, totalAmount, receiptLines);
-    }
-
-    /** Guest receipt — D5 reversed. userid stays null; email + sessionId identify the buyer. */
-    public static OrderReceipt forGuest(String guestEmail, String guestSessionId, double totalAmount, List<ReceiptLine> receiptLines) {
-        OrderReceipt r = new OrderReceipt();
-        if (guestEmail == null || guestEmail.isBlank()) {
-            throw new IllegalArgumentException("forGuest requires a non-blank email");
+        if (transactionRecords != null) {
+            transactionRecords.forEach(this::addTransaction);
         }
-        if (guestSessionId == null || guestSessionId.isBlank()) {
-            throw new IllegalArgumentException("forGuest requires a non-blank sessionId");
-        }
-        r.userid = null;
-        r.guestEmail = guestEmail;
-        r.guestSessionId = guestSessionId;
-        r.totalPrice = totalAmount;
-        r.ReceiptLine = receiptLines;
-        r.purchaseTime = LocalDateTime.now();
-        return r;
+
+        checkInvariants();
     }
 
-    /** Private no-arg constructor for the {@link #forGuest} factory. */
-    private OrderReceipt() { }
-
-    public Integer getUserid() { return userid; }
-    public String getGuestEmail() { return guestEmail; }
-    public String getGuestSessionId() { return guestSessionId; }
-    public boolean isMemberReceipt() { return userid != null; }
-    public boolean isGuestReceipt() { return userid == null; }
-
-    public int geteventId() {
-        return eventId;
+    public static OrderReceipt forMember(int receiptId, int userId, double totalAmount, List<ReceiptLine> receiptLines) {
+        return forMember(receiptId, userId, totalAmount, receiptLines, List.of());
     }
 
-    public int getZoneId() {
-        return zoneId;
+    public static OrderReceipt forMember(
+            int receiptId,
+            int userId,
+            double totalAmount,
+            List<ReceiptLine> receiptLines,
+            List<TransactionRecord> transactionRecords
+    ) {
+        return new OrderReceipt(
+                receiptId,
+                userId,
+                null,
+                null,
+                totalAmount,
+                receiptLines,
+                transactionRecords
+        );
     }
 
-    // ---------------------------------------------------------------------------
-    // Skeleton additions for OrderReceipt aggregate.
-    // ---------------------------------------------------------------------------
+    public static OrderReceipt forGuest(String guestEmail, String guestSessionId, int receiptId, double totalAmount, List<ReceiptLine> receiptLines) {
+        return forGuest(guestEmail, guestSessionId, receiptId, totalAmount, receiptLines, List.of());
+    }
+
+    public static OrderReceipt forGuest(String guestEmail, String guestSessionId, int receiptId,
+            double totalAmount, List<ReceiptLine> receiptLines, List<TransactionRecord> transactionRecords) {
+        return new OrderReceipt(
+                receiptId,
+                null,
+                guestEmail,
+                guestSessionId,
+                totalAmount,
+                receiptLines,
+                transactionRecords
+        );
+    }
 
     public int getId() {
         return receiptId;
+    }
+
+    // Keep this name because existing tests/code use it.
+    public Integer getUserid() {
+        return userid;
+    }
+
+    public Integer getHolderUserId() {
+        return userid;
+    }
+
+    public String getGuestEmail() {
+        return guestEmail;
+    }
+
+    public String getGuestSessionId() {
+        return guestSessionId;
+    }
+
+    public boolean isMemberReceipt() {
+        return userid != null;
+    }
+
+    public boolean isGuestReceipt() {
+        return guestEmail != null && guestSessionId != null;
+    }
+
+    public List<Integer> getEventIds() {
+        return receiptLines.stream()
+                .map(ReceiptLine::getEventId)
+                .distinct()
+                .toList();
+    }
+
+    public boolean containsEventId(int eventId) {
+        return receiptLines.stream()
+                .anyMatch(line -> line.getEventId() == eventId);
     }
 
     public LocalDateTime getPurchaseTime() {
         return purchaseTime;
     }
 
-    public int getHolderUserId() {
-        return userid;
-    }
-
     public double getTotalAmount() {
         return totalPrice;
     }
 
-    public java.util.List<TransactionRecord> getTransactionRecords() {
-        throw new UnsupportedOperationException("not implemented (add transactionRecords list)");
-    }
-
-    // UC-4 — append a refund TransactionRecord (after multiplicity fix to 1..*).
-    public void addTransaction(TransactionRecord record) {
-        throw new UnsupportedOperationException("UC-4: not implemented");
-    }
-
     public List<ReceiptLine> getReceiptLines() {
-        return this.ReceiptLine;
-
+        return receiptLines;
     }
 
     public boolean wasRefunded() {
@@ -117,25 +172,94 @@ public class OrderReceipt implements InvariantChecked {
         this.isRefunded = true;
     }
 
+    public List<TransactionRecord> getTransactionRecords() {
+        return List.copyOf(transactionRecords);
+    }
+
+
+
+    // Helper methods to extract specific transaction info from the list of transaction records. These are not strictly necessary but can be convenient for common queries.
+
+    // For simplicity we assume there is at most one payment charge per receipt. In a real system we might want to enforce this or handle multiple charges more robustly.
+    public Optional<Integer> getPaymentTransactionId() {
+        return transactionRecords.stream()
+                .filter(record -> record.getType() == TransactionRecord.TransactionType.PAYMENT_CHARGE)
+                .map(TransactionRecord::getExternalTransactionId)
+                .map(Integer::parseInt)
+                .findFirst();
+    }
+
+    // For simplicity, we assume all payment charges for a receipt use the same currency. In a real system we might want to enforce this or handle multiple currencies more robustly.
+    public String getPaymentCurrency() {
+        return transactionRecords.stream()
+                .filter(record -> record.getType() == TransactionRecord.TransactionType.PAYMENT_CHARGE)
+                .map(TransactionRecord::getCurrency)
+                .filter(currency -> currency != null && !currency.isBlank())
+                .findFirst()
+                .orElse("ILS");
+    }
+
+    // For simplicity we assume there is at most one ticket issuance per receipt. In a real system we might want to enforce this or handle multiple issuances more robustly.
+    public void markRefunded(TransactionRecord refundRecord) {
+        addTransaction(refundRecord);
+        this.isRefunded = true;
+    }
+
+
+
+
+
+    public void addTransaction(TransactionRecord record) {
+        Objects.requireNonNull(record, "transaction record must not be null");
+        record.checkInvariants();
+        transactionRecords.add(record);
+    }
+
     @Override
     public void checkInvariants() {
-        if (totalPrice < 0) {
-            throw new IllegalStateException(
-                    "OrderReceipt invariant violated: totalPrice must be non-negative (was " + totalPrice + ")");
+        if (receiptId <= 0) {
+            throw new IllegalStateException("OrderReceipt invariant violated: receiptId must be positive");
         }
+
+        if (totalPrice < 0) {
+            throw new IllegalStateException("OrderReceipt invariant violated: totalPrice must be non-negative");
+        }
+
         if (purchaseTime == null) {
             throw new IllegalStateException("OrderReceipt invariant violated: purchaseTime must not be null");
         }
-        // Dual-identity rule: exactly one of userid OR (guestEmail + guestSessionId) is set.
-        boolean isMember = userid != null;
-        boolean isGuest = guestEmail != null && guestSessionId != null;
-        if (isMember == isGuest) {
-            throw new IllegalStateException(
-                    "OrderReceipt invariant violated: must be exactly Member (userid set) OR Guest (email+sessionId set)");
+
+        if (receiptLines == null) {
+            throw new IllegalStateException("OrderReceipt invariant violated: receiptLines must not be null");
         }
-        if (isRefunded == null) {
-            throw new IllegalStateException("OrderReceipt invariant violated: isRefunded must not be null");
+
+        if (transactionRecords == null) {
+            throw new IllegalStateException("OrderReceipt invariant violated: transactionRecords must not be null");
+        }
+
+        if (receiptLines.isEmpty()) {
+            throw new IllegalStateException("OrderReceipt invariant violated: receiptLines must not be empty");
+        }
+
+        boolean isMember = userid != null;
+        boolean isGuest = guestEmail != null && !guestEmail.isBlank() && guestSessionId != null && !guestSessionId.isBlank();
+
+        if (isMember == isGuest) {
+            throw new IllegalStateException("OrderReceipt invariant violated: must be exactly member OR guest");
+        }
+
+        if (isMember && userid <= 0) {
+            throw new IllegalStateException("OrderReceipt invariant violated: userid must be positive");
+        }
+
+        for (ReceiptLine line : receiptLines) {
+            Objects.requireNonNull(line, "OrderReceipt invariant violated: receipt line must not be null");
+            line.checkInvariants();
+        }
+
+        for (TransactionRecord record : transactionRecords) {
+            Objects.requireNonNull(record, "OrderReceipt invariant violated: transaction record must not be null");
+            record.checkInvariants();
         }
     }
-
 }

@@ -22,12 +22,14 @@ public interface IOrderReceiptRepository extends IRepository<OrderReceipt, Integ
     List<OrderReceipt> findByEventIds(List<Integer> eventIds);
 
     // UC-22 — company-scoped sales (filtered down to the company's events).
-    List<OrderReceipt> findByCompanyId(int companyId);
+    // Because this method(findByCompanyId) is conceptually in the wrong place. A receipt does not know company ownership directly.
+    // @Deprecated
+    // List<OrderReceipt> findByCompanyId(int companyId);
 
     // UC-31 — global view with filters (admin only).
     List<OrderReceipt> findGlobal(GlobalHistoryFiltersDTO filters);
 
     List<OrderReceipt> findByEventId(int eventId);
     
-    Map<String, OrderReceipt> getReceiptsById() ;
+    Map<Integer, OrderReceipt> getReceiptsById();
 }

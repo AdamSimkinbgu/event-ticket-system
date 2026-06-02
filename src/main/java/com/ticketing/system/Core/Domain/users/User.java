@@ -1,6 +1,5 @@
 package com.ticketing.system.Core.Domain.users;
 
-import java.util.Collection;
 import java.util.ArrayList;
 import java.util.List;
 

@@ -327,20 +327,19 @@ class ProductionCompanyTest extends BaseDomainTest {
 
 
         @Test
-
         public void GivenUserWithoutConfigureVenuePermission_WhenValidateManagerOrOwner_ThenThrowException() {
 
                 company.validateManagerInvitation(COMPANY_ID, MANAGER_ID, OWNER_ID, List.of(Permission.MANAGE_INVENTORY));
                 company.acceptManagerInvitation(MANAGER_ID);
                 assertThrows(RuntimeException.class, () ->
-                company.ValidateManagerOrOwner(MANAGER_ID)
+                company.ValidateManagerOrOwnerForConfigureVenue(MANAGER_ID)
                 );
         }  
     
         @Test
         public void GivenUserIsNotManagerOrOwner_WhenValidateManagerOrOwner_ThenThrowException() {
                 assertThrows(RuntimeException.class, () ->
-                company.ValidateManagerOrOwner(TARGET_USER_ID)
+                company.ValidateManagerOrOwnerForConfigureVenue(TARGET_USER_ID)
                 );
         }
 

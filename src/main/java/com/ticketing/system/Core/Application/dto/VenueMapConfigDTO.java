@@ -9,12 +9,18 @@ public record VenueMapConfigDTO(
     String venueName,
     List<ZoneConfigDTO> zones
 ) {
-    // One zone definition. Either seated (with seat layout) or standing (with capacity).
+    // One zone definition. Either seated (with seat layout/list) or standing (only with capacity, null for seats).
     public record ZoneConfigDTO(
         String zoneName,
         boolean seated,
-        Integer standingCapacity,        // nullable — only for standing zones
-        List<String> seatNumbers,        // nullable — only for seated zones, e.g. ["A1","A2","B1",...]
+        Integer capacity,
+        List<SeatConfigDTO> seats,  // null for standing zones
         double pricePerTicket
+    ) {}
+
+    public record SeatConfigDTO(
+            String label,
+            double x,
+            double y
     ) {}
 }

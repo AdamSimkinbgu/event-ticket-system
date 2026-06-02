@@ -249,7 +249,7 @@ public class ProductionCompany implements InvariantChecked {
         throw new UnsupportedOperationException("UC-23 / II.4.8.3: not implemented");
     }
 
-    public void ValidateManagerOrOwner(int userId) {
+    public void ValidateManagerOrOwnerForConfigureVenue(int userId) {
         if (isOwner(userId)) {
             return;
         }

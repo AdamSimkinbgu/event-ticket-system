@@ -6,6 +6,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
+
 import lombok.extern.slf4j.Slf4j;
 
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
@@ -102,7 +104,7 @@ public class CompanyManagementService {
             throw new RuntimeException("Company not found");
         }
 
-        ManagementInvitation invitation = targetUser.acceptInvitation(companyId);
+        targetUser.acceptInvitation(companyId);
         company.acceptManagerInvitation(targetId);
         userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
@@ -291,7 +293,7 @@ public class CompanyManagementService {
 
     // UC-22 — Owner-side flat list of company sales.
     public List<PurchaseHistoryDTO> viewSalesHistory(String token, int companyId) {
-        this.log.info("Attempting to view sales history for company {}", companyId);
+        log.info("Attempting to view sales history for company {}", companyId);
 
         if (!sessionManager.validateToken(token)) {
             log.warn("Invalid token provided for viewing sales history");
@@ -315,10 +317,32 @@ public class CompanyManagementService {
             throw new RuntimeException("Insufficient permissions");
         }
 
-        List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByCompanyId(companyId).stream()
-                .map(sale -> new PurchaseHistoryDTO(
-                    List.of(new OrderReceiptMapper().OrderReceiptToPurchaseRecordDTO(sale, ticketRepository, eventRepository))))
+        List<Integer> companyEventIds = eventRepository.findIdsByCompany(companyId);
+
+        if (companyEventIds == null || companyEventIds.isEmpty()) {
+            return List.of();
+        }
+
+        Set<Integer> companyEventIdSet = Set.copyOf(companyEventIds);
+        OrderReceiptMapper mapper = new OrderReceiptMapper();
+
+        List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByEventIds(companyEventIds).stream()
+                .map(receipt -> {
+                    List<Ticket> companyTickets = ticketRepository.findByOrderReceiptId(receipt.getId()).stream()
+                            .filter(ticket -> companyEventIdSet.contains(ticket.getEventId()))
+                            .toList();
+
+                    return new PurchaseHistoryDTO(
+                            List.of(mapper.OrderReceiptToPurchaseRecordDTO(receipt, companyTickets))  // use overloaded mapper to pass the filtered list of tickets for richer DTO construction without bloating service logic
+                    );
+                })
                 .toList();
+        
+        // This is the correct responsibility split.
+        // The repository finds receipts related to company events.
+        // The service filters the tickets to only this company’s events.
+        // The mapper maps the receipt and the selected tickets into DTOs.
+
 
         log.info("Successfully retrieved sales history for company {}", companyId);
         return salesHistory;
@@ -333,7 +357,7 @@ public class CompanyManagementService {
 
     // UC-25 — recursive organizational tree (Owners only per II.4.15).
     public OrganizationalTreeNodeDTO viewOrganizationalTree(String token, int companyId) {
-        this.log.info("Attempting to view organizational tree for company {}", companyId);
+        log.info("Attempting to view organizational tree for company {}", companyId);
 
         if (!sessionManager.validateToken(token)) {
             log.warn("Invalid token provided for viewing organizational tree");

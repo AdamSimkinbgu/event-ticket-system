@@ -460,7 +460,7 @@ class AuthenticationServiceTest {
 
     @Test
     void login_whenGuestCartExists_promotesItToMember() {
-        Session guestSession = mockValidGuestSession("preserved-sid");
+        mockValidGuestSession("preserved-sid");
         ActiveOrder guestCart = ActiveOrder.forGuest("preserved-sid");
         when(mockActiveOrderRepo.getBySessionId("preserved-sid")).thenReturn(Optional.of(guestCart));
 

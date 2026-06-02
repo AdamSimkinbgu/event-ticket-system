@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapDTO;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.CatalogService;
@@ -26,6 +27,7 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
@@ -34,6 +36,17 @@ import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.NullVenueMapException;
 import com.ticketing.system.Core.Domain.exceptions.SessionExpiredException;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.util.List;
+
+import com.ticketing.system.Core.Application.dto.InventoryZoneDTO;
+import com.ticketing.system.Core.Application.dto.SeatDTO;
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
+import com.ticketing.system.Core.Domain.events.Seat;
+import com.ticketing.system.Core.Domain.events.SeatedZone;
+import com.ticketing.system.Core.Domain.events.SeatStatus;
 
 class CatalogServiceTest {
 
@@ -260,7 +273,7 @@ class CatalogServiceTest {
         VenueMapDTO result = catalogService.getEventVenueMap(VALID_TOKEN, EVENT_ID);
 
         assertNotNull(result);
-        assertEquals(5, result.eventId());
+        assertEquals(5, result.venueMapId());
         assertEquals(1, result.inventoryZones().size());
         assertEquals(10, result.inventoryZones().get(0).getId());
         assertEquals("Floor", result.inventoryZones().get(0).getName());
@@ -375,6 +388,117 @@ class CatalogServiceTest {
         assertThrows(InvalidTokenException.class,
                 () -> catalogService.getEventVenueMap("", EVENT_ID));
     }
+
+
+
+
+
+
+
+
+    @Test
+    void givenSeatedZone_whenGetVenueMap_thenPerSeatStatusesReturned() {
+        SeatedZone seatedZone = new SeatedZone(
+                5,
+                "Orchestra",
+                120.0,
+                List.of(
+                        new Seat("A1", 0, 0),
+                        new Seat("A2", 1, 0),
+                        new Seat("A3", 2, 0)
+                )
+        );
+
+        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+        seatedZone.reserve(InventorySelection.seated(List.of("A2")));
+        seatedZone.confirmSale(InventorySelection.seated(List.of("A2")));
+
+        VenueMap venueMap = new VenueMap(
+                1,
+                LOCATION,
+                List.of(seatedZone)
+        );
+
+        Event event = createMockEvent(EVENT_ID, 10);
+        ProductionCompany company = createMockCompany("Company A", 4.5);
+
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(event.getVenueMap()).thenReturn(venueMap);
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
+        when(company.getStatus()).thenReturn(CompanyStatus.ACTIVE);
+
+        VenueMapDTO result = catalogService.getEventVenueMap(VALID_TOKEN, EVENT_ID);
+
+        assertEquals(1, result.inventoryZones().size());
+
+        InventoryZoneDTO zoneDTO = result.inventoryZones().get(0);
+
+        assertEquals(5, zoneDTO.getId());
+        assertEquals("Orchestra", zoneDTO.getName());
+        assertEquals("SEATED", zoneDTO.getZoneType());
+        assertEquals(3, zoneDTO.getCapacity());
+        assertEquals(1, zoneDTO.getAvailableAmount());
+        assertEquals(1, zoneDTO.getReservedAmount());
+        assertEquals(1, zoneDTO.getSoldAmount());
+
+        assertEquals(3, zoneDTO.getSeats().size());
+
+        SeatDTO a1 = zoneDTO.getSeats().stream()
+                .filter(seat -> seat.label().equals("A1"))
+                .findFirst()
+                .orElseThrow();
+
+        SeatDTO a2 = zoneDTO.getSeats().stream()
+                .filter(seat -> seat.label().equals("A2"))
+                .findFirst()
+                .orElseThrow();
+
+        SeatDTO a3 = zoneDTO.getSeats().stream()
+                .filter(seat -> seat.label().equals("A3"))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals("RESERVED", a1.status());
+        assertEquals("SOLD", a2.status());
+        assertEquals("AVAILABLE", a3.status());
+    }
+
+    @Test
+    void givenStandingZone_whenGetVenueMap_thenZoneCountAvailabilityReturned() {
+        StandingZone standingZone = new StandingZone(5, "General Admission", 10, 50.0);
+        standingZone.reserve(InventorySelection.standing(3));
+
+        VenueMap venueMap = new VenueMap(
+                1,
+                LOCATION,
+                List.of(standingZone)
+        );
+
+        Event event = createMockEvent(EVENT_ID, 10);
+        ProductionCompany company = createMockCompany("Company A", 4.5);
+
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(event.getVenueMap()).thenReturn(venueMap);
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
+        when(company.getStatus()).thenReturn(CompanyStatus.ACTIVE);
+
+        VenueMapDTO result = catalogService.getEventVenueMap(VALID_TOKEN, EVENT_ID);
+
+        InventoryZoneDTO zoneDTO = result.inventoryZones().get(0);
+
+        assertEquals("STANDING", zoneDTO.getZoneType());
+        assertEquals(10, zoneDTO.getCapacity());
+        assertEquals(7, zoneDTO.getAvailableAmount());
+        assertEquals(3, zoneDTO.getReservedAmount());
+        assertEquals(0, zoneDTO.getSoldAmount());
+        assertTrue(zoneDTO.getSeats().isEmpty());
+    }
+
+
+
+
 
 
 

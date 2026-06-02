@@ -1,6 +1,5 @@
 package com.ticketing.system.Core.Application.dto;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 import com.ticketing.system.Core.Domain.events.EventCategory;

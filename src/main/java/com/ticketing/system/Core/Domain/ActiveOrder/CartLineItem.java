@@ -11,11 +11,13 @@ public class CartLineItem {
     private int zoneId;
     private double priceAtoneticketReservation;
     private LocalDateTime addedAt;
+    private String seatNumber;  // null for standing zones
     private final Duration EXPIRATION_LIMIT = Duration.ofMinutes(10);
 
-    public CartLineItem(int eventId, int zoneId, double priceAtReservation, LocalDateTime addedAt) {
+    public CartLineItem(int eventId, int zoneId, String seatNumber, double priceAtReservation, LocalDateTime addedAt) {
         this.eventId = eventId;
         this.zoneId = zoneId;
+        this.seatNumber = seatNumber;
         this.priceAtoneticketReservation = priceAtReservation;
         this.addedAt = addedAt;
     }
@@ -35,6 +37,18 @@ public class CartLineItem {
 
     public LocalDateTime getAddedAt() {
         return addedAt;
+    }
+
+    public String getSeatNumber() {
+        return seatNumber;
+    }
+
+    public boolean isSeatedTicket() {
+        return seatNumber != null;
+    }
+
+    public boolean isStandingTicket() {
+        return seatNumber == null;
     }
 
     public Duration getRemainingTime() {
@@ -65,7 +79,7 @@ public class CartLineItem {
                 eventId,
                 "Event Name Placeholder", // This should be replaced with actual event name retrieval logic
                 zoneId,
-                null, // seatNumber is null for standing-zone tickets
+                seatNumber,   // seatNumber is null for standing-zone tickets
                 priceAtoneticketReservation,
                 addedAt);
     }

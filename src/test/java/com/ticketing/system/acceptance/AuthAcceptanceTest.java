@@ -197,7 +197,7 @@ class AuthAcceptanceTest {
 
         // Simulate an active cart on the first session.
         ActiveOrder cart = ActiveOrder.forMember(first.authToken().userId(), firstSid);
-        cart.addReservation(1, 10, 1, 50.0, LocalDateTime.now());
+        cart.addStandingReservation(1, 10, 1, 50.0, LocalDateTime.now());
         activeOrderRepository.save(cart);
 
         // Logout — D8 (L1) deletes the Session row; D9a preserves the cart.
@@ -267,7 +267,7 @@ class AuthAcceptanceTest {
         LoginDTO session = authService.login(new LoginRequestDTO("link1", "Password1", sid));
 
         ActiveOrder cart = ActiveOrder.forMember(session.authToken().userId(), sid);
-        cart.addReservation(2, 20, 2, 30.0, LocalDateTime.now());
+        cart.addStandingReservation(2, 20, 2, 30.0, LocalDateTime.now());
         activeOrderRepository.save(cart);
 
         authService.logout(new LogoutRequestDTO(session.authToken().token()));

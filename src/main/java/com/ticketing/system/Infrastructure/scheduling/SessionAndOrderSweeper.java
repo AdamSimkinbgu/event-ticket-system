@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -16,6 +17,7 @@ import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.Session;
 
@@ -62,7 +64,7 @@ public class SessionAndOrderSweeper {
         this.eventRepository = eventRepository;
         this.clock = clock;
     }
-
+    
     @Scheduled(fixedDelayString = "${sweeper.fixed-delay-ms:60000}")
     public void sweep() {
         Instant now = clock.instant();
@@ -104,7 +106,8 @@ public class SessionAndOrderSweeper {
      * own line-item expiry sweep.
      */
     private void cleanUpAttachedCart(Session session) {
-        if (session.isMember()) return;
+        if (session.isMember())
+            return;
         Optional<ActiveOrder> cartOpt = activeOrderRepository.getBySessionId(session.getSessionId());
         if (cartOpt.isPresent()) {
             releaseTicketsToInventory(cartOpt.get());
@@ -112,6 +115,8 @@ public class SessionAndOrderSweeper {
         }
     }
 
+    
+    
     /**
      * Groups the cart's line items by (eventId, zoneId) and releases the
      * aggregated quantity per zone via {@link Event#releaseTickets(int, int)},
@@ -119,18 +124,36 @@ public class SessionAndOrderSweeper {
      * failed checkout.
      */
     private void releaseTicketsToInventory(ActiveOrder order) {
-        Map<Integer, Map<Integer, Integer>> countByEventThenZone = new HashMap<>();
-        for (CartLineItem item : order.getItems()) {
-            countByEventThenZone
-                    .computeIfAbsent(item.geteventId(), k -> new HashMap<>())
-                    .merge(item.getzoneId(), 1, Integer::sum);
-        }
-        for (Map.Entry<Integer, Map<Integer, Integer>> eventEntry : countByEventThenZone.entrySet()) {
+        // Group line items by event and zone to aggregate the release calls
+        Map<Integer, Map<Integer, List<CartLineItem>>> grouped =
+                order.getItems().stream()
+                        .collect(Collectors.groupingBy(
+                                CartLineItem::geteventId,
+                                Collectors.groupingBy(CartLineItem::getzoneId)
+                        ));
+        // For each (event, zone) group, release the appropriate quantity back to inventory
+        for (Map.Entry<Integer, Map<Integer, List<CartLineItem>>> eventEntry : grouped.entrySet()) {
             Event event = eventRepository.findById(eventEntry.getKey());
-            if (event == null) continue;
-            for (Map.Entry<Integer, Integer> zoneEntry : eventEntry.getValue().entrySet()) {
-                event.releaseTickets(zoneEntry.getKey(), zoneEntry.getValue());
+            if (event == null) {
+                continue;
             }
+            // For each zone in the event, determine how many tickets to release
+            for (Map.Entry<Integer, List<CartLineItem>> zoneEntry : eventEntry.getValue().entrySet()) {
+                int zoneId = zoneEntry.getKey();
+                List<CartLineItem> items = zoneEntry.getValue();
+                // If any line item has a seat number, we need to release specific seats; otherwise, we can release a quantity of standing tickets
+                List<String> seatNumbers = items.stream()
+                        .map(CartLineItem::getSeatNumber)
+                        .filter(s -> s != null)
+                        .toList();
+                // If there are no seat numbers, it's a standing reservation, so we release by quantity. Otherwise, we release specific seats.
+                if (seatNumbers.isEmpty()) {
+                    event.releaseInventory(zoneId, InventorySelection.standing(items.size()));
+                } else {
+                    event.releaseInventory(zoneId, InventorySelection.seated(seatNumbers));
+                }
+            }
+
             eventRepository.save(event);
         }
     }
