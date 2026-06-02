@@ -13,7 +13,7 @@ public class ReceiptLine implements InvariantChecked {
     private final int zoneId;
     private final String seatNumber;
 
-      public ReceiptLine(int ticketId, double price, int eventid, int zoneId, String seatNumber, LocalDateTime addedAt) {
+    public ReceiptLine(int ticketId, double price, int eventid, int zoneId, String seatNumber, LocalDateTime addedAt) {
         this.ticketId = ticketId;
         this.price = price;
         this.eventid = eventid;

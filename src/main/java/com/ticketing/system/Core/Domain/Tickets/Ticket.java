@@ -74,7 +74,11 @@ public class Ticket implements InvariantChecked {
     // UC-9 / UC-5 — AVAILABLE -> RESERVED. Throws TicketNotAvailableException if not AVAILABLE.
     public void reserve(int holderUserId) {
         if (!isAvailable()) {
-            throw new TicketNotAvailableException("Ticket " + ticketId + " is not available for reservation (current status: " + status + ")");
+            throw new TicketNotAvailableException(
+                    "Ticket " + ticketId + " is not available for reservation (current status: " + status + ")");
+        }
+        if (holderUserId <= 0) {
+            throw new IllegalArgumentException("holderUserId must be positive");
         }
         this.holderUserId = holderUserId;
         this.status = TicketStatus.RESERVED;
@@ -155,6 +159,9 @@ public class Ticket implements InvariantChecked {
      * unassigned (holderUserId remains null).
      */
     public void setHolderUserId(Integer userId) {
+        if (userId != null && userId <= 0) {
+            throw new IllegalArgumentException("holderUserId must be positive when set");
+        }
         this.holderUserId = userId;
     }
 

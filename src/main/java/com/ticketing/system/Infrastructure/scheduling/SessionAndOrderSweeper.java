@@ -12,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
@@ -64,6 +63,7 @@ public class SessionAndOrderSweeper {
         this.activeOrderRepository = activeOrderRepository;
         this.eventRepository = eventRepository;
         this.clock = clock;
+    }
     
     @Scheduled(fixedDelayString = "${sweeper.fixed-delay-ms:60000}")
     public void sweep() {
@@ -106,7 +106,8 @@ public class SessionAndOrderSweeper {
      * own line-item expiry sweep.
      */
     private void cleanUpAttachedCart(Session session) {
-        if (session.isMember()) return;
+        if (session.isMember())
+            return;
         Optional<ActiveOrder> cartOpt = activeOrderRepository.getBySessionId(session.getSessionId());
         if (cartOpt.isPresent()) {
             releaseTicketsToInventory(cartOpt.get());
@@ -114,6 +115,8 @@ public class SessionAndOrderSweeper {
         }
     }
 
+    
+    
     /**
      * Groups the cart's line items by (eventId, zoneId) and releases the
      * aggregated quantity per zone via {@link Event#releaseTickets(int, int)},

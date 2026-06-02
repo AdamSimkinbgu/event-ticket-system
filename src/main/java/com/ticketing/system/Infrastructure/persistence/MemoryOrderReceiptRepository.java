@@ -110,7 +110,7 @@ public class MemoryOrderReceiptRepository implements IOrderReceiptRepository {
     // UC-31 — global view with filters
     // A System Admin can query the full cross-company purchase history, with filters by buyer, production company, event, or date range.
 
-    //TODO: We only implement buyer and event filters. Date range and company filters require more complex querying that would be inefficient to do in-memory without indexes.
+    //TODO: We only implement buyer and event filters here. Date range and company filters require more complex querying that would be inefficient to do in-memory without indexes.
     @Override
     public List<OrderReceipt> findGlobal(GlobalHistoryFiltersDTO filters) {
         if (filters == null) {
@@ -120,7 +120,14 @@ public class MemoryOrderReceiptRepository implements IOrderReceiptRepository {
         List<Integer> requestedEventIds = filters.eventIds() == null
                 ? null
                 : filters.eventIds().stream()
-                        .map(Integer::parseInt)
+                        .map(id -> {
+                             try {
+                                 return Integer.parseInt(id);
+                             } catch (NumberFormatException e) {
+                                 return null;
+                             }
+                         })
+                         .filter(id -> id != null)
                         .toList();
 
         return receiptsById.values().stream()
