@@ -1,5 +1,11 @@
 package com.ticketing.system.Core.Domain.users;
 
+/*
+    this class is irelevant for the current implementation 
+    it will be deleted in the futere
+    */
+
+//TODO: delete this class 
 public class MemberProfile {
 
     private int companyId;
@@ -12,7 +18,7 @@ public class MemberProfile {
 
     public void RevokeManagerRole(int companyId2) {
         if (this.companyId == companyId2) {
-            this.companyRole = CompanyRole.None;
+            // this.companyRole = CompanyRole.None;
         }
     }
 
@@ -23,5 +29,5 @@ public class MemberProfile {
     public CompanyRole getCompanyRole() {
         return this.companyRole;
     }
-    
+
 }

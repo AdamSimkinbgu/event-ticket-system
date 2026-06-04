@@ -123,12 +123,15 @@ public class CompanyAppointment {
 
     // UC-24 — ACTIVE -> REVOKED. Owner appointments do NOT support revoke (II.4.9
     // Cancelled in v0).
-    public void revoke() {
+    public void revoke(int revokerId) {
         if (this.status != AppointmentStatus.ACTIVE) {
             throw new IllegalStateException("Only active appointments can be revoked.");
         }
         if (this.role == CompanyRole.Owner) {
             throw new UnsupportedOperationException("Owner appointments cannot be revoked.");
+        }
+        if (this.inviterId != revokerId) {
+            throw new IllegalArgumentException("Only the original inviter can revoke this appointment.");
         }
         this.status = AppointmentStatus.REVOKED;
     }

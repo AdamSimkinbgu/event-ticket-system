@@ -30,6 +30,9 @@ import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.PurchasePolicy;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
+import com.ticketing.system.Core.Domain.users.User;
+import com.ticketing.system.Core.Domain.users.Permission;
 
 @Service
 @Slf4j
@@ -41,6 +44,7 @@ public class EventManagementService {
     private final ISessionManager sessionManager;
     private final IOrderReceiptRepository orderReceiptRepository;
     private final IPaymentGateway paymentGateway;
+    private final IUserRepository userRepository;
 
     public EventManagementService(
             IEventRepository eventRepository,
@@ -48,29 +52,24 @@ public class EventManagementService {
             ITicketRepository ticketRepository,
             ISessionManager sessionManager,
             IOrderReceiptRepository orderReceiptRepository,
-            IPaymentGateway paymentGateway
-    ) {
+            IPaymentGateway paymentGateway,
+            IUserRepository userRepository) {
         this.eventRepository = eventRepository;
         this.companyRepository = companyRepository;
         this.ticketRepository = ticketRepository;
         this.sessionManager = sessionManager;
         this.orderReceiptRepository = orderReceiptRepository;
         this.paymentGateway = paymentGateway;
+        this.userRepository = userRepository;
     }
 
     // UC-19 — Owner adds an Event in DRAFT state.
     public EventDetailDTO addEvent(String token, EventCreationDTO request) {
-        if (!sessionManager.validateToken(token)) {
-            log.warn("Invalid token provided for adding event");
-            throw new RuntimeException("Invalid token");
-        }
-        int ownerId = sessionManager.extractUserId(token);
+        int ownerId = validateTokenAndGetUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(request.companyId());
-        if (company == null) {
-            log.warn("Company {} not found", request.companyId());
-            throw new RuntimeException("Company not found");
-        }
-        company.checkowner(ownerId);
+        User user = userRepository.getUserById(ownerId);
+        user.requirePermissionInCompany(request.companyId(), Permission.CONFIGURE_VENUE);
+
         int newEventId = eventRepository.nextId();
         InventoryZone zone1 = new StandingZone(1, "General Admission", 100, 50.0);
         VenueMap venueMap = new VenueMap(3, request.location(), List.of(zone1));
@@ -87,8 +86,7 @@ public class EventManagementService {
                 venueMap,
                 request.showDates(),
                 purchasePolicy,
-                discountPolicy
-        );
+                discountPolicy);
         eventRepository.save(newEvent);
         log.info("Event {} created successfully with ID {}", request.name(), newEventId);
         return new EventDetailDTO(
@@ -102,116 +100,97 @@ public class EventManagementService {
                 company.getName(),
                 newEvent.getStatus(),
                 newEvent.getShowDates());
-        }
+    }
 
-    // UC-19 — partial update; immutability rules per II.3.5.2 enforced inside Event.
+    // UC-19 — partial update; immutability rules per II.3.5.2 enforced inside
+    // Event.
     public void editEvent(String token, EventUpdateDTO update) {
         throw new UnsupportedOperationException("UC-19: not implemented");
     }
 
-    // UC-19 — soft cancel; fires EventCancelled domain event for UC-4 refund pipeline.
+    // UC-19 — soft cancel; fires EventCancelled domain event for UC-4 refund
+    // pipeline.
     public void cancelEventAndRefund(String token, int eventId) {
-        
-        if (!sessionManager.validateToken(token)) {
-            log.warn("Invalid token provided for inviting manager");
-            throw new RuntimeException("Invalid token");
-        }
-        int ownerId = sessionManager.extractUserId(token);
-        Event event = eventRepository.findById(eventId);
-        if (event == null) {
-            log.warn("Event {} not found", eventId);
-            throw new RuntimeException("Event not found");
-        }
-        if (event.isCancelled()) {
-            log.warn("Event {} is already canceled", eventId);
-            return;
-        }
 
-        ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
-        if (company == null) {
-            log.warn("Company {} not found", event.getCompanyId());
-            throw new RuntimeException("Company not found");
-        }
-        company.checkowner(ownerId);
-        
-        List<Ticket> tickets = ticketRepository.findByEventId(String.valueOf(eventId));
-        List<OrderReceipt> orderReceipts = orderReceiptRepository.findByEventId(eventId);
-        for (OrderReceipt receipt : orderReceipts) {
-            if (receipt.wasRefunded()) {
-                continue;
+        int ownerId = validateTokenAndGetUserId(token);
+        try {
+            Event event = eventRepository.findById(eventId);
+            if (event.isCancelled()) {
+                log.warn("Event {} is already canceled", eventId);
+                return;
             }
+            ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
+            company.checkowner(ownerId);
 
-            double totalRefundForReceipt = 0.0;
-            boolean requiresRefund = false;
+            List<Ticket> tickets = ticketRepository.findByEventId(String.valueOf(eventId));
+            List<OrderReceipt> orderReceipts = orderReceiptRepository.findByEventId(eventId);
+            for (OrderReceipt receipt : orderReceipts) {
+                if (receipt.wasRefunded()) {
+                    continue;
+                }
 
-            for (ReceiptLine line : receipt.getReceiptLines()) {
-                if (line.getEventId() == eventId) {
-                    totalRefundForReceipt += line.getPriceAtReservation();
-                    requiresRefund = true;
+                double totalRefundForReceipt = 0.0;
+                boolean requiresRefund = false;
+
+                for (ReceiptLine line : receipt.getReceiptLines()) {
+                    if (line.getEventId() == eventId) {
+                        totalRefundForReceipt += line.getPriceAtReservation();
+                        requiresRefund = true;
+                    }
+                }
+
+                if (requiresRefund && totalRefundForReceipt > 0) {
+                    // paymentGateway.refund(
+                    // receipt.getHolderUserId(),
+                    // totalRefundForReceipt
+                    // // "Refund for canceled event: " + event.getId()
+                    // );
+
+                    receipt.markRefunded();
+                    orderReceiptRepository.save(receipt);
                 }
             }
 
-            if (requiresRefund && totalRefundForReceipt > 0) {
-                // paymentGateway.refund(
-                //     receipt.getHolderUserId(), 
-                //      totalRefundForReceipt 
-                //     // "Refund for canceled event: " + event.getId()
-                // );
-                
-                receipt.markRefunded();
-                orderReceiptRepository.save(receipt);
+            for (Ticket ticket : tickets) {
+                if (ticket.getEventId() == eventId
+                        && (ticket.getStatus() == TicketStatus.PAID || ticket.getStatus() == TicketStatus.ISSUED)) {
+                    ticket.markRefunded();
+                    ticketRepository.save(ticket);
+                } else {
+                    ticket.markVoided();
+                    ticketRepository.save(ticket);
+                }
             }
+
+            event.setCanceled(true);
+            eventRepository.save(event);
+
+            log.info("Event {} canceled successfully", eventId);
+
+        } catch (Exception e) {
+            log.error("{}", e.getMessage());
+            return;
         }
 
-        for(Ticket ticket : tickets){
-            if(ticket.getEventId() == eventId &&  (ticket.getStatus() == TicketStatus.PAID || ticket.getStatus() == TicketStatus.ISSUED)){
-                ticket.markRefunded();
-                ticketRepository.save(ticket);
-            }else{
-                ticket.markVoided();
-                ticketRepository.save(ticket);
-            }
-        }
-
-
-        event.setCanceled(true);
-        eventRepository.save(event);
-
-        log.info("Event {} canceled successfully", eventId);
-    
-        
     }
 
     // UC-20 — Owner/Manager configures venue map and inventory zones.
-    public void addCapacitoesToVenueMapZone(String token, int company_id,int event_id, int zone_id, int newCapacity) {
-       
-          if (!sessionManager.validateToken(token)) {
-            log.warn("Invalid token provided for updating zone capacity");
-            throw new RuntimeException("Invalid token");
+    public void addCapacitoesToVenueMapZone(String token, int company_id, int event_id, int zone_id, int newCapacity) {
+        try {
+            int userId = validateTokenAndGetUserId(token);
+            User user = userRepository.getUserById(userId);
+            ProductionCompany company = companyRepository.getCompanyById(company_id);
+            user.requirePermissionInCompany(company_id, Permission.CONFIGURE_VENUE);
+
+            Event event = eventRepository.findById(event_id);
+            event.updateZoneCapacity(zone_id, newCapacity, company_id);
+
+            eventRepository.save(event);
+            log.info("Zone {} at company {} capacity updated successfully", zone_id, company_id);
+        } catch (Exception e) {
+            log.error("Error updating zone capacity: {}", e.getMessage());
         }
-        int userId = sessionManager.extractUserId(token);
-        ProductionCompany company = companyRepository.getCompanyById(company_id);
-        if (company == null) {
-            log.warn("Company {} not found", company_id);
-            throw new RuntimeException("Company not found");
-        }
-
-        company.ValidateManagerOrOwner(userId);
-
-        Event event = eventRepository.findById(event_id);
-
-        if (event == null) {
-            log.warn("Event {} not found", event_id);
-            throw new RuntimeException("Event not found");
-        }
-
-        event.updateZoneCapacity(zone_id, newCapacity, company_id);
-
-        eventRepository.save(event);
-        log.info("Zone {} at company {} capacity updated successfully", zone_id, company_id);
-
     }
-
 
     // UC-21 — set / replace event-level purchase + discount policies.
     public void setEventPolicies(String token, EventPolicyConfigDTO config) {
@@ -221,5 +200,13 @@ public class EventManagementService {
     // Detail view for owner-side editing pages.
     public EventDetailDTO getEventDetail(String token, String eventId) {
         throw new UnsupportedOperationException("UC-19: not implemented");
+    }
+
+    private int validateTokenAndGetUserId(String token) {
+        if (!sessionManager.validateToken(token)) {
+            log.warn("Invalid token provided");
+            throw new RuntimeException("Invalid token");
+        }
+        return sessionManager.extractUserId(token);
     }
 }

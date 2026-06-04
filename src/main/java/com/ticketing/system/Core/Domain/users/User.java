@@ -1,6 +1,7 @@
 package com.ticketing.system.Core.Domain.users;
 
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -78,9 +79,19 @@ public class User implements InvariantChecked {
         companyAppointments.add(appointment);
     }
 
+    // add new pending owner appointment to target user. Will throw if target user
+    // already has an active or pending appointment in the company.
+    // note that the user cant call this method on themselves, only the appointer
+    // can call it on the target user, and the appointer must have permission to
+    // appoint (be an active owner or have APPOINT_MANAGER permission).
     public void receiveOwnerAppointment(int companyId, int appointerId) {
         if (getAppointmentForCompany(companyId) != null) {
             throw new RuntimeException("User already has an active or pending appointment in this company");
+        }
+        for (CompanyAppointment appointment : companyAppointments) {
+            if (appointment.getCompanyId() == companyId && appointment.getStatus() == AppointmentStatus.PENDING) {
+                throw new RuntimeException("User already has a pending appointment in this company");
+            }
         }
 
         CompanyAppointment appointment = CompanyAppointment.OwnerAppointment(
@@ -92,12 +103,12 @@ public class User implements InvariantChecked {
         companyAppointments.add(appointment);
     }
 
-    public void revokeManagerAppointment(int companyId) {
+    public void revokeManagerAppointment(int companyId, int revokerId) {
         CompanyAppointment appointment = getAppointmentForCompany(companyId);
         if (appointment == null) {
             throw new RuntimeException("Cannot remove appointment: no appointment found for the specified company");
         }
-        appointment.revoke();
+        appointment.revoke(revokerId);
     }
 
     // Returns the User's appointment in the given company, or null if absent.
@@ -111,34 +122,47 @@ public class User implements InvariantChecked {
     }
 
     // Helper for the "view my appointments" flow (UC-20) — returns only pending
-    public List<CompanyAppointment> getActiveCompanyAppointments() {
-        List<CompanyAppointment> activeAppointments = new ArrayList<>();
+    public CompanyAppointment getActiveCompanyAppointments(int companyId) {
         for (CompanyAppointment appointment : companyAppointments) {
-            if (appointment.getStatus() == AppointmentStatus.ACTIVE) {
-                activeAppointments.add(appointment);
+            if (appointment.getCompanyId() == companyId && appointment.getStatus() == AppointmentStatus.ACTIVE) {
+                return appointment;
             }
         }
-        return activeAppointments;
+        return null;
     }
 
     // returns all pending appointments, which includes both invitations (for
     // managers) and ownership appointments awaiting acceptance.
-    public List<CompanyAppointment> getPendingCompanyAppointments() {
-        List<CompanyAppointment> pendingAppointments = new ArrayList<>();
+    public CompanyAppointment getPendingCompanyAppointments(int companyId) {
         for (CompanyAppointment appointment : companyAppointments) {
-            if (appointment.getStatus() == AppointmentStatus.PENDING) {
-                pendingAppointments.add(appointment);
+            if (appointment.getCompanyId() == companyId && appointment.getStatus() == AppointmentStatus.PENDING) {
+                return appointment;
             }
         }
-        return pendingAppointments;
+        return null;
     }
 
     // Helper for permission-checking flows (UC-19/21/22/24).
     public boolean isOwnerInCompany(int companyId) {
-        CompanyAppointment appointment = getAppointmentForCompany(companyId);
-        return appointment != null
-                && appointment.getRole() == CompanyRole.Owner
-                && appointment.getStatus() == AppointmentStatus.ACTIVE;
+        CompanyAppointment appointment = getActiveCompanyAppointments(companyId);
+        return appointment != null && appointment.getRole() == CompanyRole.Owner;
+    }
+
+    // Will throw if the user is not an active owner in the company. Used to secure
+    public void requireOwnerInCompany(int companyId) {
+        if (!isOwnerInCompany(companyId)) {
+            throw new RuntimeException("User is not an owner in this company");
+        }
+    }
+
+    /**
+     * Will throw if the user doesn't have the specified permission in the company.
+     * Used to secure flows that require specific permissions.
+     */
+    public void requirePermissionInCompany(int companyId, Permission permission) {
+        if (!hasPermissionInCompany(companyId, permission)) {
+            throw new RuntimeException("Missing permission: " + permission);
+        }
     }
 
     public boolean hasPermissionInCompany(int companyId, Permission permission) {
