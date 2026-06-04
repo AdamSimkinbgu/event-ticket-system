@@ -6,8 +6,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.Set;
+
+import lombok.extern.slf4j.Slf4j;
 
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
@@ -35,6 +36,7 @@ import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class CompanyManagementService {
     private final IProductionCompanyRepository companyRepository;
     private final IUserRepository userRepository;
@@ -42,7 +44,6 @@ public class CompanyManagementService {
     private final ISessionManager sessionManager;
     private final ITicketRepository ticketRepository;
     private final IEventRepository eventRepository;
-    private final Logger logger = LoggerFactory.getLogger(CompanyManagementService.class);
     private static final String EMAIL_PATTERN = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
     private static final String PHONE_PATTERN = "^\\+?[0-9\\-\\s]{9,15}$";
 
@@ -58,19 +59,19 @@ public class CompanyManagementService {
 
     public void inviteManager(String token, int companyId, int targetId, List<Permission> permissions) {
         if (!sessionManager.validateToken(token)) {
-            logger.warn("Invalid token provided for inviting manager");
+            log.warn("Invalid token provided for inviting manager");
             throw new RuntimeException("Invalid token");
         }
         int ownerId = sessionManager.extractUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            logger.warn("Company {} not found", companyId);
+            log.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
         company.checkowner(ownerId);
         User targetUser = userRepository.getUserById(targetId);
         if (targetUser == null) {
-            logger.warn("Target user {} not found", targetId);
+            log.warn("Target user {} not found", targetId);
             throw new RuntimeException("Target user not found");
         }
 
@@ -81,50 +82,50 @@ public class CompanyManagementService {
         companyRepository.updateCompany(company);
         userRepository.updateUser(targetUser);
 
-        logger.info("user invited succesfully");
+        log.info("user invited succesfully");
 
     }
 
     public void acceptManagerInvitation(String token, int companyId) {
         if (!sessionManager.validateToken(token)) {
-                logger.warn("Invalid token provided for accepting manager invitation");
+                log.warn("Invalid token provided for accepting manager invitation");
             throw new RuntimeException("Invalid token");
         }
         int targetId = sessionManager.extractUserId(token);
         User targetUser = userRepository.getUserById(targetId);
         if (targetUser == null) {
-            logger.warn("Target user {} not found", targetId);
+            log.warn("Target user {} not found", targetId);
             throw new RuntimeException("Target user not found");
         }
 
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            logger.warn("Company {} not found", companyId);
+            log.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
 
-        ManagementInvitation invitation = targetUser.acceptInvitation(companyId);
+        targetUser.acceptInvitation(companyId);
         company.acceptManagerInvitation(targetId);
         userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
-        logger.info("Manager invitation accepted successfully");
+        log.info("Manager invitation accepted successfully");
     }
 
     public void rejectManagerInvitation(String token, int companyId) {
         if (!sessionManager.validateToken(token)) {
-            logger.warn("Invalid token provided for rejecting manager invitation");
+            log.warn("Invalid token provided for rejecting manager invitation");
             throw new RuntimeException("Invalid token");
         }
         int targetId = sessionManager.extractUserId(token);
         User targetUser = userRepository.getUserById(targetId);
         if (targetUser == null) {
-            logger.warn("Target user {} not found", targetId);
+            log.warn("Target user {} not found", targetId);
             throw new RuntimeException("Target user not found");
         }
 
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            logger.warn("Company {} not found", companyId);
+            log.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
 
@@ -132,25 +133,25 @@ public class CompanyManagementService {
         company.rejectManagerInvitation(targetId);
         userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
-        logger.info("Manager invitation rejected successfully");
+        log.info("Manager invitation rejected successfully");
     }
 
     public void RevokeManager(String token, int companyId, int targetId) {
         if (!sessionManager.validateToken(token)) {
-            logger.warn("Invalid token provided for revoking manager");
+            log.warn("Invalid token provided for revoking manager");
             throw new RuntimeException("Invalid token");
         }
         int ownerId = sessionManager.extractUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            logger.warn("Company {} not found", companyId);
+            log.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
         company.checkowner(ownerId);
 
         User targetUser = userRepository.getUserById(targetId);
         if (targetUser == null) {
-            logger.warn("Target user {} not found", targetId);
+            log.warn("Target user {} not found", targetId);
             throw new RuntimeException("Target user not found");
         }
 
@@ -160,25 +161,25 @@ public class CompanyManagementService {
         
         userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
-        logger.info("Manager revoked successfully");
+        log.info("Manager revoked successfully");
 
     }
 
     public void ModifyManagerPermissions(String token, int companyId, int targetId, List<Permission> newPermissions) {
         if (!sessionManager.validateToken(token)) {
-            logger.warn("Invalid token provided for modifying manager permissions");
+            log.warn("Invalid token provided for modifying manager permissions");
             throw new RuntimeException("Invalid token");
         }
         int ownerId = sessionManager.extractUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            logger.warn("Company {} not found", companyId);
+            log.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
         company.checkowner(ownerId);
         User targetUser = userRepository.getUserById(targetId);
         if (targetUser == null) {
-            logger.warn("Target user {} not found", targetId);
+            log.warn("Target user {} not found", targetId);
             throw new RuntimeException("Target user not found");
         }
 
@@ -188,7 +189,7 @@ public class CompanyManagementService {
          userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
 
-        logger.info("Manager permissions modified successfully");
+        log.info("Manager permissions modified successfully");
     }
 
     // ---------------------------------------------------------------------------
@@ -199,7 +200,7 @@ public class CompanyManagementService {
     // UC-18 — register a new Production Company; appoints Founder/Owner in same transaction.
     public ProductionCompanyDTO registerCompany(String token, CompanyRegistrationDTO request) {
         if (!sessionManager.validateToken(token)) {
-            logger.warn("Invalid token provided for registering a company");
+            log.warn("Invalid token provided for registering a company");
             throw new RuntimeException("Invalid token");
         }
         int userId = sessionManager.extractUserId(token);
@@ -208,13 +209,13 @@ public class CompanyManagementService {
         if (request.getName() == null || request.getName().trim().isEmpty() ||
             request.getDescription() == null || request.getDescription().trim().isEmpty()) {
 
-            logger.warn("Company registration failed: Missing required fields by user {}", userId);
+            log.warn("Company registration failed: Missing required fields by user {}", userId);
             throw new IllegalArgumentException("All company fields (name, description) must be provided");
         }
 
         // Call on the injected instance, not the interface.
         if (companyRepository.existsByName(request.getName().trim())) {
-            logger.warn("Company registration failed: Company name '{}' already exists", request.getName());
+            log.warn("Company registration failed: Company name '{}' already exists", request.getName());
             throw new IllegalStateException("A company with this name already exists");
         }
 
@@ -231,7 +232,7 @@ public class CompanyManagementService {
 
             // IProductionCompanyRepository.save returns void; the new instance IS the saved one.
             companyRepository.save(newProductionCompany);
-            logger.info("Successfully registered new company: '{}' by userId: {}", newProductionCompany.getName(), userId);
+            log.info("Successfully registered new company: '{}' by userId: {}", newProductionCompany.getName(), userId);
 
             return new ProductionCompanyDTO(
                 newProductionCompany.getCompanyId(),
@@ -242,7 +243,7 @@ public class CompanyManagementService {
             );
 
         } catch (Exception e) {
-            logger.error("Error occurred while saving company '{}': {}", request.getName(), e.getMessage());
+            log.error("Error occurred while saving company '{}': {}", request.getName(), e.getMessage());
             throw new RuntimeException("Failed to register company due to a server error", e);
         }
     }
@@ -292,36 +293,58 @@ public class CompanyManagementService {
 
     // UC-22 — Owner-side flat list of company sales.
     public List<PurchaseHistoryDTO> viewSalesHistory(String token, int companyId) {
-        this.logger.info("Attempting to view sales history for company {}", companyId);
+        log.info("Attempting to view sales history for company {}", companyId);
 
         if (!sessionManager.validateToken(token)) {
-            logger.warn("Invalid token provided for viewing sales history");
+            log.warn("Invalid token provided for viewing sales history");
             throw new InvalidTokenException("Invalid token");
         }
 
         int requesterId = sessionManager.extractUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            logger.warn("Company {} not found", companyId);
+            log.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
 
         User currUser = userRepository.getUserById(requesterId);
         if (currUser == null) {
-            logger.warn("User {} not found", requesterId);
+            log.warn("User {} not found", requesterId);
             throw new RuntimeException("User not found");
         }
         if (!currUser.isOwnerInCompany(companyId) && !currUser.hasPermissionInCompany(companyId, Permission.VIEW_SALES)) {
-            logger.warn("User {} does not have permission to view sales history for company {}", requesterId, companyId);
+            log.warn("User {} does not have permission to view sales history for company {}", requesterId, companyId);
             throw new RuntimeException("Insufficient permissions");
         }
 
-        List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByCompanyId(companyId).stream()
-                .map(sale -> new PurchaseHistoryDTO(
-                    List.of(new OrderReceiptMapper().OrderReceiptToPurchaseRecordDTO(sale, ticketRepository, eventRepository))))
-                .toList();
+        List<Integer> companyEventIds = eventRepository.findIdsByCompany(companyId);
 
-        logger.info("Successfully retrieved sales history for company {}", companyId);
+        if (companyEventIds == null || companyEventIds.isEmpty()) {
+            return List.of();
+        }
+
+        Set<Integer> companyEventIdSet = Set.copyOf(companyEventIds);
+        OrderReceiptMapper mapper = new OrderReceiptMapper();
+
+        List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByEventIds(companyEventIds).stream()
+                .map(receipt -> {
+                    List<Ticket> companyTickets = ticketRepository.findByOrderReceiptId(receipt.getId()).stream()
+                            .filter(ticket -> companyEventIdSet.contains(ticket.getEventId()))
+                            .toList();
+
+                    return new PurchaseHistoryDTO(
+                            List.of(mapper.OrderReceiptToPurchaseRecordDTO(receipt, companyTickets))  // use overloaded mapper to pass the filtered list of tickets for richer DTO construction without bloating service logic
+                    );
+                })
+                .toList();
+        
+        // This is the correct responsibility split.
+        // The repository finds receipts related to company events.
+        // The service filters the tickets to only this company’s events.
+        // The mapper maps the receipt and the selected tickets into DTOs.
+
+
+        log.info("Successfully retrieved sales history for company {}", companyId);
         return salesHistory;
     }
 
@@ -334,32 +357,32 @@ public class CompanyManagementService {
 
     // UC-25 — recursive organizational tree (Owners only per II.4.15).
     public OrganizationalTreeNodeDTO viewOrganizationalTree(String token, int companyId) {
-        this.logger.info("Attempting to view organizational tree for company {}", companyId);
+        log.info("Attempting to view organizational tree for company {}", companyId);
 
         if (!sessionManager.validateToken(token)) {
-            logger.warn("Invalid token provided for viewing organizational tree");
+            log.warn("Invalid token provided for viewing organizational tree");
             throw new InvalidTokenException("Invalid token");
         }
 
         int requesterId = sessionManager.extractUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            logger.warn("Company {} not found", companyId);
+            log.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
 
         User currUser = userRepository.getUserById(requesterId);
         if (currUser == null) {
-            logger.warn("User {} not found", requesterId);
+            log.warn("User {} not found", requesterId);
             throw new RuntimeException("User not found");
         }
         if (!currUser.isOwnerInCompany(companyId)) {
-            logger.warn("User {} does not have permission to view organizational tree for company {}", requesterId,
+            log.warn("User {} does not have permission to view organizational tree for company {}", requesterId,
                     companyId);
             throw new RuntimeException("Insufficient permissions");
         }
 
-        logger.info("Successfully retrieved organizational tree for company {}", companyId);
+        log.info("Successfully retrieved organizational tree for company {}", companyId);
         // using the helper method to build the tree starting from the founder (root of the tree)
         return buildOrganizationalTree(companyId, company.getFounderId());
     }

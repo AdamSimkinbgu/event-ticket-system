@@ -3,6 +3,8 @@ package com.ticketing.system.unit.infrastructure.scheduling;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -23,9 +25,25 @@ import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.Session;
 import com.ticketing.system.Infrastructure.scheduling.SessionAndOrderSweeper;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
+import com.ticketing.system.Core.Domain.events.DiscountPolicy;
+import com.ticketing.system.Core.Domain.events.EventCategory;
+import com.ticketing.system.Core.Domain.events.EventStatus;
+import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.Location;
+import com.ticketing.system.Core.Domain.events.PurchasePolicy;
+import com.ticketing.system.Core.Domain.events.Seat;
+import com.ticketing.system.Core.Domain.events.SeatStatus;
+import com.ticketing.system.Core.Domain.events.SeatedZone;
+import com.ticketing.system.Core.Domain.events.StandingZone;
+import com.ticketing.system.Core.Domain.events.VenueMap;
 
 class SessionAndOrderSweeperTest {
 
@@ -75,7 +93,7 @@ class SessionAndOrderSweeperTest {
         when(sessionRepo.findExpiredBefore(T0)).thenReturn(List.of(guest));
 
         ActiveOrder cart = ActiveOrder.forGuest("guest-sid");
-        cart.addReservation(1, 10, 2, 50.0, LocalDateTime.now());  // 2 tickets, event=1, zone=10
+        cart.addStandingReservation(1, 10, 2, 50.0, LocalDateTime.now());  // 2 tickets, event=1, zone=10
         when(orderRepo.getBySessionId("guest-sid")).thenReturn(Optional.of(cart));
 
         Event event = mock(Event.class);
@@ -86,7 +104,7 @@ class SessionAndOrderSweeperTest {
         assertEquals(1, cleaned);
         verify(orderRepo).delete(cart);
         verify(sessionRepo).delete("guest-sid");
-        verify(event).releaseTickets(10, 2);     // 2 tickets in zone 10 released
+        verify(event).releaseInventory(eq(10), argThat(s -> s.isStandingSelection() && s.getQuantity() == 2));     // 2 tickets in zone 10 released
         verify(eventRepo).save(event);
     }
 
@@ -129,7 +147,7 @@ class SessionAndOrderSweeperTest {
     @Test
     void cartWithExpiredItems_deletedAndTicketsReleased() {
         ActiveOrder expiredCart = ActiveOrder.forMember(5, "sid-1");
-        expiredCart.addReservation(2, 20, 3, 30.0, LocalDateTime.now());
+        expiredCart.addStandingReservation(2, 20, 3, 30.0, LocalDateTime.now());
         when(orderRepo.findExpired()).thenReturn(List.of(expiredCart));
 
         Event event = mock(Event.class);
@@ -139,16 +157,16 @@ class SessionAndOrderSweeperTest {
 
         assertEquals(1, cleaned);
         verify(orderRepo).delete(expiredCart);
-        verify(event).releaseTickets(20, 3);
+        verify(event).releaseInventory(eq(20), argThat(s -> s.isStandingSelection() && s.getQuantity() == 3));
         verify(eventRepo).save(event);
     }
 
     @Test
     void cartWithExpiredItemsAcrossMultipleEvents_releasesPerZoneAggregated() {
         ActiveOrder cart = ActiveOrder.forGuest("sid-multi");
-        cart.addReservation(1, 10, 2, 50.0, LocalDateTime.now());   // 2 in event=1 zone=10
-        cart.addReservation(1, 20, 1, 75.0, LocalDateTime.now());   // 1 in event=1 zone=20
-        cart.addReservation(2, 30, 1, 100.0, LocalDateTime.now());  // 1 in event=2 zone=30
+        cart.addStandingReservation(1, 10, 2, 50.0, LocalDateTime.now());   // 2 in event=1 zone=10
+        cart.addStandingReservation(1, 20, 1, 75.0, LocalDateTime.now());   // 1 in event=1 zone=20
+        cart.addStandingReservation(2, 30, 1, 100.0, LocalDateTime.now());  // 1 in event=2 zone=30
         when(orderRepo.findExpired()).thenReturn(List.of(cart));
 
         Event event1 = mock(Event.class);
@@ -158,9 +176,9 @@ class SessionAndOrderSweeperTest {
 
         sweeper.sweepExpiredOrders();
 
-        verify(event1).releaseTickets(10, 2);
-        verify(event1).releaseTickets(20, 1);
-        verify(event2).releaseTickets(30, 1);
+        verify(event1).releaseInventory(eq(10), argThat(s -> s.isStandingSelection() && s.getQuantity() == 2));
+        verify(event1).releaseInventory(eq(20), argThat(s -> s.isStandingSelection() && s.getQuantity() == 1));
+        verify(event2).releaseInventory(eq(30), argThat(s -> s.isStandingSelection() && s.getQuantity() == 1));
         verify(eventRepo, times(1)).save(event1);  // saved once after both zones updated
         verify(eventRepo, times(1)).save(event2);
         verify(orderRepo).delete(cart);
@@ -169,7 +187,7 @@ class SessionAndOrderSweeperTest {
     @Test
     void cartWithEventMissingFromRepo_skipsReleaseGracefully() {
         ActiveOrder cart = ActiveOrder.forGuest("sid-1");
-        cart.addReservation(99, 10, 1, 25.0, LocalDateTime.now());
+        cart.addStandingReservation(99, 10, 1, 25.0, LocalDateTime.now());
         when(orderRepo.findExpired()).thenReturn(List.of(cart));
         when(eventRepo.findById(99)).thenReturn(null);  // event vanished
 
@@ -191,7 +209,7 @@ class SessionAndOrderSweeperTest {
         when(orderRepo.getBySessionId("sid-g")).thenReturn(Optional.empty());
 
         ActiveOrder expiredCart = ActiveOrder.forMember(5, "sid-m");
-        expiredCart.addReservation(1, 10, 1, 30.0, LocalDateTime.now());
+        expiredCart.addStandingReservation(1, 10, 1, 30.0, LocalDateTime.now());
         when(orderRepo.findExpired()).thenReturn(List.of(expiredCart));
 
         Event event = mock(Event.class);
@@ -201,11 +219,11 @@ class SessionAndOrderSweeperTest {
 
         verify(sessionRepo).delete("sid-g");
         verify(orderRepo).delete(expiredCart);
-        verify(event).releaseTickets(10, 1);
+        verify(event).releaseInventory(eq(10), argThat(s -> s.isStandingSelection() && s.getQuantity() == 1));
     }
 
     @Test
-    void emptyOrderItems_releaseTicketsIsNoOp() {
+    void emptyOrderItems_releaseStandingSpotsIsNoOp() {
         // Defensive: an ActiveOrder with no line items shouldn't blow up.
         ActiveOrder emptyCart = ActiveOrder.forGuest("sid-empty");
         when(orderRepo.findExpired()).thenReturn(List.of(emptyCart));
@@ -216,4 +234,175 @@ class SessionAndOrderSweeperTest {
         verify(eventRepo, never()).findById(anyInt());
         verify(eventRepo, never()).save(any());
     }
+
+
+
+    
+
+
+
+
+
+
+    @Test
+    void expiredSeatedOrder_releasesExactReservedSeats() {
+        SeatedZone seatedZone = new SeatedZone(
+                20,
+                "Orchestra",
+                120.0,
+                List.of(
+                        new Seat("A1", 0, 0),
+                        new Seat("A2", 1, 0),
+                        new Seat("A3", 2, 0)));
+
+        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2")));
+
+        Event event = createEventWithZones(2, List.of(seatedZone));
+
+        ActiveOrder expiredCart = ActiveOrder.forMember(5, "sid-1");
+        expiredCart.addSeatedReservation(
+                2,
+                20,
+                List.of("A1", "A2"),
+                120.0,
+                LocalDateTime.now());
+
+        when(orderRepo.findExpired()).thenReturn(List.of(expiredCart));
+        when(eventRepo.findById(2)).thenReturn(event);
+
+        int cleaned = sweeper.sweepExpiredOrders();
+
+        assertEquals(1, cleaned);
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A2"));
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A3"));
+
+        verify(orderRepo).delete(expiredCart);
+        verify(eventRepo).save(event);
+    }
+    
+
+
+    @Test
+    void expiredMixedOrder_releasesStandingQuantityAndExactSeatedSeats() {
+        StandingZone standingZone = new StandingZone(10, "General Admission", 5, 50.0);
+        SeatedZone seatedZone = new SeatedZone(
+                20,
+                "Orchestra",
+                120.0,
+                List.of(
+                        new Seat("A1", 0, 0),
+                        new Seat("A2", 1, 0)));
+
+        standingZone.reserve(InventorySelection.standing(2));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+
+        Event event = createEventWithZones(1, List.of(standingZone, seatedZone));
+
+        ActiveOrder expiredCart = ActiveOrder.forGuest("sid-mixed");
+        expiredCart.addStandingReservation(1, 10, 2, 50.0, LocalDateTime.now());
+        expiredCart.addSeatedReservation(1, 20, List.of("A1"), 120.0, LocalDateTime.now());
+
+        when(orderRepo.findExpired()).thenReturn(List.of(expiredCart));
+        when(eventRepo.findById(1)).thenReturn(event);
+
+        sweeper.sweepExpiredOrders();
+
+        assertEquals(5, standingZone.getAvailableAmount());
+        assertEquals(0, standingZone.getReservedAmount());
+
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A2"));
+
+        verify(orderRepo).delete(expiredCart);
+        verify(eventRepo).save(event);
+    }
+    
+
+
+    @Test
+    void expiredGuestSessionWithSeatedCart_releasesExactSeatsAndDeletesCart() {
+        Session guest = new Session("guest-seated-sid", null, T0.minusSeconds(7200), T0.minusSeconds(60));
+        when(sessionRepo.findExpiredBefore(T0)).thenReturn(List.of(guest));
+
+        SeatedZone seatedZone = new SeatedZone(
+                20,
+                "Orchestra",
+                120.0,
+                List.of(
+                        new Seat("A1", 0, 0),
+                        new Seat("A2", 1, 0)
+                )
+        );
+
+        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+
+        Event event = createEventWithZones(1, List.of(seatedZone));
+
+        ActiveOrder cart = ActiveOrder.forGuest("guest-seated-sid");
+        cart.addSeatedReservation(1, 20, List.of("A1"), 120.0, LocalDateTime.now());
+
+        when(orderRepo.getBySessionId("guest-seated-sid")).thenReturn(Optional.of(cart));
+        when(eventRepo.findById(1)).thenReturn(event);
+
+        int cleaned = sweeper.sweepExpiredSessions(T0);
+
+        assertEquals(1, cleaned);
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A2"));
+
+        verify(orderRepo).delete(cart);
+        verify(sessionRepo).delete("guest-seated-sid");
+        verify(eventRepo).save(event);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // test helper functions:
+
+    private PurchasePolicy acceptingPurchasePolicy() {
+        return new PurchasePolicy(10);
+    }
+
+    private DiscountPolicy noDiscountPolicy() {
+        return new DiscountPolicy(0) {
+            @Override
+            public double calculate(int quantity, Double priceAtOneTicketReservation, LocalDateTime now) {
+                return quantity * priceAtOneTicketReservation;
+            }
+
+            @Override
+            public double calculatePriceforoneticket(int quantity, Double priceAtOneTicketReservation, LocalDateTime now) {
+                return priceAtOneTicketReservation;
+            }
+        };
+    }
+
+    private Event createEventWithZones(int eventId, List<InventoryZone> zones) {
+        return new Event(
+                eventId,
+                "Concert",
+                4.5,
+                List.of("Artist"),
+                EventCategory.CONCERT,
+                100,
+                EventStatus.SCHEDULED,
+                new VenueMap(1, new Location("Israel", "Tel Aviv"), zones),
+                List.of(),
+                acceptingPurchasePolicy(),
+                noDiscountPolicy()
+        );
+    }
+
+
 }

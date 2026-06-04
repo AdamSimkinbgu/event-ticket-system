@@ -3,6 +3,7 @@ package com.ticketing.system.Core.Application.services;
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.PurchaseRecordDTO;
+import com.ticketing.system.Core.Application.dtoMappers.OrderReceiptMapper;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
@@ -11,8 +12,7 @@ import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 
 import java.util.ArrayList;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 // Read-side service for member-facing personal account queries.
 // Owns UC-16 (View Personal Purchase History).
@@ -22,14 +22,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class MemberAccountService {
 
-    private final AuthenticationService authenticationService; // For user identity verification, if needed for future
-                                                               // methods.
+    private final AuthenticationService authenticationService; // For user identity verification, if needed for future methods.
     private final IOrderReceiptRepository orderReceiptRepository;
     private final ITicketRepository ticketRepository;
     private final IEventRepository eventRepository; // For event name lookups in history records.
-    private final Logger logger = LoggerFactory.getLogger(MemberAccountService.class);
 
     public MemberAccountService(
             AuthenticationService authenticationService,
@@ -48,7 +47,7 @@ public class MemberAccountService {
     // user.
     public PurchaseHistoryDTO viewMyHistory(AuthTokenDTO authToken) {
         try {
-            logger.info("Received request to view purchase history with authToken: {}", authToken.token());
+            log.info("Received request to view purchase history with authToken: {}", authToken.token());
             if (!authenticationService.validateToken(authToken.token())) {
                 throw new SecurityException("Invalid auth token");
             }
@@ -57,36 +56,25 @@ public class MemberAccountService {
             List<OrderReceipt> receipts = orderReceiptRepository.findByHolderUserId(userId);
             List<PurchaseRecordDTO> purchaseRecords = new ArrayList<>();
 
+            OrderReceiptMapper receiptMapper = new OrderReceiptMapper();
             for (OrderReceipt receipt : receipts) {
-                purchaseRecords.add(mapToPurchaseRecordDTO(receipt));
+                // pass repositories to mapper for richer DTOs without bloating service logic. Mapper handles all data fetching for the DTO construction.
+                purchaseRecords.add(receiptMapper.toPurchaseRecordDTO(receipt, ticketRepository));
             }
 
-            logger.info("Successfully retrieved purchase history for userId={}, recordsCount={}", userId,
+            log.info("Successfully retrieved purchase history for userId={}, recordsCount={}", userId,
                     purchaseRecords.size());
             return new PurchaseHistoryDTO(purchaseRecords);
 
         } catch (SecurityException e) {
-            logger.error("Error retrieving purchase history for user {}: {}",
+            log.error("Error retrieving purchase history for user {}: {}",
                     authenticationService.extractUserId(authToken.token()), e.getMessage());
         } catch (Exception e) {
-            logger.error("Unexpected error retrieving purchase history for user {}: {}",
+            log.error("Unexpected error retrieving purchase history for user {}: {}",
                     authenticationService.extractUserId(authToken.token()), e.getMessage(), e);
         }
         return new PurchaseHistoryDTO(new ArrayList<>()); // Return empty history on failure.
     }
 
-    private PurchaseRecordDTO mapToPurchaseRecordDTO(OrderReceipt receipt) {
-        List<PurchaseHistoryDTO.TicketRecordDTO> ticketRecords = new ArrayList<>();
-        Event event = eventRepository.findById(receipt.geteventId());
-        for (var ticket : ticketRepository.findByOrderReceiptId(receipt.getId())) {
-            ticketRecords.add(ticket.toTicketRecordDTO());
-        }
-        return new PurchaseRecordDTO(
-                receipt.getId(),
-                receipt.geteventId(),
-                event.getName(), // Would need to query event details for the name.
-                receipt.getPurchaseTime(), // Assuming first transaction is purchase time.
-                receipt.getTotalAmount(),
-                ticketRecords);
-    }
+
 }

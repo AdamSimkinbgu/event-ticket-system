@@ -27,7 +27,14 @@ import com.ticketing.system.Core.Domain.users.Session;
 public class MemorySessionRepository implements ISessionRepository {
 
     private final Map<String, Session> sessionsById = new ConcurrentHashMap<>();
+    private final RepositoryLocks<String> locks = new RepositoryLocks<>();
     private final Clock clock;
+
+    @Override
+    public void lockForUpdate(String id) { locks.lock(id); }
+
+    @Override
+    public void unlock(String id) { locks.unlock(id); }
 
     public MemorySessionRepository(Clock clock) {
         this.clock = clock;

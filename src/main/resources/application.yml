@@ -42,3 +42,13 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+
+# Vaadin Flow (V2-F-01).
+#  - launch-browser=false: don't auto-open browser on `mvn spring-boot:run`
+#  - allowed-packages: restrict component / route scan to our package to keep
+#    startup fast (without this, Vaadin scans the whole classpath).
+#  - productionMode is NOT set here on purpose — it's controlled by the
+#    Maven `production` profile, not by yml.
+vaadin:
+  launch-browser: false
+  allowed-packages: com.ticketing.system.Presentation

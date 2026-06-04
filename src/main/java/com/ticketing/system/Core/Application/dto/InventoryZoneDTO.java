@@ -1,23 +1,41 @@
 package com.ticketing.system.Core.Application.dto;
 
+import java.util.List;
+
 public class InventoryZoneDTO {
     private final int id;
     private final String name;
-    private  int capacity;
-    private int reservedAmount;
-    private double price;
+    private final String zoneType;
+    private final int capacity;
+    private final int availableAmount;
+    private final int reservedAmount;
+    private final int soldAmount;
+    private final double price;
+    private final List<SeatDTO> seats;
 
-    public InventoryZoneDTO(int id, String name, int capacity, int reservedAmount, double price) {
+    public InventoryZoneDTO(
+            int id,
+            String name,
+            String zoneType,
+            int capacity,
+            int availableAmount,
+            int reservedAmount,
+            int soldAmount,
+            double price,
+            List<SeatDTO> seats
+    ) {
         this.id = id;
         this.name = name;
+        this.zoneType = zoneType;
         this.capacity = capacity;
+        this.availableAmount = availableAmount;
         this.reservedAmount = reservedAmount;
-        this.price=price;
+        this.soldAmount = soldAmount;
+        this.price = price;
+        this.seats = seats == null ? List.of() : List.copyOf(seats);
     }
 
-    public int getAvailableAmount() {
-        return capacity - reservedAmount;
-    }
+
 
     public int getId() {
         return id;
@@ -27,12 +45,32 @@ public class InventoryZoneDTO {
         return name;
     }
 
+    public String getZoneType() {
+        return zoneType;
+    }
+
     public int getCapacity() {
         return capacity;
     }
 
+    public int getAvailableAmount() {
+        return availableAmount;
+    }
+
+    public int getReservedAmount() {
+        return reservedAmount;
+    }
+
+    public int getSoldAmount() {
+        return soldAmount;
+    }
+
     public double getPrice() {
         return price;
+    }
+
+    public List<SeatDTO> getSeats() {
+        return seats;
     }
 
 }

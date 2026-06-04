@@ -1,6 +1,5 @@
 package com.ticketing.system.Core.Application.dto;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 // Lightweight Event projection for listings — UC-3 (browse), UC-7 (search results).
