@@ -1,0 +1,18 @@
+# V2 dev profile (V2-F-01).
+#
+# The codebase uses Memory*Repository classes for persistence — no real DB is
+# needed at runtime. But the default `application.yml` is V3-prep wired for
+# Postgres + JPA, which makes Spring Boot fail on startup if there's no DB.
+#
+# This profile EXCLUDES DataSource + JPA auto-config so the app boots cleanly
+# with Vaadin + Memory* repos and no Postgres / Docker. Activate it with:
+#
+#   ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+#
+# V3 will delete this profile and bring back the JPA stack via the ORM lane.
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
