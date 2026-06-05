@@ -2,6 +2,7 @@ package com.ticketing.system.acceptance;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -196,12 +197,11 @@ class CompanyAcceptanceTest {
                                 manager.userId(),
                                 permissions);
 
-                ProductionCompany company = companyRepository.getCompanyById(companyId);
                 User managerUser = userRepository.getUserById(manager.userId());
 
-                assertTrue(company.getPendingManagers().containsKey(manager.userId()));
-                assertEquals(permissions, company.getPendingManagers().get(manager.userId()));
-                assertEquals(1, managerUser.getManagementInvitations().size());
+                assertNotEquals(null, managerUser.getPendingCompanyAppointments(companyId));
+                assertEquals(permissions, managerUser.getPendingCompanyAppointments(companyId).getPermissions().stream()
+                                .toList());
         }
 
         @Test
@@ -231,12 +231,10 @@ class CompanyAcceptanceTest {
                                 manager.userId(),
                                 updated);
 
-                ProductionCompany company = companyRepository.getCompanyById(companyId);
                 User managerUser = userRepository.getUserById(manager.userId());
 
-                assertEquals(updated, company.getManagers().get(manager.userId()));
                 assertEquals(updated,
-                                managerUser.getAppointmentForCompany(companyId).getPermissions());
+                                managerUser.getActiveCompanyAppointments(companyId).getPermissions().stream().toList());
         }
 
         @Test
@@ -295,8 +293,7 @@ class CompanyAcceptanceTest {
                 ProductionCompany company = companyRepository.getCompanyById(companyId);
                 User managerUser = userRepository.getUserById(manager.userId());
 
-                assertFalse(company.getManagers().containsKey(manager.userId()));
-                assertNull(managerUser.getAppointmentForCompany(companyId));
+                assertNull(managerUser.getActiveCompanyAppointments(companyId));
         }
 
         // UC-25

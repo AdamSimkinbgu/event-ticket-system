@@ -180,29 +180,19 @@ public class User implements InvariantChecked {
         return this.managementInvitations;
     }
 
-    public void ModifyManagerPermissions(int companyId, int targetId, List<Permission> newPermissions) {
+    public void ModifyManagerPermissions(int companyId, int inventorId, List<Permission> newPermissions) {
         CompanyAppointment appointment = getAppointmentForCompany(companyId);
         if (appointment == null) {
             throw new RuntimeException("No appointment found for the specified company");
         }
-        if (appointment.getRole() != CompanyRole.Owner || appointment.getStatus() != AppointmentStatus.ACTIVE) {
+        if (appointment.getInviterId() != inventorId) {
+            throw new RuntimeException("Only the original appointer can modify manager permissions");
+        }
+        if (appointment.getRole() != CompanyRole.Manager || appointment.getStatus() != AppointmentStatus.ACTIVE) {
             throw new RuntimeException("Only active owners can modify manager permissions");
         }
-        CompanyAppointment targetAppointment = null;
-        for (CompanyAppointment app : companyAppointments) {
-            if (app.getCompanyId() == companyId && app.getTargetId() == targetId) {
-                targetAppointment = app;
-                break;
-            }
-        }
-        if (targetAppointment == null) {
-            throw new RuntimeException("Target user does not have an appointment in this company");
-        }
-        if (targetAppointment.getRole() != CompanyRole.Manager
-                || targetAppointment.getStatus() != AppointmentStatus.ACTIVE) {
-            throw new RuntimeException("Target appointment must be an active manager appointment");
-        }
-        targetAppointment.setPermissions(EnumSet.copyOf(newPermissions));
+
+        appointment.setPermissions(EnumSet.copyOf(newPermissions));
     }
 
     // ---------------------------------------------------------------------------

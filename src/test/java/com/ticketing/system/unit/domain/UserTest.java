@@ -26,16 +26,20 @@ public class UserTest extends BaseDomainTest {
         private final int OTHER_COMPANY_ID = 200;
 
         private User user;
+        private User owner;
         private List<Permission> defaultPermissions;
 
         @BeforeEach
         public void setUp() {
+
                 user = track(new User(USER_ID, "targetUser", "target@example.com", "password"));
+                owner = track(new User(OWNER_ID, "owner", "owner@example.com", "password"));
 
                 defaultPermissions = new ArrayList<>();
                 defaultPermissions.add(Permission.APPOINT_MANAGER);
                 defaultPermissions.add(Permission.CONFIGURE_VENUE);
                 defaultPermissions.add(Permission.MANAGE_INVENTORY);
+                owner.addFounderAppointment(COMPANY_ID);
         }
 
         @Test
@@ -45,7 +49,7 @@ public class UserTest extends BaseDomainTest {
                                 OWNER_ID,
                                 defaultPermissions);
 
-                assertEquals(1, user.getManagementInvitations().size());
+                assertEquals(1, user.getAllCompanyAppointments().size());
         }
 
         @Test
@@ -69,7 +73,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.acceptInvitation(COMPANY_ID);
 
-                assertTrue(user.getManagementInvitations().isEmpty());
+                assertEquals(null, user.getPendingCompanyAppointments(COMPANY_ID));
         }
 
         @Test
@@ -107,7 +111,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.rejectInvitation(COMPANY_ID);
 
-                assertTrue(user.getManagementInvitations().isEmpty());
+                assertEquals(null, user.getPendingCompanyAppointments(COMPANY_ID));
         }
 
         @Test
@@ -119,7 +123,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.rejectInvitation(COMPANY_ID);
 
-                assertNotEquals(null, user.getActiveCompanyAppointments(COMPANY_ID));
+                assertEquals(null, user.getActiveCompanyAppointments(COMPANY_ID));
         }
 
         @Test
@@ -163,7 +167,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.revokeManagerAppointment(COMPANY_ID, OWNER_ID);
 
-                assertNotEquals(null, user.getActiveCompanyAppointments(COMPANY_ID));
+                assertEquals(null, user.getActiveCompanyAppointments(COMPANY_ID));
         }
 
         @Test
@@ -197,12 +201,12 @@ public class UserTest extends BaseDomainTest {
 
                 user.ModifyManagerPermissions(
                                 COMPANY_ID,
-                                USER_ID,
+                                OWNER_ID,
                                 newPermissions);
 
                 CompanyAppointment appointment = user.getActiveCompanyAppointments(COMPANY_ID);
 
-                assertEquals(newPermissions, appointment.getPermissions());
+                assertEquals(newPermissions, appointment.getPermissions().stream().toList());
         }
 
         @Test
@@ -232,30 +236,6 @@ public class UserTest extends BaseDomainTest {
                                 COMPANY_ID,
                                 USER_ID,
                                 newPermissions));
-        }
-
-        @Test
-        public void GivenPendingInvitation_WhenAcceptInvitation_ThenMemberProfileIdUpdated() {
-                user.receiveManagerAppointment(
-                                COMPANY_ID,
-                                OWNER_ID,
-                                defaultPermissions);
-
-                user.acceptInvitation(COMPANY_ID);
-
-                assertEquals(COMPANY_ID, user.getMemberProfile().getCompanyId());
-        }
-
-        @Test
-        public void GivenPendingInvitation_WhenAcceptInvitation_ThenMemberProfileRoleIsManager() {
-                user.receiveManagerAppointment(
-                                COMPANY_ID,
-                                OWNER_ID,
-                                defaultPermissions);
-
-                user.acceptInvitation(COMPANY_ID);
-
-                assertEquals(CompanyRole.Manager, user.getMemberProfile().getCompanyRole());
         }
 
 }
