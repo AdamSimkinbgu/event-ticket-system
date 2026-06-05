@@ -286,8 +286,9 @@ public class ProductionCompany implements InvariantChecked {
         throw new UnsupportedOperationException("UC-23 / II.4.8.3: not implemented");
     }
 
-    // TODO: need to check if this function is needed or could be deleted
-    public void ValidateManagerOrOwner(int userId) {
+    // TODO: delete this function if not needed after the manager invitation
+    // refactor
+    public void ValidateManagerOrOwnerForConfigureVenue(int userId) {
         if (isOwner(userId)) {
             return;
         }

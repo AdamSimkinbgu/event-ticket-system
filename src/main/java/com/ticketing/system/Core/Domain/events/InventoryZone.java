@@ -1,5 +1,6 @@
 package com.ticketing.system.Core.Domain.events;
 
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 /**
@@ -35,6 +36,10 @@ public abstract class InventoryZone implements InvariantChecked {
         if (price < 0) {
             throw new IllegalArgumentException("Price cannot be negative");
         }
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Zone name must be non-blank");
+        }
+
         this.id = id;
         this.name = name;
         this.price = price;
@@ -52,36 +57,37 @@ public abstract class InventoryZone implements InvariantChecked {
         return price;
     }
 
-    /** Total inventory units in this zone (seats for SeatedZone, capacity for StandingZone). */
+    public abstract ZoneType getZoneType();
+
     public abstract int getCapacity();
 
-    /** Units currently available for new reservations. */
     public abstract int getAvailableAmount();
 
-    /** Units currently held by un-purchased reservations. */
     public abstract int getReservedAmount();
 
-    // ---------------------------------------------------------------------
-    // Legacy counter-based API. Concrete on StandingZone; throws on SeatedZone.
-    // ---------------------------------------------------------------------
+    public abstract boolean checkAvailability(int quantity);
 
-    public boolean reserve(int quantity) {
-        throw new UnsupportedOperationException(
-                "reserve(int) is a StandingZone operation — for SeatedZone, downcast and call reserveSeats(List<String>) instead");
+    public abstract boolean reserve(InventorySelection selection);
+
+    public abstract boolean release(InventorySelection selection);
+
+    public abstract boolean confirmSale(InventorySelection selection);
+
+    public abstract int getSoldAmount();
+
+    public boolean isStanding() {
+        return getZoneType() == ZoneType.STANDING;
     }
 
-    public boolean release(int quantity) {
-        throw new UnsupportedOperationException(
-                "release(int) is a StandingZone operation — for SeatedZone, downcast and call releaseSeats(List<String>) instead");
+    public boolean isSeated() {
+        return getZoneType() == ZoneType.SEATED;
     }
-
-    public boolean checkAvailability(int quantity) {
-        throw new UnsupportedOperationException(
-                "checkAvailability(int) is a StandingZone operation");
-    }
-
-    public void setCapacity(int newCapacity) {
-        throw new UnsupportedOperationException(
-                "setCapacity(int) is a StandingZone operation — SeatedZone capacity is derived from its seat list");
+    
+    // setCapacity is overriden only in standing zone, will throw here if called on seated zone; the seat-based methods must be used instead
+    public void setStandingCapacity(int newCapacity) {
+        if (!isStanding()) {
+            throw new UnsupportedOperationException("Cannot update capacity directly for a seated zone");
+        }
+        //Note: won't get here if it's a standing zone
     }
 }

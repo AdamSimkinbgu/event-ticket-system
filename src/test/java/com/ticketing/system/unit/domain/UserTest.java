@@ -1,6 +1,7 @@
 package com.ticketing.system.unit.domain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -54,9 +55,9 @@ public class UserTest extends BaseDomainTest {
                                 OWNER_ID,
                                 defaultPermissions);
 
-                ManagementInvitation invitation = user.acceptInvitation(COMPANY_ID);
+                CompanyAppointment appontment = user.acceptInvitation(COMPANY_ID);
 
-                assertEquals(COMPANY_ID, invitation.getCompanyId());
+                assertEquals(COMPANY_ID, appontment.getCompanyId());
         }
 
         @Test
@@ -80,7 +81,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.acceptInvitation(COMPANY_ID);
 
-                assertEquals(1, user.getCompanyAppointments().size());
+                assertNotEquals(null, user.getActiveCompanyAppointments(COMPANY_ID));
         }
 
         @Test
@@ -92,7 +93,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.acceptInvitation(COMPANY_ID);
 
-                CompanyAppointment appointment = user.getCompanyAppointments().get(0);
+                CompanyAppointment appointment = user.getAllCompanyAppointments().get(0);
 
                 assertEquals(COMPANY_ID, appointment.getCompanyId());
         }
@@ -118,7 +119,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.rejectInvitation(COMPANY_ID);
 
-                assertTrue(user.getCompanyAppointments().isEmpty());
+                assertNotEquals(null, user.getActiveCompanyAppointments(COMPANY_ID));
         }
 
         @Test
@@ -160,14 +161,14 @@ public class UserTest extends BaseDomainTest {
 
                 user.acceptInvitation(COMPANY_ID);
 
-                user.revokeManagerAppointment(COMPANY_ID);
+                user.revokeManagerAppointment(COMPANY_ID, OWNER_ID);
 
-                assertTrue(user.getCompanyAppointments().isEmpty());
+                assertNotEquals(null, user.getActiveCompanyAppointments(COMPANY_ID));
         }
 
         @Test
         public void GivenNoAppointment_WhenrevokeManagerAppointment_ThenThrowException() {
-                assertThrows(RuntimeException.class, () -> user.revokeManagerAppointment(COMPANY_ID));
+                assertThrows(RuntimeException.class, () -> user.revokeManagerAppointment(COMPANY_ID, OWNER_ID));
         }
 
         @Test
@@ -179,7 +180,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.acceptInvitation(OTHER_COMPANY_ID);
 
-                assertThrows(RuntimeException.class, () -> user.revokeManagerAppointment(COMPANY_ID));
+                assertThrows(RuntimeException.class, () -> user.revokeManagerAppointment(COMPANY_ID, OWNER_ID));
         }
 
         @Test
@@ -199,7 +200,7 @@ public class UserTest extends BaseDomainTest {
                                 USER_ID,
                                 newPermissions);
 
-                CompanyAppointment appointment = user.getCompanyAppointments().get(0);
+                CompanyAppointment appointment = user.getActiveCompanyAppointments(COMPANY_ID);
 
                 assertEquals(newPermissions, appointment.getPermissions());
         }

@@ -115,9 +115,16 @@ class CompanyAcceptanceTest {
                                 List.of(new ShowDate(LocalDateTime.now().plusDays(1),
                                                 LocalDateTime.now().plusDays(30))));
                 EventDetailDTO event = eventManagementService.addEvent(owner.token(), eventRequest);
+
+                eventManagementService.configureVenueMap(owner.token(), companyId, new VenueMapConfigDTO(
+                                event.eventId(),
+                                "Test Venue",
+                                List.of(new VenueMapConfigDTO.ZoneConfigDTO("Standing Zone A", false, 100, null,
+                                                50.0))));
+
                 Event storedEvent = eventRepository.findById(Integer.parseInt(event.eventId()));
 
-                eventManagementService.addCapacitoesToVenueMapZone(owner.token(), companyId, storedEvent.getId(), 1,
+                eventManagementService.updateStandingZoneCapacity(owner.token(), companyId, storedEvent.getId(), 1,
                                 150);
 
                 InventoryZone zone = storedEvent.getVenueMap().getInventoryZones().stream()

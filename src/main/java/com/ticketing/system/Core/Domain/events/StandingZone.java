@@ -1,5 +1,7 @@
 package com.ticketing.system.Core.Domain.events;
 
+import com.ticketing.system.Core.Domain.events.InventorySelection;
+
 /**
  * Counter-based zone — no addressable seats, just "N tickets available".
  *
@@ -12,6 +14,7 @@ public class StandingZone extends InventoryZone {
 
     private int capacity;
     private int reservedAmount;
+    private int soldAmount;
     private final Object inventoryLock = new Object();
 
     public StandingZone(int id, String name, int capacity, double price) {
@@ -21,21 +24,40 @@ public class StandingZone extends InventoryZone {
         }
         this.capacity = capacity;
         this.reservedAmount = 0;
+        this.soldAmount = 0;
     }
+
+
 
     @Override
     public int getAvailableAmount() {
         synchronized (inventoryLock) {
-            return capacity - reservedAmount;
+            return capacity - reservedAmount - soldAmount;
         }
     }
+
+    @Override
+    public int getReservedAmount() {
+        synchronized (inventoryLock) {
+            return reservedAmount;
+        }
+    }
+
+    @Override
+    public int getSoldAmount() {
+        synchronized (inventoryLock) {
+            return soldAmount;
+        }
+    }
+
+
 
     @Override
     public boolean checkAvailability(int quantity) {
         synchronized (inventoryLock) {
             validatePositiveQuantity(quantity);
 
-            int availableAmount = capacity - reservedAmount;
+            int availableAmount = capacity - reservedAmount - soldAmount;
 
             if (availableAmount < quantity) {
                 throw new IllegalStateException("remaining " + availableAmount + " tickets available");
@@ -45,12 +67,25 @@ public class StandingZone extends InventoryZone {
         }
     }
 
+
+
+
+
+
+
+
+
+
     @Override
-    public boolean reserve(int quantity) {
+    public boolean reserve(InventorySelection selection) {
+        if (!selection.isStandingSelection()) {
+            throw new IllegalArgumentException("Standing zone cannot reserve specific seats");
+        }
+        int quantity = selection.getQuantity();
         synchronized (inventoryLock) {
             validatePositiveQuantity(quantity);
 
-            int availableAmount = capacity - reservedAmount;
+            int availableAmount = capacity - reservedAmount - soldAmount;
 
             if (availableAmount < quantity) {
                 throw new IllegalStateException("remaining " + availableAmount + " tickets available");
@@ -61,15 +96,15 @@ public class StandingZone extends InventoryZone {
         }
     }
 
-    @Override
-    public int getCapacity() {
-        synchronized (inventoryLock) {
-            return capacity;
-        }
-    }
+
+
 
     @Override
-    public boolean release(int quantity) {
+    public boolean release(InventorySelection selection) {
+        if (!selection.isStandingSelection()) {
+            throw new IllegalArgumentException("Standing zone cannot release specific seats");
+        }
+        int quantity = selection.getQuantity();
         synchronized (inventoryLock) {
             validatePositiveQuantity(quantity);
 
@@ -82,27 +117,75 @@ public class StandingZone extends InventoryZone {
         }
     }
 
+
+
+    
     @Override
-    public void setCapacity(int newCapacity) {
+    public boolean confirmSale(InventorySelection selection) {
+        if (!selection.isStandingSelection()) {
+            throw new IllegalArgumentException("Standing zone cannot confirm specific seats");
+        }
+
+        int quantity = selection.getQuantity();
+
+        synchronized (inventoryLock) {
+            validatePositiveQuantity(quantity);
+
+            if (quantity > reservedAmount) {
+                throw new IllegalStateException("Cannot confirm more tickets than reserved");
+            }
+
+            reservedAmount -= quantity;
+            soldAmount += quantity;
+            return true;
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    @Override
+    public int getCapacity() {
+        synchronized (inventoryLock) {
+            return capacity;
+        }
+    }
+
+
+    @Override
+    public void setStandingCapacity(int newCapacity) {
         synchronized (inventoryLock) {
             if (newCapacity < 0) {
                 throw new IllegalArgumentException("Capacity cannot be negative");
             }
 
-            if (newCapacity < reservedAmount) {
-                throw new IllegalArgumentException("New capacity cannot be less than the number of reserved tickets");
+            if (newCapacity < reservedAmount + soldAmount) {
+                throw new IllegalArgumentException("New capacity cannot be less than reserved + sold tickets");
             }
 
             this.capacity = newCapacity;
         }
     }
 
+
     @Override
-    public int getReservedAmount() {
-        synchronized (inventoryLock) {
-            return reservedAmount;
-        }
+    public ZoneType getZoneType() {
+        return ZoneType.STANDING;
     }
+
 
     private void validatePositiveQuantity(int quantity) {
         if (quantity <= 0) {
