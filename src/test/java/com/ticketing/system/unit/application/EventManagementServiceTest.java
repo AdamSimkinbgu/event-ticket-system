@@ -73,6 +73,7 @@ class EventManagementServiceTest {
     private VenueMap venueMap;
     private Event event;
     private User ownerUser;
+    private User managerUser;
 
     @BeforeEach
     public void setUp() {
@@ -110,6 +111,10 @@ class EventManagementServiceTest {
                 null,
                 null);
         ownerUser = new User(OWNER_ID, "Owner Name", "owner@example.com", "hashedpassword");
+        ownerUser.addFounderAppointment(COMPANY_ID);
+        managerUser = new User(MANAGER_ID, "Manager Name", "manager@example.com", "hashedpassword");
+        managerUser.receiveManagerAppointment(COMPANY_ID, OWNER_ID, List.of(Permission.CONFIGURE_VENUE));
+        managerUser.acceptInvitation(COMPANY_ID);
     }
 
     @Test
@@ -119,8 +124,7 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
-        when(ownerUser.hasPermissionInCompany(COMPANY_ID, Permission.CONFIGURE_VENUE)).thenReturn(true);
-
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
         eventService.updateStandingZoneCapacity(
                 OWNER_TOKEN,
                 COMPANY_ID,
@@ -144,6 +148,8 @@ class EventManagementServiceTest {
         when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
         eventService.updateStandingZoneCapacity(
@@ -236,6 +242,8 @@ class EventManagementServiceTest {
     public void GivenZoneDoesNotExist_WhenUpdateZoneCapacity_ThenThrowException() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
@@ -253,6 +261,8 @@ class EventManagementServiceTest {
 
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
@@ -267,6 +277,8 @@ class EventManagementServiceTest {
     private OrderReceipt setupStateBasedHappyPath() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         ReceiptLine line = new ReceiptLine(1, 100.0, EVENT_ID, 1, "A1", java.time.LocalDateTime.now());
@@ -344,6 +356,8 @@ class EventManagementServiceTest {
     public void GivenPaidTicket_WhenCancelEventAndRefund_ThenTicketStatusIsMarkedRefunded() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
@@ -361,6 +375,8 @@ class EventManagementServiceTest {
     public void GivenIssuedTicket_WhenCancelEventAndRefund_ThenTicketStatusIsMarkedRefunded() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
@@ -380,6 +396,8 @@ class EventManagementServiceTest {
     public void GivenAvailableTicket_WhenCancelEventAndRefund_ThenTicketStatusRemainsUnchanged() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
