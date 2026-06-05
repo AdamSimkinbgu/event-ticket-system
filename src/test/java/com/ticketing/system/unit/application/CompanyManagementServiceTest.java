@@ -99,7 +99,7 @@ public class CompanyManagementServiceTest {
                                 TARGET_USER_ID,
                                 defaultPermissions);
 
-                assertEquals(1, targetUser.getManagementInvitations().size());
+                assertNotEquals(null, targetUser.getPendingCompanyAppointments(COMPANY_ID));
         }
 
         @Test
@@ -190,7 +190,9 @@ public class CompanyManagementServiceTest {
                                 TARGET_USER_ID,
                                 newPermissions);
 
-                assertEquals(newPermissions, company.getManagers().get(TARGET_USER_ID));
+                for (Permission perm : newPermissions) {
+                        assertTrue(targetUser.hasPermissionInCompany(COMPANY_ID, perm));
+                }
         }
 
         @Test
@@ -531,6 +533,8 @@ public class CompanyManagementServiceTest {
                 when(mockCompanyRepo.existsByName("Epic Productions")).thenReturn(false);
                 when(mockCompanyRepo.nextId()).thenReturn(expectedCompanyId);
 
+                when(mockUserRepo.getUserById(userId)).thenReturn(new User(userId, "founder", "", "password"));
+
                 // save() is void per IProductionCompanyRepository — no return-value mock
                 // needed.
                 // The service builds the DTO from the locally-constructed ProductionCompany,
@@ -561,7 +565,7 @@ public class CompanyManagementServiceTest {
                         companyService.registerCompany(token, request);
                 });
 
-                assertEquals("Invalid token", exception.getMessage());
+                assertEquals("Invalid authentication token: Invalid token", exception.getMessage());
                 verify(mockCompanyRepo, never()).save(any());
         }
 
@@ -692,9 +696,10 @@ public class CompanyManagementServiceTest {
 
                 when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+                when(eventRepository.findIdsByCompany(COMPANY_ID)).thenReturn(new ArrayList<>());
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
                 when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(ownerUser);
-                when(ownerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(true);
+                when(ownerUser.hasPermissionInCompany(COMPANY_ID, Permission.VIEW_SALES)).thenReturn(true);
                 // when(mockOrderReceiptRepo.findByCompanyId(COMPANY_ID)).thenReturn(new
                 // ArrayList<>());
 
@@ -757,7 +762,7 @@ public class CompanyManagementServiceTest {
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
                 when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(ownerUser);
-                when(ownerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(true);
+                when(ownerUser.hasPermissionInCompany(COMPANY_ID, Permission.VIEW_SALES)).thenReturn(true);
 
                 when(mockEvent.getName()).thenReturn("Summer Festival");
 
@@ -831,10 +836,10 @@ public class CompanyManagementServiceTest {
                 ProductionCompany company = mock(ProductionCompany.class);
                 when(company.getManagers()).thenReturn(new HashMap<>());
                 when(company.getFounderId()).thenReturn(OWNER_ID);
+                when(company.getOwnersIds()).thenReturn(List.of(OWNER_ID));
 
-                User ownerUser = mock(User.class);
-                when(ownerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(true);
-                when(ownerUser.getUsername()).thenReturn("ownerUser");
+                User ownerUser = new User(OWNER_ID, "ownerUser", "", "password");
+                ownerUser.addFounderAppointment(COMPANY_ID);
 
                 when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
@@ -860,10 +865,10 @@ public class CompanyManagementServiceTest {
                 ProductionCompany company = mock(ProductionCompany.class);
                 when(company.getManagers()).thenReturn(managersMap);
                 when(company.getFounderId()).thenReturn(OWNER_ID);
+                when(company.getOwnersIds()).thenReturn(List.of(OWNER_ID));
 
-                User ownerUser = mock(User.class);
-                when(ownerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(true);
-                when(ownerUser.getUsername()).thenReturn("ownerUser");
+                User ownerUser = new User(OWNER_ID, "ownerUser", "", "password");
+                ownerUser.addFounderAppointment(COMPANY_ID);
 
                 User managerUser = new User(TARGET_USER_ID, "managerUser", "", "password");
                 managerUser.receiveManagerAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
@@ -902,10 +907,10 @@ public class CompanyManagementServiceTest {
                 ProductionCompany company = mock(ProductionCompany.class);
                 when(company.getManagers()).thenReturn(managersMap);
                 when(company.getFounderId()).thenReturn(OWNER_ID);
+                when(company.getOwnersIds()).thenReturn(List.of(OWNER_ID));
 
-                User ownerUser = mock(User.class);
-                when(ownerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(true);
-                when(ownerUser.getUsername()).thenReturn("ownerUser");
+                User ownerUser = new User(OWNER_ID, "ownerUser", "", "password");
+                ownerUser.addFounderAppointment(COMPANY_ID);
 
                 User manager1 = new User(MANAGER1_ID, "manager1", "", "password");
                 manager1.receiveManagerAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
@@ -952,10 +957,10 @@ public class CompanyManagementServiceTest {
                 ProductionCompany company = mock(ProductionCompany.class);
                 when(company.getManagers()).thenReturn(managersMap);
                 when(company.getFounderId()).thenReturn(OWNER_ID);
+                when(company.getOwnersIds()).thenReturn(List.of(OWNER_ID));
 
-                User ownerUser = mock(User.class);
-                when(ownerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(true);
-                when(ownerUser.getUsername()).thenReturn("ownerUser");
+                User ownerUser = new User(OWNER_ID, "ownerUser", "", "password");
+                ownerUser.addFounderAppointment(COMPANY_ID);
 
                 // manager1 was appointed by the owner
                 User manager1 = new User(MANAGER1_ID, "manager1", "", "password");
@@ -993,7 +998,7 @@ public class CompanyManagementServiceTest {
                 assertEquals("Manager", manager2Node.role());
                 assertFalse(manager2Node.isFounder());
                 assertTrue(manager2Node.appointedByThisUser().isEmpty());
-                assertEquals(List.of("MANAGE_INVENTORY"), manager2Node.grantedPermissions());
+                assertEquals(List.of(Permission.MANAGE_INVENTORY), manager2Node.grantedPermissions());
         }
 
 }

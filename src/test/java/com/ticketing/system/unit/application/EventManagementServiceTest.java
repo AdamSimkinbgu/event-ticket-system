@@ -41,6 +41,7 @@ import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.users.Permission;
+import com.ticketing.system.Core.Domain.users.User;
 
 class EventManagementServiceTest {
 
@@ -71,6 +72,7 @@ class EventManagementServiceTest {
     private InventoryZone zone;
     private VenueMap venueMap;
     private Event event;
+    private User ownerUser;
 
     @BeforeEach
     public void setUp() {
@@ -107,6 +109,7 @@ class EventManagementServiceTest {
                 List.of(),
                 null,
                 null);
+        ownerUser = new User(OWNER_ID, "Owner Name", "owner@example.com", "hashedpassword");
     }
 
     @Test
@@ -115,6 +118,8 @@ class EventManagementServiceTest {
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(ownerUser.hasPermissionInCompany(COMPANY_ID, Permission.CONFIGURE_VENUE)).thenReturn(true);
 
         eventService.updateStandingZoneCapacity(
                 OWNER_TOKEN,
@@ -128,6 +133,7 @@ class EventManagementServiceTest {
 
     @Test
     public void GivenManagerWithConfigureVenuePermission_WhenUpdateZoneCapacity_ThenZoneCapacityUpdated() {
+
         company.validateManagerInvitation(
                 COMPANY_ID,
                 MANAGER_ID,
