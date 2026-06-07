@@ -46,6 +46,17 @@ public class LkPopover extends Div {
     public LkPopover variant(PopoverVariant v)   { popover.addThemeVariants(v); return this; }
     public LkPopover modal()                     { popover.setModal(true); popover.setBackdropVisible(true); return this; }
 
+    /**
+     * Switch the wrapper from {@code inline-flex} to {@code block} +
+     * {@code width:100%} so the trigger fills its parent container.
+     * Used by form fields like {@link LkSelect} and {@link LkDateRangeField}
+     * that should stretch across the filter sidebar.
+     */
+    public LkPopover block() {
+        getStyle().set("display", "block").set("width", "100%");
+        return this;
+    }
+
     public Component getTrigger() { return trigger; }
     public Popover getPopover()   { return popover; }
 }

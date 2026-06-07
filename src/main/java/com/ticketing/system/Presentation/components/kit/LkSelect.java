@@ -22,8 +22,11 @@ public class LkSelect extends NativeLabel {
     private Consumer<String> onChange;
     private boolean hasLabel;
 
+    private List<String> options;
+
     public LkSelect(String value, List<String> options) {
         this.currentValue = value;
+        this.options = options;
         addClassName("lk-field");
         labelSpan.addClassName("lk-label");
         req.addClassName("lk-req");
@@ -35,9 +38,19 @@ public class LkSelect extends NativeLabel {
         trigger.add(valueSpan, new LkIcon("caret", 13));
         trigger.getElement().setAttribute("tabindex", "0");
 
-        popover = new LkPopover(trigger, menu);
+        popover = new LkPopover(trigger, menu).block();
         rebuildOptions(options);
         add(popover);
+    }
+
+    /** Programmatically set the value (e.g. when an external control syncs). Fires onChange. */
+    public LkSelect setValue(String value) {
+        if (value == null || value.equals(currentValue)) return this;
+        currentValue = value;
+        valueSpan.setText(value);
+        rebuildOptions(options);
+        if (onChange != null) onChange.accept(value);
+        return this;
     }
 
     public LkSelect label(String t) {

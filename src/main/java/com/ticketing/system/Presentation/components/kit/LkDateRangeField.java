@@ -5,10 +5,12 @@ import com.vaadin.flow.component.html.NativeLabel;
 import com.vaadin.flow.component.html.Span;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Date-range field — popover with preset list + custom range stub.
- * Ports the React {@code DateRangeField}.
+ * Ports the React {@code DateRangeField}. Click a preset to fire the
+ * {@link #onChange(Consumer)} callback with the new value.
  */
 public class LkDateRangeField extends NativeLabel {
 
@@ -21,10 +23,9 @@ public class LkDateRangeField extends NativeLabel {
     private final LkMenu menu = new LkMenu();
     private boolean hasLabel;
     private String currentValue;
+    private Consumer<String> onChange;
 
-    public LkDateRangeField() {
-        this("Any time");
-    }
+    public LkDateRangeField() { this("Any time"); }
 
     public LkDateRangeField(String initial) {
         this.currentValue = initial;
@@ -43,8 +44,51 @@ public class LkDateRangeField extends NativeLabel {
         trigger.getElement().setAttribute("tabindex", "0");
 
         rebuild();
+        add(new LkPopover(trigger, menu).block());
+    }
 
-        // Custom range row at the bottom
+    public LkDateRangeField label(String t) {
+        labelSpan.setText(t);
+        if (!hasLabel) {
+            getElement().insertChild(0, labelSpan.getElement());
+            hasLabel = true;
+        }
+        return this;
+    }
+
+    public LkDateRangeField width(String w) { getStyle().set("width", w); return this; }
+
+    public LkDateRangeField onChange(Consumer<String> handler) {
+        this.onChange = handler;
+        return this;
+    }
+
+    public String getValue() { return currentValue; }
+
+    /** Programmatically set the value (e.g. from a "Clear all" reset). Fires onChange. */
+    public LkDateRangeField setValue(String value) {
+        if (value == null || value.equals(currentValue)) return this;
+        currentValue = value;
+        valueSpan.setText(value);
+        rebuild();
+        if (onChange != null) onChange.accept(value);
+        return this;
+    }
+
+    private void rebuild() {
+        menu.removeAll();
+        for (String preset : PRESETS) {
+            LkMenu.Item item = new LkMenu.Item(preset);
+            if (preset.equals(currentValue)) item.active();
+            item.onClick(() -> {
+                if (preset.equals(currentValue)) return;
+                currentValue = preset;
+                valueSpan.setText(preset);
+                rebuild();
+                if (onChange != null) onChange.accept(preset);
+            });
+            menu.add(item);
+        }
         menu.add(new LkMenu.Divider());
         menu.add(new LkMenu.Label("Custom range"));
         Div rangeRow = new Div();
@@ -59,34 +103,5 @@ public class LkDateRangeField extends NativeLabel {
         end.addClassName("lk-mini");
         rangeRow.add(start, sep, end);
         menu.add(rangeRow);
-
-        add(new LkPopover(trigger, menu));
-    }
-
-    public LkDateRangeField label(String t) {
-        labelSpan.setText(t);
-        if (!hasLabel) {
-            getElement().insertChild(0, labelSpan.getElement());
-            hasLabel = true;
-        }
-        return this;
-    }
-
-    public LkDateRangeField width(String w) { getStyle().set("width", w); return this; }
-
-    public String getValue() { return currentValue; }
-
-    private void rebuild() {
-        menu.removeAll();
-        for (String preset : PRESETS) {
-            LkMenu.Item item = new LkMenu.Item(preset);
-            if (preset.equals(currentValue)) item.active();
-            item.onClick(() -> {
-                currentValue = preset;
-                valueSpan.setText(preset);
-                rebuild();
-            });
-            menu.add(item);
-        }
     }
 }

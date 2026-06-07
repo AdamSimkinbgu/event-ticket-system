@@ -21,6 +21,7 @@ public class LkPage extends Div {
 
     public LkPage() {
         addClassName("lk-page");
+        getStyle().set("margin", "0 auto");
         headRow.addClassName("lk-page-head");
         title.addClassName("lk-h1");
         subtitle.addClassName("lk-page-sub");
