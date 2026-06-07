@@ -1,7 +1,6 @@
 package com.ticketing.system.Presentation.components.kit;
 
 import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.HasComponents;
 import com.vaadin.flow.component.html.Div;
 
 /**

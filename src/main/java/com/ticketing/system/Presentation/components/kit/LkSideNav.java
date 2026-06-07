@@ -20,6 +20,7 @@ public class LkSideNav extends Aside {
 
     private final Div heading = new Div();
     private final List<Div> itemEls = new ArrayList<>();
+    private List<Item> itemDefs = List.of();
     private String activeLabel;
 
     public LkSideNav(String headingText) {
@@ -30,6 +31,7 @@ public class LkSideNav extends Aside {
     }
 
     public LkSideNav items(List<Item> items, String activeLabel) {
+        this.itemDefs = items;
         this.activeLabel = activeLabel;
         for (Div el : itemEls)
             remove(el);
@@ -76,9 +78,25 @@ public class LkSideNav extends Aside {
         container.getElement().appendChild(ico.getElement(), lbl.getElement());
     }
 
-    /** Use the orange-accent admin variant. */
+    /**
+     * Toggle the {@code .on} class to highlight the item whose label
+     * matches. Pass {@code null} to clear the highlight. Cheaper than
+     * calling {@link #items} again — no DOM rebuild.
+     */
+    public LkSideNav setActive(String label) {
+        this.activeLabel = label;
+        for (int i = 0; i < itemEls.size(); i++) {
+            if (itemDefs.get(i).label().equals(label)) itemEls.get(i).addClassName("on");
+            else itemEls.get(i).removeClassName("on");
+        }
+        return this;
+    }
+
+    /** Tags the nav with the orange-accent admin variant so the
+     *  kit's {@code .lk-admin-platform .lk-sidenav-item.on} selector
+     *  paints the highlight orange instead of blue. */
     public LkSideNav platform() {
-        // Class added on the parent shell (lk-admin-platform on wrapper) drives this.
+        addClassName("lk-admin-platform");
         return this;
     }
 }

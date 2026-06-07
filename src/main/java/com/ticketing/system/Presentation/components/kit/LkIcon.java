@@ -1,7 +1,6 @@
 package com.ticketing.system.Presentation.components.kit;
 
-import com.vaadin.flow.component.Composite;
-import com.vaadin.flow.component.Html;
+import com.vaadin.flow.component.html.Span;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -11,8 +10,14 @@ import java.util.Map;
  * {@code docs/tickethub-ui/lumo-kit.jsx} ({@code LK_ICONS}). All paths are
  * stroke-only, {@code currentColor}, 24×24 viewBox, drawn with a 1.7px
  * round-cap stroke. The glyph names match the React kit verbatim.
+ *
+ * <p>Renders the SVG by setting {@code innerHTML} on a wrapping
+ * {@code <span class="lk-icon">} — the browser's HTML5 parser handles
+ * the inline SVG namespace correctly. (Vaadin's {@code Html} component
+ * uses Jsoup which loses the SVG namespace and silently drops the
+ * paths.)
  */
-public class LkIcon extends Composite<Html> {
+public class LkIcon extends Span {
 
     private static final Map<String, String[]> PATHS = new HashMap<>();
     static {
@@ -91,10 +96,6 @@ public class LkIcon extends Composite<Html> {
                 "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" });
     }
 
-    private final String name;
-    private final int size;
-    private final double stroke;
-
     public LkIcon(String name) {
         this(name, 18, 1.7);
     }
@@ -104,23 +105,26 @@ public class LkIcon extends Composite<Html> {
     }
 
     public LkIcon(String name, int size, double stroke) {
-        this.name = name;
-        this.size = size;
-        this.stroke = stroke;
+        addClassName("lk-icon");
+        getStyle()
+            .set("display", "inline-flex")
+            .set("align-items", "center")
+            .set("justify-content", "center")
+            .set("flex-shrink", "0")
+            .set("line-height", "0");
+        getElement().setProperty("innerHTML", buildSvg(name, size, stroke));
     }
 
-    @Override
-    protected Html initContent() {
+    private static String buildSvg(String name, int size, double stroke) {
         StringBuilder svg = new StringBuilder(256);
-        svg.append("<svg xmlns=\"http://www.w3.org/2000/svg\" class=\"lk-icon\" width=\"")
-                .append(size).append("\" height=\"").append(size)
-                .append("\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"")
-                .append(stroke)
-                .append("\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">");
+        svg.append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"")
+            .append(size).append("\" height=\"").append(size)
+            .append("\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"")
+            .append(stroke)
+            .append("\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">");
         String[] paths = PATHS.getOrDefault(name, new String[0]);
-        for (String p : paths)
-            svg.append("<path d=\"").append(p).append("\"/>");
+        for (String p : paths) svg.append("<path d=\"").append(p).append("\"/>");
         svg.append("</svg>");
-        return new Html(svg.toString());
+        return svg.toString();
     }
 }

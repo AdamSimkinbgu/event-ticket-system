@@ -1,6 +1,5 @@
 package com.ticketing.system.Presentation.components.kit;
 
-import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.NativeLabel;
 import com.vaadin.flow.component.html.Span;
 
@@ -51,25 +50,36 @@ public class LkSelect extends NativeLabel {
     }
 
     public LkSelect required() {
-        if (req.getParent().isEmpty()) labelSpan.add(req);
+        if (req.getParent().isEmpty())
+            labelSpan.add(req);
         return this;
     }
 
-    public LkSelect width(String w) { getStyle().set("width", w); return this; }
+    public LkSelect width(String w) {
+        getStyle().set("width", w);
+        return this;
+    }
 
-    public LkSelect onChange(Consumer<String> handler) { this.onChange = handler; return this; }
+    public LkSelect onChange(Consumer<String> handler) {
+        this.onChange = handler;
+        return this;
+    }
 
-    public String getValue() { return currentValue; }
+    public String getValue() {
+        return currentValue;
+    }
 
     private void rebuildOptions(List<String> options) {
         menu.removeAll();
         for (String opt : options) {
             LkMenu.Item item = new LkMenu.Item(opt);
-            if (opt.equals(currentValue)) item.active();
+            if (opt.equals(currentValue))
+                item.active();
             item.onClick(() -> {
                 currentValue = opt;
                 valueSpan.setText(opt);
-                if (onChange != null) onChange.accept(opt);
+                if (onChange != null)
+                    onChange.accept(opt);
                 rebuildOptions(options);
             });
             menu.add(item);
