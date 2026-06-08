@@ -1,31 +1,30 @@
 package com.ticketing.system.unit.application;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
-import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
-
-import org.mockito.ArgumentCaptor;
-
-import com.ticketing.system.Core.Domain.Tickets.Ticket;
-import com.ticketing.system.Core.Domain.orders.OrderReceipt;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.concurrent.atomic.AtomicInteger;
+import org.mockito.ArgumentCaptor;
 
 import com.ticketing.system.Core.Application.dto.BarcodeDTO;
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
-import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
 import com.ticketing.system.Core.Application.dto.PaymentRequestDTO;
@@ -39,26 +38,26 @@ import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
+import com.ticketing.system.Core.Domain.Tickets.Ticket;
+import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.EventCategory;
+import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
-import com.ticketing.system.Core.Domain.events.StandingZone;
-import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
-
-import static org.junit.jupiter.api.Assertions.*;
-
-import com.ticketing.system.Core.Domain.events.DiscountPolicy;
-import com.ticketing.system.Core.Domain.events.EventCategory;
-import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.Seat;
 import com.ticketing.system.Core.Domain.events.SeatStatus;
 import com.ticketing.system.Core.Domain.events.SeatedZone;
+import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.VenueMap;
+import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
+import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
-import com.ticketing.system.Core.Domain.policies.purchase.PurchaseContext;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
+import com.ticketing.system.Core.Domain.users.User;
 
 class CheckoutServiceTest {
 
@@ -70,6 +69,7 @@ class CheckoutServiceTest {
     private IPaymentGateway mockPaymentGateway;
     private INotificationService mockNotificationService;
     private ISessionManager mockiSessionManager;
+    private IUserRepository mockUserRepository;
 
     private CheckoutService checkoutService;
 
@@ -117,6 +117,13 @@ class CheckoutServiceTest {
         mockPaymentGateway = mock(IPaymentGateway.class);
         mockNotificationService = mock(INotificationService.class);
         mockiSessionManager = mock(ISessionManager.class);
+        mockUserRepository = mock(IUserRepository.class);
+        User mockUser = mock(User.class);
+        when(mockUser.getAge()).thenReturn(20);
+          when(mockUserRepository.getUserById(USER_ID)).thenReturn(mockUser); 
+        mockUserRepository = mock(IUserRepository.class);
+        when(mockUser.getAge()).thenReturn(20);
+         when(mockUserRepository.getUserById(USER_ID)).thenReturn(mockUser);
 
         checkoutService = new CheckoutService(
                 mockActiveOrderRepo,
@@ -126,7 +133,8 @@ class CheckoutServiceTest {
                 mockTicketIssuer,
                 mockPaymentGateway,
                 mockNotificationService,
-                mockiSessionManager
+                mockiSessionManager,
+                mockUserRepository
         );
 
         mockOrder = mock(ActiveOrder.class);
@@ -159,6 +167,10 @@ class CheckoutServiceTest {
 
         when(event1.getName()).thenReturn("Concert");
         when(event2.getName()).thenReturn("Theater");
+        when(event1.getId()).thenReturn(EVENT_ID_1);
+        when(event1.getCompanyId()).thenReturn(100);
+        when(event2.getId()).thenReturn(EVENT_ID_2);
+        when(event2.getCompanyId()).thenReturn(100);
     }
 
     @Test
