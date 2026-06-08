@@ -57,7 +57,7 @@ public class CheckoutServiceAcceptanceTest {
             name,
             name + "@test.com",
             "Password1",
-            sid
+            sid,72
     ));
 
     return authService
@@ -103,7 +103,8 @@ public class CheckoutServiceAcceptanceTest {
                 ticketIssuer,
                 paymentGateway,
                 notificationService,
-                sessionManager
+                sessionManager,
+                userRepository
         );
 
         event1 = mock(Event.class);

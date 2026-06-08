@@ -16,12 +16,15 @@ public class User implements InvariantChecked {
     private String email;
     private String password;
     private List<CompanyAppointment> companyAppointments;
+    private int age;
 
-    public User(int userId, String username, String email, String password) {
+
+    public User(int userId, String username, String email, String password, int age) {
         this.userId = userId;
         this.username = username;
         this.email = email;
         this.password = password;
+        this.age = age;
         this.managementInvitations = new ArrayList<>();
         this.memberProfile = new MemberProfile();
         this.companyAppointments = new ArrayList<>();
@@ -105,6 +108,9 @@ public List<ManagementInvitation> getManagementInvitations() {
     public String getEmail() {
         return email;
     }
+public int getAge() {
+    return age;
+}
 
     /**
      * Verifies a candidate raw password against the stored hash. UC-12.

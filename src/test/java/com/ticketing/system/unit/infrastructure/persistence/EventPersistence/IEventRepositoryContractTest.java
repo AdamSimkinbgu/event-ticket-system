@@ -20,11 +20,12 @@ import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
-import com.ticketing.system.Core.Domain.events.PurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
+import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 
 // Contract tests every IEventRepository implementation must satisfy. Future JPA-backed
 // adapter will subclass this with its own newRepository() factory; tests are reused.
@@ -49,7 +50,7 @@ public abstract class IEventRepositoryContractTest {
         VenueMap venueMap = new VenueMap(id, LOCATION, List.of(new StandingZone(1, "Floor", 100, 50)));
         ShowDate showDate = new ShowDate(FUTURE_START, FUTURE_END);
         return new Event(id, name, rating, List.of("Artist A"), category, companyId, status,
-                venueMap, List.of(showDate), new PurchasePolicy(10), new DiscountPolicy(0));
+                venueMap, List.of(showDate), new NoPurchasePolicy(), new DiscountPolicy(0));
     }
 
     // === save ===
@@ -186,7 +187,7 @@ public abstract class IEventRepositoryContractTest {
         Event event = new Event(1, "Concert", 4.5, List.of("John Doe", "Jane Smith"),
                 EventCategory.CONCERT, 10, EventStatus.ON_SALE, vm,
                 List.of(new ShowDate(FUTURE_START, FUTURE_END)),
-                new PurchasePolicy(10), new DiscountPolicy(0));
+                 new NoPurchasePolicy(), new DiscountPolicy(0));
         eventRepo.save(event);
 
         List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
@@ -205,7 +206,7 @@ public abstract class IEventRepositoryContractTest {
         Event theaterEvent = new Event(2, "Hamlet2", 4.5, List.of("Actor B"),
                 EventCategory.THEATER, 10, EventStatus.ON_SALE, vm,
                 List.of(new ShowDate(FUTURE_START, FUTURE_END)),
-                new PurchasePolicy(10), new DiscountPolicy(0));
+                new NoPurchasePolicy(), new DiscountPolicy(0));
         eventRepo.save(theaterEvent);
 
         List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
@@ -245,7 +246,7 @@ public abstract class IEventRepositoryContractTest {
         Event event = new Event(1, "Night Out", 4.5, List.of("Coldplay"),
                 EventCategory.CONCERT, 10, EventStatus.ON_SALE, vm,
                 List.of(new ShowDate(FUTURE_START, FUTURE_END)),
-                new PurchasePolicy(10), new DiscountPolicy(0));
+                new NoPurchasePolicy(), new DiscountPolicy(0));
         eventRepo.save(event);
 
         List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(

@@ -45,6 +45,7 @@ import com.ticketing.system.Core.Domain.users.CompanyRole;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
+import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -65,7 +66,8 @@ class CompanyAcceptanceTest {
             name,
             name + "@test.com",
             "Password1",
-            sid
+            sid,
+            20
     ));
 
     return authService
@@ -93,14 +95,18 @@ void GivenOwner_WhenConfigureVenueMapWithCapacity_ThenInventoryZoneCapacityAdded
             new CompanyRegistrationDTO("capacityCompany", "desc")
     ).companyId();
 
-    EventCreationDTO eventRequest = new EventCreationDTO(
-            companyId,
-            "Capacity Test Event",
-            "Testing inventory zone capacity",
-            EventCategory.CONCERT,
-            new Location("Test Venue", "Test City"),
-            List.of(new ShowDate(LocalDateTime.now().plusDays(1),LocalDateTime.now().plusDays(30)))
-    );
+   EventCreationDTO eventRequest = new EventCreationDTO(
+        companyId,
+        "Capacity Test Event",
+        "Testing inventory zone capacity",
+        EventCategory.CONCERT,
+        new Location("Test Venue", "Test City"),
+        List.of(new ShowDate(
+                LocalDateTime.now().plusDays(1),
+                LocalDateTime.now().plusDays(30)
+        )),
+        null
+);
     EventDetailDTO event = eventManagementService.addEvent(owner.token(), eventRequest);
 
     eventManagementService.configureVenueMap(owner.token(), companyId, new VenueMapConfigDTO(

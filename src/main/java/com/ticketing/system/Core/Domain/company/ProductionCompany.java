@@ -7,6 +7,9 @@ import java.util.List;
 import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 import com.ticketing.system.Core.Domain.users.Permission;
+import com.ticketing.system.Core.Domain.policies.purchase.AndPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
 
 
 
@@ -28,7 +31,7 @@ public class ProductionCompany implements InvariantChecked {
     private String description;
     private Double rating;
     private List<DiscountPolicy> discountPolicies;
-    private List<PurchasePolicy> purchasePolicies;
+   private PurchasePolicy purchasePolicy;
     private HashMap <Integer, List<Permission>> pendingManagers;
     private HashMap<Integer, List<Permission>> managers;
 
@@ -42,7 +45,7 @@ public class ProductionCompany implements InvariantChecked {
         this.rating = rating;
         this.companyStatus = companyStatus;
         this.discountPolicies = new ArrayList<>();
-        this.purchasePolicies = new ArrayList<>();
+      this.purchasePolicy = new NoPurchasePolicy();
         this.managers = new HashMap<>();
         this.pendingManagers = new HashMap<>();
     }
@@ -294,9 +297,9 @@ public class ProductionCompany implements InvariantChecked {
         if (discountPolicies == null) {
             throw new IllegalStateException("ProductionCompany invariant violated: discountPolicies list must not be null");
         }
-        if (purchasePolicies == null) {
-            throw new IllegalStateException("ProductionCompany invariant violated: purchasePolicies list must not be null");
-        }
+       if (purchasePolicy == null) {
+             throw new IllegalStateException("ProductionCompany invariant violated: purchasePolicy must not be null");
+}
         if (managers == null) {
             throw new IllegalStateException("ProductionCompany invariant violated: managers map must not be null");
         }
@@ -322,4 +325,35 @@ public class ProductionCompany implements InvariantChecked {
             }
         }
     }
+
+    public PurchasePolicy getPurchasePolicy() {
+    if (this.purchasePolicy == null) {
+        this.purchasePolicy = new NoPurchasePolicy();
+    }
+
+    return this.purchasePolicy;
+}
+
+public void setPurchasePolicy(PurchasePolicy purchasePolicy) {
+    if (purchasePolicy == null) {
+        throw new IllegalArgumentException("Purchase policy cannot be null");
+    }
+
+    this.purchasePolicy = purchasePolicy;
+}
+
+public void extendPurchasePolicy(PurchasePolicy additionalPolicy) {
+    if (additionalPolicy == null) {
+        throw new IllegalArgumentException("Additional purchase policy cannot be null");
+    }
+
+    if (this.purchasePolicy == null) {
+        this.purchasePolicy = new NoPurchasePolicy();
+    }
+
+    this.purchasePolicy = new AndPurchasePolicy(
+            this.purchasePolicy,
+            additionalPolicy
+    );
+}
 }

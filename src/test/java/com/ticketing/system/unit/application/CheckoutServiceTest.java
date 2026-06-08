@@ -52,11 +52,13 @@ import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.Location;
-import com.ticketing.system.Core.Domain.events.PurchasePolicy;
 import com.ticketing.system.Core.Domain.events.Seat;
 import com.ticketing.system.Core.Domain.events.SeatStatus;
 import com.ticketing.system.Core.Domain.events.SeatedZone;
 import com.ticketing.system.Core.Domain.events.VenueMap;
+import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.PurchaseContext;
+import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
 
 class CheckoutServiceTest {
 
@@ -1345,7 +1347,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
    // test helper functions:
 
    private PurchasePolicy acceptingPurchasePolicy() {
-           return new PurchasePolicy(10);
+           return new NoPurchasePolicy();
         }
 
         private DiscountPolicy noDiscountPolicy() {

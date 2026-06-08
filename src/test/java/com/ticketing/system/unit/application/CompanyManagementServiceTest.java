@@ -86,7 +86,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenOwnerAndTargetUser_WhenInviteManager_ThenTargetHasOneInvitation() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
-        User targetUser = new User(TARGET_USER_ID, "targetUser", "","password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser", "","password",19);
 
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
@@ -107,7 +107,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenPendingManagerInvitation_WhenTargetAccepts_ThenTargetIsCompanyManager() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
-        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password",20);
 
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
@@ -133,7 +133,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenPendingManagerInvitation_WhenTargetRejects_ThenTargetHasNoInvitations() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
-        User targetUser = new User(TARGET_USER_ID, "targetUser", "","password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser", "","password",19);
 
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
@@ -159,7 +159,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenAcceptedManager_WhenOwnerModifiesPermissions_ThenCompanyPermissionsAreUpdated() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
-        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password",20);
 
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
@@ -199,7 +199,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenAcceptedManager_WhenOwnerRevokesManager_ThenCompanyDoesNotContainManager() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
-        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password",20);
 
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
@@ -301,7 +301,12 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenEmptyPermissions_WhenInviteManager_ThenThrowException() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
-        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password",20);
+
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
@@ -346,7 +351,7 @@ public class CompanyManagementServiceTest {
 
     @Test
     public void GivenCompanyDoesNotExist_WhenAcceptManagerInvitation_ThenThrowException() {
-        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password",20);
 
         when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
@@ -364,7 +369,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenNoPendingInvitation_WhenAcceptManagerInvitation_ThenThrowException() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
-        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password",20);
 
         when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
@@ -394,7 +399,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenNoPendingInvitation_WhenRejectManagerInvitation_ThenThrowException() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
-        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password",20       );
 
         when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
@@ -442,7 +447,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenTargetIsNotManager_WhenRevokeManager_ThenThrowException() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
-        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password",20);
 
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
@@ -493,7 +498,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenTargetIsNotManager_WhenModifyManagerPermissions_ThenThrowException() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
-        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password",20);
 
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
@@ -513,7 +518,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenEmptyPermissions_WhenModifyManagerPermissions_ThenThrowException() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
-        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password",20);
 
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
@@ -553,7 +558,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenAlreadyPendingInvitation_WhenInviteManagerAgain_ThenThrowException() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
-        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password",20);
 
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
@@ -581,7 +586,7 @@ public class CompanyManagementServiceTest {
     @Test
     public void GivenTargetAlreadyManager_WhenInviteManagerAgain_ThenThrowException() {
         ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
-        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password");
+        User targetUser = new User(TARGET_USER_ID, "targetUser","", "password",20);
 
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
@@ -960,7 +965,7 @@ public class CompanyManagementServiceTest {
         when(ownerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(true);
         when(ownerUser.getUsername()).thenReturn("ownerUser");
 
-        User managerUser = new User(TARGET_USER_ID, "managerUser", "", "password");
+        User managerUser = new User(TARGET_USER_ID, "managerUser", "", "password",85);
         managerUser.InvitetoCompanyAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
         managerUser.acceptInvitation(COMPANY_ID);
 
@@ -1002,11 +1007,11 @@ public class CompanyManagementServiceTest {
         when(ownerUser.isOwnerInCompany(COMPANY_ID)).thenReturn(true);
         when(ownerUser.getUsername()).thenReturn("ownerUser");
 
-        User manager1 = new User(MANAGER1_ID, "manager1", "", "password");
+        User manager1 = new User(MANAGER1_ID, "manager1", "", "password",101);
         manager1.InvitetoCompanyAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
         manager1.acceptInvitation(COMPANY_ID);
 
-        User manager2 = new User(MANAGER2_ID, "manager2", "", "password");
+        User manager2 = new User(MANAGER2_ID, "manager2", "", "password",102);
         manager2.InvitetoCompanyAppointment(COMPANY_ID, OWNER_ID, List.of(Permission.VIEW_SALES));
         manager2.acceptInvitation(COMPANY_ID);
 
@@ -1053,12 +1058,12 @@ public class CompanyManagementServiceTest {
             when(ownerUser.getUsername()).thenReturn("ownerUser");
 
             // manager1 was appointed by the owner
-            User manager1 = new User(MANAGER1_ID, "manager1", "", "password");
+            User manager1 = new User(MANAGER1_ID, "manager1", "", "password",101);
             manager1.InvitetoCompanyAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
             manager1.acceptInvitation(COMPANY_ID);
 
             // manager2 was appointed by manager1, not by the owner
-            User manager2 = new User(MANAGER2_ID, "manager2", "", "password");
+            User manager2 = new User(MANAGER2_ID, "manager2", "", "password",152);
             manager2.InvitetoCompanyAppointment(COMPANY_ID, MANAGER1_ID, List.of(Permission.MANAGE_INVENTORY));
             manager2.acceptInvitation(COMPANY_ID);
 
