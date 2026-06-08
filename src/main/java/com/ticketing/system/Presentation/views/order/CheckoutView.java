@@ -9,6 +9,7 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.session.MockCart;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.Key;
 import com.vaadin.flow.component.UI;
@@ -21,10 +22,15 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
+import java.time.Duration;
+import java.time.Instant;
+
 @Route(value = "checkout", layout = MainLayout.class)
 @PageTitle("Checkout · TicketHub")
 @AnonymousAllowed
 public class CheckoutView extends LkPage {
+
+    private static final int SERVICE_FEE_CENTS = 2400;
 
     private final TextField cardholder = new TextField("Cardholder name");
     private final TextField cardNumber = new TextField("Card number");
@@ -32,10 +38,28 @@ public class CheckoutView extends LkPage {
     private final TextField cvc        = new TextField("CVC");
     private final TextField coupon     = new TextField();
 
+    private final int subtotalCents = MockCart.subtotalCents();
+    private final int totalCents    = MockCart.getItems().isEmpty()
+                                      ? 0 : subtotalCents + SERVICE_FEE_CENTS;
+
     public CheckoutView() {
         title("Checkout");
+        ensureCheckoutDeadline();
         add(buildCountdownBanner());
         add(buildSplit());
+    }
+
+    /**
+     * Seed a single 10-min global checkout window on the first entry to
+     * Checkout for this cart. Subsequent visits (after leaving and
+     * returning without paying) keep the existing deadline so the timer
+     * doesn't reset — that's the contract V2-CHECK-01 promises.
+     */
+    private void ensureCheckoutDeadline() {
+        if (MockCart.getItems().isEmpty()) return;
+        if (MockCart.getCheckoutDeadline() == null) {
+            MockCart.setCheckoutDeadline(Instant.now().plus(Duration.ofMinutes(10)));
+        }
     }
 
     private Component buildCountdownBanner() {
@@ -43,9 +67,27 @@ public class CheckoutView extends LkPage {
         banner.tone(LkBanner.Tone.warn);
         banner.setIcon(new LkIcon("clock", 17));
 
-        Span timer = new Span("09:42");
+        Span timer = new Span("--:--");
         timer.addClassName("lk-mono");
         timer.getStyle().set("font-size", "18px").set("font-weight", "700");
+
+        Instant deadline = MockCart.getCheckoutDeadline();
+        double endMs = deadline != null
+            ? (double) deadline.toEpochMilli()
+            : (double) (System.currentTimeMillis() + 10 * 60 * 1000);
+
+        timer.getElement().executeJs(
+            "const t = this;" +
+            "const end = $0;" +
+            "function pad(n){return String(n).padStart(2,'0');}" +
+            "function tick(){" +
+            "  const s = Math.max(0, Math.floor((end - Date.now())/1000));" +
+            "  t.textContent = pad(Math.floor(s/60)) + ':' + pad(s%60);" +
+            "  if (s > 0) setTimeout(tick, 1000);" +
+            "}" +
+            "tick();",
+            endMs);
+
         Span body = new Span();
         body.add(timer);
         Span msg = new Span(" — one timer for the whole order. Replaces the per-line cart timers.");
@@ -74,9 +116,18 @@ public class CheckoutView extends LkPage {
 
         Div lines = new Div();
         lines.addClassName("bz-order-lines");
-        lines.add(orderLine("Coldplay · Lower L · Row C · Seat 14", "$160"));
-        lines.add(orderLine("Coldplay · Lower L · Row C · Seat 15", "$160"));
-        lines.add(orderLine("Hapoel TLV · 2 × GA",                  "$160"));
+        if (MockCart.getItems().isEmpty()) {
+            Div empty = new Div();
+            empty.getStyle()
+                .set("padding", "20px").set("text-align", "center")
+                .set("color", "var(--muted)").set("font-size", "13.5px");
+            empty.setText("No items in cart. Add tickets from Browse first.");
+            lines.add(empty);
+        } else {
+            for (MockCart.Item it : MockCart.getItems()) {
+                lines.add(orderLine(it.title() + " · " + it.seat(), it.priceCents()));
+            }
+        }
         order.add(lines);
 
         Div foot = new Div();
@@ -85,11 +136,8 @@ public class CheckoutView extends LkPage {
         coupon.setPlaceholder("Coupon code");
         coupon.getStyle().set("flex", "1 1 auto");
         Button apply = new Button("Apply", e -> {
-            if (coupon.isEmpty()) {
-                Toasts.warn("Enter a coupon code first.");
-            } else {
-                Toasts.success("Coupon '" + coupon.getValue() + "' applied (mock — no discount in placeholder).");
-            }
+            if (coupon.isEmpty()) Toasts.warn("Enter a coupon code first.");
+            else Toasts.success("Coupon '" + coupon.getValue() + "' applied (mock — no discount in placeholder).");
         });
         apply.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
         LkRow couponRow = new LkRow().gap(8);
@@ -98,9 +146,9 @@ public class CheckoutView extends LkPage {
 
         LkCol totals = new LkCol().gap(6);
         totals.getStyle().set("margin-top", "12px");
-        totals.add(line("Subtotal",    "$480.00", false));
-        totals.add(line("Service fee", "$24.00",  false));
-        totals.add(line("Total",       "$504.00", true));
+        totals.add(line("Subtotal",    formatPrice(subtotalCents),       false));
+        totals.add(line("Service fee", formatPrice(SERVICE_FEE_CENTS),   false));
+        totals.add(line("Total",       formatPrice(totalCents),          true));
         foot.add(totals);
 
         order.add(foot);
@@ -108,12 +156,12 @@ public class CheckoutView extends LkPage {
         return col;
     }
 
-    private Component orderLine(String label, String price) {
+    private Component orderLine(String label, int priceCents) {
         Div line = new Div();
         line.addClassName("bz-order-line");
         Span l = new Span(label);
         Span p = new Span();
-        p.getElement().setProperty("innerHTML", "<b>" + price + "</b>");
+        p.getElement().setProperty("innerHTML", "<b>" + formatPrice(priceCents) + "</b>");
         line.add(l, p);
         return line;
     }
@@ -158,10 +206,11 @@ public class CheckoutView extends LkPage {
         col.add(cardholder, cardNumber, expiryCvc);
         col.add(Lk.divider());
 
-        Button pay = new Button("Pay $504.00", e -> attemptPay());
+        Button pay = new Button("Pay " + formatPrice(totalCents), e -> attemptPay());
         pay.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_LARGE);
         pay.setWidthFull();
         pay.addClickShortcut(Key.ENTER);
+        pay.setEnabled(totalCents > 0);
         col.add(pay);
 
         Span hint = new Span();
@@ -176,11 +225,20 @@ public class CheckoutView extends LkPage {
     }
 
     private void attemptPay() {
+        if (totalCents == 0) {
+            Toasts.failure("Your cart is empty.");
+            return;
+        }
         if (cardholder.isEmpty() || cardNumber.isEmpty() || expiry.isEmpty() || cvc.isEmpty()) {
             Toasts.failure("Please fill in every payment field.");
             return;
         }
-        Toasts.success("Payment successful — $504.00 charged.");
+        Toasts.success("Payment successful — " + formatPrice(totalCents) + " charged.");
+        MockCart.clear();
         UI.getCurrent().navigate("order/TKT-20847");
+    }
+
+    private static String formatPrice(int cents) {
+        return "$" + (cents / 100) + "." + String.format("%02d", cents % 100);
     }
 }

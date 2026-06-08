@@ -208,12 +208,7 @@ public class EventDetailsView extends LkPage {
             .variant(LkBtn.Variant.primary)
             .size(LkBtn.Size.l)
             .full()
-            .onClick(e -> {
-                VkVenueMap.Zone z = zoneFor(selectedZoneId);
-                String label = z == null ? "selection" : z.label();
-                Toasts.success(label + " held for 10 min. Continue to cart.");
-                UI.getCurrent().navigate(CartView.class);
-            });
+            .onClick(e -> UI.getCurrent().navigate("events/coldplay/seats/" + selectedZoneId));
         choose.getStyle().set("margin-top", "10px");
         Span hint = Lk.muted("Seats lock for 10 min once selected");
         hint.getStyle()
