@@ -163,6 +163,57 @@ public class LkTopBar extends Header {
                     adminVariant ? "Admin alerts" : "Notifications");
     }
 
+    /**
+     * Cart trigger — bell-shaped icon button that navigates to {@code target}.
+     * Shows an item-count badge when {@code itemCount > 0} and a live-ticking
+     * timer chip when {@code shortestDeadlineMs} is in the future (the
+     * earliest expiry across cart lines). Both decorations vanish when the
+     * cart is empty / no item still has a TTL.
+     */
+    public LkTopBar cart(Class<? extends Component> target, int itemCount, Long shortestDeadlineMs) {
+        ensureRightSlot();
+        NativeButton btn = new NativeButton();
+        btn.addClassName("lk-bell");
+        btn.getElement().setAttribute("aria-label",
+            "Shopping cart" + (itemCount > 0 ? " · " + itemCount + " items" : ""));
+        btn.add(new LkIcon("cart", 18));
+        if (itemCount > 0) {
+            Span badge = new Span(String.valueOf(itemCount));
+            badge.addClassName("lk-bell-badge");
+            btn.add(badge);
+        }
+        if (target != null) {
+            btn.addClickListener(e -> com.vaadin.flow.component.UI.getCurrent().navigate(target));
+        }
+        rightSlot.add(btn);
+
+        if (shortestDeadlineMs != null && shortestDeadlineMs > System.currentTimeMillis()) {
+            Span chip = new Span();
+            chip.addClassName("bz-timer");
+            chip.getStyle().set("margin-left", "6px");
+            chip.add(new LkIcon("clock", 13));
+            Span text = new Span(" --:--");
+            chip.add(text);
+            double endMs = (double) shortestDeadlineMs.longValue();
+            text.getElement().executeJs(
+                "const text = this;" +
+                "const chip = text.closest('.bz-timer');" +
+                "const end  = $0;" +
+                "function pad(n){return String(n).padStart(2,'0');}" +
+                "function tick(){" +
+                "  const s = Math.max(0, Math.floor((end - Date.now())/1000));" +
+                "  text.textContent = ' ' + pad(Math.floor(s/60)) + ':' + pad(s%60);" +
+                "  if (s <= 180 && chip) chip.classList.add('urgent');" +
+                "  if (s > 0) setTimeout(tick, 1000);" +
+                "  else if (chip) chip.remove();" +
+                "}" +
+                "tick();",
+                endMs);
+            rightSlot.add(chip);
+        }
+        return this;
+    }
+
     public LkTopBar account(String initials, String tooltip, Component menu) {
         return account(initials, tooltip, menu, null, null);
     }

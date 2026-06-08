@@ -4,6 +4,7 @@ import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
 import com.ticketing.system.Presentation.security.MockAuth;
+import com.ticketing.system.Presentation.session.MockCart;
 import com.ticketing.system.Presentation.session.MockCompanies;
 import com.ticketing.system.Presentation.views.company.CompanyRegistrationView;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
@@ -26,8 +27,12 @@ import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.router.AfterNavigationEvent;
 import com.vaadin.flow.router.AfterNavigationObserver;
 
+import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Stream;
 
 /**
  * Buyer-facing shell — composes {@link LkTopBar} with the tickethub
@@ -74,6 +79,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
                 new LkTopBar.NavItem("My Tickets", MyAccountView.class)
             ), activeLabel)
             .searchDefault()
+            .cart(CartView.class, MockCart.size(), shortestCartDeadlineMs())
             .bellDefault(false);
 
         if (signedIn) {
@@ -115,6 +121,25 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
             })
         );
         return new LkAccountMenu(initials(name), name, "Signed in member · V2-AUTH-02 stub", menu, null, null);
+    }
+
+    /**
+     * Earliest still-future deadline across the cart, in epoch millis —
+     * the union of every line's {@code heldUntil} and the global checkout
+     * deadline (set on entry to {@code CheckoutView}). The minimum wins,
+     * so the navbar always reflects whichever timer expires first at this
+     * moment. {@code null} when the cart is empty / every timer expired.
+     */
+    private static Long shortestCartDeadlineMs() {
+        Instant now = Instant.now();
+        return Stream.concat(
+                MockCart.getItems().stream().map(MockCart.Item::heldUntil),
+                Stream.of(MockCart.getCheckoutDeadline()))
+            .filter(Objects::nonNull)
+            .filter(t -> t.isAfter(now))
+            .min(Comparator.naturalOrder())
+            .map(Instant::toEpochMilli)
+            .orElse(null);
     }
 
     private static String findActiveLabel(AfterNavigationEvent event) {
