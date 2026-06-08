@@ -9,7 +9,6 @@ import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.layouts.AdminLayout;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Presentation.views.PlaceholderView;
 import com.ticketing.system.Presentation.views.admin.AdminAnnouncementsView;
 import com.ticketing.system.Presentation.views.admin.AdminComplaintQueueView;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
@@ -28,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Smoke tests for V2-F-01 (Vaadin starter) and V2-F-02 (layouts + view stubs).
+ * Smoke tests for the V2 Presentation layer.
  *
  * <p>Lightweight checks — boots the Spring context but does not render any
  * view. Verifies:
@@ -36,16 +35,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <ul>
  *   <li>Vaadin Flow classes are on the classpath</li>
  *   <li>{@link MainLayout} and {@link AdminLayout} are well-formed</li>
- *   <li>A representative placeholder ({@link BrowseEventsView},
- *       {@link GlobalHistoryView}) is reachable</li>
- *   <li>Custom components instantiate without throwing</li>
+ *   <li>Representative buyer + owner + platform-admin views construct
+ *       without throwing (catches kit-API misuse)</li>
+ *   <li>Custom kit components instantiate without throwing</li>
  *   <li>{@link Toasts} utility is reachable</li>
  * </ul>
  *
  * <p>Rendering tests are intentionally out of scope — the V2 spec exempts UI
- * tests ("בדיקות אינן נדרשות עבור ממשק המשתמש"). When lane owners replace
- * a placeholder with a real implementation, they exercise it via the
- * application-layer acceptance tests instead.
+ * tests ("בדיקות אינן נדרשות עבור ממשק המשתמש"). Business behavior is
+ * exercised by the application-layer acceptance tests instead.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -76,14 +74,15 @@ class VaadinSmokeTest {
 
     @Test
     void presentationPackageIsConfigured() {
-        // PlaceholderView and all subclasses must live under the package
-        // configured in application.yml `vaadin.allowed-packages`.
-        assertTrue(PlaceholderView.class.getPackageName()
-                .startsWith("com.ticketing.system.Presentation"),
-            "PlaceholderView must live under com.ticketing.system.Presentation");
+        // All view classes must live under the package configured in
+        // application.yml `vaadin.allowed-packages`, otherwise Vaadin's
+        // route scanner won't discover them.
         assertTrue(BrowseEventsView.class.getPackageName()
                 .startsWith("com.ticketing.system.Presentation"),
             "BrowseEventsView must live under com.ticketing.system.Presentation");
+        assertTrue(AdminDashboardView.class.getPackageName()
+                .startsWith("com.ticketing.system.Presentation"),
+            "AdminDashboardView must live under com.ticketing.system.Presentation");
     }
 
     @Test
@@ -99,9 +98,9 @@ class VaadinSmokeTest {
     }
 
     @Test
-    void placeholderViewsInstantiate() {
-        // Spot-check one MainLayout view and one AdminLayout view. If the
-        // PlaceholderView base class is broken, every view subclass breaks.
+    void coreViewsInstantiate() {
+        // Spot-check one MainLayout view and one AdminLayout view as a
+        // cheap canary for kit-API breakage.
         assertDoesNotThrow(BrowseEventsView::new, "BrowseEventsView (root route) failed to construct");
         assertDoesNotThrow(GlobalHistoryView::new, "GlobalHistoryView (admin route) failed to construct");
     }

@@ -10,7 +10,6 @@ import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;

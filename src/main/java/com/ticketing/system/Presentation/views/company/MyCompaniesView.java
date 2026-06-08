@@ -1,6 +1,5 @@
 package com.ticketing.system.Presentation.views.company;
 
-import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;

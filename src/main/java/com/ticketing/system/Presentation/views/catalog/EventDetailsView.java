@@ -1,6 +1,5 @@
 package com.ticketing.system.Presentation.views.catalog;
 
-import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
@@ -12,7 +11,6 @@ import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
 import com.ticketing.system.Presentation.components.venue.VkVenueMap;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Presentation.views.order.CartView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
