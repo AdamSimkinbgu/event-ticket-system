@@ -2,6 +2,13 @@ package com.ticketing.system.Core.Domain.users;
 
 import java.util.List;
 
+/*
+    this class is irelevant for the current implementation 
+    it will be deleted in the futere
+*/
+
+//TODO: delete this class 
+
 public class ManagementInvitation {
 
     private final int companyId;
@@ -17,7 +24,7 @@ public class ManagementInvitation {
     }
 
     public int getCompanyId() {
-         return this.companyId;
+        return this.companyId;
     }
 
     public int getTargetId() {
@@ -32,6 +39,4 @@ public class ManagementInvitation {
         return this.permissions;
     }
 
-
-    
 }

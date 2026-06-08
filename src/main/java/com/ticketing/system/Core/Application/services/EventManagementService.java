@@ -34,6 +34,9 @@ import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.PurchasePolicy;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
+import com.ticketing.system.Core.Domain.users.User;
+import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.events.Seat;
 import com.ticketing.system.Core.Domain.events.SeatedZone;
 
@@ -47,6 +50,7 @@ public class EventManagementService {
     private final ISessionManager sessionManager;
     private final IOrderReceiptRepository orderReceiptRepository;
     private final IPaymentGateway paymentGateway;
+    private final IUserRepository userRepository;
 
     public EventManagementService(
             IEventRepository eventRepository,
@@ -54,46 +58,44 @@ public class EventManagementService {
             ITicketRepository ticketRepository,
             ISessionManager sessionManager,
             IOrderReceiptRepository orderReceiptRepository,
-            IPaymentGateway paymentGateway
-    ) {
+            IPaymentGateway paymentGateway,
+            IUserRepository userRepository) {
         this.eventRepository = eventRepository;
         this.companyRepository = companyRepository;
         this.ticketRepository = ticketRepository;
         this.sessionManager = sessionManager;
         this.orderReceiptRepository = orderReceiptRepository;
         this.paymentGateway = paymentGateway;
+        this.userRepository = userRepository;
     }
 
-    
     // Flow:
 
-    // addEvent adds an event in DRAFT state; venue map and inventory configuration come later in UC-20.
-    
-    // Note: we could combine addEvent and configureVenueMap into a single UC-19 method that takes a more complex DTO, but separating them allows for a cleaner separation of concerns and 
-    // more focused validation (e.g. addEvent doesn't need to worry about venue map details at all).
+    // addEvent adds an event in DRAFT state; venue map and inventory configuration
+    // come later in UC-20.
 
-    // configureVenueMap is a separate method that can be called multiple times to update the venue map and inventory zones *before* the event goes live. 
-    // It also allows for a more iterative setup process where the owner/manager can first create the event with basic details and then configure the venue map in a second step.
+    // Note: we could combine addEvent and configureVenueMap into a single UC-19
+    // method that takes a more complex DTO, but separating them allows for a
+    // cleaner separation of concerns and
+    // more focused validation (e.g. addEvent doesn't need to worry about venue map
+    // details at all).
 
-
+    // configureVenueMap is a separate method that can be called multiple times to
+    // update the venue map and inventory zones *before* the event goes live.
+    // It also allows for a more iterative setup process where the owner/manager can
+    // first create the event with basic details and then configure the venue map in
+    // a second step.
 
     // UC-19 — Owner adds an Event in DRAFT state.
     public EventDetailDTO addEvent(String token, EventCreationDTO request) {
-        if (!sessionManager.validateToken(token)) {
-            log.warn("Invalid token provided for adding event");
-            throw new RuntimeException("Invalid token");
-        }
-
-        int ownerId = sessionManager.extractUserId(token);
+        int ownerId = validateTokenAndGetUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(request.companyId());
-        if (company == null) {
-            log.warn("Company {} not found", request.companyId());
-            throw new RuntimeException("Company not found");
-        }
+        User user = userRepository.getUserById(ownerId);
+        user.requirePermissionInCompany(request.companyId(), Permission.CONFIGURE_VENUE);
 
-        company.checkowner(ownerId);
         int newEventId = eventRepository.nextId();
-        VenueMap venueMap = new VenueMap(1, request.location(), List.of()); //TODO: need an incremantal ID counter for venue maps
+        VenueMap venueMap = new VenueMap(1, request.location(), List.of()); // TODO: need an incremantal ID counter for
+                                                                            // venue maps
         DiscountPolicy discountPolicy = new DiscountPolicy(10.0); // Note: support policies later
         PurchasePolicy purchasePolicy = new PurchasePolicy(10); // Note: support policies later
 
@@ -116,36 +118,19 @@ public class EventManagementService {
                 newEvent.getStatus(),
                 newEvent.getShowDates());
     }
-    
 
+    // configureVenueMap is a separate method that can be called multiple times to
+    // update the venue map and inventory zones *before* the event goes live.
+    // It also allows for a more iterative setup process where the owner/manager can
+    // first create the event with basic details and then configure the venue map in
+    // a second step.
 
-
-
-
-
-
-
-
-
-
-
-    // configureVenueMap is a separate method that can be called multiple times to update the venue map and inventory zones *before* the event goes live. 
-    // It also allows for a more iterative setup process where the owner/manager can first create the event with basic details and then configure the venue map in a second step.
-    
     public void configureVenueMap(String token, int companyId, VenueMapConfigDTO config) {
-        if (!sessionManager.validateToken(token)) {
-            throw new RuntimeException("Invalid token");
-        }
-
-        int userId = sessionManager.extractUserId(token);
+        int userId = validateTokenAndGetUserId(token);
         log.info("Configuring venue map for company {}, event {}, by user {}", companyId, config.eventId(), userId);
-
+        User user = userRepository.getUserById(userId);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
-        if (company == null) {
-            throw new RuntimeException("Company not found");
-        }
-
-        company.ValidateManagerOrOwnerForConfigureVenue(userId);
+        user.requirePermissionInCompany(companyId, Permission.CONFIGURE_VENUE);
 
         Event event = eventRepository.findById(Integer.parseInt(config.eventId()));
         if (event == null) {
@@ -170,8 +155,7 @@ public class EventManagementService {
                         nextZoneId,
                         zoneConfig.zoneName(),
                         zoneConfig.pricePerTicket(),
-                        seats
-                ));
+                        seats));
             } else {
 
                 if (zoneConfig.capacity() == null || zoneConfig.capacity() <= 0) {
@@ -182,8 +166,7 @@ public class EventManagementService {
                         nextZoneId,
                         zoneConfig.zoneName(),
                         zoneConfig.capacity(),
-                        zoneConfig.pricePerTicket()
-                ));
+                        zoneConfig.pricePerTicket()));
             }
 
             nextZoneId++;
@@ -192,51 +175,26 @@ public class EventManagementService {
         VenueMap venueMap = new VenueMap(
                 event.getVenueMap() != null ? event.getVenueMap().getId() : 1,
                 event.getVenueMap() != null ? event.getVenueMap().getLocation() : null,
-                zones
-        );
+                zones);
 
         event.configureVenueMap(venueMap, companyId);
         eventRepository.save(event);
         log.info("Venue map for event {} configured successfully", event.getId());
     }
 
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-        
-
-
-    // UC-19 — partial update; immutability rules per II.3.5.2 enforced inside Event.
+    // UC-19 — partial update; immutability rules per II.3.5.2 enforced inside
+    // Event.
     public void editEventDetails(String token, EventUpdateDTO update) {
         throw new UnsupportedOperationException("UC-19: not implemented");
     }
 
-
-
-
-
-    // UC-19 — soft cancel; fires EventCancelled domain event for UC-4 refund pipeline.
+    // UC-19 — soft cancel; fires EventCancelled domain event for UC-4 refund
+    // pipeline.
     public void cancelEventAndRefund(String token, int eventId) {
-
-        if (!sessionManager.validateToken(token)) {
-            throw new RuntimeException("Invalid token");
-        }
-
-        int ownerId = sessionManager.extractUserId(token);
-        // We lock the event for update to prevent concurrent modifications during the cancellation and refund process. This ensures that we have a consistent view of the event's state
+        int ownerId = validateTokenAndGetUserId(token);
+        // We lock the event for update to prevent concurrent modifications during the
+        // cancellation and refund process. This ensures that we have a consistent view
+        // of the event's state
         eventRepository.lockForUpdate(eventId);
 
         try {
@@ -244,20 +202,21 @@ public class EventManagementService {
             if (event == null) {
                 throw new RuntimeException("Event not found");
             }
+            ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
+            User user = userRepository.getUserById(ownerId);
+            user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
 
             if (event.getStatus() == EventStatus.CANCELED) {
                 return;
             }
-            // Authorization: only the owner of the event can cancel it and trigger refunds. We enforce this by checking the requester’s user ID against the owner ID of the production company that owns the event. If the requester is not the owner, we throw an exception and abort the cancellation process.
-            ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
-            if (company == null) {
-                throw new RuntimeException("Company not found");
-            }
-
-            company.checkowner(ownerId);
 
             List<OrderReceipt> orderReceipts = orderReceiptRepository.findByEventId(eventId);
-            // For each receipt, we calculate the total refund amount for the lines related to the canceled event, call the payment gateway to process the refund, validate the refund result, and then update our domain state accordingly (marking the receipt as refunded and updating ticket statuses). We also handle various edge cases and potential errors along the way to ensure a robust refund process.
+            // For each receipt, we calculate the total refund amount for the lines related
+            // to the canceled event, call the payment gateway to process the refund,
+            // validate the refund result, and then update our domain state accordingly
+            // (marking the receipt as refunded and updating ticket statuses). We also
+            // handle various edge cases and potential errors along the way to ensure a
+            // robust refund process.
             for (OrderReceipt receipt : orderReceipts) {
                 double totalRefundForReceipt = receipt.getReceiptLines().stream()
                         .filter(line -> line.getEventId() == eventId)
@@ -267,34 +226,51 @@ public class EventManagementService {
                 if (totalRefundForReceipt <= 0) {
                     continue;
                 }
-                // Extract the payment transaction ID from the receipt's transaction records. This is necessary to tell the payment gateway which transaction we want to refund. If we can't find a valid payment transaction ID, we throw an exception and skip this receipt since we don't want to risk refunding without a valid reference to the original charge.
+                // Extract the payment transaction ID from the receipt's transaction records.
+                // This is necessary to tell the payment gateway which transaction we want to
+                // refund. If we can't find a valid payment transaction ID, we throw an
+                // exception and skip this receipt since we don't want to risk refunding without
+                // a valid reference to the original charge.
                 int paymentTransactionId = receipt.getPaymentTransactionId()
                         .orElseThrow(() -> new RefundFailedException(
                                 receipt.getId(),
-                                "receipt does not contain a payment transaction"
-                        ));
-                // Call the payment gateway to process the refund. This is a critical step that must succeed before we make any changes to our domain state (e.g. marking tickets as refunded or canceling the event) since we want to avoid inconsistencies where we think we've refunded a customer but the payment gateway disagrees.
+                                "receipt does not contain a payment transaction"));
+                // Call the payment gateway to process the refund. This is a critical step that
+                // must succeed before we make any changes to our domain state (e.g. marking
+                // tickets as refunded or canceling the event) since we want to avoid
+                // inconsistencies where we think we've refunded a customer but the payment
+                // gateway disagrees.
                 RefundResultDTO refundResult = paymentGateway.refund(
                         paymentTransactionId,
-                        totalRefundForReceipt
-                );
-                // Validate the refund result before proceeding. If the refund failed for some reason, we want to throw an exception and avoid making any changes to our domain state (e.g. marking tickets as refunded or canceling the event) since that could lead to inconsistencies.
+                        totalRefundForReceipt);
+                // Validate the refund result before proceeding. If the refund failed for some
+                // reason, we want to throw an exception and avoid making any changes to our
+                // domain state (e.g. marking tickets as refunded or canceling the event) since
+                // that could lead to inconsistencies.
                 validateRefundResult(receipt.getId(), totalRefundForReceipt, refundResult);
 
-                // If we reach this point, the refund was successful and we can update our domain state accordingly.
+                // If we reach this point, the refund was successful and we can update our
+                // domain state accordingly.
                 receipt.markRefunded(TransactionRecord.refund(
                         refundResult.refundTransactionId(),
                         paymentGateway.getId(),
                         refundResult.totalRefunded(),
                         receipt.getPaymentCurrency(),
-                        refundResult.refundedAt()
-                ));
+                        refundResult.refundedAt()));
 
                 orderReceiptRepository.save(receipt);
             }
-            // After processing refunds for all receipts, we need to update the status of all tickets for the event. For simplicity, we assume that if a ticket was PAID or ISSUED, it should be marked as REFUNDED; otherwise, it can be marked as VOIDED. In a real system, we might want to handle this more robustly (e.g. consider different ticket statuses, handle partial refunds, etc.).
+            // After processing refunds for all receipts, we need to update the status of
+            // all tickets for the event. For simplicity, we assume that if a ticket was
+            // PAID or ISSUED, it should be marked as REFUNDED; otherwise, it can be marked
+            // as VOIDED. In a real system, we might want to handle this more robustly (e.g.
+            // consider different ticket statuses, handle partial refunds, etc.).
             List<Ticket> tickets = ticketRepository.findByEventId(String.valueOf(eventId));
-            // Note: we update ticket statuses after processing refunds to avoid complications where we mark tickets as refunded but then encounter an error during the refund process. By only updating ticket statuses after we've successfully processed refunds, we can ensure that our domain state remains consistent with the actual refund status of each order receipt.
+            // Note: we update ticket statuses after processing refunds to avoid
+            // complications where we mark tickets as refunded but then encounter an error
+            // during the refund process. By only updating ticket statuses after we've
+            // successfully processed refunds, we can ensure that our domain state remains
+            // consistent with the actual refund status of each order receipt.
             for (Ticket ticket : tickets) {
                 if (ticket.getStatus() == TicketStatus.PAID || ticket.getStatus() == TicketStatus.ISSUED) {
                     ticket.markRefunded();
@@ -303,7 +279,12 @@ public class EventManagementService {
                 }
                 ticketRepository.save(ticket);
             }
-            // Finally, we mark the event as canceled. This is a soft cancel that allows us to keep the event in our system for historical and reporting purposes while preventing any future purchases or interactions with it. The event's status will be used in various parts of the system (e.g. purchase flow, event listings) to enforce the fact that it's canceled and should not be available for purchase.
+            // Finally, we mark the event as canceled. This is a soft cancel that allows us
+            // to keep the event in our system for historical and reporting purposes while
+            // preventing any future purchases or interactions with it. The event's status
+            // will be used in various parts of the system (e.g. purchase flow, event
+            // listings) to enforce the fact that it's canceled and should not be available
+            // for purchase.
             event.transitionToCanceled("Event canceled by owner");
             eventRepository.save(event);
 
@@ -314,9 +295,10 @@ public class EventManagementService {
         }
     }
 
-
-
-    // helper function for cancelEventAndRefund to validate refund results from the payment gateway and throw domain-specific exceptions if something looks wrong. This keeps the main flow cleaner and centralizes refund validation logic.
+    // helper function for cancelEventAndRefund to validate refund results from the
+    // payment gateway and throw domain-specific exceptions if something looks
+    // wrong. This keeps the main flow cleaner and centralizes refund validation
+    // logic.
     private void validateRefundResult(int receiptId, double expectedRefundAmount, RefundResultDTO refundResult) {
         if (refundResult == null) {
             throw new RefundFailedException(receiptId, "payment gateway returned null refund result");
@@ -335,37 +317,12 @@ public class EventManagementService {
         }
     }
 
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     // UC-20 — Owner/Manager configures venue map and inventory zones.
     public void updateStandingZoneCapacity(String token, int company_id, int event_id, int zone_id, int newCapacity) {
 
-        if (!sessionManager.validateToken(token)) {
-            log.warn("Invalid token provided for updating zone capacity");
-            throw new RuntimeException("Invalid token");
-        }
-        int userId = sessionManager.extractUserId(token);
-        ProductionCompany company = companyRepository.getCompanyById(company_id);
-        if (company == null) {
-            log.warn("Company {} not found", company_id);
-            throw new RuntimeException("Company not found");
-        }
-
-        company.ValidateManagerOrOwnerForConfigureVenue(userId);
+        int userId = validateTokenAndGetUserId(token);
+        User user = userRepository.getUserById(userId);
+        user.requirePermissionInCompany(company_id, Permission.CONFIGURE_VENUE);
 
         Event event = eventRepository.findById(event_id);
 
@@ -380,20 +337,22 @@ public class EventManagementService {
         log.info("Zone {} at company {} capacity updated successfully", zone_id, company_id);
 
     }
-    
-
-
-
 
     // UC-21 — set / replace event-level purchase + discount policies.
     public void setEventPolicies(String token, EventPolicyConfigDTO config) {
         throw new UnsupportedOperationException("UC-21: not implemented");
     }
 
-
-
     // Detail view for owner-side editing pages.
     public EventDetailDTO getEventDetail(String token, String eventId) {
         throw new UnsupportedOperationException("UC-19: not implemented");
+    }
+
+    private int validateTokenAndGetUserId(String token) {
+        if (!sessionManager.validateToken(token)) {
+            log.warn("Invalid token provided");
+            throw new RuntimeException("Invalid token");
+        }
+        return sessionManager.extractUserId(token);
     }
 }

@@ -16,7 +16,6 @@ import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 
 import org.springframework.stereotype.Repository;
 
-
 @Repository
 public class MemoryEventRepository implements IEventRepository {
 
@@ -25,30 +24,36 @@ public class MemoryEventRepository implements IEventRepository {
     private final RepositoryLocks<Integer> locks = new RepositoryLocks<>();    // Key is eventId for event-level locks.
 
     @Override
-    public void lockForUpdate(Integer id) { locks.lock(id); }
+    public void lockForUpdate(Integer id) {
+        locks.lock(id);
+    }
 
     @Override
-    public void unlock(Integer id) { locks.unlock(id); }
+    public void unlock(Integer id) {
+        locks.unlock(id);
+    }
 
     @Override
     public int nextId() {
         return idSequence.getAndIncrement();
     }
-    
 
     @Override
     public Event findById(int eventId) {
-        return events.get(eventId);  // so returns null if not found, which is what the service layer expects; no need to throw exception here
+        if (!events.containsKey(eventId)) {
+            throw new EventNotFoundException("Event with ID " + eventId + " not found");
+        }
+        return events.get(eventId);
     }
 
     @Override
     public boolean save(Event event) {
         events.put(event.getId(), event);
         return true;
-        // In a real implementation, we might return false if the save failed for some reason (e.g. DB error);
+        // In a real implementation, we might return false if the save failed for some
+        // reason (e.g. DB error);
         // here we'll just assume it always works.
     }
-
 
     @Override
     public List<Event> findByCompanyId(int companyId) {
@@ -56,7 +61,6 @@ public class MemoryEventRepository implements IEventRepository {
                 .filter(e -> e.getCompanyId() == companyId)
                 .collect(Collectors.toList());
     }
-
 
     @Override
     public List<Integer> findIdsByCompany(int companyId) {
@@ -73,19 +77,12 @@ public class MemoryEventRepository implements IEventRepository {
                 .collect(Collectors.toList());
     }
 
-
-
     @Override
     public List<Event> findByStatus(EventStatus status) {
         return events.values().stream()
                 .filter(e -> e.getStatus() == status)
                 .collect(Collectors.toList());
     }
-
-
-
-
-
 
     @Override
     public List<Event> search(CatalogSearchFiltersDTO filters) {
@@ -94,15 +91,10 @@ public class MemoryEventRepository implements IEventRepository {
                 .collect(Collectors.toList());
     }
 
-
-
-
-
-
-
-    /* 
-    A helper method to apply the various search filters to an event; used in the search() implementation above.
-    */
+    /*
+     * A helper method to apply the various search filters to an event; used in the
+     * search() implementation above.
+     */
     private boolean matchesSearch(Event event, CatalogSearchFiltersDTO filters) {
         // eventName — case-insensitive substring match on event name.
         if (filters.eventName() != null &&
@@ -118,7 +110,6 @@ public class MemoryEventRepository implements IEventRepository {
                 return false;
             }
         }
-        
 
         // category — exact enum match by name (case-insensitive).
         if (filters.category() != null) {
@@ -128,10 +119,9 @@ public class MemoryEventRepository implements IEventRepository {
                     return false;
                 }
             } catch (IllegalArgumentException e) {
-                return false;   // unknown category value — no event can match.
+                return false; // unknown category value — no event can match.
             }
         }
-                
 
         // keywords — case-insensitive substring match on event name or any artist name.
         if (filters.keywords() != null) {
@@ -147,22 +137,27 @@ public class MemoryEventRepository implements IEventRepository {
         // fromDate / toDate — at least one ShowDate must fall within the range.
         if (filters.fromDate() != null || filters.toDate() != null) {
             boolean hasMatchingDate = event.getShowDates() != null && event.getShowDates().stream().anyMatch(sd -> {
-                        LocalDate date = sd.getStartTime().toLocalDate();
-                        if (filters.fromDate() != null && date.isBefore(filters.fromDate())) return false;
-                        if (filters.toDate() != null && date.isAfter(filters.toDate())) return false;
-                        return true;
-                    });
+                LocalDate date = sd.getStartTime().toLocalDate();
+                if (filters.fromDate() != null && date.isBefore(filters.fromDate()))
+                    return false;
+                if (filters.toDate() != null && date.isAfter(filters.toDate()))
+                    return false;
+                return true;
+            });
             if (!hasMatchingDate)
                 return false;
         }
-        
+
         // minPrice / maxPrice — at least one zone must be priced within the range.
         if (filters.minPrice() != null || filters.maxPrice() != null) {
-            if (event.getVenueMap() == null || event.getVenueMap().getInventoryZones() == null) return false;
+            if (event.getVenueMap() == null || event.getVenueMap().getInventoryZones() == null)
+                return false;
             boolean hasMatchingZone = event.getVenueMap().getInventoryZones().stream().anyMatch(z -> {
                 double price = z.getprice();
-                if (filters.minPrice() != null && price < filters.minPrice()) return false;
-                if (filters.maxPrice() != null && price > filters.maxPrice()) return false;
+                if (filters.minPrice() != null && price < filters.minPrice())
+                    return false;
+                if (filters.maxPrice() != null && price > filters.maxPrice())
+                    return false;
                 return true;
             });
             if (!hasMatchingZone)
@@ -170,17 +165,20 @@ public class MemoryEventRepository implements IEventRepository {
         }
 
         // minEventRating / maxEventRating — event rating must fall within the range.
-        if (filters.minEventRating() != null && (event.getRating() == null || event.getRating() < filters.minEventRating())) {
+        if (filters.minEventRating() != null
+                && (event.getRating() == null || event.getRating() < filters.minEventRating())) {
             return false;
         }
-        if (filters.maxEventRating() != null && (event.getRating() == null || event.getRating() > filters.maxEventRating())) {
+        if (filters.maxEventRating() != null
+                && (event.getRating() == null || event.getRating() > filters.maxEventRating())) {
             return false;
         }
 
-        
-        // location — event venue city or country must match (case-insensitive substring).
+        // location — event venue city or country must match (case-insensitive
+        // substring).
         if (filters.location() != null) {
-            if (event.getVenueMap() == null || event.getVenueMap().getLocation() == null) return false;
+            if (event.getVenueMap() == null || event.getVenueMap().getLocation() == null)
+                return false;
             String locFilter = filters.location().toLowerCase();
             boolean cityMatch = event.getVenueMap().getLocation().city().toLowerCase().contains(locFilter);
             boolean countryMatch = event.getVenueMap().getLocation().country().toLowerCase().contains(locFilter);
@@ -189,10 +187,8 @@ public class MemoryEventRepository implements IEventRepository {
             }
         }
 
-        return true;  // if the event passed into all the filters, it got to here and we'll return true
+        return true; // if the event passed into all the filters, it got to here and we'll return
+                     // true
     }
 
-
-
-    
 }

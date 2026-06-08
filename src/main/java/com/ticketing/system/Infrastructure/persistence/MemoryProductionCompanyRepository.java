@@ -25,10 +25,14 @@ public class MemoryProductionCompanyRepository implements IProductionCompanyRepo
     private final RepositoryLocks<Integer> locks = new RepositoryLocks<>();
 
     @Override
-    public void lockForUpdate(Integer id) { locks.lock(id); }
+    public void lockForUpdate(Integer id) {
+        locks.lock(id);
+    }
 
     @Override
-    public void unlock(Integer id) { locks.unlock(id); }
+    public void unlock(Integer id) {
+        locks.unlock(id);
+    }
 
     @Override
     public void save(ProductionCompany company) {
@@ -42,14 +46,19 @@ public class MemoryProductionCompanyRepository implements IProductionCompanyRepo
 
     @Override
     public ProductionCompany getCompanyById(int companyId) {
+        if (!companiesById.containsKey(companyId)) {
+            throw new RuntimeException("Company with ID " + companyId + " not found");
+        }
         return companiesById.get(companyId);
     }
 
     @Override
     public Optional<ProductionCompany> findByName(String name) {
-        if (name == null) return Optional.empty();
+        if (name == null)
+            return Optional.empty();
         for (ProductionCompany c : companiesById.values()) {
-            if (name.equals(c.getName())) return Optional.of(c);
+            if (name.equals(c.getName()))
+                return Optional.of(c);
         }
         return Optional.empty();
     }
@@ -63,7 +72,8 @@ public class MemoryProductionCompanyRepository implements IProductionCompanyRepo
     public List<ProductionCompany> findActive() {
         List<ProductionCompany> result = new ArrayList<>();
         for (ProductionCompany c : companiesById.values()) {
-            if (c.getStatus() == CompanyStatus.ACTIVE) result.add(c);
+            if (c.getStatus() == CompanyStatus.ACTIVE)
+                result.add(c);
         }
         return result;
     }
@@ -72,7 +82,8 @@ public class MemoryProductionCompanyRepository implements IProductionCompanyRepo
     public List<ProductionCompany> findByFounder(int founderUserId) {
         List<ProductionCompany> result = new ArrayList<>();
         for (ProductionCompany c : companiesById.values()) {
-            if (c.getFounderId() == founderUserId) result.add(c);
+            if (c.getFounderId() == founderUserId)
+                result.add(c);
         }
         return result;
     }

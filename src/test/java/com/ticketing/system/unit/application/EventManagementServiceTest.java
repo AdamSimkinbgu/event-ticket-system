@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
@@ -40,6 +41,7 @@ import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.users.Permission;
+import com.ticketing.system.Core.Domain.users.User;
 
 class EventManagementServiceTest {
 
@@ -50,6 +52,7 @@ class EventManagementServiceTest {
     private EventManagementService eventService;
     private IOrderReceiptRepository orderReceiptRepository;
     private IPaymentGateway paymentGateway;
+    private IUserRepository userRepository;
 
     private final String OWNER_TOKEN = "owner-token";
     private final String MANAGER_TOKEN = "manager-token";
@@ -65,11 +68,12 @@ class EventManagementServiceTest {
     private final String COMPANY_1_DESCRIPTION = "A test production company1";
     private final Location LOCATION = new Location("Belgium", "Brussels");
 
-
     private ProductionCompany company;
     private InventoryZone zone;
     private VenueMap venueMap;
     private Event event;
+    private User ownerUser;
+    private User managerUser;
 
     @BeforeEach
     public void setUp() {
@@ -79,6 +83,7 @@ class EventManagementServiceTest {
         sessionManager = mock(ISessionManager.class);
         orderReceiptRepository = mock(IOrderReceiptRepository.class);
         paymentGateway = mock(IPaymentGateway.class);
+        userRepository = mock(IUserRepository.class);
 
         eventService = new EventManagementService(
                 mockEventRepo,
@@ -86,10 +91,11 @@ class EventManagementServiceTest {
                 mockTicketRepo,
                 sessionManager,
                 orderReceiptRepository,
-                paymentGateway
-        );
+                paymentGateway,
+                userRepository);
 
-        company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
+        company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE,
+                COMPANY_1_DESCRIPTION, 4.5);
         zone = new StandingZone(ZONE_ID, "VIP", 10, 100);
         venueMap = new VenueMap(1, LOCATION, List.of(zone));
         event = new Event(
@@ -103,10 +109,13 @@ class EventManagementServiceTest {
                 venueMap,
                 List.of(),
                 null,
-                null
-        );
+                null);
+        ownerUser = new User(OWNER_ID, "Owner Name", "owner@example.com", "hashedpassword");
+        ownerUser.addFounderAppointment(COMPANY_ID);
+        managerUser = new User(MANAGER_ID, "Manager Name", "manager@example.com", "hashedpassword");
+        managerUser.receiveManagerAppointment(COMPANY_ID, OWNER_ID, List.of(Permission.CONFIGURE_VENUE));
+        managerUser.acceptInvitation(COMPANY_ID);
     }
-
 
     @Test
     public void GivenOwner_WhenUpdateZoneCapacity_ThenZoneCapacityUpdated() {
@@ -114,31 +123,33 @@ class EventManagementServiceTest {
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
-
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
         eventService.updateStandingZoneCapacity(
                 OWNER_TOKEN,
                 COMPANY_ID,
                 EVENT_ID,
                 ZONE_ID,
-                20
-        );
+                20);
 
         assertEquals(20, zone.getAvailableAmount());
     }
 
-       @Test
+    @Test
     public void GivenManagerWithConfigureVenuePermission_WhenUpdateZoneCapacity_ThenZoneCapacityUpdated() {
+
         company.validateManagerInvitation(
                 COMPANY_ID,
                 MANAGER_ID,
                 OWNER_ID,
-                List.of(Permission.CONFIGURE_VENUE)
-        );
+                List.of(Permission.CONFIGURE_VENUE));
         company.acceptManagerInvitation(MANAGER_ID);
 
         when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
         eventService.updateStandingZoneCapacity(
@@ -146,8 +157,7 @@ class EventManagementServiceTest {
                 COMPANY_ID,
                 EVENT_ID,
                 ZONE_ID,
-                20
-        );
+                20);
 
         assertEquals(20, zone.getAvailableAmount());
     }
@@ -156,15 +166,12 @@ class EventManagementServiceTest {
     public void GivenInvalidToken_WhenUpdateZoneCapacity_ThenThrowException() {
         when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
 
-        assertThrows(RuntimeException.class, () ->
-                eventService.updateStandingZoneCapacity(
-                        INVALID_TOKEN,
-                        COMPANY_ID,
-                        EVENT_ID,
-                        ZONE_ID,
-                        20
-                )
-        );
+        assertThrows(RuntimeException.class, () -> eventService.updateStandingZoneCapacity(
+                INVALID_TOKEN,
+                COMPANY_ID,
+                EVENT_ID,
+                ZONE_ID,
+                20));
     }
 
     @Test
@@ -173,15 +180,12 @@ class EventManagementServiceTest {
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
 
-        assertThrows(RuntimeException.class, () ->
-                eventService.updateStandingZoneCapacity(
-                        OWNER_TOKEN,
-                        COMPANY_ID,
-                        EVENT_ID,
-                        ZONE_ID,
-                        20
-                )
-        );
+        assertThrows(RuntimeException.class, () -> eventService.updateStandingZoneCapacity(
+                OWNER_TOKEN,
+                COMPANY_ID,
+                EVENT_ID,
+                ZONE_ID,
+                20));
     }
 
     @Test
@@ -191,15 +195,12 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(null);
 
-        assertThrows(RuntimeException.class, () ->
-                eventService.updateStandingZoneCapacity(
-                        OWNER_TOKEN,
-                        COMPANY_ID,
-                        EVENT_ID,
-                        ZONE_ID,
-                        20
-                )
-        );
+        assertThrows(RuntimeException.class, () -> eventService.updateStandingZoneCapacity(
+                OWNER_TOKEN,
+                COMPANY_ID,
+                EVENT_ID,
+                ZONE_ID,
+                20));
     }
 
     @Test
@@ -208,15 +209,12 @@ class EventManagementServiceTest {
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(99);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
-        assertThrows(RuntimeException.class, () ->
-                eventService.updateStandingZoneCapacity(
-                        OWNER_TOKEN,
-                        COMPANY_ID,
-                        EVENT_ID,
-                        ZONE_ID,
-                        20
-                )
-        );
+        assertThrows(RuntimeException.class, () -> eventService.updateStandingZoneCapacity(
+                OWNER_TOKEN,
+                COMPANY_ID,
+                EVENT_ID,
+                ZONE_ID,
+                20));
     }
 
     @Test
@@ -225,41 +223,36 @@ class EventManagementServiceTest {
                 COMPANY_ID,
                 MANAGER_ID,
                 OWNER_ID,
-                List.of(Permission.MANAGE_INVENTORY)
-        );
+                List.of(Permission.MANAGE_INVENTORY));
         company.acceptManagerInvitation(MANAGER_ID);
 
         when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
-        assertThrows(RuntimeException.class, () ->
-                eventService.updateStandingZoneCapacity(
-                        MANAGER_TOKEN,
-                        COMPANY_ID,
-                        EVENT_ID,
-                        ZONE_ID,
-                        20
-                )
-        );
+        assertThrows(RuntimeException.class, () -> eventService.updateStandingZoneCapacity(
+                MANAGER_TOKEN,
+                COMPANY_ID,
+                EVENT_ID,
+                ZONE_ID,
+                20));
     }
 
     @Test
     public void GivenZoneDoesNotExist_WhenUpdateZoneCapacity_ThenThrowException() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
-        assertThrows(IllegalArgumentException.class, () ->
-                eventService.updateStandingZoneCapacity(
-                        OWNER_TOKEN,
-                        COMPANY_ID,
-                        EVENT_ID,
-                        999,
-                        20
-                )
-        );
+        assertThrows(IllegalArgumentException.class, () -> eventService.updateStandingZoneCapacity(
+                OWNER_TOKEN,
+                COMPANY_ID,
+                EVENT_ID,
+                999,
+                20));
     }
 
     @Test
@@ -268,38 +261,38 @@ class EventManagementServiceTest {
 
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
-        assertThrows(IllegalArgumentException.class, () ->
-                eventService.updateStandingZoneCapacity(
-                        OWNER_TOKEN,
-                        COMPANY_ID,
-                        EVENT_ID,
-                        ZONE_ID,
-                        5
-                )
-        );
+        assertThrows(IllegalArgumentException.class, () -> eventService.updateStandingZoneCapacity(
+                OWNER_TOKEN,
+                COMPANY_ID,
+                EVENT_ID,
+                ZONE_ID,
+                5));
     }
-
 
     private OrderReceipt setupStateBasedHappyPath() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         ReceiptLine line = new ReceiptLine(1, 100.0, EVENT_ID, 1, "A1", java.time.LocalDateTime.now());
         OrderReceipt realReceipt = OrderReceipt.forMember(99, OWNER_ID, 100.0, List.of(line));
-        realReceipt.addTransaction(TransactionRecord.paymentCharge(42, "test-gateway", 100.0, "ILS", java.time.LocalDateTime.now()));
+        realReceipt.addTransaction(
+                TransactionRecord.paymentCharge(42, "test-gateway", 100.0, "ILS", java.time.LocalDateTime.now()));
 
         when(paymentGateway.getId()).thenReturn("test-gateway");
         when(paymentGateway.refund(anyInt(), anyDouble())).thenReturn(
-            new RefundResultDTO("refund-tx-1", "99", 100.0, java.time.LocalDateTime.now(), List.of(), List.of())
-        );
+                new RefundResultDTO("refund-tx-1", "99", 100.0, java.time.LocalDateTime.now(), List.of(), List.of()));
         when(mockTicketRepo.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of());
 
         when(orderReceiptRepository.findByEventId(EVENT_ID))
-            .thenReturn(List.of(realReceipt));
+                .thenReturn(List.of(realReceipt));
 
         return realReceipt;
     }
@@ -308,9 +301,7 @@ class EventManagementServiceTest {
     public void GivenInvalidToken_WhenCancelEventAndRefund_ThenThrowException() {
         when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
 
-        assertThrows(RuntimeException.class, () ->
-                eventService.cancelEventAndRefund(INVALID_TOKEN, EVENT_ID)
-        );
+        assertThrows(RuntimeException.class, () -> eventService.cancelEventAndRefund(INVALID_TOKEN, EVENT_ID));
     }
 
     @Test
@@ -319,9 +310,7 @@ class EventManagementServiceTest {
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(null);
 
-        assertThrows(RuntimeException.class, () ->
-                eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID)
-        );
+        assertThrows(RuntimeException.class, () -> eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID));
     }
 
     @Test
@@ -331,15 +320,14 @@ class EventManagementServiceTest {
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
 
-        assertThrows(RuntimeException.class, () ->
-                eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID)
-        );
+        assertThrows(RuntimeException.class, () -> eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID));
     }
 
     @Test
     public void GivenEventAlreadyCanceled_WhenCancelEventAndRefund_ThenReceiptStateRemainsUnchanged() {
         OrderReceipt receipt = setupStateBasedHappyPath();
-        event.transitionToCanceled("cancelled");; // Manually cancel it beforehand
+        event.transitionToCanceled("cancelled");
+        ; // Manually cancel it beforehand
 
         eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
 
@@ -364,11 +352,12 @@ class EventManagementServiceTest {
         assertTrue(realReceipt.wasRefunded());
     }
 
-
-@Test
+    @Test
     public void GivenPaidTicket_WhenCancelEventAndRefund_ThenTicketStatusIsMarkedRefunded() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
@@ -382,19 +371,20 @@ class EventManagementServiceTest {
         assertEquals(TicketStatus.REFUNDED, paidTicket.getStatus());
     }
 
-
-@Test
+    @Test
     public void GivenIssuedTicket_WhenCancelEventAndRefund_ThenTicketStatusIsMarkedRefunded() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
 
         Ticket issuedTicket = new Ticket(EVENT_ID, ZONE_ID, ORDER_RECEIPT_ID, null, 100.0, 1, "BARCODE123");
-        
-        issuedTicket.markIssued("BARCODE123"); 
-        
+
+        issuedTicket.markIssued("BARCODE123");
+
         when(mockTicketRepo.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of(issuedTicket));
 
         eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
@@ -406,6 +396,8 @@ class EventManagementServiceTest {
     public void GivenAvailableTicket_WhenCancelEventAndRefund_ThenTicketStatusRemainsUnchanged() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
@@ -420,7 +412,6 @@ class EventManagementServiceTest {
 
         assertEquals(TicketStatus.VOIDED, availableTicket.getStatus());
     }
-    
 
     // new test
     @Test
@@ -431,7 +422,6 @@ class EventManagementServiceTest {
         // assert A1.getY() == 20
 
     }
-    
 
     @Test
     void GivenEventCreatedByAddEventAndVenueConfigured_WhenReserveStandingTicket_ThenReservationSucceeds() {
@@ -442,18 +432,18 @@ class EventManagementServiceTest {
 
     }
 
+    @Test
+    @Disabled("UC-19: Owner adds event — DRAFT state initially")
+    void givenOwner_whenAddEvent_thenEventInDraft() {
+    }
 
+    @Test
+    @Disabled("UC-19: Manager without permission rejected")
+    void givenManagerWithoutPermission_whenAddEvent_thenRejected() {
+    }
 
-
-
-    @Test @Disabled("UC-19: Owner adds event — DRAFT state initially")
-    void givenOwner_whenAddEvent_thenEventInDraft() {}
-
-    @Test @Disabled("UC-19: Manager without permission rejected")
-    void givenManagerWithoutPermission_whenAddEvent_thenRejected() {}
-
-    
-
-    @Test @Disabled("UC-21: setEventPolicies stores PurchasePolicy + DiscountPolicy")
-    void givenOwner_whenSetEventPolicies_thenStored() {}
+    @Test
+    @Disabled("UC-21: setEventPolicies stores PurchasePolicy + DiscountPolicy")
+    void givenOwner_whenSetEventPolicies_thenStored() {
+    }
 }
