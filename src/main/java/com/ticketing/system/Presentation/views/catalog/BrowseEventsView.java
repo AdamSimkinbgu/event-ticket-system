@@ -21,6 +21,8 @@ import com.vaadin.flow.component.html.NativeButton;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.data.value.ValueChangeMode;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
@@ -30,10 +32,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-@Route(value = "", layout = MainLayout.class)
+@Route(value = "browse", layout = MainLayout.class)
 @PageTitle("Browse Events · TicketHub")
 @AnonymousAllowed
-public class BrowseEventsView extends LkPage {
+public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
 
     // ---- data model ----
 
@@ -98,6 +100,21 @@ public class BrowseEventsView extends LkPage {
         add(buildAllEventsHeader());
         add(buildBrowseSplit());
         renderGrid();
+    }
+
+    /**
+     * Apply a {@code ?category=...} query parameter (e.g. when arriving
+     * from a category card on the landing page) by pre-selecting the
+     * matching chip + sidebar Category select, and filtering the grid.
+     */
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        List<String> values = event.getLocation().getQueryParameters()
+            .getParameters().getOrDefault("category", List.of());
+        if (values.isEmpty()) return;
+        String category = values.get(0);
+        // Only honor a known category (else the chips/select would mismatch).
+        if (CATEGORIES.contains(category)) setCategory(category);
     }
 
     // ---- hero ----

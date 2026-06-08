@@ -12,6 +12,7 @@ import com.ticketing.system.Presentation.views.auth.LoginView;
 import com.ticketing.system.Presentation.views.auth.RegisterView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.ticketing.system.Presentation.views.catalog.EventDetailsView;
+import com.ticketing.system.Presentation.views.landing.LandingView;
 import com.ticketing.system.Presentation.views.company.MyCompaniesView;
 import com.ticketing.system.Presentation.views.company.OwnerDashboardView;
 import com.ticketing.system.Presentation.views.order.CartView;
@@ -65,7 +66,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         String name = signedIn ? MockAuth.displayName() : "Guest";
 
         LkTopBar bar = new LkTopBar(LkTopBar.Variant.MAIN)
-            .brand("TicketHub")
+            .brand("TicketHub", LandingView.class)
             .nav(List.of(
                 new LkTopBar.NavItem("Browse",     BrowseEventsView.class),
                 new LkTopBar.NavItem("My Tickets", MyAccountView.class)

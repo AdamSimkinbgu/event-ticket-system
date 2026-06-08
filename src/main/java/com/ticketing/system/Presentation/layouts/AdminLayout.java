@@ -13,6 +13,7 @@ import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
 import com.ticketing.system.Presentation.views.auth.LoginView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
+import com.ticketing.system.Presentation.views.landing.LandingView;
 import com.ticketing.system.Presentation.views.company.CompanyEventListView;
 import com.ticketing.system.Presentation.views.company.CompanyInquiryInboxView;
 import com.ticketing.system.Presentation.views.company.CompanyRegistrationView;
@@ -78,8 +79,8 @@ public class AdminLayout extends AppLayout implements AfterNavigationObserver {
         if (topBar != null) topBar.getElement().removeFromParent();
         String name = MockAuth.isSignedIn() ? MockAuth.displayName() : "Admin";
         topBar = new LkTopBar(LkTopBar.Variant.PLATFORM)
-            .brand("Event Ticket Platform", " · Admin")
-            .rightLink("Back to site", "arrowLeft", BrowseEventsView.class)
+            .brand("Event Ticket Platform", " · Admin", LandingView.class)
+            .rightLink("Back to site", "arrowLeft", LandingView.class)
             .bellDefault(true)
             .account(initials(name), name, buildAdminMenu(name), "#fff", "#c2410c");
         addToNavbar(topBar);

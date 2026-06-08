@@ -41,9 +41,16 @@ public class LkTopBar extends Header {
     // Left / centre slots
     // ---------------------------------------------------------------------
 
-    public LkTopBar brand(String text) { return brand(text, null); }
+    public LkTopBar brand(String text) { return brand(text, null, null); }
 
-    public LkTopBar brand(String text, String crumb) {
+    public LkTopBar brand(String text, String crumb) { return brand(text, crumb, null); }
+
+    /** Brand line that navigates to {@code target} when clicked. */
+    public LkTopBar brand(String text, Class<? extends Component> target) {
+        return brand(text, null, target);
+    }
+
+    public LkTopBar brand(String text, String crumb, Class<? extends Component> target) {
         Span brand = new Span();
         brand.addClassName("lk-brand");
         brand.add(new LkIcon("ticket", 20));
@@ -54,6 +61,11 @@ public class LkTopBar extends Header {
             Span c = new Span(crumb);
             c.addClassName("lk-brand-crumb");
             brand.add(c);
+        }
+        if (target != null) {
+            brand.getStyle().set("cursor", "pointer");
+            brand.getElement().addEventListener("click", e ->
+                com.vaadin.flow.component.UI.getCurrent().navigate(target));
         }
         add(brand);
         return this;
