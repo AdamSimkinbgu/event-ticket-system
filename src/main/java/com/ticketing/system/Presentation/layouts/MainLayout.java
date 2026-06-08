@@ -4,6 +4,8 @@ import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
 import com.ticketing.system.Presentation.security.MockAuth;
+import com.ticketing.system.Presentation.session.MockCompanies;
+import com.ticketing.system.Presentation.views.company.CompanyRegistrationView;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
 import com.ticketing.system.Presentation.views.account.MyInvitationsView;
 import com.ticketing.system.Presentation.views.account.MyProfileView;
@@ -92,10 +94,22 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
             new LkMenu.Item("crown",     "My invitations").onClick(() -> UI.getCurrent().navigate(MyInvitationsView.class)),
             new LkMenu.Item("briefcase", "My companies").onClick(() -> UI.getCurrent().navigate(MyCompaniesView.class)),
             new LkMenu.Item("comment",   "Support inbox").onClick(() -> UI.getCurrent().navigate(SupportInboxView.class)),
+            new LkMenu.Divider()
+        );
+
+        // Conditional: owner workspace vs. become-an-organizer CTA.
+        if (MockCompanies.isOwner()) {
+            menu.add(new LkMenu.Item("building", "Owner workspace")
+                .onClick(() -> UI.getCurrent().navigate(OwnerDashboardView.class)));
+        } else {
+            menu.add(new LkMenu.Item("plus", "Become an organizer")
+                .hint("free")
+                .onClick(() -> UI.getCurrent().navigate(CompanyRegistrationView.class)));
+        }
+
+        menu.add(
             new LkMenu.Divider(),
-            new LkMenu.Item("building",  "Owner workspace").onClick(() -> UI.getCurrent().navigate(OwnerDashboardView.class)),
-            new LkMenu.Divider(),
-            new LkMenu.Item("logout",    "Sign out").danger().onClick(() -> {
+            new LkMenu.Item("logout", "Sign out").danger().onClick(() -> {
                 MockAuth.signOut();
                 UI.getCurrent().navigate(LoginView.class);
             })
