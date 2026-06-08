@@ -10,7 +10,12 @@ import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.layouts.AdminLayout;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.views.PlaceholderView;
+import com.ticketing.system.Presentation.views.admin.AdminAnnouncementsView;
+import com.ticketing.system.Presentation.views.admin.AdminComplaintQueueView;
+import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
+import com.ticketing.system.Presentation.views.admin.AdminLoginView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
+import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -99,6 +104,17 @@ class VaadinSmokeTest {
         // PlaceholderView base class is broken, every view subclass breaks.
         assertDoesNotThrow(BrowseEventsView::new, "BrowseEventsView (root route) failed to construct");
         assertDoesNotThrow(GlobalHistoryView::new, "GlobalHistoryView (admin route) failed to construct");
+    }
+
+    @Test
+    void platformAdminViewsInstantiate() {
+        // Every PlatformAdminLayout view + the dedicated sign-in endpoint.
+        // Catches kit-API misuse the layout's gate would otherwise mask.
+        assertDoesNotThrow(AdminDashboardView::new,      "AdminDashboardView failed to construct");
+        assertDoesNotThrow(AdminAnnouncementsView::new,  "AdminAnnouncementsView failed to construct");
+        assertDoesNotThrow(AdminComplaintQueueView::new, "AdminComplaintQueueView failed to construct");
+        assertDoesNotThrow(OrganizationalTreeView::new,  "OrganizationalTreeView failed to construct");
+        assertDoesNotThrow(AdminLoginView::new,          "AdminLoginView failed to construct");
     }
 
     @Test

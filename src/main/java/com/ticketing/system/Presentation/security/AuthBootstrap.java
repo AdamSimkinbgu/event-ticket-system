@@ -1,6 +1,7 @@
 package com.ticketing.system.Presentation.security;
 
 import com.ticketing.system.Presentation.session.MockCompanies;
+import com.ticketing.system.Presentation.views.admin.AdminLoginView;
 import com.ticketing.system.Presentation.views.auth.LoginView;
 import com.ticketing.system.Presentation.views.company.CompanyRegistrationView;
 import com.vaadin.flow.router.BeforeEnterEvent;
@@ -12,21 +13,24 @@ import org.springframework.stereotype.Component;
 /**
  * Global navigation guard for the V2 placeholder UI.
  *
- * <p>Two-step check on every navigation:
+ * <p>Three-step check on every navigation:
  * <ol>
- *   <li><b>Auth gate</b> — targets annotated {@link AnonymousAllowed}
- *       pass through. Otherwise, signed-out users are forwarded to
+ *   <li><b>Admin gate</b> — targets implementing
+ *       {@link RequiresAdminRole} require a signed-in admin
+ *       ({@link MockAuth#isAdmin()}). Non-admins are forwarded to
+ *       {@link AdminLoginView} so the system-admin workspace is
+ *       unreachable from a member's session.</li>
+ *   <li><b>Auth gate</b> — targets not annotated {@link AnonymousAllowed}
+ *       require any signed-in user. Signed-out users are forwarded to
  *       {@link LoginView}.</li>
  *   <li><b>Owner gate</b> — targets implementing
  *       {@link RequiresOwnerCompany} require the signed-in user to own
- *       at least one company (per {@link MockCompanies#isOwner()}).
- *       Non-owners are forwarded to {@link CompanyRegistrationView} so
- *       they can register and become an owner.</li>
+ *       at least one company. Non-owners are forwarded to
+ *       {@link CompanyRegistrationView}.</li>
  * </ol>
  *
- * <p>Mock equivalent of Spring Security's filter chain + a method-level
- * permission check — replace with SecurityConfig + a custom
- * SecurityFilter once V2-AUTH-02 lands.
+ * <p>Mock equivalent of Spring Security's filter chain + method-level
+ * permission checks — replace once V2-AUTH-02 lands.
  */
 @Component
 public class AuthBootstrap implements VaadinServiceInitListener {
@@ -40,7 +44,13 @@ public class AuthBootstrap implements VaadinServiceInitListener {
     private void guard(BeforeEnterEvent event) {
         Class<?> target = event.getNavigationTarget();
 
-        // 1. Auth gate
+        // 1. Admin gate — has its own dedicated sign-in endpoint.
+        if (RequiresAdminRole.class.isAssignableFrom(target) && !MockAuth.isAdmin()) {
+            event.forwardTo(AdminLoginView.class);
+            return;
+        }
+
+        // 2. Auth gate.
         if (!target.isAnnotationPresent(AnonymousAllowed.class)) {
             if (!MockAuth.isSignedIn()) {
                 event.forwardTo(LoginView.class);
@@ -48,7 +58,7 @@ public class AuthBootstrap implements VaadinServiceInitListener {
             }
         }
 
-        // 2. Owner gate — must own ≥ 1 company.
+        // 3. Owner gate — must own ≥ 1 company.
         if (RequiresOwnerCompany.class.isAssignableFrom(target) && !MockCompanies.isOwner()) {
             event.forwardTo(CompanyRegistrationView.class);
         }

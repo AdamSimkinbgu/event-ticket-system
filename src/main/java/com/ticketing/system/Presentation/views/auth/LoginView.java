@@ -85,6 +85,10 @@ public class LoginView extends LkAuthCard {
             Toasts.failure("Please enter both username and password.");
             return;
         }
+        if (MockAuth.isAdminUsername(username.getValue())) {
+            Toasts.failure("Admin accounts use the dedicated sign-in at /admin/sign-in.");
+            return;
+        }
         MockAuth.signIn(username.getValue());
         Toasts.success("Signed in as " + username.getValue());
         UI.getCurrent().navigate(BrowseEventsView.class);

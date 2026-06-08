@@ -1,35 +1,70 @@
 package com.ticketing.system.Presentation.views.admin;
 
-import com.ticketing.system.Presentation.layouts.AdminLayout;
-import com.ticketing.system.Presentation.views.PlaceholderView;
+import com.ticketing.system.Presentation.components.kit.LkCard;
+import com.ticketing.system.Presentation.components.kit.LkIcon;
+import com.ticketing.system.Presentation.components.kit.LkPage;
+import com.ticketing.system.Presentation.components.kit.LkStat;
+import com.ticketing.system.Presentation.components.kit.LkTile;
+import com.ticketing.system.Presentation.layouts.PlatformAdminLayout;
+import com.ticketing.system.Presentation.security.RequiresAdminRole;
+import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
-import jakarta.annotation.security.RolesAllowed;
+import jakarta.annotation.security.PermitAll;
 
-@Route(value = "admin", layout = AdminLayout.class)
+@Route(value = "admin", layout = PlatformAdminLayout.class)
 @PageTitle("Admin workspace · Event Ticket Platform")
-@RolesAllowed("ADMIN")
-public class AdminDashboardView extends PlaceholderView {
+@PermitAll
+public class AdminDashboardView extends LkPage implements RequiresAdminRole {
+
     public AdminDashboardView() {
-        super(
-            "Admin workspace",
-            "V2-VIEW-NW-00",
-            "Bar (@BarMiyara)",
-            "Hub for system-administrator activity. Lands here on /admin. Every admin sub-view is reachable as a clickable card below, plus from the left drawer."
+        title("Admin workspace");
+        subtitle("Cross-company moderation, broadcasts, and platform analytics.");
+
+        add(buildStats());
+        add(buildTiles());
+    }
+
+    private Component buildStats() {
+        Div row = new Div();
+        row.addClassName("ow-stats");
+        row.add(
+            new LkStat("Active companies",  "42").delta("▲ 3 this week", LkStat.Tone.up),
+            new LkStat("Live events",       "118"),
+            new LkStat("Open complaints",   "7").delta("▼ 2 vs last week", LkStat.Tone.warn),
+            new LkStat("Platform revenue · 30d", "$5.8M").delta("▲ 12%", LkStat.Tone.up)
         );
-        add(wireCardGrid(
-            wireNavCard("📊", "Global Purchase History",
-                "Every order across the platform with date / company / event / status filters and revenue aggregations.",
+        return row;
+    }
+
+    private Component buildTiles() {
+        Div tiles = new Div();
+        tiles.addClassName("ow-tiles");
+        tiles.add(
+            tile("chart",   "Global purchase history",
+                "Every order across the platform with filters and revenue aggregations.",
                 GlobalHistoryView.class),
-            wireNavCard("🌳", "Organizational Tree",
-                "Per-company appointment hierarchy — founder → owners → managers with their granted permissions.",
+            tile("org",     "Organizational tree",
+                "Per-company founder → owners → managers hierarchy.",
                 OrganizationalTreeView.class),
-            wireNavCard("📢", "Announcements",
-                "Broadcast a Conversation of type ANNOUNCEMENT to all members or a specific role.",
+            tile("comment", "Announcements",
+                "Broadcast a Conversation to all members or a specific role.",
                 AdminAnnouncementsView.class),
-            wireNavCard("📬", "Complaint Queue",
-                "Handle member complaints opened via Conversation type COMPLAINT. Reply, mark resolved, filter by status.",
+            tile("warning", "Complaint queue",
+                "Member complaints opened via Conversation type COMPLAINT.",
                 AdminComplaintQueueView.class)
-        ));
+        );
+
+        LkCard card = new LkCard("Admin tools").pad(20);
+        card.add(tiles);
+        return card;
+    }
+
+    private LkTile tile(String iconName, String title, String desc, Class<? extends Component> target) {
+        LkTile t = new LkTile(new LkIcon(iconName, 26), title, desc);
+        t.addClickListener(e -> UI.getCurrent().navigate(target));
+        return t;
     }
 }

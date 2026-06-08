@@ -75,6 +75,10 @@ public class RegisterView extends LkAuthCard {
             Toasts.failure("Password must be at least 8 characters.");
             return;
         }
+        if (MockAuth.isAdminUsername(username.getValue())) {
+            Toasts.failure("That username is reserved for the platform-admin pool.");
+            return;
+        }
         MockAuth.signIn(username.getValue());
         Toasts.success("Welcome, " + username.getValue() + "! Account created.");
         UI.getCurrent().navigate(BrowseEventsView.class);
