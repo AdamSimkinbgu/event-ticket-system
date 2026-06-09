@@ -8,9 +8,9 @@ import com.ticketing.system.Presentation.security.MockAuth;
 import com.ticketing.system.Presentation.views.admin.AdminAnnouncementsView;
 import com.ticketing.system.Presentation.views.admin.AdminComplaintQueueView;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
-import com.ticketing.system.Presentation.views.admin.AdminLoginView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
+import com.ticketing.system.Presentation.views.auth.LoginView;
 import com.ticketing.system.Presentation.views.landing.LandingView;
 import com.vaadin.flow.component.HasElement;
 import com.vaadin.flow.component.UI;
@@ -24,9 +24,12 @@ import java.util.Map;
 
 /**
  * Platform-admin shell — orange "Event Ticket Platform · Admin" top bar
- * with a single-section drawer of admin-only items. Unreachable except
- * through {@link AdminLoginView} (gated by {@link com.ticketing.system.Presentation.security.RequiresAdminRole}),
- * which keeps the system-admin workspace hidden from members.
+ * with a single-section drawer of admin-only items. Reached after
+ * signing in at the unified {@link LoginView} with an admin username
+ * ({@link com.ticketing.system.Presentation.security.MockAuth#ADMIN_USERNAMES}).
+ * Every view inside is gated by an admin {@link
+ * com.ticketing.system.Presentation.security.Capability}, so members
+ * who somehow type the URL bounce back to the sign-in form.
  */
 public class PlatformAdminLayout extends AppLayout implements AfterNavigationObserver {
 
@@ -86,7 +89,7 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
             new LkMenu.Divider(),
             new LkMenu.Item("logout",    "Sign out").danger().onClick(() -> {
                 MockAuth.signOut();
-                UI.getCurrent().navigate(AdminLoginView.class);
+                UI.getCurrent().navigate(LoginView.class);
             })
         );
         return new LkAccountMenu(initials(name), name, "System administrator", menu, "#fff", "#c2410c");

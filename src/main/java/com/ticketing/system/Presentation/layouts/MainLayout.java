@@ -3,9 +3,11 @@ package com.ticketing.system.Presentation.layouts;
 import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
+import com.ticketing.system.Presentation.security.Capabilities;
+import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.MockAuth;
 import com.ticketing.system.Presentation.session.MockCart;
-import com.ticketing.system.Presentation.session.MockCompanies;
+import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.company.CompanyRegistrationView;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
 import com.ticketing.system.Presentation.views.account.MyInvitationsView;
@@ -28,6 +30,7 @@ import com.vaadin.flow.router.AfterNavigationEvent;
 import com.vaadin.flow.router.AfterNavigationObserver;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -72,12 +75,19 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         boolean signedIn = MockAuth.isSignedIn();
         String name = signedIn ? MockAuth.displayName() : "Guest";
 
+        List<LkTopBar.NavItem> nav = new ArrayList<>();
+        nav.add(new LkTopBar.NavItem("Browse",     BrowseEventsView.class));
+        nav.add(new LkTopBar.NavItem("My Tickets", MyAccountView.class));
+        // An admin who is also browsing as a member gets a fast-jump tab into
+        // the platform shell. Driven by Capabilities so a dev-panel toggle
+        // flips it on without rewiring routes.
+        if (Capabilities.has(Capability.ADMIN_WORKSPACE)) {
+            nav.add(new LkTopBar.NavItem("Admin", AdminDashboardView.class));
+        }
+
         LkTopBar bar = new LkTopBar(LkTopBar.Variant.MAIN)
             .brand("TicketHub", LandingView.class)
-            .nav(List.of(
-                new LkTopBar.NavItem("Browse",     BrowseEventsView.class),
-                new LkTopBar.NavItem("My Tickets", MyAccountView.class)
-            ), activeLabel)
+            .nav(nav, activeLabel)
             .searchDefault()
             .cart(CartView.class, MockCart.size(), shortestCartDeadlineMs())
             .bellDefault(false);
@@ -104,10 +114,12 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         );
 
         // Conditional: owner workspace vs. become-an-organizer CTA.
-        if (MockCompanies.isOwner()) {
-            menu.add(new LkMenu.Item("building", "Owner workspace")
+        // Capability-driven so swapping MockCompanies for a real service later is a
+        // one-file change in Capabilities, not 30 view edits.
+        if (Capabilities.has(Capability.OWNER_WORKSPACE)) {
+            menu.add(new LkMenu.Item("building", "Workspace")
                 .onClick(() -> UI.getCurrent().navigate(OwnerDashboardView.class)));
-        } else {
+        } else if (Capabilities.has(Capability.REGISTER_COMPANY)) {
             menu.add(new LkMenu.Item("plus", "Become an organizer")
                 .hint("free")
                 .onClick(() -> UI.getCurrent().navigate(CompanyRegistrationView.class)));

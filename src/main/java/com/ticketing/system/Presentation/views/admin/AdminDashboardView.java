@@ -6,7 +6,8 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkStat;
 import com.ticketing.system.Presentation.components.kit.LkTile;
 import com.ticketing.system.Presentation.layouts.PlatformAdminLayout;
-import com.ticketing.system.Presentation.security.RequiresAdminRole;
+import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -17,7 +18,8 @@ import jakarta.annotation.security.PermitAll;
 @Route(value = "admin", layout = PlatformAdminLayout.class)
 @PageTitle("Admin workspace · Event Ticket Platform")
 @PermitAll
-public class AdminDashboardView extends LkPage implements RequiresAdminRole {
+@RequireCapability(Capability.ADMIN_WORKSPACE)
+public class AdminDashboardView extends LkPage {
 
     public AdminDashboardView() {
         title("Admin workspace");

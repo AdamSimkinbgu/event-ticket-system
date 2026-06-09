@@ -9,8 +9,9 @@ import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.messaging.MdConvRow;
 import com.ticketing.system.Presentation.components.messaging.MdReplyBar;
 import com.ticketing.system.Presentation.components.messaging.MdThread;
-import com.ticketing.system.Presentation.layouts.AdminLayout;
-import com.ticketing.system.Presentation.security.RequiresOwnerCompany;
+import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.router.PageTitle;
@@ -20,10 +21,11 @@ import jakarta.annotation.security.PermitAll;
 import java.util.ArrayList;
 import java.util.List;
 
-@Route(value = "owner/inquiries", layout = AdminLayout.class)
+@Route(value = "owner/inquiries", layout = WorkspaceLayout.class)
 @PageTitle("Member inquiries · TicketHub")
 @PermitAll
-public class CompanyInquiryInboxView extends LkPage implements RequiresOwnerCompany {
+@RequireCapability(Capability.RESPOND_INQUIRIES)
+public class CompanyInquiryInboxView extends LkPage {
 
     private record Inquiry(String iconName, String subject, String who, String time,
                            String unread, String status, List<MdThread.Message> thread) { }

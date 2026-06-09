@@ -9,8 +9,10 @@ import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
-import com.ticketing.system.Presentation.layouts.AdminLayout;
-import com.ticketing.system.Presentation.security.RequiresOwnerCompany;
+import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.security.Capabilities;
+import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.views.admin.CompanySalesView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -23,32 +25,32 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
-@Route(value = "owner/events/:eventId", layout = AdminLayout.class)
+@Route(value = "owner/events/:eventId", layout = WorkspaceLayout.class)
 @PageTitle("Edit event · TicketHub")
 @PermitAll
-public class EventManagementView extends LkPage implements RequiresOwnerCompany {
+@RequireCapability(Capability.EDIT_COMPANY_EVENTS)
+public class EventManagementView extends LkPage {
 
-    private final TextField    title       = new TextField("Title");
-    private final TextField    category    = new TextField("Category");
-    private final TextField    start       = new TextField("Start");
-    private final TextField    end         = new TextField("End");
-    private final TextField    venue       = new TextField("Venue");
-    private final TextField    city        = new TextField("City / address");
-    private final IntegerField maxAttend   = new IntegerField("Max attendance");
-    private final TextArea     description = new TextArea("Description");
+    private final TextField title = new TextField("Title");
+    private final TextField category = new TextField("Category");
+    private final TextField start = new TextField("Start");
+    private final TextField end = new TextField("End");
+    private final TextField venue = new TextField("Venue");
+    private final TextField city = new TextField("City / address");
+    private final IntegerField maxAttend = new IntegerField("Max attendance");
+    private final TextArea description = new TextArea("Description");
 
     public EventManagementView() {
         title("Edit event");
         subtitle("Coldplay · Music of the Spheres");
         actions(
-            new LkBtn("Discard").variant(LkBtn.Variant.tertiary)
-                .onClick(e -> UI.getCurrent().navigate(CompanyEventListView.class)),
-            new LkBtn("Save changes").variant(LkBtn.Variant.primary)
-                .onClick(e -> {
-                    Toasts.success("Event saved.");
-                    UI.getCurrent().navigate(CompanyEventListView.class);
-                })
-        );
+                new LkBtn("Discard").variant(LkBtn.Variant.tertiary)
+                        .onClick(e -> UI.getCurrent().navigate(CompanyEventListView.class)),
+                new LkBtn("Save changes").variant(LkBtn.Variant.primary)
+                        .onClick(e -> {
+                            Toasts.success("Event saved.");
+                            UI.getCurrent().navigate(CompanyEventListView.class);
+                        }));
         add(buildSplit());
     }
 
@@ -94,9 +96,9 @@ public class EventManagementView extends LkPage implements RequiresOwnerCompany 
 
         Div grid = new Div();
         grid.getStyle()
-            .set("display", "grid")
-            .set("grid-template-columns", "repeat(auto-fit, minmax(min(100%, 220px), 1fr))")
-            .set("gap", "14px");
+                .set("display", "grid")
+                .set("grid-template-columns", "repeat(auto-fit, minmax(min(100%, 220px), 1fr))")
+                .set("gap", "14px");
         grid.add(title, category, start, end, venue, city, maxAttend);
 
         LkCol col = new LkCol().gap(14);
@@ -107,7 +109,12 @@ public class EventManagementView extends LkPage implements RequiresOwnerCompany 
 
     private Component buildSideCol() {
         LkCol col = new LkCol().gap(14);
-        col.add(buildLinkedEditorsCard(), buildStatusCard(), buildDangerCard());
+        col.add(buildLinkedEditorsCard(), buildStatusCard());
+        // Danger zone (cancel event) is owner-only — managers can edit details
+        // but cannot cancel. Drop the entire card for users without the cap.
+        if (Capabilities.has(Capability.CANCEL_EVENT)) {
+            col.add(buildDangerCard());
+        }
         return col;
     }
 
@@ -115,10 +122,9 @@ public class EventManagementView extends LkPage implements RequiresOwnerCompany 
         LkCard card = new LkCard("Linked editors").pad(14);
         LkCol col = new LkCol().gap(8);
         col.add(
-            linkRow("ticket", "Venue map + zones", () -> UI.getCurrent().navigate("owner/venue/coldplay")),
-            linkRow("policy", "Purchase policies", () -> UI.getCurrent().navigate(PurchasePolicyEditorView.class)),
-            linkRow("chart",  "Sales for this event", () -> UI.getCurrent().navigate(CompanySalesView.class))
-        );
+                linkRow("ticket", "Venue map + zones", () -> UI.getCurrent().navigate("owner/venue/coldplay")),
+                linkRow("policy", "Purchase policies", () -> UI.getCurrent().navigate(PurchasePolicyEditorView.class)),
+                linkRow("chart", "Sales for this event", () -> UI.getCurrent().navigate(CompanySalesView.class)));
         card.add(col);
         return card;
     }
@@ -171,8 +177,8 @@ public class EventManagementView extends LkPage implements RequiresOwnerCompany 
         warn.getStyle().set("font-size", "13px").set("display", "block").set("margin-bottom", "10px");
         card.add(warn);
         card.add(new LkBtn("Cancel this event").variant(LkBtn.Variant.error).full()
-            .icon(new LkIcon("warning", 16))
-            .onClick(e -> Toasts.warn("Cancel-event dialog refunds all holders + emails them.")));
+                .icon(new LkIcon("warning", 16))
+                .onClick(e -> Toasts.warn("Cancel-event dialog refunds all holders + emails them.")));
         return card;
     }
 }

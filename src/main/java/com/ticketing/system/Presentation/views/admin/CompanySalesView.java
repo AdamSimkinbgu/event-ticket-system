@@ -10,8 +10,9 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStat;
-import com.ticketing.system.Presentation.layouts.AdminLayout;
-import com.ticketing.system.Presentation.security.RequiresOwnerCompany;
+import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
@@ -23,10 +24,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-@Route(value = "owner/sales", layout = AdminLayout.class)
+@Route(value = "owner/sales", layout = WorkspaceLayout.class)
 @PageTitle("Company sales · TicketHub")
 @PermitAll
-public class CompanySalesView extends LkPage implements RequiresOwnerCompany {
+@RequireCapability(Capability.VIEW_COMPANY_SALES)
+public class CompanySalesView extends LkPage {
 
     public CompanySalesView() {
         title("Company sales history");

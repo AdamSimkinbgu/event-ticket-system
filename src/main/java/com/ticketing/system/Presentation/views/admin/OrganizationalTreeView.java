@@ -5,7 +5,8 @@ import com.ticketing.system.Presentation.components.kit.LkFilterChip;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.PlatformAdminLayout;
-import com.ticketing.system.Presentation.security.RequiresAdminRole;
+import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.ListItem;
@@ -20,7 +21,8 @@ import java.util.List;
 @Route(value = "admin/org-tree", layout = PlatformAdminLayout.class)
 @PageTitle("Organizational tree · Admin")
 @PermitAll
-public class OrganizationalTreeView extends LkPage implements RequiresAdminRole {
+@RequireCapability(Capability.VIEW_ORG_TREES)
+public class OrganizationalTreeView extends LkPage {
 
     private record Node(String initial, String name, String role, String variant, String sub, List<Node> children) {
         Node(String initial, String name, String role, String variant, String sub) {

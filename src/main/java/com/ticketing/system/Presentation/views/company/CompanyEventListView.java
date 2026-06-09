@@ -11,8 +11,9 @@ import com.ticketing.system.Presentation.components.kit.LkIconBtn;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStatusDot;
-import com.ticketing.system.Presentation.layouts.AdminLayout;
-import com.ticketing.system.Presentation.security.RequiresOwnerCompany;
+import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Span;
@@ -24,10 +25,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-@Route(value = "owner/events", layout = AdminLayout.class)
+@Route(value = "owner/events", layout = WorkspaceLayout.class)
 @PageTitle("My events · TicketHub")
 @PermitAll
-public class CompanyEventListView extends LkPage implements RequiresOwnerCompany {
+@RequireCapability(Capability.VIEW_COMPANY_EVENTS)
+public class CompanyEventListView extends LkPage {
 
     private record EventRow(String name, String date, String venue, String sold,
                             LkStatusDot.Tone tone, String status, String id) { }

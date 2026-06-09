@@ -12,7 +12,8 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStat;
 import com.ticketing.system.Presentation.layouts.PlatformAdminLayout;
-import com.ticketing.system.Presentation.security.RequiresAdminRole;
+import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
@@ -27,7 +28,8 @@ import java.util.Map;
 @Route(value = "admin/global-history", layout = PlatformAdminLayout.class)
 @PageTitle("Global purchase history · Admin")
 @PermitAll
-public class GlobalHistoryView extends LkPage implements RequiresAdminRole {
+@RequireCapability(Capability.VIEW_GLOBAL_HISTORY)
+public class GlobalHistoryView extends LkPage {
 
     public GlobalHistoryView() {
         title("Global purchase history");

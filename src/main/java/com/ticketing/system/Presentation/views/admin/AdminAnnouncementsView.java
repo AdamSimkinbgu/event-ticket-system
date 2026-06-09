@@ -11,7 +11,8 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkSelect;
 import com.ticketing.system.Presentation.layouts.PlatformAdminLayout;
-import com.ticketing.system.Presentation.security.RequiresAdminRole;
+import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.textfield.TextArea;
@@ -27,7 +28,8 @@ import java.util.Map;
 @Route(value = "admin/announcements", layout = PlatformAdminLayout.class)
 @PageTitle("Announcements · Admin")
 @PermitAll
-public class AdminAnnouncementsView extends LkPage implements RequiresAdminRole {
+@RequireCapability(Capability.BROADCAST_ANNOUNCEMENT)
+public class AdminAnnouncementsView extends LkPage {
 
     private final TextField subject  = new TextField("Subject");
     private final TextArea  body     = new TextArea("Body");

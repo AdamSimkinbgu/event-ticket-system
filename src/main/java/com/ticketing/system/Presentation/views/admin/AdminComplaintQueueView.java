@@ -10,7 +10,8 @@ import com.ticketing.system.Presentation.components.messaging.MdConvRow;
 import com.ticketing.system.Presentation.components.messaging.MdReplyBar;
 import com.ticketing.system.Presentation.components.messaging.MdThread;
 import com.ticketing.system.Presentation.layouts.PlatformAdminLayout;
-import com.ticketing.system.Presentation.security.RequiresAdminRole;
+import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.router.PageTitle;
@@ -23,7 +24,8 @@ import java.util.List;
 @Route(value = "admin/complaints", layout = PlatformAdminLayout.class)
 @PageTitle("Complaint queue · Admin")
 @PermitAll
-public class AdminComplaintQueueView extends LkPage implements RequiresAdminRole {
+@RequireCapability(Capability.MANAGE_COMPLAINTS)
+public class AdminComplaintQueueView extends LkPage {
 
     private record Complaint(String iconName, String subject, String who, String time,
                              String unread, String status, List<MdThread.Message> thread) { }

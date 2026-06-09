@@ -6,8 +6,10 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkStat;
 import com.ticketing.system.Presentation.components.kit.LkTile;
-import com.ticketing.system.Presentation.layouts.AdminLayout;
-import com.ticketing.system.Presentation.security.RequiresOwnerCompany;
+import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.security.Capabilities;
+import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.session.MockCompanies;
 import com.ticketing.system.Presentation.views.admin.CompanySalesView;
 import com.vaadin.flow.component.Component;
@@ -19,16 +21,17 @@ import jakarta.annotation.security.PermitAll;
 
 import java.util.List;
 
-@Route(value = "owner", layout = AdminLayout.class)
-@PageTitle("Owner workspace · TicketHub")
+@Route(value = "owner", layout = WorkspaceLayout.class)
+@PageTitle("Workspace · TicketHub")
 @PermitAll
-public class OwnerDashboardView extends LkPage implements RequiresOwnerCompany {
+@RequireCapability(Capability.OWNER_WORKSPACE)
+public class OwnerDashboardView extends LkPage {
 
     public OwnerDashboardView() {
         List<MockCompanies.Company> companies = MockCompanies.forCurrentUser();
         MockCompanies.Company company = companies.get(0); // gated → guaranteed non-empty
 
-        title("Owner workspace");
+        title("Workspace");
         subtitle(company.name() + "  ·  you are the " + company.role());
         actions(new LkBtn("New event")
             .variant(LkBtn.Variant.primary)
@@ -56,31 +59,59 @@ public class OwnerDashboardView extends LkPage implements RequiresOwnerCompany {
         return stats;
     }
 
+    /**
+     * Build the tile grid, dropping any tile whose target view the user
+     * doesn't have access to. Without this filter, a manager clicking
+     * (say) "Managers" would just bounce off the capability gate and
+     * land back here — the dead-click UX problem.
+     */
     private Component buildTiles() {
         Div tiles = new Div();
         tiles.addClassName("ow-tiles");
-        tiles.add(
-            tile("calendar",  "My Events",        "Edit metadata, venue map, policies, or cancel an event.",     CompanyEventListView.class),
-            tile("comment",   "Member Inquiries", "Respond to questions about your events and mark resolved.",   CompanyInquiryInboxView.class),
-            tile("chart",     "Sales History",    "Per-company sales with date / event filters. Immutable receipts.", CompanySalesView.class),
-            tile("users",     "Managers",         "Active managers + pending invites. Edit permissions or revoke.",   ManagerListView.class),
-            tile("crown",     "Appoint Co-owner", "Invite another member as co-owner. Cycle-prevention enforced.",    OwnerAppointmentView.class),
-            tile("policy",    "Purchase Policies", "Visual AND/OR builder for company- or event-level rules.",        PurchasePolicyEditorView.class),
-            tileExternal("briefcase", "Register New Company",
-                "Found another production company. You become the founder.")
-        );
+
+        if (Capabilities.has(Capability.VIEW_COMPANY_EVENTS))
+            tiles.add(tile("calendar", "My Events",
+                "Edit metadata, venue map, policies, or cancel an event.",
+                CompanyEventListView.class));
+
+        if (Capabilities.has(Capability.RESPOND_INQUIRIES))
+            tiles.add(tile("comment", "Member Inquiries",
+                "Respond to questions about your events and mark resolved.",
+                CompanyInquiryInboxView.class));
+
+        if (Capabilities.has(Capability.VIEW_COMPANY_SALES))
+            tiles.add(tile("chart", "Sales History",
+                "Per-company sales with date / event filters. Immutable receipts.",
+                CompanySalesView.class));
+
+        if (Capabilities.has(Capability.APPOINT_MANAGER))
+            tiles.add(tile("users", "Managers",
+                "Active managers + pending invites. Edit permissions or revoke.",
+                ManagerListView.class));
+
+        if (Capabilities.has(Capability.APPOINT_CO_OWNER))
+            tiles.add(tile("crown", "Appoint Co-owner",
+                "Invite another member as co-owner. Cycle-prevention enforced.",
+                OwnerAppointmentView.class));
+
+        if (Capabilities.has(Capability.EDIT_PURCHASE_POLICIES))
+            tiles.add(tile("policy", "Purchase Policies",
+                "Visual AND/OR builder for company- or event-level rules.",
+                PurchasePolicyEditorView.class));
+
+        // "Register new company" is universal — any signed-in user can start
+        // a new company and become its founder.
+        if (Capabilities.has(Capability.REGISTER_COMPANY))
+            tiles.add(tile("briefcase", "Register New Company",
+                "Found another production company. You become the founder.",
+                CompanyRegistrationView.class));
+
         return tiles;
     }
 
-    private LkTile tile(String iconName, String title, String desc, Class<? extends com.vaadin.flow.component.Component> target) {
+    private LkTile tile(String iconName, String title, String desc, Class<? extends Component> target) {
         LkTile t = new LkTile(new LkIcon(iconName, 26), title, desc);
         t.addClickListener(e -> UI.getCurrent().navigate(target));
-        return t;
-    }
-
-    private LkTile tileExternal(String iconName, String title, String desc) {
-        LkTile t = new LkTile(new LkIcon(iconName, 26), title, desc);
-        t.addClickListener(e -> UI.getCurrent().navigate(CompanyRegistrationView.class));
         return t;
     }
 }

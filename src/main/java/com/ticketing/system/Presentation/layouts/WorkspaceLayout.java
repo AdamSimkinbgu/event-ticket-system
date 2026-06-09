@@ -4,6 +4,8 @@ import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkSideNav;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
+import com.ticketing.system.Presentation.security.Capabilities;
+import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.MockAuth;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
 import com.ticketing.system.Presentation.views.account.MyInvitationsView;
@@ -26,6 +28,7 @@ import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.router.AfterNavigationEvent;
 import com.vaadin.flow.router.AfterNavigationObserver;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -35,11 +38,31 @@ import java.util.Map;
  * shell is a separate layout ({@code PlatformAdminLayout}) reached only
  * through its own sign-in endpoint, so owners never see admin nav and
  * vice versa.
+ *
+ * <p>The drawer items are filtered against the current user's
+ * {@link Capabilities capability set} on every navigation — a manager
+ * with only "respond to inquiries" sees just the dashboard + inquiries
+ * entries; a founder sees everything. Items that lack a {@code cap()}
+ * (the workspace home and "My Companies") are always shown.
  */
-public class AdminLayout extends AppLayout implements AfterNavigationObserver {
+public class WorkspaceLayout extends AppLayout implements AfterNavigationObserver {
+
+    /** A drawer entry paired with the capability that gates it ({@code null} = always shown). */
+    private record DrawerEntry(LkSideNav.Item item, Capability cap) { }
+
+    private static final List<DrawerEntry> DRAWER_ITEMS = List.of(
+        new DrawerEntry(new LkSideNav.Item("building",  "Workspace",         OwnerDashboardView.class),       null),
+        new DrawerEntry(new LkSideNav.Item("briefcase", "My Companies",      MyCompaniesView.class),          null),
+        new DrawerEntry(new LkSideNav.Item("calendar",  "My Events",         CompanyEventListView.class),     Capability.VIEW_COMPANY_EVENTS),
+        new DrawerEntry(new LkSideNav.Item("comment",   "Inquiries",         CompanyInquiryInboxView.class),  Capability.RESPOND_INQUIRIES),
+        new DrawerEntry(new LkSideNav.Item("chart",     "Company Sales",     CompanySalesView.class),         Capability.VIEW_COMPANY_SALES),
+        new DrawerEntry(new LkSideNav.Item("users",     "Managers",          ManagerListView.class),          Capability.APPOINT_MANAGER),
+        new DrawerEntry(new LkSideNav.Item("crown",     "Appoint Co-owner",  OwnerAppointmentView.class),     Capability.APPOINT_CO_OWNER),
+        new DrawerEntry(new LkSideNav.Item("policy",    "Purchase Policies", PurchasePolicyEditorView.class), Capability.EDIT_PURCHASE_POLICIES)
+    );
 
     private static final Map<Class<?>, String> OWNER_LABELS = Map.of(
-        OwnerDashboardView.class,       "Owner workspace",
+        OwnerDashboardView.class,       "Workspace",
         MyCompaniesView.class,          "My Companies",
         CompanyEventListView.class,     "My Events",
         CompanyInquiryInboxView.class,  "Inquiries",
@@ -51,16 +74,18 @@ public class AdminLayout extends AppLayout implements AfterNavigationObserver {
 
     private LkTopBar topBar;
     private LkSideNav ownerNav;
+    private final Div drawerWrap = new Div();
 
-    public AdminLayout() {
+    public WorkspaceLayout() {
         rebuildTopBar();
-        buildDrawerOnce();
+        addToDrawer(drawerWrap);
+        rebuildDrawer(null);
     }
 
     @Override
     public void afterNavigation(AfterNavigationEvent event) {
         rebuildTopBar();
-        ownerNav.setActive(findLabel(event, OWNER_LABELS));
+        rebuildDrawer(findLabel(event, OWNER_LABELS));
     }
 
     private void rebuildTopBar() {
@@ -77,21 +102,16 @@ public class AdminLayout extends AppLayout implements AfterNavigationObserver {
         addToNavbar(topBar);
     }
 
-    private void buildDrawerOnce() {
-        ownerNav = new LkSideNav("Owner").items(List.of(
-            new LkSideNav.Item("building",  "Owner workspace",   OwnerDashboardView.class),
-            new LkSideNav.Item("briefcase", "My Companies",      MyCompaniesView.class),
-            new LkSideNav.Item("calendar",  "My Events",         CompanyEventListView.class),
-            new LkSideNav.Item("comment",   "Inquiries",         CompanyInquiryInboxView.class),
-            new LkSideNav.Item("chart",     "Company Sales",     CompanySalesView.class),
-            new LkSideNav.Item("users",     "Managers",          ManagerListView.class),
-            new LkSideNav.Item("crown",     "Appoint Co-owner",  OwnerAppointmentView.class),
-            new LkSideNav.Item("policy",    "Purchase Policies", PurchasePolicyEditorView.class)
-        ), null);
-
-        Div drawer = new Div();
-        drawer.add(ownerNav);
-        addToDrawer(drawer);
+    private void rebuildDrawer(String activeLabel) {
+        List<LkSideNav.Item> visible = new ArrayList<>();
+        for (DrawerEntry e : DRAWER_ITEMS) {
+            if (e.cap() == null || Capabilities.has(e.cap())) {
+                visible.add(e.item());
+            }
+        }
+        drawerWrap.removeAll();
+        ownerNav = new LkSideNav("Owner").items(visible, activeLabel);
+        drawerWrap.add(ownerNav);
     }
 
     private LkAccountMenu buildOwnerMenu(String name) {
@@ -108,7 +128,15 @@ public class AdminLayout extends AppLayout implements AfterNavigationObserver {
                 UI.getCurrent().navigate(LoginView.class);
             })
         );
-        return new LkAccountMenu(initials(name), name, "Owner · Workspace", menu, null, null);
+        return new LkAccountMenu(initials(name), name, currentRoleLabel(), menu, null, null);
+    }
+
+    /** Subtitle shown under the user's name in the avatar dropdown — reflects current role. */
+    private static String currentRoleLabel() {
+        if (Capabilities.has(Capability.DISSOLVE_COMPANY)) return "Founder · Workspace";
+        if (Capabilities.has(Capability.APPOINT_MANAGER))  return "Co-owner · Workspace";
+        if (Capabilities.has(Capability.OWNER_WORKSPACE))  return "Manager · Workspace";
+        return "Workspace";
     }
 
     private static String findLabel(AfterNavigationEvent event, Map<Class<?>, String> labels) {
@@ -128,4 +156,5 @@ public class AdminLayout extends AppLayout implements AfterNavigationObserver {
         }
         return ("" + parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
     }
+
 }

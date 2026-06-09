@@ -7,12 +7,11 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
 import com.ticketing.system.Presentation.components.Toasts;
-import com.ticketing.system.Presentation.layouts.AdminLayout;
+import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.views.admin.AdminAnnouncementsView;
 import com.ticketing.system.Presentation.views.admin.AdminComplaintQueueView;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
-import com.ticketing.system.Presentation.views.admin.AdminLoginView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
@@ -34,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <ul>
  *   <li>Vaadin Flow classes are on the classpath</li>
- *   <li>{@link MainLayout} and {@link AdminLayout} are well-formed</li>
+ *   <li>{@link MainLayout} and {@link WorkspaceLayout} are well-formed</li>
  *   <li>Representative buyer + owner + platform-admin views construct
  *       without throwing (catches kit-API misuse)</li>
  *   <li>Custom kit components instantiate without throwing</li>
@@ -69,7 +68,7 @@ class VaadinSmokeTest {
         assertDoesNotThrow(() -> Class.forName("com.vaadin.flow.component.UI"),
             "Vaadin UI class not on classpath");
         assertDoesNotThrow(() -> Class.forName("com.vaadin.flow.component.applayout.AppLayout"),
-            "Vaadin AppLayout class not on classpath (needed by MainLayout / AdminLayout)");
+            "Vaadin AppLayout class not on classpath (needed by MainLayout / WorkspaceLayout)");
     }
 
     @Test
@@ -94,12 +93,12 @@ class VaadinSmokeTest {
         // Actual layout rendering is verified by booting the app and
         // navigating to a route in a browser.
         assertNotNull(MainLayout.class, "MainLayout class did not load");
-        assertNotNull(AdminLayout.class, "AdminLayout class did not load");
+        assertNotNull(WorkspaceLayout.class, "WorkspaceLayout class did not load");
     }
 
     @Test
     void coreViewsInstantiate() {
-        // Spot-check one MainLayout view and one AdminLayout view as a
+        // Spot-check one MainLayout view and one WorkspaceLayout view as a
         // cheap canary for kit-API breakage.
         assertDoesNotThrow(BrowseEventsView::new, "BrowseEventsView (root route) failed to construct");
         assertDoesNotThrow(GlobalHistoryView::new, "GlobalHistoryView (admin route) failed to construct");
@@ -107,13 +106,12 @@ class VaadinSmokeTest {
 
     @Test
     void platformAdminViewsInstantiate() {
-        // Every PlatformAdminLayout view + the dedicated sign-in endpoint.
-        // Catches kit-API misuse the layout's gate would otherwise mask.
+        // Every PlatformAdminLayout view. Sign-in is now the unified LoginView
+        // (which is exercised by the buyer-side construction path).
         assertDoesNotThrow(AdminDashboardView::new,      "AdminDashboardView failed to construct");
         assertDoesNotThrow(AdminAnnouncementsView::new,  "AdminAnnouncementsView failed to construct");
         assertDoesNotThrow(AdminComplaintQueueView::new, "AdminComplaintQueueView failed to construct");
         assertDoesNotThrow(OrganizationalTreeView::new,  "OrganizationalTreeView failed to construct");
-        assertDoesNotThrow(AdminLoginView::new,          "AdminLoginView failed to construct");
     }
 
     @Test

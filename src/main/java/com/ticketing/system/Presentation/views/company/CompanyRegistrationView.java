@@ -30,7 +30,7 @@ import java.util.UUID;
  *
  * <p>Lives in {@link MainLayout} so a member who hasn't yet founded a
  * company stays in the buyer shell while they fill out the form. After
- * submit, they're navigated to {@code OwnerDashboardView} (AdminLayout)
+ * submit, they're navigated to {@code OwnerDashboardView} (WorkspaceLayout)
  * with their new company in {@link MockCompanies}.
  */
 @Route(value = "register-company", layout = MainLayout.class)

@@ -11,8 +11,10 @@ import com.ticketing.system.Presentation.components.kit.LkIconBtn;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStatusDot;
-import com.ticketing.system.Presentation.layouts.AdminLayout;
-import com.ticketing.system.Presentation.security.RequiresOwnerCompany;
+import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.security.Capabilities;
+import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Span;
@@ -23,10 +25,11 @@ import jakarta.annotation.security.PermitAll;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-@Route(value = "owner/managers", layout = AdminLayout.class)
+@Route(value = "owner/managers", layout = WorkspaceLayout.class)
 @PageTitle("Managers · TicketHub")
 @PermitAll
-public class ManagerListView extends LkPage implements RequiresOwnerCompany {
+@RequireCapability(Capability.APPOINT_MANAGER)
+public class ManagerListView extends LkPage {
 
     public ManagerListView() {
         title("Managers");
@@ -70,11 +73,16 @@ public class ManagerListView extends LkPage implements RequiresOwnerCompany {
         row.put("perms", p);
         row.put("status", new LkStatusDot(LkStatusDot.Tone.ok, "Active"));
         LkRow actions = new LkRow().gap(4).noWrap();
-        LkIconBtn edit = new LkIconBtn(new LkIcon("edit", 15), "Edit permissions");
-        edit.addClickListener(e -> Toasts.warn("Edit-permissions dialog (V2-CADMIN-03)."));
-        LkIconBtn revoke = new LkIconBtn(new LkIcon("trash", 15), "Revoke");
-        revoke.addClickListener(e -> Toasts.warn("Confirm-revoke dialog (V2-CADMIN-03)."));
-        actions.add(edit, revoke);
+        if (Capabilities.has(Capability.EDIT_MANAGER_PERMISSIONS)) {
+            LkIconBtn edit = new LkIconBtn(new LkIcon("edit", 15), "Edit permissions");
+            edit.addClickListener(e -> Toasts.warn("Edit-permissions dialog (V2-CADMIN-03)."));
+            actions.add(edit);
+        }
+        if (Capabilities.has(Capability.REVOKE_MANAGER)) {
+            LkIconBtn revoke = new LkIconBtn(new LkIcon("trash", 15), "Revoke");
+            revoke.addClickListener(e -> Toasts.warn("Confirm-revoke dialog (V2-CADMIN-03)."));
+            actions.add(revoke);
+        }
         row.put("act", actions);
         grid.row(row);
     }

@@ -13,8 +13,9 @@ import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStepper;
 import com.ticketing.system.Presentation.components.venue.VkSeatBlock;
 import com.ticketing.system.Presentation.components.venue.VkVenueMap;
-import com.ticketing.system.Presentation.layouts.AdminLayout;
-import com.ticketing.system.Presentation.security.RequiresOwnerCompany;
+import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -28,10 +29,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-@Route(value = "owner/venue/:eventId", layout = AdminLayout.class)
+@Route(value = "owner/venue/:eventId", layout = WorkspaceLayout.class)
 @PageTitle("Venue map · TicketHub")
 @PermitAll
-public class VenueMapEditorView extends LkPage implements RequiresOwnerCompany {
+@RequireCapability(Capability.MANAGE_VENUE_MAPS)
+public class VenueMapEditorView extends LkPage {
 
     private static final List<VkVenueMap.Zone> ZONES = List.of(
         new VkVenueMap.Zone("vip", "VIP Floor",         "$250", "sel",    null, "8%",  "26%", "48%", "20%"),

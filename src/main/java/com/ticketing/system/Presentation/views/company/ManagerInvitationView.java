@@ -7,8 +7,9 @@ import com.ticketing.system.Presentation.components.kit.LkCheckRow;
 import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
-import com.ticketing.system.Presentation.layouts.AdminLayout;
-import com.ticketing.system.Presentation.security.RequiresOwnerCompany;
+import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -19,10 +20,11 @@ import jakarta.annotation.security.PermitAll;
 
 import java.util.List;
 
-@Route(value = "owner/managers/invite", layout = AdminLayout.class)
+@Route(value = "owner/managers/invite", layout = WorkspaceLayout.class)
 @PageTitle("Invite manager · TicketHub")
 @PermitAll
-public class ManagerInvitationView extends LkPage implements RequiresOwnerCompany {
+@RequireCapability(Capability.APPOINT_MANAGER)
+public class ManagerInvitationView extends LkPage {
 
     private static final List<String> PERMS = List.of(
         "Manage events",

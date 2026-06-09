@@ -8,8 +8,9 @@ import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
-import com.ticketing.system.Presentation.layouts.AdminLayout;
-import com.ticketing.system.Presentation.security.RequiresOwnerCompany;
+import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.session.MockCompanies;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -19,10 +20,11 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
-@Route(value = "owner/owners/appoint", layout = AdminLayout.class)
+@Route(value = "owner/owners/appoint", layout = WorkspaceLayout.class)
 @PageTitle("Appoint co-owner · TicketHub")
 @PermitAll
-public class OwnerAppointmentView extends LkPage implements RequiresOwnerCompany {
+@RequireCapability(Capability.APPOINT_CO_OWNER)
+public class OwnerAppointmentView extends LkPage {
 
     private final TextField invitee = new TextField("Invitee username or email");
     private final TextField scope   = new TextField("Scope");
