@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
  * widget without touching any view code.
  */
 @Component
+@org.springframework.context.annotation.Profile("dev")
 public class DevPanelInitializer implements VaadinServiceInitListener {
 
     @Override
