@@ -24,9 +24,9 @@ import java.util.UUID;
 
 /**
  * Register-a-company form — the entry point for a registered member to
- * become an organizer. Deliberately <i>not</i> marked
- * {@link com.ticketing.system.Presentation.security.RequiresOwnerCompany},
- * since it's the very forward target the owner gate uses for non-owners.
+ * become an organizer. Deliberately <i>not</i> gated by
+ * {@link com.ticketing.system.Presentation.security.RequireCapability}
+ * so non-owners can reach it as the workspace fallback destination.
  *
  * <p>Lives in {@link MainLayout} so a member who hasn't yet founded a
  * company stays in the buyer shell while they fill out the form. After
