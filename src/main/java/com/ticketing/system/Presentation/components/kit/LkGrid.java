@@ -10,9 +10,7 @@ import java.util.Map;
 
 /**
  * Static data grid — ports the React {@code Grid} component. Renders an
- * HTML {@code 
- * <table>
- * } with the kit's {@code .lk-grid} styling.
+ * HTML {@code <table>} with the kit's {@code .lk-grid} styling.
  *
  * <pre>{@code
  * LkGrid grid = new LkGrid()
