@@ -11,8 +11,8 @@ import java.util.List;
  * <p>Used by {@code MainLayout} to decide whether to show "Owner
  * workspace" vs "Become an organizer" in the avatar menu, by
  * {@code MyCompaniesView} to render the list, by
- * {@code OwnerDashboardView} for the hub stats, and by the
- * {@code RequiresOwnerCompany}-marked owner views as their gate.
+ * {@code OwnerDashboardView} for the hub stats, and as a backing store for
+ * {@code @RequireCapability(Capability.OWNER_WORKSPACE)}-gated workspace views.
  *
  * <p>Real implementation is V2-CADMIN-05 (Abed) — replaces with
  * {@code CompanyManagementService.findCompaniesByUser}.
