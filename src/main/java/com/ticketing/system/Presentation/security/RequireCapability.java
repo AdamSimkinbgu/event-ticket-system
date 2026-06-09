@@ -16,9 +16,8 @@ import java.lang.annotation.Target;
  * (hide a section, hide a button) call {@link Capabilities#has} inside
  * the view body instead.
  *
- * <p>Pairs with the persona markers {@link RequireCapability} and
- * {@link RequireCapability} — order in {@code AuthBootstrap.guard}:
- * admin → auth → owner → capability.
+ * <p>Evaluated by {@link AuthBootstrap} after the signed-in check in
+ * {@code AuthBootstrap.guard}.
  *
  * <pre>{@code
  * @Route(value = "owner/dissolve", layout = WorkspaceLayout.class)
