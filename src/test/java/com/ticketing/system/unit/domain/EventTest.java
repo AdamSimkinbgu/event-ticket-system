@@ -62,7 +62,8 @@ class EventTest extends BaseDomainTest {
                 venueMap,
                 List.of(),
                 null,
-                null));
+                new DiscountPolicy(0) ));
+                   
     }
 
     @Test
