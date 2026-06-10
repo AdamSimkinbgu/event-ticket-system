@@ -1,6 +1,20 @@
 package com.ticketing.system.unit.presentation;
 
-import com.ticketing.system.Presentation.views.WelcomeView;
+import com.ticketing.system.Presentation.components.kit.LkBadge;
+import com.ticketing.system.Presentation.components.kit.LkBtn;
+import com.ticketing.system.Presentation.components.kit.LkCard;
+import com.ticketing.system.Presentation.components.kit.LkIcon;
+import com.ticketing.system.Presentation.components.venue.VkSeat;
+import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
+import com.ticketing.system.Presentation.components.Toasts;
+import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.views.admin.AdminAnnouncementsView;
+import com.ticketing.system.Presentation.views.admin.AdminComplaintQueueView;
+import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
+import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
+import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
+import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -12,15 +26,23 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * V2-F-01 smoke test: prove that adding Vaadin Flow to the project produces a
- * working Spring context and the temporary {@link WelcomeView} is well-formed.
+ * Smoke tests for the V2 Presentation layer.
  *
- * <p>This is intentionally lightweight — it boots the full Spring context but
- * doesn't render any view. Vaadin servlets are registered as
- * {@code ServletRegistrationBean}s rather than top-level beans, so we don't
- * assert on a specific bean type — instead we verify the classpath is correct
- * (Vaadin classes load) and the {@link WelcomeView} lives in the
- * configured {@code vaadin.allowed-packages} root.
+ * <p>Lightweight checks — boots the Spring context but does not render any
+ * view. Verifies:
+ *
+ * <ul>
+ *   <li>Vaadin Flow classes are on the classpath</li>
+ *   <li>{@link MainLayout} and {@link WorkspaceLayout} are well-formed</li>
+ *   <li>Representative buyer + owner + platform-admin views construct
+ *       without throwing (catches kit-API misuse)</li>
+ *   <li>Custom kit components instantiate without throwing</li>
+ *   <li>{@link Toasts} utility is reachable</li>
+ * </ul>
+ *
+ * <p>Rendering tests are intentionally out of scope — the V2 spec exempts UI
+ * tests ("בדיקות אינן נדרשות עבור ממשק המשתמש"). Business behavior is
+ * exercised by the application-layer acceptance tests instead.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -32,31 +54,82 @@ class VaadinSmokeTest {
     @Test
     void springContextLoadsWithVaadin() {
         // Reaching this method means @SpringBootTest succeeded. If Vaadin's
-        // auto-configuration were broken or the starter were missing from the
-        // classpath, the context load would have thrown before we got here.
+        // auto-configuration were broken or the starter were missing, context
+        // load would have thrown.
         assertNotNull(context, "Spring context did not load");
     }
 
     @Test
     void vaadinClassesAreReachable() {
-        // If vaadin-spring-boot-starter is on the classpath, these resolve.
         assertDoesNotThrow(() -> Class.forName("com.vaadin.flow.spring.SpringServlet"),
             "Vaadin SpringServlet class not on classpath");
         assertDoesNotThrow(() -> Class.forName("com.vaadin.flow.server.VaadinService"),
             "Vaadin VaadinService class not on classpath");
         assertDoesNotThrow(() -> Class.forName("com.vaadin.flow.component.UI"),
             "Vaadin UI class not on classpath");
+        assertDoesNotThrow(() -> Class.forName("com.vaadin.flow.component.applayout.AppLayout"),
+            "Vaadin AppLayout class not on classpath (needed by MainLayout / WorkspaceLayout)");
     }
 
     @Test
-    void welcomeViewIsInAllowedPackage() {
-        // WelcomeView must live under the package configured in
-        // application.yml `vaadin.allowed-packages`. If it moves outside,
-        // Vaadin's route scan will miss it and the V2-F-01 smoke test fails
-        // even though the rest of the system would compile.
-        assertNotNull(WelcomeView.class);
-        assertTrue(WelcomeView.class.getPackageName()
+    void presentationPackageIsConfigured() {
+        // All view classes must live under the package configured in
+        // application.yml `vaadin.allowed-packages`, otherwise Vaadin's
+        // route scanner won't discover them.
+        assertTrue(BrowseEventsView.class.getPackageName()
                 .startsWith("com.ticketing.system.Presentation"),
-            "WelcomeView must live under com.ticketing.system.Presentation");
+            "BrowseEventsView must live under com.ticketing.system.Presentation");
+        assertTrue(AdminDashboardView.class.getPackageName()
+                .startsWith("com.ticketing.system.Presentation"),
+            "AdminDashboardView must live under com.ticketing.system.Presentation");
+    }
+
+    @Test
+    void layoutsAreLoadable() {
+        // We can't instantiate the layouts here — they build RouterLinks in
+        // their constructors and RouterLink calls VaadinService.getCurrent()
+        // which is null outside a real UI context. So just verify the
+        // classes load cleanly (proves imports + compilation are fine).
+        // Actual layout rendering is verified by booting the app and
+        // navigating to a route in a browser.
+        assertNotNull(MainLayout.class, "MainLayout class did not load");
+        assertNotNull(WorkspaceLayout.class, "WorkspaceLayout class did not load");
+    }
+
+    @Test
+    void coreViewsInstantiate() {
+        // Spot-check one MainLayout view and one WorkspaceLayout view as a
+        // cheap canary for kit-API breakage.
+        assertDoesNotThrow(BrowseEventsView::new, "BrowseEventsView (root route) failed to construct");
+        assertDoesNotThrow(GlobalHistoryView::new, "GlobalHistoryView (admin route) failed to construct");
+    }
+
+    @Test
+    void platformAdminViewsInstantiate() {
+        // Every PlatformAdminLayout view. Sign-in is now the unified LoginView
+        // (which is exercised by the buyer-side construction path).
+        assertDoesNotThrow(AdminDashboardView::new,      "AdminDashboardView failed to construct");
+        assertDoesNotThrow(AdminAnnouncementsView::new,  "AdminAnnouncementsView failed to construct");
+        assertDoesNotThrow(AdminComplaintQueueView::new, "AdminComplaintQueueView failed to construct");
+        assertDoesNotThrow(OrganizationalTreeView::new,  "OrganizationalTreeView failed to construct");
+    }
+
+    @Test
+    void kitComponentsInstantiate() {
+        // Generic kit primitives — these underpin every view.
+        assertDoesNotThrow(() -> new LkIcon("ticket"),    "LkIcon failed");
+        assertDoesNotThrow(() -> new LkBtn("Sign in"),    "LkBtn failed");
+        assertDoesNotThrow(() -> new LkCard("Card"),      "LkCard failed");
+        assertDoesNotThrow(() -> new LkBadge("OK"),       "LkBadge failed");
+        // Domain components used by the venue / seat picker views.
+        assertDoesNotThrow(() -> new VkSeat(VkSeat.State.free, "1"), "VkSeat failed");
+        assertDoesNotThrow(VkSeatLegend::new,             "VkSeatLegend failed");
+    }
+
+    @Test
+    void toastsUtilityIsLoadable() {
+        // Just checking the class loads — we can't invoke Notification.show
+        // outside a UI context.
+        assertNotNull(Toasts.class);
     }
 }

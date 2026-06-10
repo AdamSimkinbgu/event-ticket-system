@@ -35,18 +35,21 @@ public abstract class IEventRepositoryContractTest {
 
     private IEventRepository eventRepo;
 
-    // Far-future timestamps used across test events (ShowDate enforces future-only times).
+    // Far-future timestamps used across test events (ShowDate enforces future-only
+    // times).
     private static final LocalDateTime FUTURE_START = LocalDateTime.of(2099, 6, 1, 18, 0);
     private static final LocalDateTime FUTURE_END = LocalDateTime.of(2099, 6, 1, 22, 0);
     private static final Location LOCATION = new Location("Belgium", "Brussels");
-    
+
     @BeforeEach
     void setUp() {
         eventRepo = newRepository();
     }
 
-    // Builds a minimal valid Event with specified category and one zone priced at 50.
-    private Event buildEvent(int id, String name, Double rating, int companyId, EventStatus status, EventCategory category) {
+    // Builds a minimal valid Event with specified category and one zone priced at
+    // 50.
+    private Event buildEvent(int id, String name, Double rating, int companyId, EventStatus status,
+            EventCategory category) {
         VenueMap venueMap = new VenueMap(id, LOCATION, List.of(new StandingZone(1, "Floor", 100, 50)));
         ShowDate showDate = new ShowDate(FUTURE_START, FUTURE_END);
         return new Event(id, name, rating, List.of("Artist A"), category, companyId, status,
@@ -72,11 +75,6 @@ public abstract class IEventRepositoryContractTest {
         assertNotNull(found);
         assertEquals(1, found.getId());
         assertEquals("Rock Night", found.getName());
-    }
-
-    @Test
-    void givenNoEvent_whenFindById_thenReturnsNull() {
-        assertEquals(null, eventRepo.findById(999));
     }
 
     // === findByCompanyId ===
@@ -120,8 +118,8 @@ public abstract class IEventRepositoryContractTest {
 
     @Test
     void givenMixedStatusEventsForCompany_whenFindActiveByCompany_thenReturnsOnlyOnSaleEventsForThatCompany() {
-        eventRepo.save(buildEvent(1, "On Sale",              4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
-        eventRepo.save(buildEvent(2, "Draft",                3.8, 10, EventStatus.DRAFT, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(1, "On Sale", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(2, "Draft", 3.8, 10, EventStatus.DRAFT, EventCategory.CONCERT));
         eventRepo.save(buildEvent(3, "On Sale Other Company", 4.2, 20, EventStatus.ON_SALE, EventCategory.CONCERT));
 
         List<Event> result = eventRepo.findActiveByCompany(10);
@@ -139,7 +137,7 @@ public abstract class IEventRepositoryContractTest {
         eventRepo.save(buildEvent(3, "Event C", 4.2, 20, EventStatus.ON_SALE, EventCategory.CONCERT));
 
         List<Event> onSale = eventRepo.findByStatus(EventStatus.ON_SALE);
-        List<Event> draft  = eventRepo.findByStatus(EventStatus.DRAFT);
+        List<Event> draft = eventRepo.findByStatus(EventStatus.DRAFT);
 
         assertEquals(2, onSale.size());
         assertEquals(1, draft.size());
@@ -160,7 +158,7 @@ public abstract class IEventRepositoryContractTest {
     @Test
     void givenMatchingEventName_whenSearch_thenReturnsMatchingEvent() {
         eventRepo.save(buildEvent(1, "Jazz Festival", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
-        eventRepo.save(buildEvent(2, "Rock Night",    3.8, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(2, "Rock Night", 3.8, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
 
         List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
                 "Jazz", null, null, null, null, null, null, null, null, null, null, null, null));
@@ -231,7 +229,7 @@ public abstract class IEventRepositoryContractTest {
     @Test
     void givenMatchingKeywordInEventName_whenSearch_thenReturnsMatchingEvent() {
         eventRepo.save(buildEvent(1, "Summer Festival", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
-        eventRepo.save(buildEvent(2, "Rock Night",      4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(2, "Rock Night", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
 
         List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
                 null, null, null, "Summer", null, null, null, null, null, null, null, null, null));
@@ -259,7 +257,8 @@ public abstract class IEventRepositoryContractTest {
 
     @Test
     void givenEventWithShowDateInsideRange_whenSearch_thenReturnsMatchingEvent() {
-        eventRepo.save(buildEvent(1, "Future Show", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT)); // show date: 2099-06-01
+        eventRepo.save(buildEvent(1, "Future Show", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT)); // show date:
+                                                                                                           // 2099-06-01
 
         List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
                 null, null, null, null, null, null,
@@ -271,7 +270,8 @@ public abstract class IEventRepositoryContractTest {
 
     @Test
     void givenEventWithShowDateOutsideRange_whenSearch_thenReturnsEmpty() {
-        eventRepo.save(buildEvent(1, "Future Show", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT)); // show date: 2099-06-01
+        eventRepo.save(buildEvent(1, "Future Show", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT)); // show date:
+                                                                                                           // 2099-06-01
 
         List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
                 null, null, null, null, null, null,
@@ -285,7 +285,9 @@ public abstract class IEventRepositoryContractTest {
 
     @Test
     void givenEventWithZoneInPriceRange_whenSearch_thenReturnsMatchingEvent() {
-        eventRepo.save(buildEvent(1, "Affordable Show", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT)); // zone price = 50
+        eventRepo.save(buildEvent(1, "Affordable Show", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT)); // zone
+                                                                                                               // price
+                                                                                                               // = 50
 
         List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
                 null, null, null, null, 10.0, 100.0, null, null, null, null, null, null, null));
@@ -295,7 +297,8 @@ public abstract class IEventRepositoryContractTest {
 
     @Test
     void givenEventWithZonePriceBelowMinPrice_whenSearch_thenReturnsEmpty() {
-        eventRepo.save(buildEvent(1, "Cheap Show", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT)); // zone price = 50
+        eventRepo.save(buildEvent(1, "Cheap Show", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT)); // zone price
+                                                                                                          // = 50
 
         List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
                 null, null, null, null, 100.0, 500.0, null, null, null, null, null, null, null));

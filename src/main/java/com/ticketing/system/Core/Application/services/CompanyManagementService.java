@@ -3,6 +3,7 @@ package com.ticketing.system.Core.Application.services;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -11,9 +12,13 @@ import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
+import com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO;
+import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
+import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dtoMappers.OrderReceiptMapper;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Domain.company.CompanyAppointment;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
@@ -23,7 +28,6 @@ import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
-import com.ticketing.system.Core.Domain.users.CompanyAppointment;
 import com.ticketing.system.Core.Domain.users.CompanyRole;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.ManagementInvitation;
@@ -47,8 +51,9 @@ public class CompanyManagementService {
     private static final String EMAIL_PATTERN = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
     private static final String PHONE_PATTERN = "^\\+?[0-9\\-\\s]{9,15}$";
 
-
-    public CompanyManagementService(IProductionCompanyRepository companyRepository, IUserRepository userRepository, IOrderReceiptRepository orderReceiptRepository, ISessionManager sessionManager, ITicketRepository ticketRepository, IEventRepository eventRepository) {
+    public CompanyManagementService(IProductionCompanyRepository companyRepository, IUserRepository userRepository,
+            IOrderReceiptRepository orderReceiptRepository, ISessionManager sessionManager,
+            ITicketRepository ticketRepository, IEventRepository eventRepository) {
         this.companyRepository = companyRepository;
         this.userRepository = userRepository;
         this.orderReceiptRepository = orderReceiptRepository;
@@ -58,11 +63,7 @@ public class CompanyManagementService {
     }
 
     public void inviteManager(String token, int companyId, int targetId, List<Permission> permissions) {
-        if (!sessionManager.validateToken(token)) {
-            log.warn("Invalid token provided for inviting manager");
-            throw new RuntimeException("Invalid token");
-        }
-        int ownerId = sessionManager.extractUserId(token);
+        int ownerId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
             log.warn("Company {} not found", companyId);
@@ -76,8 +77,8 @@ public class CompanyManagementService {
         }
 
         company.validateManagerInvitation(companyId, targetId, ownerId, permissions);
-        
-        targetUser.InvitetoCompanyAppointment(companyId, ownerId, permissions);
+
+        targetUser.receiveManagerAppointment(companyId, ownerId, permissions);
 
         companyRepository.updateCompany(company);
         userRepository.updateUser(targetUser);
@@ -87,11 +88,7 @@ public class CompanyManagementService {
     }
 
     public void acceptManagerInvitation(String token, int companyId) {
-        if (!sessionManager.validateToken(token)) {
-                log.warn("Invalid token provided for accepting manager invitation");
-            throw new RuntimeException("Invalid token");
-        }
-        int targetId = sessionManager.extractUserId(token);
+        int targetId = authenticate(token);
         User targetUser = userRepository.getUserById(targetId);
         if (targetUser == null) {
             log.warn("Target user {} not found", targetId);
@@ -112,11 +109,7 @@ public class CompanyManagementService {
     }
 
     public void rejectManagerInvitation(String token, int companyId) {
-        if (!sessionManager.validateToken(token)) {
-            log.warn("Invalid token provided for rejecting manager invitation");
-            throw new RuntimeException("Invalid token");
-        }
-        int targetId = sessionManager.extractUserId(token);
+        int targetId = authenticate(token);
         User targetUser = userRepository.getUserById(targetId);
         if (targetUser == null) {
             log.warn("Target user {} not found", targetId);
@@ -137,59 +130,28 @@ public class CompanyManagementService {
     }
 
     public void RevokeManager(String token, int companyId, int targetId) {
-        if (!sessionManager.validateToken(token)) {
-            log.warn("Invalid token provided for revoking manager");
-            throw new RuntimeException("Invalid token");
-        }
-        int ownerId = sessionManager.extractUserId(token);
+        int ownerId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
-        if (company == null) {
-            log.warn("Company {} not found", companyId);
-            throw new RuntimeException("Company not found");
-        }
-        company.checkowner(ownerId);
-
         User targetUser = userRepository.getUserById(targetId);
-        if (targetUser == null) {
-            log.warn("Target user {} not found", targetId);
-            throw new RuntimeException("Target user not found");
-        }
 
+        targetUser.revokeManagerAppointment(companyId, ownerId);
         company.RevokeManager(targetId);
-        targetUser.removeCompanyAppointment(companyId);
 
-        
         userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
         log.info("Manager revoked successfully");
 
     }
 
+    // TODO: delete this method after frontend integration, as the endpoint should
+    // accept a PermissionEditDTO, not separate args.
     public void ModifyManagerPermissions(String token, int companyId, int targetId, List<Permission> newPermissions) {
-        if (!sessionManager.validateToken(token)) {
-            log.warn("Invalid token provided for modifying manager permissions");
-            throw new RuntimeException("Invalid token");
-        }
-        int ownerId = sessionManager.extractUserId(token);
-        ProductionCompany company = companyRepository.getCompanyById(companyId);
-        if (company == null) {
-            log.warn("Company {} not found", companyId);
-            throw new RuntimeException("Company not found");
-        }
-        company.checkowner(ownerId);
-        User targetUser = userRepository.getUserById(targetId);
-        if (targetUser == null) {
-            log.warn("Target user {} not found", targetId);
-            throw new RuntimeException("Target user not found");
-        }
-
-        company.ModifyManagerPermissions(companyId, targetId, newPermissions);
-        targetUser.ModifyManagerPermissions(companyId, targetId, newPermissions);
-
-         userRepository.updateUser(targetUser);
-        companyRepository.updateCompany(company);
-
-        log.info("Manager permissions modified successfully");
+        editManagerPermissions(
+                token,
+                new PermissionEditDTO(
+                        companyId,
+                        targetId,
+                        newPermissions));
     }
 
     // ---------------------------------------------------------------------------
@@ -197,17 +159,14 @@ public class CompanyManagementService {
     // token-arg / List<Permission>-arg methods above; team to consolidate later).
     // ---------------------------------------------------------------------------
 
-    // UC-18 — register a new Production Company; appoints Founder/Owner in same transaction.
+    // UC-18 — register a new Production Company; appoints Founder/Owner in same
+    // transaction.
     public ProductionCompanyDTO registerCompany(String token, CompanyRegistrationDTO request) {
-        if (!sessionManager.validateToken(token)) {
-            log.warn("Invalid token provided for registering a company");
-            throw new RuntimeException("Invalid token");
-        }
-        int userId = sessionManager.extractUserId(token);
-
+        int userId = authenticate(token);
+        User user = userRepository.getUserById(userId);
         // CompanyRegistrationDTO is a class with get* accessors, not a record.
         if (request.getName() == null || request.getName().trim().isEmpty() ||
-            request.getDescription() == null || request.getDescription().trim().isEmpty()) {
+                request.getDescription() == null || request.getDescription().trim().isEmpty()) {
 
             log.warn("Company registration failed: Missing required fields by user {}", userId);
             throw new IllegalArgumentException("All company fields (name, description) must be provided");
@@ -222,24 +181,26 @@ public class CompanyManagementService {
         try {
             int companyId = companyRepository.nextId();
             ProductionCompany newProductionCompany = new ProductionCompany(
-                companyId,
-                userId,
-                request.getName().trim(),
-                CompanyStatus.ACTIVE,
-                request.getDescription().trim(),
-                null
-            );
+                    companyId,
+                    userId,
+                    request.getName().trim(),
+                    CompanyStatus.ACTIVE,
+                    request.getDescription().trim(),
+                    null);
 
-            // IProductionCompanyRepository.save returns void; the new instance IS the saved one.
+            // IProductionCompanyRepository.save returns void; the new instance IS the saved
+            // one.
             companyRepository.save(newProductionCompany);
+            user.addFounderAppointment(companyId);
+            userRepository.updateUser(user);
             log.info("Successfully registered new company: '{}' by userId: {}", newProductionCompany.getName(), userId);
 
             return new ProductionCompanyDTO(
-                newProductionCompany.getCompanyId(),
-                newProductionCompany.getName(),
-                newProductionCompany.getDescription(),
-                newProductionCompany.getStatus().name(),   // DTO field is String
-                newProductionCompany.getFounderId()        // DTO field is founderId
+                    newProductionCompany.getCompanyId(),
+                    newProductionCompany.getName(),
+                    newProductionCompany.getDescription(),
+                    newProductionCompany.getStatus().name(), // DTO field is String
+                    newProductionCompany.getFounderId() // DTO field is founderId
             );
 
         } catch (Exception e) {
@@ -249,17 +210,53 @@ public class CompanyManagementService {
     }
 
     // UC-23 — Owner appoints another Member as co-Owner (PENDING).
-    public void appointOwner(
-            String token,
-            com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO request) {
-        throw new UnsupportedOperationException("UC-23: not implemented");
+    public void appointOwner(String token, OwnerAppointmentRequestDTO request) {
+        if (request.companyId() <= 0 || request.targetUserId() <= 0) {
+            log.warn("Invalid appointment request: companyId and targetUserId must be positive integers");
+            throw new IllegalArgumentException("companyId and targetUserId must be positive integers");
+        }
+        int appointerId = authenticate(token);
+        User appointer = userRepository.getUserById(appointerId);
+        User targetUser = userRepository.getUserById(request.targetUserId());
+
+        appointer.hasPermissionInCompany(appointerId, Permission.APPOINT_MANAGER);// check if appointer has permission
+                                                                                  // to appoint
+
+        targetUser.receiveOwnerAppointment(request.companyId(), appointerId); // target user receives pending owner
+                                                                              // appointment
+
+        userRepository.updateUser(targetUser); // update target user with new appointment
+        log.info("Owner appointment created successfully: appointerId={}, targetUserId={}, companyId={}",
+                appointerId, request.targetUserId(), request.companyId());
     }
 
     // UC-23 / UC-24 — target accepts or rejects a pending appointment.
-    public void respondToAppointment(
-            String token,
-            com.ticketing.system.Core.Application.dto.AppointmentResponseDTO response) {
-        throw new UnsupportedOperationException("UC-23 / UC-24: not implemented");
+    public void respondToAppointment(String token, AppointmentResponseDTO response) {
+        if (response.companyId() <= 0) {
+            log.warn("Invalid appointment response: companyId must be a positive integer");
+            throw new IllegalArgumentException("companyId must be a positive integer");
+        }
+
+        int userId = authenticate(token);
+        User user = userRepository.getUserById(userId);
+        ProductionCompany company = companyRepository.getCompanyById(response.companyId());
+
+        CompanyAppointment appointment;
+
+        if (response.accept()) {
+            appointment = user.acceptInvitation(response.companyId());
+            if (appointment.getRole() == CompanyRole.Owner) {
+                company.addOwner(appointment.getInviterId(), userId);
+            } else if (appointment.getRole() == CompanyRole.Manager) {
+                company.validateManagerAppointment(userId, appointment.getPermissions().stream().toList());
+            }
+            log.info("Appointment accepted: userId={}, companyId={}", userId, response.companyId());
+        } else {
+            user.rejectInvitation(response.companyId());
+            log.info("Appointment rejected: userId={}, companyId={}", userId, response.companyId());
+        }
+        userRepository.updateUser(user);
+        companyRepository.updateCompany(company);
     }
 
     // UC-24 — Owner appoints a Manager with explicit granular permissions.
@@ -273,34 +270,44 @@ public class CompanyManagementService {
     public void editManagerPermissions(
             String token,
             com.ticketing.system.Core.Application.dto.PermissionEditDTO edit) {
-        throw new UnsupportedOperationException("UC-24: not implemented");
+        int ownerId = authenticate(token);
+        User manager = userRepository.getUserById(edit.targetUserId());
+        CompanyAppointment appointment = manager.getActiveCompanyAppointments(edit.companyId());
+        if (appointment == null || appointment.getRole() != CompanyRole.Manager) {
+            log.warn("No active manager appointment found for user {} in company {}", edit.targetUserId(),
+                    edit.companyId());
+            throw new RuntimeException("No active manager appointment found for target user in this company");
+        }
+        if (appointment.getInviterId() != ownerId) {
+            log.warn("User {} is not the original appointer of manager {} in company {}", ownerId, edit.targetUserId(),
+                    edit.companyId());
+            throw new RuntimeException("Only the original appointer can edit this manager's permissions");
+        }
+
+        if (edit.newPermissions() == null || edit.newPermissions().isEmpty()) {
+            log.warn("Invalid permission edit: newPermissions list cannot be null or empty");
+            throw new IllegalArgumentException("Manager role must have at least one permission");
+        }
+
+        appointment.setPermissions(edit.newPermissions().isEmpty()
+                ? EnumSet.noneOf(Permission.class)
+                : EnumSet.copyOf(edit.newPermissions()));
+
+        log.info("Manager permissions updated successfully for user {} in company {}", edit.targetUserId(),
+                edit.companyId());
     }
 
-    // UC-21 — set / replace company-wide default policies.
     public void setCompanyPolicies(
             String token,
             com.ticketing.system.Core.Application.dto.CompanyPolicyConfigDTO config) {
         throw new UnsupportedOperationException("UC-21: not implemented");
     }
 
-
-
-
-
-
-    
-
-
     // UC-22 — Owner-side flat list of company sales.
     public List<PurchaseHistoryDTO> viewSalesHistory(String token, int companyId) {
         log.info("Attempting to view sales history for company {}", companyId);
 
-        if (!sessionManager.validateToken(token)) {
-            log.warn("Invalid token provided for viewing sales history");
-            throw new InvalidTokenException("Invalid token");
-        }
-
-        int requesterId = sessionManager.extractUserId(token);
+        int requesterId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
             log.warn("Company {} not found", companyId);
@@ -312,7 +319,7 @@ public class CompanyManagementService {
             log.warn("User {} not found", requesterId);
             throw new RuntimeException("User not found");
         }
-        if (!currUser.isOwnerInCompany(companyId) && !currUser.hasPermissionInCompany(companyId, Permission.VIEW_SALES)) {
+        if (!currUser.hasPermissionInCompany(companyId, Permission.VIEW_SALES)) {
             log.warn("User {} does not have permission to view sales history for company {}", requesterId, companyId);
             throw new RuntimeException("Insufficient permissions");
         }
@@ -333,38 +340,32 @@ public class CompanyManagementService {
                             .toList();
 
                     return new PurchaseHistoryDTO(
-                            List.of(mapper.OrderReceiptToPurchaseRecordDTO(receipt, companyTickets))  // use overloaded mapper to pass the filtered list of tickets for richer DTO construction without bloating service logic
+                            List.of(mapper.OrderReceiptToPurchaseRecordDTO(receipt, companyTickets)) // use overloaded
+                                                                                                     // mapper to pass
+                                                                                                     // the filtered
+                                                                                                     // list of tickets
+                                                                                                     // for richer DTO
+                                                                                                     // construction
+                                                                                                     // without bloating
+                                                                                                     // service logic
                     );
                 })
                 .toList();
-        
+
         // This is the correct responsibility split.
         // The repository finds receipts related to company events.
         // The service filters the tickets to only this company’s events.
         // The mapper maps the receipt and the selected tickets into DTOs.
 
-
         log.info("Successfully retrieved sales history for company {}", companyId);
         return salesHistory;
     }
-
-    
-
-
-
-
-
 
     // UC-25 — recursive organizational tree (Owners only per II.4.15).
     public OrganizationalTreeNodeDTO viewOrganizationalTree(String token, int companyId) {
         log.info("Attempting to view organizational tree for company {}", companyId);
 
-        if (!sessionManager.validateToken(token)) {
-            log.warn("Invalid token provided for viewing organizational tree");
-            throw new InvalidTokenException("Invalid token");
-        }
-
-        int requesterId = sessionManager.extractUserId(token);
+        int requesterId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
             log.warn("Company {} not found", companyId);
@@ -383,75 +384,60 @@ public class CompanyManagementService {
         }
 
         log.info("Successfully retrieved organizational tree for company {}", companyId);
-        // using the helper method to build the tree starting from the founder (root of the tree)
+        // using the helper method to build the tree starting from the founder (root of
+        // the tree)
         return buildOrganizationalTree(companyId, company.getFounderId());
     }
 
-    
-
-    // *HELPER METHOD* — BFS build of the organizational tree for UC-25 (viewOrganizationalTree).
+    // *HELPER METHOD* — BFS build of the organizational tree for UC-25
+    // (viewOrganizationalTree).
     private OrganizationalTreeNodeDTO buildOrganizationalTree(int companyId, int founderId) {
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
 
-        // Build appointer -> direct appointees map from all managers' CompanyAppointments.
-        Map<Integer, List<Integer>> appointerToAppointees = new HashMap<>();
-        for (Integer managerId : companyRepository.getCompanyById(companyId).getManagers().keySet()) {
-            User manager = userRepository.getUserById(managerId);
-            // get this manager's appointment in the current company to find out who appointed them (their inviterId)
-            CompanyAppointment appointment = manager.getAppointmentForCompany(companyId);
-            if (appointment != null) {
-                appointerToAppointees
-                    .computeIfAbsent(appointment.getInviterId(), k -> new ArrayList<>()).add(managerId);
-            }
-        }
-        // now we have a map of appointerId -> List of their direct appointees' userIds, which we can use to build the tree.
-        
-        // Build root node (the founder/owner).
-        User founderUser = userRepository.getUserById(founderId);
-        List<OrganizationalTreeNodeDTO> rootChildren = new ArrayList<>();
-        OrganizationalTreeNodeDTO root = new OrganizationalTreeNodeDTO(
-                founderId,
-                founderUser.getUsername(),
-                CompanyRole.Owner.name(),
-                true,
-                List.of(),
-                rootChildren
-        );
+        // gather all members (owners and managers) of the company in a single list for
+        // easy processing
+        List<Integer> members = new ArrayList<>();
+        members.addAll(company.getManagers().keySet());
+        members.addAll(company.getOwnersIds());
 
-        // BFS — for each node, find who it appointed and attach them as children.
-        Queue<OrganizationalTreeNodeDTO> queue = new LinkedList<>();
-        queue.add(root);
+        Map<Integer, OrganizationalTreeNodeDTO> userIdToNodeMap = new HashMap<>();
 
-        // BFS while traversal of the organizational tree, building DTO nodes on the fly and attaching to parents.
-        while (!queue.isEmpty()) {
+        // First pass: create a node for each member (including founder) without setting
+        // children yet.
+        for (Integer memberId : members) {
+            User memberUser = userRepository.getUserById(memberId);
+            CompanyAppointment appt = memberUser.getAppointmentForCompany(companyId);
 
-            OrganizationalTreeNodeDTO current = queue.poll();
-            // get direct appointees of the current node's userId (if any) from the pre-built map; default to empty list if none.
-            List<Integer> appointees = appointerToAppointees.getOrDefault(current.userId(), List.of());
-            
-            // For each direct appointee, create a DTO node and attach to current, then enqueue for further processing.
-            for (int appointeeId : appointees) {
-                User appointeeUser = userRepository.getUserById(appointeeId);
-                CompanyAppointment appt = appointeeUser.getAppointmentForCompany(companyId);
-                List<String> permissions = appt != null
-                        ? appt.getPermissions().stream().map(Enum::name).toList()
-                        : List.of();
-                
-                List<OrganizationalTreeNodeDTO> childChildren = new ArrayList<>();
-                OrganizationalTreeNodeDTO childNode = new OrganizationalTreeNodeDTO(
-                        appointeeId,
-                        appointeeUser.getUsername(),
-                        CompanyRole.Manager.name(),
-                        false,
-                        permissions,
-                        childChildren
-                );
-                // Attach the child node to the current node's list of appointees and enqueue it for further processing.
-                current.appointedByThisUser().add(childNode);
-                queue.add(childNode);
-            }
+            OrganizationalTreeNodeDTO node = new OrganizationalTreeNodeDTO(
+                    memberId,
+                    memberUser.getUsername(),
+                    appt.getRole().name(),
+                    memberId == founderId,
+                    appt.getPermissions().stream().toList(),
+                    new ArrayList<>());
+            userIdToNodeMap.put(memberId, node);
         }
 
-        return root;
+        // Second pass: set the appointedByThisUser list for each node based on
+        // inviterId.
+        for (Integer memberId : members) {
+            if (memberId == founderId)
+                continue; // skip founder, they have no appointer
+            User memberUser = userRepository.getUserById(memberId);
+            CompanyAppointment appt = memberUser.getAppointmentForCompany(companyId);
+            OrganizationalTreeNodeDTO node = userIdToNodeMap.get(memberId);
+            OrganizationalTreeNodeDTO inviterNode = userIdToNodeMap.get(appt.getInviterId());
+            inviterNode.appointedByThisUser().add(node);
+        }
+
+        return userIdToNodeMap.get(founderId);
+
     }
 
+    private int authenticate(String token) {
+        if (!sessionManager.validateToken(token)) {
+            throw new InvalidTokenException("Invalid token");
+        }
+        return sessionManager.extractUserId(token);
+    }
 }
