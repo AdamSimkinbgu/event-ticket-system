@@ -37,8 +37,10 @@ public class Event implements InvariantChecked {
         this.venueMap = venueMap;
         this.showDates = showDates;
          if (PurchasePolicy == null) {
-        this.purchasePolicy = new NoPurchasePolicy();
-    }
+    this.purchasePolicy = new NoPurchasePolicy();
+} else {
+    this.purchasePolicy = PurchasePolicy;
+}
         this.discountPolicy = discountPolicy;
     }
 
@@ -347,6 +349,13 @@ public class Event implements InvariantChecked {
         if (showDates == null) {
             throw new IllegalStateException("Event invariant violated: showDates list must not be null");
         }
+        if (purchasePolicy == null) {
+    throw new IllegalStateException("Event invariant violated: purchasePolicy must not be null");
+}
+
+if (discountPolicy == null) {
+    throw new IllegalStateException("Event invariant violated: discountPolicy must not be null");
+}
         // venueMap may be null in DRAFT state (UC-19) before UC-20 binds it — don't enforce non-null.
         // If present, the VenueMap's own invariants apply (cascade-check when implemented).
     }

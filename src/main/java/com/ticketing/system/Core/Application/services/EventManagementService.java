@@ -418,9 +418,50 @@ Event newEvent = new Event(
 
     // UC-21 — set / replace event-level purchase + discount policies.
     public void setEventPolicies(String token, EventPolicyConfigDTO config) {
-        throw new UnsupportedOperationException("UC-21: not implemented");
+    if (!sessionManager.validateToken(token)) {
+        throw new RuntimeException("Invalid token");
     }
 
+    if (config == null) {
+        throw new IllegalArgumentException("Event policy config cannot be null");
+    }
+
+    int userId = sessionManager.extractUserId(token);
+
+    ProductionCompany company = companyRepository.getCompanyById(config.companyId());
+    if (company == null) {
+        throw new RuntimeException("Company not found");
+    }
+
+    company.checkowner(userId);
+
+    Event event = eventRepository.findById(config.eventId());
+    if (event == null) {
+        throw new RuntimeException("Event not found");
+    }
+
+    if (event.getCompanyId() != config.companyId()) {
+        throw new RuntimeException("Event does not belong to this company");
+    }
+
+    PurchasePolicy companyPurchasePolicy = company.getPurchasePolicy();
+    if (companyPurchasePolicy == null) {
+        companyPurchasePolicy = new NoPurchasePolicy();
+    }
+
+    PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(config.purchasePolicy());
+
+    PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
+            companyPurchasePolicy,
+            eventSpecificPurchasePolicy
+    );
+
+    event.setPurchasePolicy(inheritedAndExtendedPurchasePolicy);
+
+    eventRepository.save(event);
+
+    log.info("Purchase policy for event {} was updated by user {}", event.getId(), userId);
+}
 
 
     // Detail view for owner-side editing pages.
