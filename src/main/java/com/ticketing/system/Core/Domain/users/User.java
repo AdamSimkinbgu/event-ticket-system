@@ -265,4 +265,11 @@ public int getAge() {
             throw new IllegalStateException("User invariant violated: companyAppointments list must not be null");
         }
     }
+
+    public void InvitetoCompanyAppointment(int companyId, int ownerid, List<Permission> permissions) {
+         ManagementInvitation invitation = new ManagementInvitation(companyId, this.userId, ownerid, permissions);
+        managementInvitations.add(invitation);
+    }
+
+
 }

@@ -110,9 +110,9 @@ class EventManagementServiceTest {
                 List.of(),
                 null,
                 null);
-        ownerUser = new User(OWNER_ID, "Owner Name", "owner@example.com", "hashedpassword");
+        ownerUser = new User(OWNER_ID, "Owner Name", "owner@example.com", "hashedpassword",50);
         ownerUser.addFounderAppointment(COMPANY_ID);
-        managerUser = new User(MANAGER_ID, "Manager Name", "manager@example.com", "hashedpassword");
+        managerUser = new User(MANAGER_ID, "Manager Name", "manager@example.com", "hashedpassword",40);
         managerUser.receiveManagerAppointment(COMPANY_ID, OWNER_ID, List.of(Permission.CONFIGURE_VENUE));
         managerUser.acceptInvitation(COMPANY_ID);
     }
