@@ -1,6 +1,7 @@
 package com.ticketing.system.Presentation;
 
 import com.vaadin.flow.component.page.AppShellConfigurator;
+import com.vaadin.flow.component.page.Push;
 import com.vaadin.flow.theme.Theme;
 
 /**
@@ -14,6 +15,7 @@ import com.vaadin.flow.theme.Theme;
  * {@code .org-*} class name that the Java component kit (in
  * {@code Presentation/components/kit/}) attaches to its rendered DOM.
  */
+@Push
 @Theme("tickethub")
 public class AppShell implements AppShellConfigurator {
 }

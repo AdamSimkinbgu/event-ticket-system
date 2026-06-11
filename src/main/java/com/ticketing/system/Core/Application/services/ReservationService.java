@@ -500,6 +500,31 @@ ReservationService {
 
 
 
+    public ActiveOrderDTO restoreActiveOrderForGuest(String sessionId) {
+        return activeOrderRepository.getBySessionId(sessionId)
+                .map(order -> {
+                    log.info("Active order found for sessionId={}, restoring ActiveOrderDTO", sessionId);
+                    ActiveOrderDTO dto = order.toDTO();
+                    List<ActiveOrderDTO.CartLineDTO> enrichedLines = new ArrayList<>();
+                    for (ActiveOrderDTO.CartLineDTO line : dto.lines()) {
+                        Event event = eventRepository.findById(line.eventId());
+                        String eventName = (event != null) ? event.getName() : "Unknown Event";
+                        enrichedLines.add(new ActiveOrderDTO.CartLineDTO(
+                                line.eventId(), eventName, line.zoneId(),
+                                line.seatNumber(), line.pricePerTicket(), line.addedAt()));
+                    }
+                    return new ActiveOrderDTO(dto.userId(), dto.sessionId(), dto.createdAt(),
+                            dto.remainingSecondsBeforeExpiry(), dto.currentTotalPrice(), enrichedLines);
+                })
+                .orElseGet(() -> {
+                    log.info("No active order found for sessionId={}, returning null", sessionId);
+                    return null;
+                });
+    }
+
+
+
+
     // Helper method to abandon the active order for a user (member or guest) - this is used by the frontend when a user explicitly clicks "Abandon Cart" or when they log out, to clear their active order and release any reserved inventory back to the events. For members, we look up the active order by their user ID. For guests, we look up the active order by their session ID. If an active order is found, we release any reserved inventory back to the events and then delete the active order. If no active order is found, we simply return without doing anything. This ensures that we do not leave any reserved inventory hanging around for abandoned carts, which keeps our inventory accurate and allows other users to purchase those tickets if they are still available.
     public void abandonActiveOrder(BuyerContextDTO buyer) {
         if (buyer.isMember()) {
@@ -594,11 +619,47 @@ private boolean isMember(String userTokenOrSessionId) {
 
 
 
-    // Helper method to expire active orders that have passed their expiration time. This is used by a background job that runs periodically (e.g. every minute) to check for any active orders that have expired and release their reserved inventory back to the events, and then delete those active orders. This ensures that we do not have any active orders hanging around indefinitely that have expired and are no longer valid, which keeps our data clean and our inventory accurate.
-    public void expireActiveOrders() {
-        throw new UnsupportedOperationException("UC-2: not implemented");
+public void expireActiveOrders() {
+    List<ActiveOrder> expiredOrders = activeOrderRepository.findExpired();
+    if (expiredOrders == null || expiredOrders.isEmpty()) return;
+    for (ActiveOrder order : expiredOrders) {
+        safelyReleaseAndDelete(order);
     }
+}
+private void safelyReleaseAndDelete(ActiveOrder order) {
+    String lockKey = order.getUserId() != 0
+        ? "user:" + order.getUserId()
+        : "sess:" + order.getSessionId();
 
+    activeOrderRepository.lockForUpdate(lockKey);
+    try {
+        for (ActiveOrderDTO.CartLineDTO line : order.toDTO().lines()) {
+            try {
+                Event event = eventRepository.findById(line.eventId());
+                if (event != null) {
+                    eventRepository.lockForUpdate(line.eventId());
+                    try {
+                        InventorySelection selection = (line.seatNumber() != null)
+                            ? InventorySelection.seated(List.of(line.seatNumber()))
+                            : InventorySelection.standing(1);
+                        event.releaseInventory(line.zoneId(), selection);
+                        eventRepository.save(event);
+                    } finally {
+                        eventRepository.unlock(line.eventId());
+                    }
+                }
+            } catch (RuntimeException e) {
+                log.warn("Failed to release inventory for expired order ...", e.getMessage());
+            }
+        }
+        activeOrderRepository.delete(order);
+    } catch (Exception e) {
+        log.error("Failed to expire order for userId={} sessionId={}",
+            order.getUserId(), order.getSessionId(), e);
+    } finally {
+        activeOrderRepository.unlock(lockKey);
+    }
+}
 
     // Helper method to view the current active order for a user (member or guest). For members, we look up the active order by their user ID. For guests, we look up the active order by their session ID. If an active order is found, we convert it to an ActiveOrderDTO and return it. If no active order is found, we return null. This allows the frontend to show the user their current reservations in the cart when they navigate to the cart page, etc.
     public ActiveOrderDTO viewMyActiveOrder(String userOrSessionId) {

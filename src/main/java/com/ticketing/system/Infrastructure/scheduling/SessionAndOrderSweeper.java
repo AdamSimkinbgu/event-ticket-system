@@ -9,9 +9,11 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.ticketing.system.Core.Application.events.OrderExpiredEvent;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
@@ -53,16 +55,19 @@ public class SessionAndOrderSweeper {
     private final IActiveOrderRepository activeOrderRepository;
     private final IEventRepository eventRepository;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     public SessionAndOrderSweeper(
             ISessionRepository sessionRepository,
             IActiveOrderRepository activeOrderRepository,
             IEventRepository eventRepository,
-            Clock clock) {
+            Clock clock,
+            ApplicationEventPublisher eventPublisher) {
         this.sessionRepository = sessionRepository;
         this.activeOrderRepository = activeOrderRepository;
         this.eventRepository = eventRepository;
         this.clock = clock;
+        this.eventPublisher = eventPublisher;
     }
     
     @Scheduled(fixedDelayString = "${sweeper.fixed-delay-ms:60000}")
@@ -95,6 +100,7 @@ public class SessionAndOrderSweeper {
         for (ActiveOrder order : expired) {
             releaseTicketsToInventory(order);
             activeOrderRepository.delete(order);
+            eventPublisher.publishEvent(new OrderExpiredEvent(order.getUserId(), order.getSessionId()));
         }
         return expired.size();
     }
