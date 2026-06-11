@@ -253,4 +253,5 @@ public class CartView extends LkPage {
     private static String escape(String s) {
         return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
+    
 }
