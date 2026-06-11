@@ -24,7 +24,8 @@ import com.ticketing.system.Core.Domain.events.InventoryZone;
 
 @Service
 @Slf4j
-public class ReservationService {
+public class 
+ReservationService {
 
     private final IEventRepository eventRepository;
     private final IActiveOrderRepository activeOrderRepository;
@@ -559,19 +560,37 @@ public class ReservationService {
         }
     }
 
-    
+    /**
+ * Removes a line from the cart, automatically determining whether the user is a Member or Guest.
+ * The UI just calls this method, no need to handle InventorySelectionDTO or user type.
+ */
+public ReservationResultDTO removeLine(String userTokenOrSessionId, int eventId, int zoneId, InventorySelectionDTO selection) {
+   
+    boolean isMember = isMember(userTokenOrSessionId); 
+    if (isMember) {
+        return removeForMember(userTokenOrSessionId, eventId, zoneId, selection);
+    } else {
+        return removeForGuest(userTokenOrSessionId, eventId, zoneId, selection);
+    }
+}
 
+/**
+ * Determines if the given token/session ID corresponds to a registered member.
+ */
+private boolean isMember(String userTokenOrSessionId) {
+    if (userTokenOrSessionId == null || userTokenOrSessionId.isBlank()) {
+        throw new IllegalArgumentException("User token or session ID cannot be null or empty");
+    }
 
-
-
-
-
-
-
-
-
-
-
+  
+    try {
+        int userId = validateTokenAndGetUserId(userTokenOrSessionId);
+        return userId > 0; // valid member
+    } catch (Exception e) {
+       
+        return false;
+    }
+}
 
 
 
