@@ -30,8 +30,9 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 @AnonymousAllowed
 public class CartView extends LkPage {
 
-    private ActiveOrderDTO activeOrder;
     private final ReservationService reservationService;
+    private final String userToken;
+    private ActiveOrderDTO activeOrder;
 
     private LkCol linesCol;
     private Span sub, total, subText;
@@ -39,8 +40,14 @@ public class CartView extends LkPage {
 
     public CartView(ReservationService reservationService) {
         this.reservationService = reservationService;
+        this.userToken = (String) VaadinSession.getCurrent().getAttribute("userToken");
 
-        String userToken = (String) VaadinSession.getCurrent().getAttribute("userToken");
+        // תיקון 3: החזרת בדיקת ההגנה מפני משתמש אנונימי (Null Token) כדי למנוע קריסה
+        if (this.userToken == null) {
+            UI.getCurrent().navigate("login");
+            return;
+        }
+
         this.activeOrder = reservationService.viewMyActiveOrder(userToken);
 
         title("Your cart");
@@ -57,20 +64,22 @@ public class CartView extends LkPage {
 
     private Component buildLineColumn() {
         linesCol = new LkCol().gap(12);
+        populateLines();
+        return linesCol;
+    }
 
-        if (activeOrder != null) {
-            linesCol.add(buildCountdownBanner(activeOrder.remainingSecondsBeforeExpiry()));
-        }
+    private void populateLines() {
+        linesCol.removeAll();
 
         if (activeOrder == null || activeOrder.lines().isEmpty()) {
             linesCol.add(buildEmptyState());
         } else {
+            linesCol.add(buildCountdownBanner(activeOrder.remainingSecondsBeforeExpiry()));
+
             for (ActiveOrderDTO.CartLineDTO line : activeOrder.lines()) {
                 linesCol.add(cartLineFromDTO(line));
             }
         }
-
-        return linesCol;
     }
 
     private Component cartLineFromDTO(ActiveOrderDTO.CartLineDTO line) {
@@ -79,8 +88,10 @@ public class CartView extends LkPage {
 
         Div info = new Div();
         info.addClassName("bz-cartline-info");
+        
         Span titleSpan = new Span();
-        titleSpan.getElement().setProperty("innerHTML", "<b>" + line.eventName() + "</b>");
+        titleSpan.getElement().setProperty("innerHTML", "<b>" + escape(line.eventName()) + "</b>");
+        
         Span seatLine = Lk.muted(line.seatNumber());
         info.add(titleSpan, seatLine);
 
@@ -88,9 +99,8 @@ public class CartView extends LkPage {
         removeBtn.addClassName("bz-link");
         removeBtn.getStyle()
             .set("background", "none").set("border", "none").set("padding", "0").set("cursor", "pointer");
+            
         removeBtn.addClickListener(e -> {
-            String userToken = (String) VaadinSession.getCurrent().getAttribute("userToken");
-
             InventorySelectionDTO selection;
             if (line.seatNumber() != null) {
                 selection = InventorySelectionDTO.seated(List.of(line.seatNumber()));
@@ -98,22 +108,20 @@ public class CartView extends LkPage {
                 selection = InventorySelectionDTO.standing(1);
             }
 
-         
-            reservationService.removeLine(userToken, line.eventId(), line.zoneId(), selection);
-
-            activeOrder = reservationService.viewMyActiveOrder(userToken);
-            linesCol.remove(lineDiv);
-
-            if (activeOrder == null || activeOrder.lines().isEmpty()) {
-                linesCol.add(buildEmptyState());
+            try {
+                reservationService.removeLine(userToken, line.eventId(), line.zoneId(), selection);
+                
+                activeOrder = reservationService.viewMyActiveOrder(userToken);
+                populateLines(); 
+                
+                renderHeaderSubtitle();
+                renderTotals();
+                Toasts.success("Removed from cart.");
+            } catch (Exception ex) {
+                Toasts.failure("Failed to remove item. Please try again.");
             }
-
-            renderHeaderSubtitle();
-            renderTotals();
-            Toasts.success("Removed from cart.");
         });
         info.add(removeBtn);
-
         lineDiv.add(info);
 
         Div priceTag = new Div();
@@ -131,18 +139,23 @@ public class CartView extends LkPage {
         timer.setText("Time left: " + remainingSeconds / 60 + ":" + remainingSeconds % 60);
         timer.getStyle().set("font-size", "16px").set("font-weight", "700");
 
+        
         timer.getElement().executeJs(
-            "const t = this;" +
-            "let s = $0;" +
+            "if (window.cartTimerId) { clearTimeout(window.cartTimerId); }" +
+            "const t=this; let s=$0;" +
             "function tick(){" +
-            "  if(s <= 0) return;" +
-            "  const m = Math.floor(s/60); const sec = s%60;" +
-            "  t.textContent = 'Time left: ' + m + ':' + (sec<10?'0'+sec:sec);" +
-            "  s--;" +
-            "  setTimeout(tick,1000);" +
+            "  if(s<=0) return;" +
+            "  const m=Math.floor(s/60); const sec=s%60;" +
+            "  t.textContent='Time left: '+m+':' + (sec<10?'0'+sec:sec);" +
+            "  s--; " +
+            "  window.cartTimerId = setTimeout(tick,1000);" +
             "}" +
-            "tick();",
-            remainingSeconds
+            "tick();", remainingSeconds
+        );
+
+        // הוספת ה-Detach Listener כדי לעצור את ריצת ה-JS ברקע כשהמשתמש עוזב את העמוד
+        timer.addDetachListener(ev -> 
+            timer.getElement().executeJs("if(window.cartTimerId) { clearTimeout(window.cartTimerId); }")
         );
 
         banner.setBody(timer);
@@ -162,7 +175,7 @@ public class CartView extends LkPage {
         int n = (activeOrder != null) ? activeOrder.lines().size() : 0;
         subtitle(n == 0
             ? "No reservations held"
-            : n + " reservation" + (n == 1 ? "" : "s") + " held · each line expires individually");
+            : n + " reservation" + (n == 1 ? "" : "s") + " held · global timer active");
     }
 
     private Component buildSummaryCard() {
@@ -193,7 +206,8 @@ public class CartView extends LkPage {
     }
 
     private void renderTotals() {
-        int subtotal = activeOrder != null ? (int) activeOrder.currentTotalPrice() : 0;
+       
+        int subtotal = activeOrder != null ? (int) Math.round(activeOrder.currentTotalPrice()) : 0;
         boolean empty = activeOrder == null || activeOrder.lines().isEmpty();
         int totalCents = empty ? 0 : subtotal;
 
@@ -204,7 +218,7 @@ public class CartView extends LkPage {
         if (subText != null) {
             subText.setText(empty
                 ? "Add tickets from Browse to start an order."
-                : "One 10-min timer covers the whole order at checkout");
+                : "One 10-min global timer covers the whole order");
             subText.getStyle()
                 .set("text-align", "center").set("font-size", "12.5px")
                 .set("color", "var(--muted)").set("display", "block");
@@ -229,8 +243,11 @@ public class CartView extends LkPage {
         return r;
     }
 
+   
+     
     private static String formatPrice(double cents) {
-        return "$" + (cents / 100) + "." + String.format("%02d", (int)cents % 100);
+        int totalCents = (int) Math.round(cents);
+        return String.format("$%d.%02d", totalCents / 100, Math.abs(totalCents % 100));
     }
 
     private static String escape(String s) {
