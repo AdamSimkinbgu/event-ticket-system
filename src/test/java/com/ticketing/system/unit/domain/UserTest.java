@@ -3,7 +3,6 @@ package com.ticketing.system.unit.domain;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,8 +11,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Domain.users.CompanyAppointment;
-import com.ticketing.system.Core.Domain.users.CompanyRole;
-import com.ticketing.system.Core.Domain.users.ManagementInvitation;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.support.BaseDomainTest;

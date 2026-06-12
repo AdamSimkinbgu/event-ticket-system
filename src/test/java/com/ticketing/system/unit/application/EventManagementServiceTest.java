@@ -138,11 +138,6 @@ class EventManagementServiceTest {
     @Test
     public void GivenManagerWithConfigureVenuePermission_WhenUpdateZoneCapacity_ThenZoneCapacityUpdated() {
 
-        company.validateManagerInvitation(
-                COMPANY_ID,
-                MANAGER_ID,
-                OWNER_ID,
-                List.of(Permission.CONFIGURE_VENUE));
         company.addManager(MANAGER_ID);
 
         when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
@@ -219,11 +214,7 @@ class EventManagementServiceTest {
 
     @Test
     public void GivenManagerWithoutConfigureVenuePermission_WhenUpdateZoneCapacity_ThenThrowException() {
-        company.validateManagerInvitation(
-                COMPANY_ID,
-                MANAGER_ID,
-                OWNER_ID,
-                List.of(Permission.MANAGE_INVENTORY));
+
         company.addManager(MANAGER_ID);
 
         when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);

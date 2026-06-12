@@ -16,10 +16,14 @@ import org.mockito.ArgumentCaptor;
 import java.time.LocalDateTime;
 
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
+import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
+import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
+import com.ticketing.system.Core.Application.dto.AppointmentRevokeDTO;
 import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
+import com.ticketing.system.Core.Application.dto.ManagerAppointmentRequestDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
@@ -34,6 +38,8 @@ import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
+
+import javassist.expr.NewArray;
 
 public class CompanyManagementServiceTest {
 
@@ -76,9 +82,9 @@ public class CompanyManagementServiceTest {
                                 eventRepository);
 
                 defaultPermissions = new ArrayList<>();
-                defaultPermissions.add(Permission.APPOINT_MANAGER);
                 defaultPermissions.add(Permission.CONFIGURE_VENUE);
                 defaultPermissions.add(Permission.MANAGE_INVENTORY);
+
         }
 
         @Test
@@ -93,11 +99,8 @@ public class CompanyManagementServiceTest {
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
                 when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
-                companyService.inviteManager(
-                                OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                defaultPermissions);
+                companyService.appointManager(OWNER_TOKEN, new ManagerAppointmentRequestDTO(
+                                COMPANY_ID, TARGET_USER_ID, defaultPermissions));
 
                 assertNotEquals(null, targetUser.getPendingCompanyAppointments(COMPANY_ID));
         }
@@ -114,18 +117,15 @@ public class CompanyManagementServiceTest {
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
                 when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
-                companyService.inviteManager(
-                                OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                defaultPermissions);
+                companyService.appointManager(OWNER_TOKEN, new ManagerAppointmentRequestDTO(
+                                COMPANY_ID, TARGET_USER_ID, defaultPermissions));
 
                 when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
 
-                companyService.acceptManagerInvitation(TARGET_TOKEN, COMPANY_ID);
+                companyService.respondToAppointment(TARGET_TOKEN, new AppointmentResponseDTO(COMPANY_ID, true));
 
-                assertTrue(company.getManagers().containsKey(TARGET_USER_ID));
+                assertTrue(company.getManagers().contains(TARGET_USER_ID));
         }
 
         @Test
@@ -140,18 +140,19 @@ public class CompanyManagementServiceTest {
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
                 when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
-                companyService.inviteManager(
+                companyService.appointManager(
                                 OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                defaultPermissions);
+                                new ManagerAppointmentRequestDTO(
+                                                COMPANY_ID,
+                                                TARGET_USER_ID,
+                                                defaultPermissions));
 
                 when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
 
-                companyService.rejectManagerInvitation(TARGET_TOKEN, COMPANY_ID);
+                companyService.respondToAppointment(TARGET_TOKEN, new AppointmentResponseDTO(COMPANY_ID, false));
 
-                assertTrue(targetUser.getManagementInvitations().isEmpty());
+                assertTrue(targetUser.getPendingCompanyAppointments(COMPANY_ID) == null);
         }
 
         @Test
@@ -166,29 +167,24 @@ public class CompanyManagementServiceTest {
                 when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
-                companyService.inviteManager(
-                                OWNER_TOKEN,
+                companyService.appointManager(OWNER_TOKEN, new ManagerAppointmentRequestDTO(
                                 COMPANY_ID,
                                 TARGET_USER_ID,
-                                defaultPermissions);
+                                defaultPermissions));
 
                 when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
 
-                companyService.acceptManagerInvitation(TARGET_TOKEN, COMPANY_ID);
+                companyService.respondToAppointment(TARGET_TOKEN, new AppointmentResponseDTO(COMPANY_ID, true));
 
                 List<Permission> newPermissions = new ArrayList<>();
-                newPermissions.add(Permission.APPOINT_MANAGER);
                 newPermissions.add(Permission.EDIT_POLICIES);
 
                 when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
-                companyService.ModifyManagerPermissions(
-                                OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                newPermissions);
+                companyService.editManagerPermissions(OWNER_TOKEN,
+                                new PermissionEditDTO(COMPANY_ID, TARGET_USER_ID, newPermissions));
 
                 for (Permission perm : newPermissions) {
                         assertTrue(targetUser.hasPermissionInCompany(COMPANY_ID, perm));
@@ -207,37 +203,34 @@ public class CompanyManagementServiceTest {
                 when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
-                companyService.inviteManager(
-                                OWNER_TOKEN,
+                companyService.appointManager(OWNER_TOKEN, new ManagerAppointmentRequestDTO(
                                 COMPANY_ID,
                                 TARGET_USER_ID,
-                                defaultPermissions);
+                                defaultPermissions));
 
                 when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
 
-                companyService.acceptManagerInvitation(TARGET_TOKEN, COMPANY_ID);
+                companyService.respondToAppointment(TARGET_TOKEN, new AppointmentResponseDTO(COMPANY_ID, true));
 
                 when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
-                companyService.RevokeAppointment(
-                                OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID);
+                companyService.RevokeAppointment(OWNER_TOKEN, new AppointmentRevokeDTO(COMPANY_ID, TARGET_USER_ID));
 
-                assertFalse(company.getManagers().containsKey(TARGET_USER_ID));
+                assertFalse(company.getManagers().contains(TARGET_USER_ID));
         }
 
         @Test
         public void GivenInvalidToken_WhenInviteManager_ThenThrowException() {
                 when(sessionManager.validateToken("invalid-token")).thenReturn(false);
 
-                assertThrows(RuntimeException.class, () -> companyService.inviteManager(
+                assertThrows(RuntimeException.class, () -> companyService.appointManager(
                                 "invalid-token",
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                defaultPermissions));
+                                new ManagerAppointmentRequestDTO(
+                                                COMPANY_ID,
+                                                TARGET_USER_ID,
+                                                defaultPermissions)));
         }
 
         @Test
@@ -246,11 +239,12 @@ public class CompanyManagementServiceTest {
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
 
-                assertThrows(RuntimeException.class, () -> companyService.inviteManager(
+                assertThrows(RuntimeException.class, () -> companyService.appointManager(
                                 OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                defaultPermissions));
+                                new ManagerAppointmentRequestDTO(
+                                                COMPANY_ID,
+                                                TARGET_USER_ID,
+                                                defaultPermissions)));
         }
 
         @Test
@@ -262,11 +256,12 @@ public class CompanyManagementServiceTest {
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(3);
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
-                assertThrows(RuntimeException.class, () -> companyService.inviteManager(
+                assertThrows(RuntimeException.class, () -> companyService.appointManager(
                                 OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                defaultPermissions));
+                                new ManagerAppointmentRequestDTO(
+                                                COMPANY_ID,
+                                                TARGET_USER_ID,
+                                                defaultPermissions)));
         }
 
         @Test
@@ -279,11 +274,12 @@ public class CompanyManagementServiceTest {
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
                 when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(null);
 
-                assertThrows(RuntimeException.class, () -> companyService.inviteManager(
+                assertThrows(RuntimeException.class, () -> companyService.appointManager(
                                 OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                defaultPermissions));
+                                new ManagerAppointmentRequestDTO(
+                                                COMPANY_ID,
+                                                TARGET_USER_ID,
+                                                defaultPermissions)));
         }
 
         @Test
@@ -297,20 +293,21 @@ public class CompanyManagementServiceTest {
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
                 when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
-                assertThrows(RuntimeException.class, () -> companyService.inviteManager(
+                assertThrows(RuntimeException.class, () -> companyService.appointManager(
                                 OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                new ArrayList<>()));
+                                new ManagerAppointmentRequestDTO(
+                                                COMPANY_ID,
+                                                TARGET_USER_ID,
+                                                new ArrayList<>())));
         }
 
         @Test
         public void GivenInvalidToken_WhenAcceptManagerInvitation_ThenThrowException() {
                 when(sessionManager.validateToken("invalid-token")).thenReturn(false);
 
-                assertThrows(RuntimeException.class, () -> companyService.acceptManagerInvitation(
+                assertThrows(RuntimeException.class, () -> companyService.respondToAppointment(
                                 "invalid-token",
-                                COMPANY_ID));
+                                new AppointmentResponseDTO(COMPANY_ID, true)));
         }
 
         @Test
@@ -319,9 +316,9 @@ public class CompanyManagementServiceTest {
                 when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
                 when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(null);
 
-                assertThrows(RuntimeException.class, () -> companyService.acceptManagerInvitation(
+                assertThrows(RuntimeException.class, () -> companyService.respondToAppointment(
                                 TARGET_TOKEN,
-                                COMPANY_ID));
+                                new AppointmentResponseDTO(COMPANY_ID, true)));
         }
 
         @Test
@@ -333,9 +330,9 @@ public class CompanyManagementServiceTest {
                 when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
 
-                assertThrows(RuntimeException.class, () -> companyService.acceptManagerInvitation(
+                assertThrows(RuntimeException.class, () -> companyService.respondToAppointment(
                                 TARGET_TOKEN,
-                                COMPANY_ID));
+                                new AppointmentResponseDTO(COMPANY_ID, true)));
         }
 
         @Test
@@ -349,18 +346,18 @@ public class CompanyManagementServiceTest {
                 when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
-                assertThrows(RuntimeException.class, () -> companyService.acceptManagerInvitation(
+                assertThrows(RuntimeException.class, () -> companyService.respondToAppointment(
                                 TARGET_TOKEN,
-                                COMPANY_ID));
+                                new AppointmentResponseDTO(COMPANY_ID, true)));
         }
 
         @Test
         public void GivenInvalidToken_WhenRejectManagerInvitation_ThenThrowException() {
                 when(sessionManager.validateToken("invalid-token")).thenReturn(false);
 
-                assertThrows(RuntimeException.class, () -> companyService.rejectManagerInvitation(
+                assertThrows(RuntimeException.class, () -> companyService.respondToAppointment(
                                 "invalid-token",
-                                COMPANY_ID));
+                                new AppointmentResponseDTO(COMPANY_ID, false)));
         }
 
         @Test
@@ -374,9 +371,9 @@ public class CompanyManagementServiceTest {
                 when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
-                assertThrows(RuntimeException.class, () -> companyService.rejectManagerInvitation(
+                assertThrows(RuntimeException.class, () -> companyService.respondToAppointment(
                                 TARGET_TOKEN,
-                                COMPANY_ID));
+                                new AppointmentResponseDTO(COMPANY_ID, false)));
         }
 
         @Test
@@ -385,8 +382,7 @@ public class CompanyManagementServiceTest {
 
                 assertThrows(RuntimeException.class, () -> companyService.RevokeAppointment(
                                 "invalid-token",
-                                COMPANY_ID,
-                                TARGET_USER_ID));
+                                new AppointmentRevokeDTO(COMPANY_ID, TARGET_USER_ID)));
         }
 
         @Test
@@ -400,8 +396,7 @@ public class CompanyManagementServiceTest {
 
                 assertThrows(RuntimeException.class, () -> companyService.RevokeAppointment(
                                 OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID));
+                                new AppointmentRevokeDTO(COMPANY_ID, TARGET_USER_ID)));
         }
 
         @Test
@@ -417,19 +412,16 @@ public class CompanyManagementServiceTest {
 
                 assertThrows(RuntimeException.class, () -> companyService.RevokeAppointment(
                                 OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID));
+                                new AppointmentRevokeDTO(COMPANY_ID, TARGET_USER_ID)));
         }
 
         @Test
         public void GivenInvalidToken_WhenModifyManagerPermissions_ThenThrowException() {
                 when(sessionManager.validateToken("invalid-token")).thenReturn(false);
 
-                assertThrows(RuntimeException.class, () -> companyService.ModifyManagerPermissions(
+                assertThrows(RuntimeException.class, () -> companyService.editManagerPermissions(
                                 "invalid-token",
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                defaultPermissions));
+                                new PermissionEditDTO(COMPANY_ID, TARGET_USER_ID, defaultPermissions)));
         }
 
         @Test
@@ -441,11 +433,9 @@ public class CompanyManagementServiceTest {
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(3);
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
-                assertThrows(RuntimeException.class, () -> companyService.ModifyManagerPermissions(
+                assertThrows(RuntimeException.class, () -> companyService.editManagerPermissions(
                                 OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                defaultPermissions));
+                                new PermissionEditDTO(COMPANY_ID, TARGET_USER_ID, defaultPermissions)));
         }
 
         @Test
@@ -459,11 +449,9 @@ public class CompanyManagementServiceTest {
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
                 when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
-                assertThrows(RuntimeException.class, () -> companyService.ModifyManagerPermissions(
+                assertThrows(RuntimeException.class, () -> companyService.editManagerPermissions(
                                 OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                defaultPermissions));
+                                new PermissionEditDTO(COMPANY_ID, TARGET_USER_ID, defaultPermissions)));
         }
 
         @Test
@@ -478,27 +466,21 @@ public class CompanyManagementServiceTest {
                 when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
-                companyService.inviteManager(
-                                OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                defaultPermissions);
+                companyService.appointManager(OWNER_TOKEN,
+                                new ManagerAppointmentRequestDTO(COMPANY_ID, TARGET_USER_ID, null));
 
                 when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
 
-                companyService.acceptManagerInvitation(
-                                TARGET_TOKEN,
-                                COMPANY_ID);
+                companyService.respondToAppointment(
+                                TARGET_TOKEN, new AppointmentResponseDTO(COMPANY_ID, true));
 
                 when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
-                assertThrows(RuntimeException.class, () -> companyService.ModifyManagerPermissions(
+                assertThrows(RuntimeException.class, () -> companyService.editManagerPermissions(
                                 OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                new ArrayList<>()));
+                                new PermissionEditDTO(COMPANY_ID, TARGET_USER_ID, new ArrayList<>())));
         }
 
         @Test
@@ -512,11 +494,8 @@ public class CompanyManagementServiceTest {
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
                 when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
-                companyService.inviteManager(
-                                OWNER_TOKEN,
-                                COMPANY_ID,
-                                TARGET_USER_ID,
-                                defaultPermissions);
+                companyService.appointManager(OWNER_TOKEN,
+                                new ManagerAppointmentRequestDTO(COMPANY_ID, TARGET_USER_ID, defaultPermissions));
 
         }
 
@@ -834,7 +813,7 @@ public class CompanyManagementServiceTest {
         @Test
         public void GivenOwnerWithNoManagers_WhenViewOrganizationalTree_ThenReturnRootOnlyNode() {
                 ProductionCompany company = mock(ProductionCompany.class);
-                when(company.getManagers()).thenReturn(new HashMap<>());
+                when(company.getManagers()).thenReturn(new ArrayList<>());
                 when(company.getFounderId()).thenReturn(OWNER_ID);
                 when(company.getOwnersIds()).thenReturn(List.of(OWNER_ID));
 
@@ -859,8 +838,8 @@ public class CompanyManagementServiceTest {
 
         @Test
         public void GivenOwnerWithOneDirectManager_WhenViewOrganizationalTree_ThenReturnTreeWithOneChild() {
-                HashMap<Integer, List<Permission>> managersMap = new HashMap<>();
-                managersMap.put(TARGET_USER_ID, defaultPermissions);
+                List<Integer> managersMap = new ArrayList<>();
+                managersMap.add(TARGET_USER_ID);
 
                 ProductionCompany company = mock(ProductionCompany.class);
                 when(company.getManagers()).thenReturn(managersMap);
@@ -900,9 +879,9 @@ public class CompanyManagementServiceTest {
                 int MANAGER1_ID = TARGET_USER_ID;
                 int MANAGER2_ID = 3;
 
-                HashMap<Integer, List<Permission>> managersMap = new HashMap<>();
-                managersMap.put(MANAGER1_ID, defaultPermissions);
-                managersMap.put(MANAGER2_ID, List.of(Permission.VIEW_SALES));
+                List<Integer> managersMap = new ArrayList<>();
+                managersMap.add(MANAGER1_ID);
+                managersMap.add(MANAGER2_ID);
 
                 ProductionCompany company = mock(ProductionCompany.class);
                 when(company.getManagers()).thenReturn(managersMap);
@@ -950,9 +929,9 @@ public class CompanyManagementServiceTest {
                 int MANAGER1_ID = TARGET_USER_ID;
                 int MANAGER2_ID = 3;
 
-                HashMap<Integer, List<Permission>> managersMap = new HashMap<>();
-                managersMap.put(MANAGER1_ID, defaultPermissions);
-                managersMap.put(MANAGER2_ID, List.of(Permission.MANAGE_INVENTORY));
+                List<Integer> managersMap = new ArrayList<>();
+                managersMap.add(MANAGER1_ID);
+                managersMap.add(MANAGER2_ID);
 
                 ProductionCompany company = mock(ProductionCompany.class);
                 when(company.getManagers()).thenReturn(managersMap);

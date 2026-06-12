@@ -206,9 +206,7 @@ public class CompanyManagementService {
         User appointer = userRepository.getUserById(appointerId);
         User targetUser = userRepository.getUserById(request.targetUserId());
 
-        appointer.hasPermissionInCompany(appointerId, Permission.APPOINT_MANAGER);// check if appointer has permission
-                                                                                  // to appoint
-
+        appointer.requireOwnerInCompany(request.companyId()); // check if appointer has permissions
         targetUser.receiveOwnerAppointment(request.companyId(), appointerId); // target user receives pending owner
                                                                               // appointment
 
@@ -250,7 +248,19 @@ public class CompanyManagementService {
     public void appointManager(
             String token,
             com.ticketing.system.Core.Application.dto.ManagerAppointmentRequestDTO request) {
-        throw new UnsupportedOperationException("UC-24: not implemented");
+        if (request.companyId() <= 0 || request.targetUserId() <= 0) {
+            log.warn("Invalid manager appointment request: companyId and targetUserId must be positive integers");
+            throw new IllegalArgumentException("companyId and targetUserId must be positive integers");
+        }
+        int ownerId = authenticate(token);
+        User owner = userRepository.getUserById(ownerId);
+        User targetUser = userRepository.getUserById(request.targetUserId());
+        owner.requireOwnerInCompany(request.companyId());
+
+        targetUser.receiveManagerAppointment(request.companyId(), ownerId, request.permissions());
+        userRepository.updateUser(targetUser);
+        log.info("Manager appointment created successfully: ownerId={}, targetUserId={}, companyId={}, permissions={}",
+                ownerId, request.targetUserId(), request.companyId(), request.permissions());
     }
 
     // UC-24 — edit a Manager's permission set (only by the original appointer).
@@ -280,6 +290,7 @@ public class CompanyManagementService {
                 ? EnumSet.noneOf(Permission.class)
                 : EnumSet.copyOf(edit.newPermissions()));
 
+        userRepository.updateUser(manager);
         log.info("Manager permissions updated successfully for user {} in company {}", edit.targetUserId(),
                 edit.companyId());
     }

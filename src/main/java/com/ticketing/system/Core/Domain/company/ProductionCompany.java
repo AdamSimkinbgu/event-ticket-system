@@ -52,7 +52,7 @@ public class ProductionCompany implements InvariantChecked {
 
     public void RevokeAppointment(int targetId) {
         if (managers.contains(targetId)) {
-            managers.remove(targetId);
+            managers.remove(Integer.valueOf(targetId));
         } else if (ownerIds.contains(targetId)) {
             ownerIds.remove(Integer.valueOf(targetId));
         } else {
