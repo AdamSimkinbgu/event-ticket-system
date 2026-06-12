@@ -1,13 +1,10 @@
-package com.ticketing.system.Core.Domain.company;
+package com.ticketing.system.Core.Domain.users;
 
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.Set;
 
 import com.ticketing.system.Core.Domain.exceptions.InvalidPermissionException;
-import com.ticketing.system.Core.Domain.users.CompanyRole;
-import com.ticketing.system.Core.Domain.users.Permission;
-import com.ticketing.system.Core.Domain.users.AppointmentStatus;
 
 import java.util.List;
 

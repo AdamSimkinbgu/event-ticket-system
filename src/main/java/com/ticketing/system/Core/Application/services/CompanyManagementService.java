@@ -18,7 +18,6 @@ import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dtoMappers.OrderReceiptMapper;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
-import com.ticketing.system.Core.Domain.company.CompanyAppointment;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
@@ -28,9 +27,9 @@ import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
+import com.ticketing.system.Core.Domain.users.CompanyAppointment;
 import com.ticketing.system.Core.Domain.users.CompanyRole;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
-import com.ticketing.system.Core.Domain.users.ManagementInvitation;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
@@ -69,20 +68,17 @@ public class CompanyManagementService {
             log.warn("Company {} not found", companyId);
             throw new RuntimeException("Company not found");
         }
-        company.checkowner(ownerId);
+        User owner = userRepository.getUserById(ownerId);
+        owner.requireOwnerInCompany(companyId);
+
         User targetUser = userRepository.getUserById(targetId);
         if (targetUser == null) {
             log.warn("Target user {} not found", targetId);
             throw new RuntimeException("Target user not found");
         }
 
-        company.validateManagerInvitation(companyId, targetId, ownerId, permissions);
-
         targetUser.receiveManagerAppointment(companyId, ownerId, permissions);
-
-        companyRepository.updateCompany(company);
         userRepository.updateUser(targetUser);
-
         log.info("user invited succesfully");
 
     }
@@ -102,33 +98,27 @@ public class CompanyManagementService {
         }
 
         targetUser.acceptInvitation(companyId);
-        company.acceptManagerInvitation(targetId);
+        company.addManager(targetId);
         userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
         log.info("Manager invitation accepted successfully");
     }
+    /*
+     * public void rejectManagerInvitation(String token, int companyId) {
+     * int targetId = authenticate(token);
+     * User targetUser = userRepository.getUserById(targetId);
+     * if (targetUser == null) {
+     * log.warn("Target user {} not found", targetId);
+     * throw new RuntimeException("Target user not found");
+     * }
+     * targetUser.rejectInvitation(companyId);
+     * userRepository.updateUser(targetUser);
+     * 
+     * log.info("Manager invitation rejected successfully");
+     * }
+     */
 
-    public void rejectManagerInvitation(String token, int companyId) {
-        int targetId = authenticate(token);
-        User targetUser = userRepository.getUserById(targetId);
-        if (targetUser == null) {
-            log.warn("Target user {} not found", targetId);
-            throw new RuntimeException("Target user not found");
-        }
-
-        ProductionCompany company = companyRepository.getCompanyById(companyId);
-        if (company == null) {
-            log.warn("Company {} not found", companyId);
-            throw new RuntimeException("Company not found");
-        }
-
-        targetUser.rejectInvitation(companyId);
-        company.rejectManagerInvitation(targetId);
-        userRepository.updateUser(targetUser);
-        companyRepository.updateCompany(company);
-        log.info("Manager invitation rejected successfully");
-    }
-
+    // TODO: fix this function
     public void RevokeManager(String token, int companyId, int targetId) {
         int ownerId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
@@ -248,7 +238,7 @@ public class CompanyManagementService {
             if (appointment.getRole() == CompanyRole.Owner) {
                 company.addOwner(appointment.getInviterId(), userId);
             } else if (appointment.getRole() == CompanyRole.Manager) {
-                company.validateManagerAppointment(userId, appointment.getPermissions().stream().toList());
+                company.addManager(userId);
             }
             log.info("Appointment accepted: userId={}, companyId={}", userId, response.companyId());
         } else {
@@ -397,7 +387,7 @@ public class CompanyManagementService {
         // gather all members (owners and managers) of the company in a single list for
         // easy processing
         List<Integer> members = new ArrayList<>();
-        members.addAll(company.getManagers().keySet());
+        members.addAll(company.getManagers());
         members.addAll(company.getOwnersIds());
 
         Map<Integer, OrganizationalTreeNodeDTO> userIdToNodeMap = new HashMap<>();
@@ -406,7 +396,7 @@ public class CompanyManagementService {
         // children yet.
         for (Integer memberId : members) {
             User memberUser = userRepository.getUserById(memberId);
-            CompanyAppointment appt = memberUser.getAppointmentForCompany(companyId);
+            CompanyAppointment appt = memberUser.getActiveCompanyAppointments(companyId);
 
             OrganizationalTreeNodeDTO node = new OrganizationalTreeNodeDTO(
                     memberId,
@@ -424,7 +414,7 @@ public class CompanyManagementService {
             if (memberId == founderId)
                 continue; // skip founder, they have no appointer
             User memberUser = userRepository.getUserById(memberId);
-            CompanyAppointment appt = memberUser.getAppointmentForCompany(companyId);
+            CompanyAppointment appt = memberUser.getActiveCompanyAppointments(companyId);
             OrganizationalTreeNodeDTO node = userIdToNodeMap.get(memberId);
             OrganizationalTreeNodeDTO inviterNode = userIdToNodeMap.get(appt.getInviterId());
             inviterNode.appointedByThisUser().add(node);

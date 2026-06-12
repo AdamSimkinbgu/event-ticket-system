@@ -5,13 +5,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
-import com.ticketing.system.Core.Domain.company.CompanyAppointment;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 public class User implements InvariantChecked {
 
-    private MemberProfile memberProfile;
-    private List<ManagementInvitation> managementInvitations;
     private int userId;
     private String username;
     private String email;
@@ -23,8 +20,6 @@ public class User implements InvariantChecked {
         this.username = username;
         this.email = email;
         this.password = password;
-        this.managementInvitations = new ArrayList<>();
-        this.memberProfile = new MemberProfile();
         this.companyAppointments = new ArrayList<>();
         // Messaging is its own aggregate now (Conversation / IConversationRepository in
         // messaging/);
@@ -32,16 +27,20 @@ public class User implements InvariantChecked {
     }
 
     public CompanyAppointment acceptInvitation(int companyId) {
-        CompanyAppointment appointment = getAppointmentForCompany(companyId);
+        CompanyAppointment appointment = getPendingCompanyAppointments(companyId);
         if (appointment == null) {
             throw new RuntimeException("Cannot accept invitation: no appointment found for the specified company");
+        }
+        CompanyAppointment activeAppointment = getActiveCompanyAppointments(companyId);
+        if (activeAppointment != null) {
+            companyAppointments.remove(activeAppointment);
         }
         appointment.accept();
         return appointment;
     }
 
     public void rejectInvitation(int companyId) {
-        CompanyAppointment appointment = getAppointmentForCompany(companyId);
+        CompanyAppointment appointment = getPendingCompanyAppointments(companyId);
         if (appointment == null) {
             throw new RuntimeException("Cannot reject invitation: no appointment found for the specified company");
         }
@@ -50,7 +49,7 @@ public class User implements InvariantChecked {
     }
 
     public void receiveManagerAppointment(int companyId, int ownerid, List<Permission> permissions) {
-        if (getAppointmentForCompany(companyId) != null) {
+        if (getActiveCompanyAppointments(companyId) != null || getPendingCompanyAppointments(companyId) != null) {
             throw new RuntimeException("User already has an active or pending appointment in this company");
         }
 
@@ -65,8 +64,8 @@ public class User implements InvariantChecked {
     }
 
     public void addFounderAppointment(int companyId) {
-        if (getAppointmentForCompany(companyId) != null) {
-            throw new RuntimeException("User already has an appointment in this company");
+        if (getActiveCompanyAppointments(companyId) != null || getPendingCompanyAppointments(companyId) != null) {
+            throw new RuntimeException("User already has an active or pending appointment in this company");
         }
 
         CompanyAppointment appointment = CompanyAppointment.FoundingAppointment(
@@ -84,13 +83,12 @@ public class User implements InvariantChecked {
     // can call it on the target user, and the appointer must have permission to
     // appoint (be an active owner or have APPOINT_MANAGER permission).
     public void receiveOwnerAppointment(int companyId, int appointerId) {
-        if (getAppointmentForCompany(companyId) != null) {
-            throw new RuntimeException("User already has an active or pending appointment in this company");
+        if (getPendingCompanyAppointments(companyId) != null) {
+            throw new RuntimeException("User already has an pending appointment in this company");
         }
-        for (CompanyAppointment appointment : companyAppointments) {
-            if (appointment.getCompanyId() == companyId && appointment.getStatus() == AppointmentStatus.PENDING) {
-                throw new RuntimeException("User already has a pending appointment in this company");
-            }
+        CompanyAppointment activeAppointment = getActiveCompanyAppointments(companyId);
+        if (activeAppointment != null && activeAppointment.getRole() == CompanyRole.Owner) {
+            throw new RuntimeException("User already has an active appointment in this company");
         }
 
         CompanyAppointment appointment = CompanyAppointment.OwnerAppointment(
@@ -103,7 +101,7 @@ public class User implements InvariantChecked {
     }
 
     public void revokeManagerAppointment(int companyId, int revokerId) {
-        CompanyAppointment appointment = getAppointmentForCompany(companyId);
+        CompanyAppointment appointment = getActiveCompanyAppointments(companyId);
         if (appointment == null) {
             throw new RuntimeException("Cannot remove appointment: no appointment found for the specified company");
         }
@@ -111,13 +109,14 @@ public class User implements InvariantChecked {
     }
 
     // Returns the User's appointment in the given company, or null if absent.
-    public CompanyAppointment getAppointmentForCompany(int companyId) {
+    public List<CompanyAppointment> getAppointmentForCompany(int companyId) {
+        List<CompanyAppointment> appointments = new ArrayList<>();
         for (CompanyAppointment appointment : companyAppointments) {
             if (appointment.getCompanyId() == companyId) {
-                return appointment;
+                appointments.add(appointment);
             }
         }
-        return null;
+        return appointments.isEmpty() ? null : appointments;
     }
 
     // Helper for the "view my appointments" flow (UC-20) — returns only pending
@@ -165,31 +164,24 @@ public class User implements InvariantChecked {
     }
 
     public boolean hasPermissionInCompany(int companyId, Permission permission) {
-        CompanyAppointment appointment = getAppointmentForCompany(companyId);
+        CompanyAppointment appointment = getActiveCompanyAppointments(companyId);
         if (appointment == null) {
             return false;
         }
         return appointment.hasPermission(permission);
     }
 
-    public void setAsManager(int companyId) {
-        memberProfile.setAsManager(companyId);
-    }
-
-    public List<ManagementInvitation> getManagementInvitations() {
-        return this.managementInvitations;
-    }
-
-    public void ModifyManagerPermissions(int companyId, int inventorId, List<Permission> newPermissions) {
-        CompanyAppointment appointment = getAppointmentForCompany(companyId);
+    public void ModifyManagerPermissions(int companyId, int inviterId, List<Permission> newPermissions) {
+        CompanyAppointment appointment = getActiveCompanyAppointments(companyId);
         if (appointment == null) {
             throw new RuntimeException("No appointment found for the specified company");
         }
-        if (appointment.getInviterId() != inventorId) {
+        if (appointment.getInviterId() != inviterId) {// only the original appointer can modify permissions
             throw new RuntimeException("Only the original appointer can modify manager permissions");
-        }
-        if (appointment.getRole() != CompanyRole.Manager || appointment.getStatus() != AppointmentStatus.ACTIVE) {
-            throw new RuntimeException("Only active owners can modify manager permissions");
+        } // only Owners can be inviter, so there's no need to check inviter's permissions
+          // separately
+        if (appointment.getRole() != CompanyRole.Manager) {
+            throw new RuntimeException("Can only modify permissions for manager appointments");
         }
 
         appointment.setPermissions(EnumSet.copyOf(newPermissions));
@@ -224,10 +216,6 @@ public class User implements InvariantChecked {
         return hasher.matches(rawPassword, this.password);
     }
 
-    public MemberProfile getMemberProfile() {
-        return memberProfile;
-    }
-
     public List<CompanyAppointment> getAllCompanyAppointments() {
         return companyAppointments;
     }
@@ -251,9 +239,6 @@ public class User implements InvariantChecked {
         }
         if (password == null || password.isBlank()) {
             throw new IllegalStateException("User invariant violated: password hash must be non-blank");
-        }
-        if (managementInvitations == null) {
-            throw new IllegalStateException("User invariant violated: managementInvitations list must not be null");
         }
         if (companyAppointments == null) {
             throw new IllegalStateException("User invariant violated: companyAppointments list must not be null");

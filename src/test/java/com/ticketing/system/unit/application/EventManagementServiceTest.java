@@ -143,7 +143,7 @@ class EventManagementServiceTest {
                 MANAGER_ID,
                 OWNER_ID,
                 List.of(Permission.CONFIGURE_VENUE));
-        company.acceptManagerInvitation(MANAGER_ID);
+        company.addManager(MANAGER_ID);
 
         when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
@@ -224,7 +224,7 @@ class EventManagementServiceTest {
                 MANAGER_ID,
                 OWNER_ID,
                 List.of(Permission.MANAGE_INVENTORY));
-        company.acceptManagerInvitation(MANAGER_ID);
+        company.addManager(MANAGER_ID);
 
         when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
