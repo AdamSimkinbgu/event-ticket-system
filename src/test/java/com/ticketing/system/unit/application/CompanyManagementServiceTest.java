@@ -221,7 +221,7 @@ public class CompanyManagementServiceTest {
                 when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
 
-                companyService.RevokeManager(
+                companyService.RevokeAppointment(
                                 OWNER_TOKEN,
                                 COMPANY_ID,
                                 TARGET_USER_ID);
@@ -383,7 +383,7 @@ public class CompanyManagementServiceTest {
         public void GivenInvalidToken_WhenRevokeManager_ThenThrowException() {
                 when(sessionManager.validateToken("invalid-token")).thenReturn(false);
 
-                assertThrows(RuntimeException.class, () -> companyService.RevokeManager(
+                assertThrows(RuntimeException.class, () -> companyService.RevokeAppointment(
                                 "invalid-token",
                                 COMPANY_ID,
                                 TARGET_USER_ID));
@@ -398,7 +398,7 @@ public class CompanyManagementServiceTest {
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(3);
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
-                assertThrows(RuntimeException.class, () -> companyService.RevokeManager(
+                assertThrows(RuntimeException.class, () -> companyService.RevokeAppointment(
                                 OWNER_TOKEN,
                                 COMPANY_ID,
                                 TARGET_USER_ID));
@@ -415,7 +415,7 @@ public class CompanyManagementServiceTest {
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
                 when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
 
-                assertThrows(RuntimeException.class, () -> companyService.RevokeManager(
+                assertThrows(RuntimeException.class, () -> companyService.RevokeAppointment(
                                 OWNER_TOKEN,
                                 COMPANY_ID,
                                 TARGET_USER_ID));

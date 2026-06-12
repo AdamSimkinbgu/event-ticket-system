@@ -165,14 +165,14 @@ public class UserTest extends BaseDomainTest {
 
                 user.acceptInvitation(COMPANY_ID);
 
-                user.revokeManagerAppointment(COMPANY_ID, OWNER_ID);
+                user.revokeAppointment(COMPANY_ID, OWNER_ID);
 
                 assertEquals(null, user.getActiveCompanyAppointments(COMPANY_ID));
         }
 
         @Test
         public void GivenNoAppointment_WhenrevokeManagerAppointment_ThenThrowException() {
-                assertThrows(RuntimeException.class, () -> user.revokeManagerAppointment(COMPANY_ID, OWNER_ID));
+                assertThrows(RuntimeException.class, () -> user.revokeAppointment(COMPANY_ID, OWNER_ID));
         }
 
         @Test
@@ -184,7 +184,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.acceptInvitation(OTHER_COMPANY_ID);
 
-                assertThrows(RuntimeException.class, () -> user.revokeManagerAppointment(COMPANY_ID, OWNER_ID));
+                assertThrows(RuntimeException.class, () -> user.revokeAppointment(COMPANY_ID, OWNER_ID));
         }
 
         @Test

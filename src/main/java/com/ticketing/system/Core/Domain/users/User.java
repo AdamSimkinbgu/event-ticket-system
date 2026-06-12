@@ -100,7 +100,7 @@ public class User implements InvariantChecked {
         companyAppointments.add(appointment);
     }
 
-    public void revokeManagerAppointment(int companyId, int revokerId) {
+    public void revokeAppointment(int companyId, int revokerId) {
         CompanyAppointment appointment = getActiveCompanyAppointments(companyId);
         if (appointment == null) {
             throw new RuntimeException("Cannot remove appointment: no appointment found for the specified company");

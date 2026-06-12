@@ -101,7 +101,7 @@ class ProductionCompanyTest extends BaseDomainTest {
 
                 company.addManager(TARGET_USER_ID);
 
-                company.RevokeManager(TARGET_USER_ID);
+                company.RevokeAppointment(TARGET_USER_ID);
 
                 assertFalse(company.getManagers().containsKey(TARGET_USER_ID));
         }
@@ -217,7 +217,7 @@ class ProductionCompanyTest extends BaseDomainTest {
 
         @Test
         public void GivenTargetIsNotManager_WhenRevokeManager_ThenThrowException() {
-                assertThrows(RuntimeException.class, () -> company.RevokeManager(TARGET_USER_ID));
+                assertThrows(RuntimeException.class, () -> company.RevokeAppointment(TARGET_USER_ID));
         }
 
         @Test

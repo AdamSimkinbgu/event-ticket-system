@@ -285,7 +285,7 @@ class CompanyAcceptanceTest {
 
                 companyService.acceptManagerInvitation(manager.token(), companyId);
 
-                companyService.RevokeManager(
+                companyService.RevokeAppointment(
                                 owner.token(),
                                 companyId,
                                 manager.userId());

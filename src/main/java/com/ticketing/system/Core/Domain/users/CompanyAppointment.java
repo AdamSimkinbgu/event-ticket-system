@@ -125,10 +125,13 @@ public class CompanyAppointment {
             throw new IllegalStateException("Only active appointments can be revoked.");
         }
         if (this.role == CompanyRole.Owner) {
-            throw new UnsupportedOperationException("Owner appointments cannot be revoked.");
-        }
-        if (this.inviterId != revokerId) {
-            throw new IllegalArgumentException("Only the original inviter can revoke this appointment.");
+            if (this.inviterId != revokerId && this.targetId != revokerId) {
+                throw new IllegalArgumentException("Only the original inviter or target can revoke this appointment.");
+            }
+        } else {
+            if (this.inviterId != revokerId) {
+                throw new IllegalArgumentException("Only the original inviter can revoke this appointment.");
+            }
         }
         this.status = AppointmentStatus.REVOKED;
     }

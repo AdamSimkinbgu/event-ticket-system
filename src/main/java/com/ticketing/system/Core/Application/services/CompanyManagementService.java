@@ -15,6 +15,7 @@ import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO;
 import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
 import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
+import com.ticketing.system.Core.Application.dto.AppointmentRevokeDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dtoMappers.OrderReceiptMapper;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
@@ -33,6 +34,7 @@ import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+
 import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
 import java.util.regex.Pattern;
 
@@ -60,50 +62,51 @@ public class CompanyManagementService {
         this.ticketRepository = ticketRepository;
         this.eventRepository = eventRepository;
     }
-
-    public void inviteManager(String token, int companyId, int targetId, List<Permission> permissions) {
-        int ownerId = authenticate(token);
-        ProductionCompany company = companyRepository.getCompanyById(companyId);
-        if (company == null) {
-            log.warn("Company {} not found", companyId);
-            throw new RuntimeException("Company not found");
-        }
-        User owner = userRepository.getUserById(ownerId);
-        owner.requireOwnerInCompany(companyId);
-
-        User targetUser = userRepository.getUserById(targetId);
-        if (targetUser == null) {
-            log.warn("Target user {} not found", targetId);
-            throw new RuntimeException("Target user not found");
-        }
-
-        targetUser.receiveManagerAppointment(companyId, ownerId, permissions);
-        userRepository.updateUser(targetUser);
-        log.info("user invited succesfully");
-
-    }
-
-    public void acceptManagerInvitation(String token, int companyId) {
-        int targetId = authenticate(token);
-        User targetUser = userRepository.getUserById(targetId);
-        if (targetUser == null) {
-            log.warn("Target user {} not found", targetId);
-            throw new RuntimeException("Target user not found");
-        }
-
-        ProductionCompany company = companyRepository.getCompanyById(companyId);
-        if (company == null) {
-            log.warn("Company {} not found", companyId);
-            throw new RuntimeException("Company not found");
-        }
-
-        targetUser.acceptInvitation(companyId);
-        company.addManager(targetId);
-        userRepository.updateUser(targetUser);
-        companyRepository.updateCompany(company);
-        log.info("Manager invitation accepted successfully");
-    }
     /*
+     * public void inviteManager(String token, int companyId, int targetId,
+     * List<Permission> permissions) {
+     * int ownerId = authenticate(token);
+     * ProductionCompany company = companyRepository.getCompanyById(companyId);
+     * if (company == null) {
+     * log.warn("Company {} not found", companyId);
+     * throw new RuntimeException("Company not found");
+     * }
+     * User owner = userRepository.getUserById(ownerId);
+     * owner.requireOwnerInCompany(companyId);
+     * 
+     * User targetUser = userRepository.getUserById(targetId);
+     * if (targetUser == null) {
+     * log.warn("Target user {} not found", targetId);
+     * throw new RuntimeException("Target user not found");
+     * }
+     * 
+     * targetUser.receiveManagerAppointment(companyId, ownerId, permissions);
+     * userRepository.updateUser(targetUser);
+     * log.info("user invited succesfully");
+     * 
+     * }
+     * 
+     * public void acceptManagerInvitation(String token, int companyId) {
+     * int targetId = authenticate(token);
+     * User targetUser = userRepository.getUserById(targetId);
+     * if (targetUser == null) {
+     * log.warn("Target user {} not found", targetId);
+     * throw new RuntimeException("Target user not found");
+     * }
+     * 
+     * ProductionCompany company = companyRepository.getCompanyById(companyId);
+     * if (company == null) {
+     * log.warn("Company {} not found", companyId);
+     * throw new RuntimeException("Company not found");
+     * }
+     * 
+     * targetUser.acceptInvitation(companyId);
+     * company.addManager(targetId);
+     * userRepository.updateUser(targetUser);
+     * companyRepository.updateCompany(company);
+     * log.info("Manager invitation accepted successfully");
+     * }
+     * 
      * public void rejectManagerInvitation(String token, int companyId) {
      * int targetId = authenticate(token);
      * User targetUser = userRepository.getUserById(targetId);
@@ -118,30 +121,24 @@ public class CompanyManagementService {
      * }
      */
 
-    // TODO: fix this function
-    public void RevokeManager(String token, int companyId, int targetId) {
+    public void RevokeAppointment(String token, AppointmentRevokeDTO revokeRequest) {
         int ownerId = authenticate(token);
-        ProductionCompany company = companyRepository.getCompanyById(companyId);
-        User targetUser = userRepository.getUserById(targetId);
+        ProductionCompany company = companyRepository.getCompanyById(revokeRequest.companyId());
+        User targetUser = userRepository.getUserById(revokeRequest.targetUserId());
 
-        targetUser.revokeManagerAppointment(companyId, ownerId);
-        company.RevokeManager(targetId);
+        if (company.getFounderId() == revokeRequest.targetUserId()) {
+            log.warn("Cannot revoke appointment: target user {} is the founder of company {}",
+                    revokeRequest.targetUserId(), company.getCompanyId());
+            throw new RuntimeException("Cannot revoke appointment of the founder");
+        }
+
+        targetUser.revokeAppointment(revokeRequest.companyId(), ownerId);
+        company.RevokeAppointment(revokeRequest.targetUserId());
 
         userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
         log.info("Manager revoked successfully");
 
-    }
-
-    // TODO: delete this method after frontend integration, as the endpoint should
-    // accept a PermissionEditDTO, not separate args.
-    public void ModifyManagerPermissions(String token, int companyId, int targetId, List<Permission> newPermissions) {
-        editManagerPermissions(
-                token,
-                new PermissionEditDTO(
-                        companyId,
-                        targetId,
-                        newPermissions));
     }
 
     // ---------------------------------------------------------------------------

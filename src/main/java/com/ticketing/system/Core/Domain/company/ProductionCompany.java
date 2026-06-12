@@ -50,9 +50,11 @@ public class ProductionCompany implements InvariantChecked {
         managers.add(targetId);
     }
 
-    public void RevokeManager(int targetId) {
+    public void RevokeAppointment(int targetId) {
         if (managers.contains(targetId)) {
             managers.remove(targetId);
+        } else if (ownerIds.contains(targetId)) {
+            ownerIds.remove(Integer.valueOf(targetId));
         } else {
             throw new RuntimeException("User is not a manager");
         }
