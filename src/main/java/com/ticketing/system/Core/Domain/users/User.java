@@ -14,6 +14,8 @@ public class User implements InvariantChecked {
     private String email;
     private String password;
     private List<CompanyAppointment> companyAppointments;
+    // max num of pending appointments per user is 1 per company
+    // max num of active appointments per user is 1 per company (can be either manager or owner, not both)
 
     public User(int userId, String username, String email, String password) {
         this.userId = userId;
@@ -21,35 +23,41 @@ public class User implements InvariantChecked {
         this.email = email;
         this.password = password;
         this.companyAppointments = new ArrayList<>();
-        // Messaging is its own aggregate now (Conversation / IConversationRepository in
-        // messaging/);
-        // User no longer holds an inbox field.
     }
 
     public CompanyAppointment acceptInvitation(int companyId) {
-        CompanyAppointment appointment = getPendingCompanyAppointments(companyId);
+        CompanyAppointment appointment = getPendingCompanyAppointment(companyId);
         if (appointment == null) {
             throw new RuntimeException("Cannot accept invitation: no appointment found for the specified company");
         }
-        CompanyAppointment activeAppointment = getActiveCompanyAppointments(companyId);
+        CompanyAppointment activeAppointment = getActiveCompanyAppointment(companyId);
         if (activeAppointment != null) {
-            companyAppointments.remove(activeAppointment);
+            // If the user already has an active appointment in the company, accepting the new one will revoke the old one (per UC-23). 
+            // This can only happen if the pending appointment is an owner appointment, and the active current one is a manager appointment.
+            // because of the condition rules in the receive appointment methods.
+            companyAppointments.remove(activeAppointment); // doesn't even need to revoke because we remove completely for the list.
+            // // but we call revoke to trigger the permission checks and potential exceptions if the inviter doesn't have the right to revoke the old appointment.
+            // // so someone can't just make a manager into a new owner, without the original inviter of the manager, 
+            // // revoking his manager appointment first(only he can change because it's his manager that he appointed).
+            // activeAppointment.revoke(appointment.getInviterId());
         }
         appointment.accept();
         return appointment;
     }
 
     public void rejectInvitation(int companyId) {
-        CompanyAppointment appointment = getPendingCompanyAppointments(companyId);
+        CompanyAppointment appointment = getPendingCompanyAppointment(companyId);
         if (appointment == null) {
             throw new RuntimeException("Cannot reject invitation: no appointment found for the specified company");
         }
         appointment.reject();
-        ;
     }
 
+    // this receiveManagerAppointment method is used in the flow where an owner appoints a manager, and the manager receives the appointment. 
+    // The checks in this method ensure that the user doesn't already have an active or pending appointment in the company, which would prevent them from receiving 
+    // a new manager appointment. The appointment is created with the status PENDING, and will only become ACTIVE if the user accepts the invitation.
     public void receiveManagerAppointment(int companyId, int ownerid, List<Permission> permissions) {
-        if (getActiveCompanyAppointments(companyId) != null || getPendingCompanyAppointments(companyId) != null) {
+        if (getActiveCompanyAppointment(companyId) != null || getPendingCompanyAppointment(companyId) != null) {
             throw new RuntimeException("User already has an active or pending appointment in this company");
         }
 
@@ -63,8 +71,30 @@ public class User implements InvariantChecked {
         companyAppointments.add(appointment);
     }
 
+
+    // UC-24 owner appointment receive flow. Similar to manager receive but with different checks and appointment type.
+    public void receiveOwnerAppointment(int companyId, int appointerId) {
+        if (getPendingCompanyAppointment(companyId) != null) {
+            throw new RuntimeException("User already has an pending appointment in this company");
+        }
+        CompanyAppointment activeAppointment = getActiveCompanyAppointment(companyId);
+        if (activeAppointment != null && activeAppointment.getRole() == CompanyRole.Owner) {
+            throw new RuntimeException("User already has an active Owner appointment in this company");
+        }
+        // so if we got to here so the user has no pending appointment, and if they have an active appointment, it's a manager appointment, which is fine because they can be promoted to owner.
+        CompanyAppointment appointment = CompanyAppointment.OwnerAppointment(
+                0, // appointmentId would be generated by the repository in a real implementation
+                companyId,
+                this.userId,
+                appointerId);
+
+        companyAppointments.add(appointment);
+    }
+
+
+    // used in the create company flow, where the founder receives an owner appointment immediately, without going through the pending state, because they are active immediately.
     public void addFounderAppointment(int companyId) {
-        if (getActiveCompanyAppointments(companyId) != null || getPendingCompanyAppointments(companyId) != null) {
+        if (getActiveCompanyAppointment(companyId) != null || getPendingCompanyAppointment(companyId) != null) {
             throw new RuntimeException("User already has an active or pending appointment in this company");
         }
 
@@ -77,39 +107,41 @@ public class User implements InvariantChecked {
         companyAppointments.add(appointment);
     }
 
-    // add new pending owner appointment to target user. Will throw if target user
-    // already has an active or pending appointment in the company.
-    // note that the user cant call this method on themselves, only the appointer
-    // can call it on the target user, and the appointer must have permission to
-    // appoint (be an active owner or have APPOINT_MANAGER permission).
-    public void receiveOwnerAppointment(int companyId, int appointerId) {
-        if (getPendingCompanyAppointments(companyId) != null) {
-            throw new RuntimeException("User already has an pending appointment in this company");
-        }
-        CompanyAppointment activeAppointment = getActiveCompanyAppointments(companyId);
-        if (activeAppointment != null && activeAppointment.getRole() == CompanyRole.Owner) {
-            throw new RuntimeException("User already has an active appointment in this company");
-        }
 
-        CompanyAppointment appointment = CompanyAppointment.OwnerAppointment(
-                0, // appointmentId would be generated by the repository in a real implementation
-                companyId,
-                this.userId,
-                appointerId);
 
-        companyAppointments.add(appointment);
+    public void ModifyManagerPermissions(int companyId, int inviterId, List<Permission> newPermissions) {
+        CompanyAppointment appointment = getActiveCompanyAppointment(companyId);
+        if (appointment == null) {
+            throw new RuntimeException("No active appointment to edit found for the specified company");
+        }
+        if (appointment.getInviterId() != inviterId) {// only the original appointer can modify permissions
+            throw new RuntimeException("Only the original appointer can modify manager permissions");
+        } // only Owners can be inviter, so there's no need to check inviter's permissions
+          // separately
+        if (appointment.getRole() != CompanyRole.Manager) {
+            throw new RuntimeException("Can only modify permissions for manager appointments");
+        }
+        appointment.setPermissions(EnumSet.copyOf(newPermissions));
     }
+
+    
 
     public void revokeAppointment(int companyId, int revokerId) {
-        CompanyAppointment appointment = getActiveCompanyAppointments(companyId);
+        CompanyAppointment appointment = getActiveCompanyAppointment(companyId);
         if (appointment == null) {
-            throw new RuntimeException("Cannot remove appointment: no appointment found for the specified company");
+            throw new RuntimeException("Cannot remove appointment: no active appointment found to revoke for the specified company");
         }
         appointment.revoke(revokerId);
+        // logic of revoke rules inside of this revoke method, which will throw if the revoker doesn't have the right to revoke this appointment,
+        // so we don't need to check separately here.
     }
 
+
+
+
+
     // Returns the User's appointment in the given company, or null if absent.
-    public List<CompanyAppointment> getAppointmentForCompany(int companyId) {
+    public List<CompanyAppointment> getAppointmentsForCompany(int companyId) {
         List<CompanyAppointment> appointments = new ArrayList<>();
         for (CompanyAppointment appointment : companyAppointments) {
             if (appointment.getCompanyId() == companyId) {
@@ -120,7 +152,7 @@ public class User implements InvariantChecked {
     }
 
     // Helper for the "view my appointments" flow (UC-20) — returns only pending
-    public CompanyAppointment getActiveCompanyAppointments(int companyId) {
+    public CompanyAppointment getActiveCompanyAppointment(int companyId) {
         for (CompanyAppointment appointment : companyAppointments) {
             if (appointment.getCompanyId() == companyId && appointment.getStatus() == AppointmentStatus.ACTIVE) {
                 return appointment;
@@ -131,7 +163,7 @@ public class User implements InvariantChecked {
 
     // returns all pending appointments, which includes both invitations (for
     // managers) and ownership appointments awaiting acceptance.
-    public CompanyAppointment getPendingCompanyAppointments(int companyId) {
+    public CompanyAppointment getPendingCompanyAppointment(int companyId) {
         for (CompanyAppointment appointment : companyAppointments) {
             if (appointment.getCompanyId() == companyId && appointment.getStatus() == AppointmentStatus.PENDING) {
                 return appointment;
@@ -140,11 +172,14 @@ public class User implements InvariantChecked {
         return null;
     }
 
+
     // Helper for permission-checking flows (UC-19/21/22/24).
     public boolean isOwnerInCompany(int companyId) {
-        CompanyAppointment appointment = getActiveCompanyAppointments(companyId);
+        CompanyAppointment appointment = getActiveCompanyAppointment(companyId);
         return appointment != null && appointment.getRole() == CompanyRole.Owner;
     }
+
+    //? these 2 functions above and below are the same logic, the below one throws and the above one returns boolean.
 
     // Will throw if the user is not an active owner in the company. Used to secure
     public void requireOwnerInCompany(int companyId) {
@@ -152,6 +187,8 @@ public class User implements InvariantChecked {
             throw new RuntimeException("User is not an owner in this company");
         }
     }
+
+
 
     /**
      * Will throw if the user doesn't have the specified permission in the company.
@@ -163,29 +200,17 @@ public class User implements InvariantChecked {
         }
     }
 
+    //? these 2 functions above and below are the same logic, the above one throws and the below one returns boolean.
+
     public boolean hasPermissionInCompany(int companyId, Permission permission) {
-        CompanyAppointment appointment = getActiveCompanyAppointments(companyId);
+        CompanyAppointment appointment = getActiveCompanyAppointment(companyId);
         if (appointment == null) {
             return false;
         }
         return appointment.hasPermission(permission);
     }
 
-    public void ModifyManagerPermissions(int companyId, int inviterId, List<Permission> newPermissions) {
-        CompanyAppointment appointment = getActiveCompanyAppointments(companyId);
-        if (appointment == null) {
-            throw new RuntimeException("No appointment found for the specified company");
-        }
-        if (appointment.getInviterId() != inviterId) {// only the original appointer can modify permissions
-            throw new RuntimeException("Only the original appointer can modify manager permissions");
-        } // only Owners can be inviter, so there's no need to check inviter's permissions
-          // separately
-        if (appointment.getRole() != CompanyRole.Manager) {
-            throw new RuntimeException("Can only modify permissions for manager appointments");
-        }
-
-        appointment.setPermissions(EnumSet.copyOf(newPermissions));
-    }
+    
 
     // ---------------------------------------------------------------------------
     // Skeleton additions — accessors + secure password change.
@@ -220,11 +245,10 @@ public class User implements InvariantChecked {
         return companyAppointments;
     }
 
-    // UC-11 / future profile-edit — domain receives already-hashed password (per
-    // lecture 2).
-    public void changePassword(String newHashedPassword) {
-        throw new UnsupportedOperationException("UC-11: not implemented");
-    }
+    // UC-11 / future profile-edit — domain receives already-hashed password (per lecture 2). Cancelled for current work plan.
+    // public void changePassword(String newHashedPassword) {
+    //     throw new UnsupportedOperationException("UC-11: not implemented");
+    // }
 
     @Override
     public void checkInvariants() {

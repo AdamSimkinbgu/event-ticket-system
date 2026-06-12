@@ -34,7 +34,6 @@ class ProductionCompanyTest extends BaseDomainTest {
                                 COMPANY_1_DESCRIPTION, COMPANY_1_RATING));
 
                 defaultPermissions = new ArrayList<>();
-                defaultPermissions.add(Permission.APPOINT_MANAGER);
                 defaultPermissions.add(Permission.MANAGE_INVENTORY);
         }
 

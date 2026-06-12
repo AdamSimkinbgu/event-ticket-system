@@ -27,6 +27,9 @@ public class ProductionCompany implements InvariantChecked {
     private List<PurchasePolicy> purchasePolicies;
     private List<Integer> managers;
 
+    // here the owners and managers list are just for auditing, that sector is actually managed by the appointments in the users, so these lists are just a snapshot of the current state of appointments. 
+    // The source of truth for appointments is still the users' appointments list, and these lists should be kept in sync with that.
+
     public ProductionCompany(int companyId, int founderId, String name, CompanyStatus companyStatus, String description,
             Double rating) {
         this.companyId = companyId;
@@ -50,13 +53,72 @@ public class ProductionCompany implements InvariantChecked {
         managers.add(targetId);
     }
 
+
+    /**
+     * Add a new owner. Caller (the {@code actorId}) must already be an owner.
+     * No-op if {@code newOwnerId} is already an owner.
+     *
+     * @throws UnauthorizedActionException
+     * if {@code actorId} is not an owner
+     */
+    public void addOwner(int actorId, int newOwnerId) {
+        if (!isOwner(actorId)) {
+            throw new UnauthorizedActionException("Only existing owners can add new owners");
+        }
+        if (this.ownerIds.contains(newOwnerId)) {
+            return;
+        }
+        if (this.managers.contains(newOwnerId)) {
+            // If the new owner is currently a manager, they should be removed from the managers list, upgrade.
+            managers.remove(Integer.valueOf(newOwnerId));
+        }
+        this.ownerIds.add(newOwnerId);
+    }
+
+    /**
+     * Remove an owner. Caller must be an owner. The founder cannot be removed.
+     * @throws UnauthorizedActionException
+     * if {@code actorId} is not an owner.
+     * @throws IllegalStateException                                                   
+     * if {@code targetId} is the founder, or {@code targetId} is not an owner.
+     */
+    public void removeOwner(int actorId, int targetId) {
+        if (!isOwner(actorId)) {
+            throw new UnauthorizedActionException("Only owners can remove other owners");
+        }
+        if (targetId == this.founderId) {
+            throw new IllegalStateException("The founder cannot be removed as owner");
+        }
+        if (!this.ownerIds.contains(targetId)) {
+            throw new IllegalStateException("User is not an owner of this company");
+        }
+        this.ownerIds.remove(Integer.valueOf(targetId));
+    }
+
+    /**
+     * Self-resign as owner. The founder cannot resign (their two roles —
+     * founder and owner — are immutably coupled).
+     * @throws IllegalStateException if the caller is the founder or not an owner
+     */
+    public void resignAsOwner(int userId) {
+        if (userId == this.founderId) {
+            throw new IllegalStateException("The founder cannot resign as owner");
+        }
+        if (!this.ownerIds.contains(userId)) {
+            throw new IllegalStateException("User is not an owner of this company");
+        }
+        this.ownerIds.remove(Integer.valueOf(userId));
+    }
+
+
+    // general appointment revoke for manager or owner, whatever is active for the target user right now.
     public void RevokeAppointment(int targetId) {
         if (managers.contains(targetId)) {
             managers.remove(Integer.valueOf(targetId));
         } else if (ownerIds.contains(targetId)) {
             ownerIds.remove(Integer.valueOf(targetId));
         } else {
-            throw new RuntimeException("User is not a manager");
+            throw new RuntimeException("User is not a manager or owner, cannot revoke appointment");
         }
     }
 
@@ -90,81 +152,7 @@ public class ProductionCompany implements InvariantChecked {
         return this.ownerIds.contains(userId);
     }
 
-    /**
-     * Add a new owner. Caller (the {@code actorId}) must already be an owner.
-     * No-op if {@code newOwnerId} is already an owner.
-     *
-     * @throws com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException
-     *                                                                                 if
-     *                                                                                 {@code actorId}
-     *                                                                                 is
-     *                                                                                 not
-     *                                                                                 an
-     *                                                                                 owner
-     */
-    public void addOwner(int actorId, int newOwnerId) {
-        if (!isOwner(actorId)) {
-            throw new UnauthorizedActionException("Only existing owners can add new owners");
-        }
-        if (this.ownerIds.contains(newOwnerId)) {
-            return;
-        }
-        if (this.managers.contains(newOwnerId)) {
-            managers.remove(Integer.valueOf(newOwnerId));
-        }
-        this.ownerIds.add(newOwnerId);
-    }
-
-    /**
-     * Remove an owner. Caller must be an owner. The founder cannot be removed.
-     *
-     * @throws com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException
-     *                                                                                 if
-     *                                                                                 {@code actorId}
-     *                                                                                 is
-     *                                                                                 not
-     *                                                                                 an
-     *                                                                                 owner
-     * @throws IllegalStateException                                                   if
-     *                                                                                 {@code targetId}
-     *                                                                                 is
-     *                                                                                 the
-     *                                                                                 founder,
-     *                                                                                 or
-     *                                                                                 {@code targetId}
-     *                                                                                 is
-     *                                                                                 not
-     *                                                                                 an
-     *                                                                                 owner
-     */
-    public void removeOwner(int actorId, int targetId) {
-        if (!isOwner(actorId)) {
-            throw new UnauthorizedActionException("Only owners can remove other owners");
-        }
-        if (targetId == this.founderId) {
-            throw new IllegalStateException("The founder cannot be removed as owner");
-        }
-        if (!this.ownerIds.contains(targetId)) {
-            throw new IllegalStateException("User is not an owner of this company");
-        }
-        this.ownerIds.remove(Integer.valueOf(targetId));
-    }
-
-    /**
-     * Self-resign as owner. The founder cannot resign (their two roles —
-     * founder and owner — are immutably coupled).
-     *
-     * @throws IllegalStateException if the caller is the founder or not an owner
-     */
-    public void resignAsOwner(int userId) {
-        if (userId == this.founderId) {
-            throw new IllegalStateException("The founder cannot resign as owner");
-        }
-        if (!this.ownerIds.contains(userId)) {
-            throw new IllegalStateException("User is not an owner of this company");
-        }
-        this.ownerIds.remove(Integer.valueOf(userId));
-    }
+    
 
     public CompanyStatus getStatus() {
         return this.companyStatus;
@@ -270,8 +258,6 @@ public class ProductionCompany implements InvariantChecked {
         if (!ownerIds.contains(founderId)) {
             throw new IllegalStateException("ProductionCompany invariant violated: founder must always be in ownerIds");
         }
-        // No user can be in both pending and active manager maps simultaneously
-
         // No owner can also be a manager (the roles are mutually exclusive)
         for (Integer ownerIdEntry : ownerIds) {
             if (managers.contains(ownerIdEntry)) {

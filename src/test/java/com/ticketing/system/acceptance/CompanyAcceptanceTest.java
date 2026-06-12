@@ -192,8 +192,8 @@ class CompanyAcceptanceTest {
 
                 User managerUser = userRepository.getUserById(manager.userId());
 
-                assertNotEquals(null, managerUser.getPendingCompanyAppointments(companyId));
-                assertEquals(permissions, managerUser.getPendingCompanyAppointments(companyId).getPermissions().stream()
+                assertNotEquals(null, managerUser.getPendingCompanyAppointment(companyId));
+                assertEquals(permissions, managerUser.getPendingCompanyAppointment(companyId).getPermissions().stream()
                                 .toList());
         }
 
@@ -221,7 +221,7 @@ class CompanyAcceptanceTest {
                 User managerUser = userRepository.getUserById(manager.userId());
 
                 assertEquals(updated,
-                                managerUser.getActiveCompanyAppointments(companyId).getPermissions().stream().toList());
+                                managerUser.getActiveCompanyAppointment(companyId).getPermissions().stream().toList());
         }
 
         @Test
@@ -247,7 +247,7 @@ class CompanyAcceptanceTest {
 
                 User managerUser = userRepository.getUserById(manager.userId());
                 assertEquals(original,
-                                managerUser.getActiveCompanyAppointments(companyId).getPermissions().stream().toList());
+                                managerUser.getActiveCompanyAppointment(companyId).getPermissions().stream().toList());
         }
 
         @Test
@@ -272,7 +272,7 @@ class CompanyAcceptanceTest {
 
                 User managerUser = userRepository.getUserById(manager.userId());
 
-                assertNull(managerUser.getActiveCompanyAppointments(companyId));
+                assertNull(managerUser.getActiveCompanyAppointment(companyId));
         }
 
         // UC-25

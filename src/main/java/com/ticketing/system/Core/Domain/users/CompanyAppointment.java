@@ -59,7 +59,7 @@ public class CompanyAppointment {
                 targetId,
                 inviterId,
                 CompanyRole.Owner,
-                AppointmentStatus.ACTIVE,
+                AppointmentStatus.ACTIVE,  // active because the founder is active immediately, used when opening a company.
                 null);
     }
 
@@ -118,14 +118,14 @@ public class CompanyAppointment {
         this.status = AppointmentStatus.REJECTED;
     }
 
-    // UC-24 — ACTIVE -> REVOKED. Owner appointments do NOT support revoke (II.4.9
-    // Cancelled in v0).
+    // UC-24 — ACTIVE -> REVOKED. Owner appointments do NOT support revoke (II.4.9 Cancelled in v0).
     public void revoke(int revokerId) {
         if (this.status != AppointmentStatus.ACTIVE) {
             throw new IllegalStateException("Only active appointments can be revoked.");
         }
         if (this.role == CompanyRole.Owner) {
             if (this.inviterId != revokerId && this.targetId != revokerId) {
+                // if the appointment is an owner appointment, either the original inviter or the target themselves can revoke it (per UC-24 owner revoke condition).
                 throw new IllegalArgumentException("Only the original inviter or target can revoke this appointment.");
             }
         } else {
@@ -160,13 +160,10 @@ public class CompanyAppointment {
         }
         return this.permissions.contains(permission);
     }
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+    
+    
     /// Getters for all fields (no setters except for permissions, as role/status
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////// are
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////// managed
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////// via
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////// methods).
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// changes are handled by specific methods above to enforce lifecycle rules).
 
     public int getCompanyId() {
         return this.companyId;

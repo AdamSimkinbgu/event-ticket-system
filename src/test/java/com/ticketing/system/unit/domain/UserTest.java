@@ -33,7 +33,6 @@ public class UserTest extends BaseDomainTest {
                 owner = track(new User(OWNER_ID, "owner", "owner@example.com", "password"));
 
                 defaultPermissions = new ArrayList<>();
-                defaultPermissions.add(Permission.APPOINT_MANAGER);
                 defaultPermissions.add(Permission.CONFIGURE_VENUE);
                 defaultPermissions.add(Permission.MANAGE_INVENTORY);
                 owner.addFounderAppointment(COMPANY_ID);
@@ -70,7 +69,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.acceptInvitation(COMPANY_ID);
 
-                assertEquals(null, user.getPendingCompanyAppointments(COMPANY_ID));
+                assertEquals(null, user.getPendingCompanyAppointment(COMPANY_ID));
         }
 
         @Test
@@ -82,7 +81,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.acceptInvitation(COMPANY_ID);
 
-                assertNotEquals(null, user.getActiveCompanyAppointments(COMPANY_ID));
+                assertNotEquals(null, user.getActiveCompanyAppointment(COMPANY_ID));
         }
 
         @Test
@@ -108,7 +107,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.rejectInvitation(COMPANY_ID);
 
-                assertEquals(null, user.getPendingCompanyAppointments(COMPANY_ID));
+                assertEquals(null, user.getPendingCompanyAppointment(COMPANY_ID));
         }
 
         @Test
@@ -120,7 +119,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.rejectInvitation(COMPANY_ID);
 
-                assertEquals(null, user.getActiveCompanyAppointments(COMPANY_ID));
+                assertEquals(null, user.getActiveCompanyAppointment(COMPANY_ID));
         }
 
         @Test
@@ -164,7 +163,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.revokeAppointment(COMPANY_ID, OWNER_ID);
 
-                assertEquals(null, user.getActiveCompanyAppointments(COMPANY_ID));
+                assertEquals(null, user.getActiveCompanyAppointment(COMPANY_ID));
         }
 
         @Test
@@ -201,7 +200,7 @@ public class UserTest extends BaseDomainTest {
                                 OWNER_ID,
                                 newPermissions);
 
-                CompanyAppointment appointment = user.getActiveCompanyAppointments(COMPANY_ID);
+                CompanyAppointment appointment = user.getActiveCompanyAppointment(COMPANY_ID);
 
                 assertEquals(newPermissions, appointment.getPermissions().stream().toList());
         }

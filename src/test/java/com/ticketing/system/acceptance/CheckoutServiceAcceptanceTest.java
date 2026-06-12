@@ -649,15 +649,15 @@ public class CheckoutServiceAcceptanceTest {
                 .when(notificationService)
                 .notifyPurchaseCompleted(anyInt(), anyDouble(), anyList());
 
-        RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
-        );
+        RuntimeException exception = assertThrows(RuntimeException.class,
+                () -> checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN));
 
         assertEquals(true, refundRequested.get());
         assertEquals(1, returnedTickets.get());
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
     }
 
+    //TODO:   THIS TEST IS PROBLEMATIC        <----------------------           <--------------------          <----------------
     @Test
     void GivenTwoUsersCheckoutSameReservedTicketConcurrently_WhenCheckout_ThenOnlyOneCheckoutSucceeds() throws Exception {
         validSession();
