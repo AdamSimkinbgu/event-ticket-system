@@ -173,7 +173,7 @@ class EventManagementServiceTest {
     public void GivenCompanyDoesNotExist_WhenUpdateZoneCapacity_ThenThrowException() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenThrow(RuntimeException.class);
 
         assertThrows(RuntimeException.class, () -> eventService.updateStandingZoneCapacity(
                 OWNER_TOKEN,
@@ -188,7 +188,7 @@ class EventManagementServiceTest {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-        when(mockEventRepo.findById(EVENT_ID)).thenReturn(null);
+        when(mockEventRepo.findById(EVENT_ID)).thenThrow(RuntimeException.class);
 
         assertThrows(RuntimeException.class, () -> eventService.updateStandingZoneCapacity(
                 OWNER_TOKEN,
@@ -299,7 +299,7 @@ class EventManagementServiceTest {
     public void GivenEventDoesNotExist_WhenCancelEventAndRefund_ThenThrowException() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-        when(mockEventRepo.findById(EVENT_ID)).thenReturn(null);
+        when(mockEventRepo.findById(EVENT_ID)).thenThrow(RuntimeException.class);
 
         assertThrows(RuntimeException.class, () -> eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID));
     }
@@ -309,7 +309,7 @@ class EventManagementServiceTest {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
-        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenThrow(RuntimeException.class);
 
         assertThrows(RuntimeException.class, () -> eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID));
     }

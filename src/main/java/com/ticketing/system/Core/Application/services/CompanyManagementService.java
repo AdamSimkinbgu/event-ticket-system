@@ -21,6 +21,7 @@ import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
@@ -73,8 +74,17 @@ public class CompanyManagementService {
             throw new IllegalArgumentException("companyId and targetUserId must be positive integers");
         }
         int appointerId = authenticate(token);
-        User appointer = userRepository.getUserById(appointerId);
-        User targetUser = userRepository.getUserById(request.targetUserId());
+        
+        User appointer = null;
+        User targetUser = null;
+        try {
+            appointer = userRepository.getUserById(appointerId);
+            targetUser = userRepository.getUserById(request.targetUserId());
+        } catch (UserNotFoundException e) {
+            log.warn("User appointer/appointee not found during appointment: {}", e.getMessage());
+            throw new RuntimeException("User not found");
+        }
+        
 
         appointer.requireOwnerInCompany(request.companyId()); // check if appointer has permissions
         targetUser.receiveOwnerAppointment(request.companyId(), appointerId); // target user receives pending owner
@@ -148,7 +158,14 @@ public class CompanyManagementService {
     // UC-24 — edit a Manager's permission set (only by the original appointer).
     public void editManagerPermissions(String token, PermissionEditDTO edit) {
         int ownerId = authenticate(token);
-        User manager = userRepository.getUserById(edit.targetUserId());
+        
+        User manager = null;
+        try {
+            manager = userRepository.getUserById(edit.targetUserId());
+        } catch (UserNotFoundException e) {
+            log.warn("Manager not found during permission edit: {}", e.getMessage());
+            throw new RuntimeException("Manager not found");
+        }
         
         if (edit.newPermissions() == null || edit.newPermissions().isEmpty()) {
             log.warn("Invalid permission edit: newPermissions list cannot be null or empty");

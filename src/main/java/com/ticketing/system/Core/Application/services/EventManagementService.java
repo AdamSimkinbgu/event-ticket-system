@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
+import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Application.dto.EventCreationDTO;
@@ -89,9 +90,19 @@ public class EventManagementService {
     // UC-19 — Owner adds an Event in DRAFT state.
     public EventDetailDTO addEvent(String token, EventCreationDTO request) {
         int ownerId = validateTokenAndGetUserId(token);
-        ProductionCompany company = companyRepository.getCompanyById(request.companyId());
+
+        ProductionCompany company = null;
+        //TODO: see about all the other exceptions throws handlings/catches.
+        try {
+            company = companyRepository.getCompanyById(request.companyId());
+        } catch (RuntimeException e) {
+            log.error("Error - company not found: {}, {}", request.companyId(), e.getMessage());
+            throw new RuntimeException("Company not found");
+        }
+
         User user = userRepository.getUserById(ownerId);
         user.requirePermissionInCompany(request.companyId(), Permission.CONFIGURE_VENUE);
+        
 
         int newEventId = eventRepository.nextId();
         VenueMap venueMap = new VenueMap(1, request.location(), List.of()); // TODO: need an incremantal ID counter for
@@ -131,9 +142,12 @@ public class EventManagementService {
         User user = userRepository.getUserById(userId);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         user.requirePermissionInCompany(companyId, Permission.CONFIGURE_VENUE);
-
-        Event event = eventRepository.findById(Integer.parseInt(config.eventId()));
-        if (event == null) {
+        
+        Event event = null;
+        try {
+            event = eventRepository.findById(Integer.parseInt(config.eventId()));
+        } catch (EventNotFoundException e) {
+            log.warn("Event {} not found", config.eventId());
             throw new RuntimeException("Event not found");
         }
 
@@ -198,10 +212,7 @@ public class EventManagementService {
         eventRepository.lockForUpdate(eventId);
 
         try {
-            Event event = eventRepository.findById(eventId);
-            if (event == null) {
-                throw new RuntimeException("Event not found");
-            }
+            Event event = eventRepository.findById(eventId); // throws if not found, which is what we want here.
             ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
             User user = userRepository.getUserById(ownerId);
             user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
@@ -290,6 +301,16 @@ public class EventManagementService {
 
             log.info("Event {} canceled and refund flow completed", eventId);
 
+        } catch (EventNotFoundException e) {    //TODO: check if these Catches are good
+            log.warn("Event {} not found for cancellation", eventId);
+            throw new RuntimeException("Event not found");
+        } catch (RefundFailedException e) {
+            log.error("Refund failed during cancellation of event {}: {}", eventId, e.getMessage());
+            throw new RuntimeException("Refund failed: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error during cancellation of event {}: {}", eventId, e.getMessage());
+            throw new RuntimeException("Error during cancellation: " + e.getMessage());
+
         } finally {
             eventRepository.unlock(eventId);
         }
@@ -322,11 +343,22 @@ public class EventManagementService {
 
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
+        
+        // check if company id exists
+        ProductionCompany company = null;
+        try {
+            company = companyRepository.getCompanyById(company_id);
+        } catch (RuntimeException e) {
+            log.error("Error - company not found: {}, {}", company_id, e.getMessage());
+            throw new RuntimeException("Company not found");
+        }
+
         user.requirePermissionInCompany(company_id, Permission.CONFIGURE_VENUE);
 
-        Event event = eventRepository.findById(event_id);
-
-        if (event == null) {
+        Event event = null;
+        try {
+            event = eventRepository.findById(event_id);
+        } catch (EventNotFoundException e) {
             log.warn("Event {} not found", event_id);
             throw new RuntimeException("Event not found");
         }
