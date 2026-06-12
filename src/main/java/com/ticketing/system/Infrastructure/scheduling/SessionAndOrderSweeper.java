@@ -2,7 +2,6 @@ package com.ticketing.system.Infrastructure.scheduling;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -119,7 +118,7 @@ public class SessionAndOrderSweeper {
     
     /**
      * Groups the cart's line items by (eventId, zoneId) and releases the
-     * aggregated quantity per zone via {@link Event#releaseTickets(int, int)},
+     * aggregated quantity per zone via {@link Event#releaseInventory(int, InventorySelection)},
      * matching what {@code CheckoutService.returnTicketsToStock} does on
      * failed checkout.
      */

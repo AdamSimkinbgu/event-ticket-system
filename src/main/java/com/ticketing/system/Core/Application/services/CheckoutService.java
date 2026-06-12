@@ -116,6 +116,7 @@ public class CheckoutService {
                 return cached;
             }
 
+            //* locks activeOrder before event. Good — no deadlock risk between them. Just keep this rule in mind for any future service that touches both.
             orderLockKey = memberOrderLockKey(userId);
             activeOrderRepository.lockForUpdate(orderLockKey);
 
