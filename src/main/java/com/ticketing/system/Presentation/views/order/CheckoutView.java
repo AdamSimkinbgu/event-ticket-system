@@ -105,6 +105,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     // ── live UI references — updated by syncDynamicUI() ───────────────────
     private Div    linesContainer;
     private Span   subtotalSpan;
+    private Span   serviceFeeSpan;
     private Span   totalSpan;
     private Button payButton;
     private Span   timerSpan;
@@ -320,8 +321,9 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         }
 
         // Update totals
-        if (subtotalSpan != null) subtotalSpan.setText(formatCents(subtotalCents));
-        if (totalSpan    != null) totalSpan.setText(formatCents(totalCents));
+        if (subtotalSpan   != null) subtotalSpan.setText(formatCents(subtotalCents));
+        if (serviceFeeSpan != null) serviceFeeSpan.setText(formatCents(totalCents > 0 ? SERVICE_FEE_CENTS : 0L));
+        if (totalSpan      != null) totalSpan.setText(formatCents(totalCents));
 
         // Update pay button
         if (payButton != null) {
@@ -413,13 +415,14 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         foot.add(couponRow);
 
         // Totals — Span references kept for syncDynamicUI()
-        subtotalSpan = new Span(formatCents(subtotalCents));
-        totalSpan    = new Span(formatCents(totalCents));
+        subtotalSpan    = new Span(formatCents(subtotalCents));
+        serviceFeeSpan  = new Span(formatCents(totalCents > 0 ? SERVICE_FEE_CENTS : 0L));
+        totalSpan       = new Span(formatCents(totalCents));
 
         LkCol totals = new LkCol().gap(6);
         totals.getStyle().set("margin-top", "12px");
         totals.add(summaryRow("Subtotal",    subtotalSpan, false));
-        totals.add(summaryRow("Service fee", new Span(formatCents(SERVICE_FEE_CENTS)), false));
+        totals.add(summaryRow("Service fee", serviceFeeSpan, false));
         totals.add(summaryRow("Total",       totalSpan, true));
         foot.add(totals);
 

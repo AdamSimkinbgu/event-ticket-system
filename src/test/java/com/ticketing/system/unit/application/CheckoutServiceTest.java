@@ -2260,7 +2260,7 @@ private AtomicBoolean trackReceiptSave() {
     @Test
     void GivenPaymentGatewayFails_WhenGuestCheckout_ThenThrowExceptionAndReturnTicketsToStock() {
         givenValidGuestSession();
-
+;
         StandingZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
         zone.reserve(InventorySelection.standing(1));
 
