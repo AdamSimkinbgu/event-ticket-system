@@ -664,8 +664,19 @@ private void safelyReleaseAndDelete(ActiveOrder order) {
 
     // Helper method to view the current active order for a user (member or guest). For members, we look up the active order by their user ID. For guests, we look up the active order by their session ID. If an active order is found, we convert it to an ActiveOrderDTO and return it. If no active order is found, we return null. This allows the frontend to show the user their current reservations in the cart when they navigate to the cart page, etc.
     public ActiveOrderDTO viewMyActiveOrder(String userOrSessionId) {
-        throw new UnsupportedOperationException("UC-5/9: not implemented");
+    if (userOrSessionId == null || userOrSessionId.isBlank()) {
+        return null;
     }
+    try {
+    if (iSessionManager.validateToken(userOrSessionId)) {
+        int userId = iSessionManager.extractUserId(userOrSessionId);
+        return restoreActiveOrder(userId);
+    }
+} catch (Exception ignored) {
+    // not a JWT token — fall through to guest path
+}
+return restoreActiveOrderForGuest(userOrSessionId);
+}
 
 
 
