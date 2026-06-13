@@ -23,4 +23,6 @@ public class OrPurchasePolicy implements PurchasePolicy {
     public String getFailureMessage() {
         return leftPolicy.getFailureMessage() + " OR " + rightPolicy.getFailureMessage();
     }
+    public PurchasePolicy getLeftPolicy()  { return leftPolicy; }
+public PurchasePolicy getRightPolicy() { return rightPolicy; }
 }

@@ -23,4 +23,6 @@ public class AndPurchasePolicy implements PurchasePolicy {
     public String getFailureMessage() {
         return leftPolicy.getFailureMessage() + " AND " + rightPolicy.getFailureMessage();
     }
+    public PurchasePolicy getLeftPolicy()  { return leftPolicy; }
+public PurchasePolicy getRightPolicy() { return rightPolicy; }
 }

@@ -31,4 +31,5 @@ public class AgePurchasePolicy implements PurchasePolicy {
     public String getFailureMessage() {
         return "You must be at least " + minimumAge + " years old to buy tickets";
     }
+    public int getMinimumAge() { return minimumAge; }
 }

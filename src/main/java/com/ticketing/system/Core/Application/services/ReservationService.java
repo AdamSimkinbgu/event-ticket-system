@@ -22,11 +22,11 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 
+
 @Service
 @Slf4j
 public class 
 ReservationService {
-
     private final IEventRepository eventRepository;
     private final IActiveOrderRepository activeOrderRepository;
     private final ISessionManager iSessionManager;
@@ -44,6 +44,7 @@ ReservationService {
         this.activeOrderRepository = activeOrderRepository;
         this.iSessionManager = iSessionManager;
         this.notificationService = notificationService;
+
     }
 
 
@@ -665,6 +666,8 @@ private void safelyReleaseAndDelete(ActiveOrder order) {
     public ActiveOrderDTO viewMyActiveOrder(String userOrSessionId) {
         throw new UnsupportedOperationException("UC-5/9: not implemented");
     }
+
+
 
 
 }

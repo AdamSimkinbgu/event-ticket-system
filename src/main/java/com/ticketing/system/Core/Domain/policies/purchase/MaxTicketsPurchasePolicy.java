@@ -25,4 +25,5 @@ public class MaxTicketsPurchasePolicy implements PurchasePolicy {
     public String getFailureMessage() {
         return "You can buy at most " + maximumTickets + " tickets";
     }
+    public int getMaximumTickets() { return maximumTickets; }
 }

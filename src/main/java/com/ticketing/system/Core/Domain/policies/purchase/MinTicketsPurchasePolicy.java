@@ -24,5 +24,7 @@ public class MinTicketsPurchasePolicy implements PurchasePolicy {
     @Override
     public String getFailureMessage() {
         return "You must buy at least " + minimumTickets + " tickets";
+        
     }
+    public int getMinimumTickets() { return minimumTickets; }
 }
