@@ -629,9 +629,6 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
         return null;
     }
 
-    // ---------------------------------------------------------------------
-    // Helpers
-    // ---------------------------------------------------------------------
 
     private static String escape(String s) {
         return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
