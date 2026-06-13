@@ -110,8 +110,8 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
 
     private Span          plainEnglishText;
     private PolicyTreeMap mapPanel;
-    private int companyId = -1;
-    private int eventId   = -1;
+    private int     companyId    = -1;
+    private int     eventId      = -1;
     private boolean isEventLevel = true;
 
     // ---------------------------------------------------------------------
@@ -131,14 +131,14 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
         RouteParameters params = event.getRouteParameters();
+        params.get("companyId").ifPresent(id -> {
+            try { this.companyId = Integer.parseInt(id); }
+            catch (NumberFormatException ignored) { }
+        });
         params.get("eventId").ifPresent(id -> {
             try { this.eventId = Integer.parseInt(id); }
             catch (NumberFormatException ignored) { }
         });
-        params.get("companyId").ifPresent(id -> {
-    try { this.companyId = Integer.parseInt(id); }
-    catch (NumberFormatException ignored) { }
-});
 
         title("Purchase policies");
         subtitle("Click a node to edit it · drag the canvas to pan · scroll to zoom.");
@@ -149,8 +149,9 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
         add(buildActionBar());
         add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 18),
             "Validation rejects empty groups and circular nesting before a policy can be saved."));
-loadExistingPolicy();
-rebuildTree();
+
+        loadExistingPolicy();
+        rebuildTree();
     }
 
     private static Composite seedSamplePolicy() {
@@ -163,42 +164,44 @@ rebuildTree();
         return andRoot;
     }
 
-// ---------------------------------------------------------------------
-// Load existing policy from backend
-// ---------------------------------------------------------------------
+    // ---------------------------------------------------------------------
+    // Load existing policy from backend
+    // ---------------------------------------------------------------------
 
-private void loadExistingPolicy() {
-    try {
-        String token = resolveToken();
-        if (token == null || companyId <= 0) return;
-        PurchasePolicyDTO dto = isEventLevel && eventId > 0
-            ? eventManagementService.getEventPurchasePolicy(token, companyId, eventId)
-            : companyManagementService.getCompanyPurchasePolicy(token, companyId);
-        if (dto != null && !"NONE".equals(dto.type())) {
-            root.children.clear();
-            root.op = Op.valueOf(dto.type());
-            for (PurchasePolicyDTO child : dto.children()) {
-                root.children.add(dtoToNode(child));
+    private void loadExistingPolicy() {
+        try {
+            String token = resolveToken();
+            if (token == null || companyId <= 0) return;
+            PurchasePolicyDTO dto = isEventLevel && eventId > 0
+                ? eventManagementService.getEventPurchasePolicy(token, companyId, eventId)
+                : companyManagementService.getCompanyPurchasePolicy(token, companyId);
+            if (dto != null && !"NONE".equals(dto.type())) {
+                root.children.clear();
+                root.op = Op.valueOf(dto.type());
+                if (dto.children() != null) {
+                    for (PurchasePolicyDTO child : dto.children())
+                        root.children.add(dtoToNode(child));
+                }
             }
-        }
-    } catch (Exception ignored) { }
-}
+        } catch (Exception ignored) { }
+    }
 
-private Node dtoToNode(PurchasePolicyDTO dto) {
-    return switch (dto.type()) {
-        case "AGE"         -> new Rule(RuleType.AgeAtLeast,      String.valueOf(dto.minimumAge()));
-        case "MIN_TICKETS" -> new Rule(RuleType.QuantityAtLeast, String.valueOf(dto.minimumTickets()));
-        case "MAX_TICKETS" -> new Rule(RuleType.QuantityAtMost,  String.valueOf(dto.maximumTickets()));
-        case "AND", "OR"   -> {
-            Composite c = new Composite(Op.valueOf(dto.type()));
-            for (PurchasePolicyDTO child : dto.children()) c.children.add(dtoToNode(child));
-            yield c;
-        }
-        default -> new Rule(RuleType.AgeAtLeast, "0");
-    };
-}
-
-
+    private Node dtoToNode(PurchasePolicyDTO dto) {
+        return switch (dto.type()) {
+            case "AGE"         -> new Rule(RuleType.AgeAtLeast,      String.valueOf(dto.minimumAge()));
+            case "MIN_TICKETS" -> new Rule(RuleType.QuantityAtLeast, String.valueOf(dto.minimumTickets()));
+            case "MAX_TICKETS" -> new Rule(RuleType.QuantityAtMost,  String.valueOf(dto.maximumTickets()));
+            case "AND", "OR"   -> {
+                Composite c = new Composite(Op.valueOf(dto.type()));
+                if (dto.children() != null) {
+                    for (PurchasePolicyDTO child : dto.children())
+                        c.children.add(dtoToNode(child));
+                }
+                yield c;
+            }
+            default -> new Rule(RuleType.AgeAtLeast, "0");
+        };
+    }
 
     // ---------------------------------------------------------------------
     // Scope toolbar
@@ -228,11 +231,15 @@ private Node dtoToNode(PurchasePolicyDTO dto) {
             isEventLevel = false;
             companyBtn.addClassName("on");
             eventBtn.removeClassName("on");
+            loadExistingPolicy();
+            rebuildTree();
         });
         eventBtn.addClickListener(e -> {
             isEventLevel = true;
             eventBtn.addClassName("on");
             companyBtn.removeClassName("on");
+            loadExistingPolicy();
+            rebuildTree();
         });
 
         seg.add(companyBtn, eventBtn);
@@ -424,8 +431,7 @@ private Node dtoToNode(PurchasePolicyDTO dto) {
         Button cancel = new Button("Cancel", e -> d.close());
         cancel.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
         Button save = new Button("Save", e -> {
-            RuleType chosen = typeSelect.getValue();
-            r.type = chosen;
+            r.type  = typeSelect.getValue();
             r.value = valueField.getValue().trim();
             d.close();
             rebuildTree();
@@ -546,11 +552,11 @@ private Node dtoToNode(PurchasePolicyDTO dto) {
                 Toasts.failure("Not authenticated.");
                 return;
             }
+            if (companyId <= 0) {
+                Toasts.failure("No company selected.");
+                return;
+            }
 
-           if (companyId <= 0) {
-           Toasts.failure("No company selected.");
-               return;
-}
             PurchasePolicyDTO dto = nodeToDTO(root);
 
             if (isEventLevel) {
@@ -573,12 +579,17 @@ private Node dtoToNode(PurchasePolicyDTO dto) {
     }
 
     // ---------------------------------------------------------------------
-    // Node → PurchasePolicyDTO — maps exactly to Domain classes
+    // Node → PurchasePolicyDTO
     // ---------------------------------------------------------------------
 
     private PurchasePolicyDTO nodeToDTO(Node node) {
         if (node instanceof Rule r) {
-            int val = Integer.parseInt(r.value);
+            int val;
+            try {
+                val = Integer.parseInt(r.value);
+            } catch (NumberFormatException | NullPointerException e) {
+                return new PurchasePolicyDTO("NONE", null, null, null, null);
+            }
             return switch (r.type) {
                 case AgeAtLeast      -> new PurchasePolicyDTO("AGE",         val,  null, null, null);
                 case QuantityAtLeast -> new PurchasePolicyDTO("MIN_TICKETS", null, val,  null, null);
