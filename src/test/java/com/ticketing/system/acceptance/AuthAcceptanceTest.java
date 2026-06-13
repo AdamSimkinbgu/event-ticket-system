@@ -78,7 +78,7 @@ class AuthAcceptanceTest {
     void GivenUniqueDetails_WhenRegister_ThenMemberCreated() {
         String sid = authService.startGuestSession().sessionId();
 
-        authService.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", sid));
+        authService.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", sid, 20));
 
         assertTrue(userRepository.existsByUsername("alice"));
         User stored = userRepository.findByUsername("alice").orElseThrow();
@@ -90,7 +90,7 @@ class AuthAcceptanceTest {
     void GivenSuccessfulRegistration_WhenCheckSession_ThenStillGuest() {
         String sid = authService.startGuestSession().sessionId();
 
-        authService.register(new RegisterRequestDTO("carol", "carol@example.com", "Password1", sid));
+        authService.register(new RegisterRequestDTO("carol", "carol@example.com", "Password1", sid, 20));
 
         // II.1.4 / D10a: session must still be Guest after register.
         Session row = sessionRepository.findById(sid).orElseThrow();
@@ -102,17 +102,17 @@ class AuthAcceptanceTest {
     @Test
     void GivenDuplicateUsername_WhenRegister_ThenRejected() {
         String sid1 = authService.startGuestSession().sessionId();
-        authService.register(new RegisterRequestDTO("bob", "bob@example.com", "Password1", sid1));
+        authService.register(new RegisterRequestDTO("bob", "bob@example.com", "Password1", sid1, 20));
 
         String sid2 = authService.startGuestSession().sessionId();
         assertThrows(DuplicateUsernameException.class,
-                () -> authService.register(new RegisterRequestDTO("bob", "bob2@example.com", "Password1", sid2)));
+                () -> authService.register(new RegisterRequestDTO("bob", "bob2@example.com", "Password1", sid2, 20)));
     }
 
     @Test
     void GivenNoGuestSession_WhenRegister_ThenGuestSessionRequired() {
         assertThrows(GuestSessionRequiredException.class,
-                () -> authService.register(new RegisterRequestDTO("nobody", "nobody@example.com", "Password1", null)));
+                () -> authService.register(new RegisterRequestDTO("nobody", "nobody@example.com", "Password1", null, 20)));
         assertFalse(userRepository.existsByUsername("nobody"));
     }
 
@@ -123,7 +123,7 @@ class AuthAcceptanceTest {
     @Test
     @Disabled("Will fix later")
     void GivenValidCredentials_WhenLogin_ThenTokenIssued() {
-        authService.register(new RegisterRequestDTO("dave", "dave@example.com", "Password1", null));
+        authService.register(new RegisterRequestDTO("dave", "dave@example.com", "Password1", null, 20));
         LoginDTO result = authService
                 .login(new LoginRequestDTO("dave", "Password1", authService.startGuestSession().sessionId()));
         AuthTokenDTO tokenResult = result.authToken();
@@ -139,7 +139,7 @@ class AuthAcceptanceTest {
     @Test
     void GivenLogin_ThenGuestSessionPromotedInPlace_SidPreserved() {
         String sid = authService.startGuestSession().sessionId();
-        authService.register(new RegisterRequestDTO("hank", "hank@example.com", "Password1", sid));
+        authService.register(new RegisterRequestDTO("hank", "hank@example.com", "Password1", sid, 20));
 
         LoginDTO resultLogin = authService.login(new LoginRequestDTO("hank", "Password1", sid));
         AuthTokenDTO result = resultLogin.authToken();
@@ -153,7 +153,7 @@ class AuthAcceptanceTest {
     @Test
     void GivenInvalidCredentials_WhenLogin_ThenGenericReject() {
         String sid = authService.startGuestSession().sessionId();
-        authService.register(new RegisterRequestDTO("eve", "eve@example.com", "Password1", sid));
+        authService.register(new RegisterRequestDTO("eve", "eve@example.com", "Password1", sid, 20));
 
         // Wrong password and unknown user yield the SAME exception — no enumeration
         // leak.
@@ -178,7 +178,7 @@ class AuthAcceptanceTest {
         // Promoting twice on the same sid should be rejected — second login must use a
         // fresh Guest.
         String sid = authService.startGuestSession().sessionId();
-        authService.register(new RegisterRequestDTO("ivy", "ivy@example.com", "Password1", sid));
+        authService.register(new RegisterRequestDTO("ivy", "ivy@example.com", "Password1", sid, 20));
         authService.login(new LoginRequestDTO("ivy", "Password1", sid)); // first promotion succeeds
 
         assertThrows(GuestSessionRequiredException.class,
@@ -192,7 +192,7 @@ class AuthAcceptanceTest {
         // Set up: a Member with a cart attached to an old (now-gone) session.
         // Simulates: user logged in once, added items, logged out, comes back later.
         String firstSid = authService.startGuestSession().sessionId();
-        authService.register(new RegisterRequestDTO("rest1", "rest1@example.com", "Password1", firstSid));
+        authService.register(new RegisterRequestDTO("rest1", "rest1@example.com", "Password1", firstSid, 20));
         LoginDTO first = authService.login(new LoginRequestDTO("rest1", "Password1", firstSid));
 
         // Simulate an active cart on the first session.
@@ -227,7 +227,7 @@ class AuthAcceptanceTest {
     void GivenLoggedInMember_WhenLogout_ThenStateGuest() {
         // II.3.1 / D8: logout deletes the Session row entirely.
         String sid = authService.startGuestSession().sessionId();
-        authService.register(new RegisterRequestDTO("frank", "frank@example.com", "Password1", sid));
+        authService.register(new RegisterRequestDTO("frank", "frank@example.com", "Password1", sid, 20  ));
         LoginDTO session = authService.login(new LoginRequestDTO("frank", "Password1", sid));
         assertTrue(authService.validateToken(session.authToken().token()));
 
@@ -243,7 +243,7 @@ class AuthAcceptanceTest {
         // Idempotency: repeating logout with the same (already-revoked) token must not
         // throw.
         String sid = authService.startGuestSession().sessionId();
-        authService.register(new RegisterRequestDTO("grace", "grace@example.com", "Password1", sid));
+        authService.register(new RegisterRequestDTO("grace", "grace@example.com", "Password1", sid, 20));
         LoginDTO session = authService.login(new LoginRequestDTO("grace", "Password1", sid));
         authService.logout(new LogoutRequestDTO(session.authToken().token()));
 
@@ -263,7 +263,7 @@ class AuthAcceptanceTest {
         // II.3.0.1 / D9a: logout deletes the Session row but the cart with
         // userId set survives.
         String sid = authService.startGuestSession().sessionId();
-        authService.register(new RegisterRequestDTO("link1", "link1@example.com", "Password1", sid));
+        authService.register(new RegisterRequestDTO("link1", "link1@example.com", "Password1", sid, 20));
         LoginDTO session = authService.login(new LoginRequestDTO("link1", "Password1", sid));
 
         ActiveOrder cart = ActiveOrder.forMember(session.authToken().userId(), sid);

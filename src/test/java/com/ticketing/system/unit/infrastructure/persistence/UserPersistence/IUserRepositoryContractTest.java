@@ -31,7 +31,7 @@ abstract class IUserRepositoryContractTest {
     @Test
     void save_thenFindByUsername_returnsTheSavedUser() {
         int id = repo.nextId();
-        User user = new User(id, "alice", "alice@example.com", "HASH");
+        User user = new User(id, "alice", "alice@example.com", "HASH",20);
         repo.save(user);
 
         Optional<User> found = repo.findByUsername("alice");
@@ -43,7 +43,7 @@ abstract class IUserRepositoryContractTest {
     @Test
     void save_thenFindByEmail_returnsTheSavedUser() {
         int id = repo.nextId();
-        User user = new User(id, "alice", "alice@example.com", "HASH");
+        User user = new User(id, "alice", "alice@example.com", "HASH",2);
         repo.save(user);
 
         Optional<User> found = repo.findByEmail("alice@example.com");
@@ -64,7 +64,7 @@ abstract class IUserRepositoryContractTest {
     @Test
     void existsByUsername_falseWhenMissingTrueWhenSaved() {
         assertFalse(repo.existsByUsername("alice"));
-        repo.save(new User(repo.nextId(), "alice", "alice@example.com", "HASH"));
+        repo.save(new User(repo.nextId(), "alice", "alice@example.com", "HASH",15));
         assertTrue(repo.existsByUsername("alice"));
     }
 
@@ -82,7 +82,7 @@ abstract class IUserRepositoryContractTest {
     @Test
     void getUserById_returnsTheSavedUser() {
         int id = repo.nextId();
-        User user = new User(id, "alice", "alice@example.com", "HASH");
+        User user = new User(id, "alice", "alice@example.com", "HASH",15);
         repo.save(user);
 
         User found = repo.getUserById(id);
@@ -97,7 +97,7 @@ abstract class IUserRepositoryContractTest {
     @Test
     void delete_removesTheUser() {
         int id = repo.nextId();
-        repo.save(new User(id, "alice", "alice@example.com", "HASH"));
+        repo.save(new User(id, "alice", "alice@example.com", "HASH",15));
         assertTrue(repo.existsByUsername("alice"));
 
         repo.delete(id);

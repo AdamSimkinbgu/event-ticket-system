@@ -6,6 +6,10 @@ import java.util.List;
 
 import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+import com.ticketing.system.Core.Domain.policies.purchase.AndPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.PurchaseContext;
+import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
 
 public class Event implements InvariantChecked {
     private final int id;
@@ -17,12 +21,12 @@ public class Event implements InvariantChecked {
     private EventStatus status;
     private VenueMap venueMap;
     private final List<ShowDate> showDates;
-    private final PurchasePolicy purchasePolicy;
+    private PurchasePolicy purchasePolicy;
     private final DiscountPolicy discountPolicy;
 
     public Event(int id, String name, Double rating, List<String> artistsNames, EventCategory category, int comapnyid,
-            EventStatus status, VenueMap venueMap, List<ShowDate> showDates, PurchasePolicy purchasePolicy,
-            DiscountPolicy discountPolicy) {
+            EventStatus status, VenueMap venueMap, List<ShowDate> showDates, PurchasePolicy PurchasePolicy,
+         DiscountPolicy discountPolicy) {
         this.id = id;
         this.name = name;
         this.rating = rating;
@@ -32,7 +36,11 @@ public class Event implements InvariantChecked {
         this.status = status;
         this.venueMap = venueMap;
         this.showDates = showDates;
-        this.purchasePolicy = purchasePolicy;
+         if (PurchasePolicy == null) {
+    this.purchasePolicy = new NoPurchasePolicy();
+} else {
+    this.purchasePolicy = PurchasePolicy;
+}
         this.discountPolicy = discountPolicy;
     }
 
@@ -85,9 +93,7 @@ public class Event implements InvariantChecked {
             throw new IllegalStateException("Cannot reserve tickets for a completed event");
         }
 
-        if (purchasePolicy != null && !purchasePolicy.validate(selection.getQuantity())) {
-            throw new IllegalStateException("Purchase policy rejected this quantity");
-        }
+
     }
 
 
@@ -343,8 +349,45 @@ public class Event implements InvariantChecked {
         if (showDates == null) {
             throw new IllegalStateException("Event invariant violated: showDates list must not be null");
         }
+        if (purchasePolicy == null) {
+    throw new IllegalStateException("Event invariant violated: purchasePolicy must not be null");
+}
+
+if (discountPolicy == null) {
+    throw new IllegalStateException("Event invariant violated: discountPolicy must not be null");
+}
         // venueMap may be null in DRAFT state (UC-19) before UC-20 binds it — don't enforce non-null.
         // If present, the VenueMap's own invariants apply (cascade-check when implemented).
     }
+
+
+
+
+
+
+
+
+
+    public void setPurchasePolicy(PurchasePolicy purchasePolicy) {
+    if (purchasePolicy == null) {
+        throw new IllegalArgumentException("Purchase policy cannot be null");
+    }
+
+    this.purchasePolicy = purchasePolicy;
+}
+
+public void validatePurchasePolicy(PurchaseContext context) {
+    if (context == null) {
+        throw new IllegalArgumentException("Purchase context cannot be null");
+    }
+
+    if (purchasePolicy == null) {
+        purchasePolicy = new NoPurchasePolicy();
+    }
+
+    if (!purchasePolicy.isSatisfiedBy(context)) {
+        throw new IllegalStateException(purchasePolicy.getFailureMessage());
+    }
+}
 
 }

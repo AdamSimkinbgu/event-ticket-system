@@ -12,6 +12,7 @@ import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.events.*;
 import com.ticketing.system.Core.Domain.orders.*;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
+import com.ticketing.system.Core.Domain.users.User;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -38,6 +39,7 @@ public class CheckoutServiceAcceptanceTest {
     private IPaymentGateway paymentGateway;
     private INotificationService notificationService;
     private ISessionManager sessionManager;
+    private IUserRepository userRepository;
 
     private CheckoutService checkoutService;
 
@@ -48,7 +50,7 @@ public class CheckoutServiceAcceptanceTest {
 @Autowired private IEventRepository eventRepository1;
 @Autowired private ITicketRepository ticketRepository1;
 @Autowired private IOrderReceiptRepository orderReceiptRepository1;
-@Autowired private IUserRepository userRepository;
+
 
     private AuthTokenDTO registerAndLoginMember(String name) {
     String sid = authService.startGuestSession().sessionId();
@@ -57,7 +59,8 @@ public class CheckoutServiceAcceptanceTest {
             name,
             name + "@test.com",
             "Password1",
-            sid
+            sid,
+            72
     ));
 
     return authService
@@ -85,6 +88,7 @@ public class CheckoutServiceAcceptanceTest {
         activeOrderRepository = mock(IActiveOrderRepository.class);
         eventRepository = mock(IEventRepository.class);
         ticketRepository = mock(ITicketRepository.class);
+        userRepository = mock(IUserRepository.class);
 
         orderReceiptRepository = mock(IOrderReceiptRepository.class);
         AtomicInteger receiptIds = new AtomicInteger(1);
@@ -103,7 +107,8 @@ public class CheckoutServiceAcceptanceTest {
                 ticketIssuer,
                 paymentGateway,
                 notificationService,
-                sessionManager
+                sessionManager,
+                userRepository
         );
 
         event1 = mock(Event.class);
@@ -143,6 +148,11 @@ public class CheckoutServiceAcceptanceTest {
     private void validSession() {
         when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        User user = mock(User.class);
+    when(user.getUserId()).thenReturn(USER_ID);
+    when(user.getAge()).thenReturn(72);
+
+    when(userRepository.getUserById(USER_ID)).thenReturn(user);
     }
 
     private CartLineItem item(int eventId, int zoneId, double price) {

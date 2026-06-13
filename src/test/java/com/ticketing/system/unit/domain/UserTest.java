@@ -29,11 +29,10 @@ public class UserTest extends BaseDomainTest {
         private User owner;
         private List<Permission> defaultPermissions;
 
-        @BeforeEach
-        public void setUp() {
-
-                user = track(new User(USER_ID, "targetUser", "target@example.com", "password"));
-                owner = track(new User(OWNER_ID, "owner", "owner@example.com", "password"));
+    @BeforeEach
+    public void setUp() {
+        user = track(new User(USER_ID, "targetUser", "target@example.com", "password",20));
+        owner = track(new User(OWNER_ID, "ownerUser", "owner@example.com", "password", 30));
 
                 defaultPermissions = new ArrayList<>();
                 defaultPermissions.add(Permission.APPOINT_MANAGER);
