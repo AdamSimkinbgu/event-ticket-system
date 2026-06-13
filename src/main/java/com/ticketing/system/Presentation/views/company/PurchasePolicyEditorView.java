@@ -1,5 +1,14 @@
 package com.ticketing.system.Presentation.views.company;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+
 import com.ticketing.system.Core.Application.dto.CompanyPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
@@ -30,15 +39,8 @@ import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.router.RouteParameters;
-import jakarta.annotation.security.PermitAll;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import jakarta.annotation.security.PermitAll;
 
 @Route(value = "owner/policies/:companyId/:eventId", layout = WorkspaceLayout.class)
 @PageTitle("Purchase policies · TicketHub")
