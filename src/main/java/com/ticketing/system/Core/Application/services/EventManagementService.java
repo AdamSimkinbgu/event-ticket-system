@@ -52,6 +52,7 @@ public class EventManagementService {
     private final IOrderReceiptRepository orderReceiptRepository;
     private final IPaymentGateway paymentGateway;
     private final IUserRepository userRepository;
+    private int currentVenueMapIdCounter;
 
     public EventManagementService(
             IEventRepository eventRepository,
@@ -68,6 +69,7 @@ public class EventManagementService {
         this.orderReceiptRepository = orderReceiptRepository;
         this.paymentGateway = paymentGateway;
         this.userRepository = userRepository;
+        this.currentVenueMapIdCounter = 0;  // Initialize the venue map ID counter, change the counter to be internal but here for now.
     }
 
     // Flow:
@@ -102,11 +104,9 @@ public class EventManagementService {
 
         User user = userRepository.getUserById(ownerId);
         user.requirePermissionInCompany(request.companyId(), Permission.CONFIGURE_VENUE);
-        
 
         int newEventId = eventRepository.nextId();
-        VenueMap venueMap = new VenueMap(1, request.location(), List.of()); // TODO: need an incremantal ID counter for
-                                                                            // venue maps
+        VenueMap venueMap = new VenueMap(this.nextVenueMapId(), request.location(), List.of()); // TODO: need an INTERNAL incremantal ID counter for venue maps, did this for now.
         DiscountPolicy discountPolicy = new DiscountPolicy(10.0); // Note: support policies later
         PurchasePolicy purchasePolicy = new PurchasePolicy(10); // Note: support policies later
 
@@ -130,12 +130,13 @@ public class EventManagementService {
                 newEvent.getShowDates());
     }
 
+    
+
     // configureVenueMap is a separate method that can be called multiple times to
     // update the venue map and inventory zones *before* the event goes live.
     // It also allows for a more iterative setup process where the owner/manager can
     // first create the event with basic details and then configure the venue map in
     // a second step.
-
     public void configureVenueMap(String token, int companyId, VenueMapConfigDTO config) {
         int userId = validateTokenAndGetUserId(token);
         log.info("Configuring venue map for company {}, event {}, by user {}", companyId, config.eventId(), userId);
@@ -343,7 +344,7 @@ public class EventManagementService {
 
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
-        
+
         // check if company id exists
         ProductionCompany company = null;
         try {
@@ -368,6 +369,11 @@ public class EventManagementService {
         eventRepository.save(event);
         log.info("Zone {} at company {} capacity updated successfully", zone_id, company_id);
 
+    }
+    
+    private int nextVenueMapId() {
+        this.currentVenueMapIdCounter++;
+        return this.currentVenueMapIdCounter;
     }
 
     // UC-21 — set / replace event-level purchase + discount policies.
