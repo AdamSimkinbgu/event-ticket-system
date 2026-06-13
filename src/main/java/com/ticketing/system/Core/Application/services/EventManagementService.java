@@ -115,35 +115,37 @@ public class EventManagementService {
 
         int newEventId = eventRepository.nextId();
         VenueMap venueMap = new VenueMap(this.nextVenueMapId(), request.location(), List.of()); // TODO: need an INTERNAL incremantal ID counter for venue maps, did this for now.
-        DiscountPolicy discountPolicy = new DiscountPolicy(10.0); // Note: support policies later
+        //! Note: Discount policy is currently not in the implementation plan so just put as 0 discount for every event here
+        // not doing discount automatically without the ability to change this from the outside right now.
+        DiscountPolicy discountPolicy = new DiscountPolicy(0);
 
 
 
-PurchasePolicy companyPurchasePolicy = company.getPurchasePolicy();
-if (companyPurchasePolicy == null) {
-    companyPurchasePolicy = new NoPurchasePolicy();
-}
+        PurchasePolicy companyPurchasePolicy = company.getPurchasePolicy();
+        if (companyPurchasePolicy == null) {
+            companyPurchasePolicy = new NoPurchasePolicy();
+        }
 
-PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(request.purchasePolicy());
+        PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(request.purchasePolicy());
 
-PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
-        companyPurchasePolicy,
-        eventSpecificPurchasePolicy
-);
+        PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
+                companyPurchasePolicy,
+                eventSpecificPurchasePolicy
+        );
 
-Event newEvent = new Event(
-        newEventId,
-        request.name(),
-        5.00,
-        List.of("sss", "ddd"),
-        request.category(),
-        request.companyId(),
-        EventStatus.DRAFT,
-        venueMap,
-        request.showDates(),
-        inheritedAndExtendedPurchasePolicy,
-        discountPolicy
-);
+        Event newEvent = new Event(
+                newEventId,
+                request.name(),
+                5.00,
+                List.of("sss", "ddd"),
+                request.category(),
+                request.companyId(),
+                EventStatus.DRAFT,
+                venueMap,
+                request.showDates(),
+                inheritedAndExtendedPurchasePolicy,
+                discountPolicy
+        );
         eventRepository.save(newEvent);
 
         log.info("Event {} created successfully with ID {}", request.name(), newEventId);

@@ -11,5 +11,5 @@ public record RegisterRequestDTO(
     String email,
     String rawPassword,
     String guestSessionId,
-     int age
+    int age
 ) {}

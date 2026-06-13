@@ -44,12 +44,12 @@ public class CheckoutServiceAcceptanceTest {
     private CheckoutService checkoutService;
 
     @Autowired private AuthenticationService authService;
-@Autowired private CompanyManagementService companyService;
-@Autowired private EventManagementService eventManagementService;
-@Autowired private IProductionCompanyRepository companyRepository;
-@Autowired private IEventRepository eventRepository1;
-@Autowired private ITicketRepository ticketRepository1;
-@Autowired private IOrderReceiptRepository orderReceiptRepository1;
+    @Autowired private CompanyManagementService companyService;
+    @Autowired private EventManagementService eventManagementService;
+    @Autowired private IProductionCompanyRepository companyRepository;
+    @Autowired private IEventRepository eventRepository1;
+    @Autowired private ITicketRepository ticketRepository1;
+    @Autowired private IOrderReceiptRepository orderReceiptRepository1;
 
 
     private AuthTokenDTO registerAndLoginMember(String name) {
@@ -667,9 +667,10 @@ public class CheckoutServiceAcceptanceTest {
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
     }
 
-    //TODO:   THIS TEST IS PROBLEMATIC        <----------------------           <--------------------          <----------------
+    
     @Test
-    void GivenTwoUsersCheckoutSameReservedTicketConcurrently_WhenCheckout_ThenOnlyOneCheckoutSucceeds() throws Exception {
+    void GivenTwoUsersCheckoutSameReservedTicketConcurrently_WhenCheckout_ThenOnlyOneCheckoutSucceeds()
+            throws Exception {
         validSession();
 
         ActiveOrder order = order(List.of(item(EVENT_ID_1, ZONE_ID_1, 10.0)), true);
@@ -682,11 +683,13 @@ public class CheckoutServiceAcceptanceTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger callIndex = new AtomicInteger(0);
 
         Callable<Boolean> task = () -> {
             start.await();
+            String uniqueKey = IDEMPOTENCY_KEY + "-" + callIndex.getAndIncrement();
             try {
-                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+                checkoutService.checkoutMember(VALID_TOKEN, uniqueKey, CURRENCY, PAYMENT_METHOD_TOKEN);
                 return true;
             } catch (RuntimeException e) {
                 return false;
@@ -710,6 +713,7 @@ public class CheckoutServiceAcceptanceTest {
         assertEquals(1, successCount);
     }
 
+    
     @Test
     void GivenTwoUsersCheckoutLastTicketInZoneConcurrently_WhenCheckout_ThenOnlyOneCheckoutSucceeds() throws Exception {
         validSession();
@@ -724,11 +728,13 @@ public class CheckoutServiceAcceptanceTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger callIndex = new AtomicInteger(0);
 
         Callable<Boolean> task = () -> {
             start.await();
+            String uniqueKey = IDEMPOTENCY_KEY + "-" + callIndex.getAndIncrement();
             try {
-                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+                checkoutService.checkoutMember(VALID_TOKEN, uniqueKey, CURRENCY, PAYMENT_METHOD_TOKEN);
                 return true;
             } catch (RuntimeException e) {
                 return false;

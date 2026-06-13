@@ -24,6 +24,9 @@ public class User implements InvariantChecked {
         this.username = username;
         this.email = email;
         this.password = password;
+        if(age < 0){
+            throw new IllegalArgumentException("Age cannot be negative");
+        }
         this.age = age;
         this.companyAppointments = new ArrayList<>();
     }
@@ -272,6 +275,9 @@ public int getAge() {
         }
         if (companyAppointments == null) {
             throw new IllegalStateException("User invariant violated: companyAppointments list must not be null");
+        }
+        if(age < 0){
+            throw new IllegalStateException("User invariant violated: age cannot be negative");
         }
     }
 
