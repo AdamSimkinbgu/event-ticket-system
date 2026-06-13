@@ -16,6 +16,7 @@ import com.ticketing.system.Core.Application.dto.EventCreationDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
+import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
@@ -34,12 +35,19 @@ import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.events.DiscountPolicy;
-import com.ticketing.system.Core.Domain.events.PurchasePolicy;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.events.Seat;
 import com.ticketing.system.Core.Domain.events.SeatedZone;
+import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.OrPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.AgePurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.AndPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.MaxTicketsPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.MinTicketsPurchasePolicy;
+
 
 @Service
 @Slf4j
@@ -108,12 +116,34 @@ public class EventManagementService {
         int newEventId = eventRepository.nextId();
         VenueMap venueMap = new VenueMap(this.nextVenueMapId(), request.location(), List.of()); // TODO: need an INTERNAL incremantal ID counter for venue maps, did this for now.
         DiscountPolicy discountPolicy = new DiscountPolicy(10.0); // Note: support policies later
-        PurchasePolicy purchasePolicy = new PurchasePolicy(10); // Note: support policies later
 
-        Event newEvent = new Event(
-                newEventId, request.name(), 5.00, List.of("sss", "ddd"),
-                request.category(), request.companyId(), EventStatus.DRAFT,
-                venueMap, request.showDates(), purchasePolicy, discountPolicy);
+
+
+PurchasePolicy companyPurchasePolicy = company.getPurchasePolicy();
+if (companyPurchasePolicy == null) {
+    companyPurchasePolicy = new NoPurchasePolicy();
+}
+
+PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(request.purchasePolicy());
+
+PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
+        companyPurchasePolicy,
+        eventSpecificPurchasePolicy
+);
+
+Event newEvent = new Event(
+        newEventId,
+        request.name(),
+        5.00,
+        List.of("sss", "ddd"),
+        request.category(),
+        request.companyId(),
+        EventStatus.DRAFT,
+        venueMap,
+        request.showDates(),
+        inheritedAndExtendedPurchasePolicy,
+        discountPolicy
+);
         eventRepository.save(newEvent);
 
         log.info("Event {} created successfully with ID {}", request.name(), newEventId);
@@ -378,19 +408,143 @@ public class EventManagementService {
 
     // UC-21 — set / replace event-level purchase + discount policies.
     public void setEventPolicies(String token, EventPolicyConfigDTO config) {
-        throw new UnsupportedOperationException("UC-21: not implemented");
+    if (!sessionManager.validateToken(token)) {
+        throw new RuntimeException("Invalid token");
     }
+
+    if (config == null) {
+        throw new IllegalArgumentException("Event policy config cannot be null");
+    }
+
+    int userId = sessionManager.extractUserId(token);
+
+    ProductionCompany company = companyRepository.getCompanyById(config.companyId());
+    if (company == null) {
+        throw new RuntimeException("Company not found");
+    }
+
+    company.checkowner(userId);
+
+    Event event = eventRepository.findById(config.eventId());
+    if (event == null) {
+        throw new RuntimeException("Event not found");
+    }
+
+    if (event.getCompanyId() != config.companyId()) {
+        throw new RuntimeException("Event does not belong to this company");
+    }
+
+    PurchasePolicy companyPurchasePolicy = company.getPurchasePolicy();
+    if (companyPurchasePolicy == null) {
+        companyPurchasePolicy = new NoPurchasePolicy();
+    }
+
+    PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(config.purchasePolicy());
+
+    PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
+            companyPurchasePolicy,
+            eventSpecificPurchasePolicy
+    );
+
+    event.setPurchasePolicy(inheritedAndExtendedPurchasePolicy);
+
+    eventRepository.save(event);
+
+    log.info("Purchase policy for event {} was updated by user {}", event.getId(), userId);
+}
+
 
     // Detail view for owner-side editing pages.
     public EventDetailDTO getEventDetail(String token, String eventId) {
         throw new UnsupportedOperationException("UC-19: not implemented");
     }
 
-    private int validateTokenAndGetUserId(String token) {
+private PurchasePolicy buildPurchasePolicyFromDTO(PurchasePolicyDTO dto) {
+    if (dto == null) {
+        return new NoPurchasePolicy();
+    }
+
+    if (dto.type() == null || dto.type().isBlank()) {
+        throw new IllegalArgumentException("Purchase policy type is required");
+    }
+
+    String type = dto.type().trim().toUpperCase();
+
+    switch (type) {
+        case "AGE":
+            if (dto.minimumAge() == null) {
+                throw new IllegalArgumentException("minimumAge is required for AGE policy");
+            }
+            return new AgePurchasePolicy(dto.minimumAge());
+
+        case "MIN_TICKETS":
+            if (dto.minimumTickets() == null) {
+                throw new IllegalArgumentException("minimumTickets is required for MIN_TICKETS policy");
+            }
+            return new MinTicketsPurchasePolicy(dto.minimumTickets());
+
+        case "MAX_TICKETS":
+            if (dto.maximumTickets() == null) {
+                throw new IllegalArgumentException("maximumTickets is required for MAX_TICKETS policy");
+            }
+            return new MaxTicketsPurchasePolicy(dto.maximumTickets());
+
+        case "AND":
+            validateCompositeChildren(dto, "AND");
+            return buildAndPolicy(dto.children());
+
+        case "OR":
+            validateCompositeChildren(dto, "OR");
+            return buildOrPolicy(dto.children());
+
+        case "NONE":
+            return new NoPurchasePolicy();
+
+        default:
+            throw new IllegalArgumentException("Unknown purchase policy type: " + dto.type());
+    }
+}
+
+private void validateCompositeChildren(PurchasePolicyDTO dto, String type) {
+    if (dto.children() == null || dto.children().size() < 2) {
+        throw new IllegalArgumentException(type + " policy must contain at least two children");
+    }
+}
+
+private PurchasePolicy buildAndPolicy(List<PurchasePolicyDTO> children) {
+    PurchasePolicy result = buildPurchasePolicyFromDTO(children.get(0));
+
+    for (int i = 1; i < children.size(); i++) {
+        result = new AndPurchasePolicy(
+                result,
+                buildPurchasePolicyFromDTO(children.get(i))
+        );
+    }
+
+    return result;
+}
+
+private PurchasePolicy buildOrPolicy(List<PurchasePolicyDTO> children) {
+    PurchasePolicy result = buildPurchasePolicyFromDTO(children.get(0));
+
+    for (int i = 1; i < children.size(); i++) {
+        result = new OrPurchasePolicy(
+                result,
+                buildPurchasePolicyFromDTO(children.get(i))
+        );
+    }
+
+    return result;
+}
+
+  private int validateTokenAndGetUserId(String token) {
         if (!sessionManager.validateToken(token)) {
             log.warn("Invalid token provided");
             throw new RuntimeException("Invalid token");
         }
         return sessionManager.extractUserId(token);
     }
+
+    
+
 }

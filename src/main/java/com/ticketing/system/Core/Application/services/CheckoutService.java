@@ -37,6 +37,10 @@ import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
+import com.ticketing.system.Core.Domain.policies.purchase.PurchaseContext;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
+import com.ticketing.system.Core.Domain.users.User;
+
 
 @Service
 @Slf4j
@@ -50,6 +54,7 @@ public class CheckoutService {
     private final IPaymentGateway paymentGateway;
     private final INotificationService notificationService;
     private final ISessionManager sessionManager;
+    private final IUserRepository userRepository;
 
     // In-memory cache for completed checkouts to handle idempotency. Keyed by a combination of buyer identity and idempotency key, since the same idempotency key could be used 
     // by different users (e.g. if they copy-paste it from a confirmation page). In a real implementation this would likely be a distributed cache like Redis with an expiration time.
@@ -68,7 +73,8 @@ public class CheckoutService {
             ITicketIssuer ticketIssuer,
             IPaymentGateway paymentGateway,
             INotificationService notificationService,
-            ISessionManager sessionManager
+            ISessionManager sessionManager,
+            IUserRepository userRepository
     ) {
         this.activeOrderRepository = activeOrderRepository;
         this.eventRepository = eventRepository;
@@ -78,6 +84,8 @@ public class CheckoutService {
         this.paymentGateway = paymentGateway;
         this.notificationService = notificationService;
         this.sessionManager = sessionManager;
+         this.userRepository = userRepository;
+
     }
 
 
@@ -129,6 +137,9 @@ public class CheckoutService {
             // Extract the unique event IDs from the list of cart line items and sort them to ensure a consistent locking order. This is important for preventing deadlocks when we lock events for update during the checkout process. By always locking events in a consistent order (e.g. by event ID), we can reduce the likelihood of two concurrent checkouts trying to lock the same set of events in different orders and blocking each other indefinitely.
             lockedEventIds = extractSortedEventIds(boughtItems);
             lockEvents(lockedEventIds);
+
+            Integer buyerAge = getBuyerAgeByUserId(userId);
+             validatePurchasePolicies(boughtItems, userId, buyerAge);
 
             // Price all items at once before processing payment to ensure that the total price is consistent with what the user saw at checkout and to avoid issues where prices might change between individual item pricing calls. This also allows us to apply any relevant discounts or promotions that depend on the overall purchase (e.g. "buy 2 get 1 free" or "10% off if you buy more than 3 tickets").
             List<PricedCartLine> pricedItems = priceItemsOnce(boughtItems);
@@ -211,7 +222,7 @@ public class CheckoutService {
 
 
     // The checkoutMember and checkoutGuest methods follow a similar flow but have some differences in how they identify the buyer (user ID for members, guest session ID + email for guests) and how they retrieve the active order (by user ID vs. by guest session ID). They both implement the same core steps of validating input, checking the cache for idempotency, locking the order and events, pricing items, processing payment, issuing tickets, confirming inventory sale, saving receipts, and handling errors. The separation into two methods allows us to handle member-specific and guest-specific logic cleanly while still sharing common helper methods for the core checkout steps.
-    public CheckoutResultDTO checkoutGuest(String guestSessionId, String guestEmail, String idempotencyKey, String currency, String paymentMethodToken) {
+    public CheckoutResultDTO checkoutGuest(String guestSessionId, String guestEmail, String idempotencyKey, String currency, String paymentMethodToken, int buyerAge) {
         ActiveOrder order = null;
         PaymentResultDTO paymentResult = null;
         double totalPrice = 0.0;
@@ -249,6 +260,7 @@ public class CheckoutService {
             // 
             lockedEventIds = extractSortedEventIds(boughtItems);
             lockEvents(lockedEventIds);
+            validatePurchasePolicies(boughtItems, null, buyerAge);
 
             List<PricedCartLine> pricedItems = priceItemsOnce(boughtItems);
             totalPrice = sumPrices(pricedItems);
@@ -1047,6 +1059,47 @@ public class CheckoutService {
         return "sess:" + guestSessionId;
     }
 
+private void validatePurchasePolicies(List<CartLineItem> boughtItems, Integer userId, Integer buyerAge) {
+    Map<Integer, Long> quantityByEvent = boughtItems.stream()
+            .collect(Collectors.groupingBy(CartLineItem::geteventId, Collectors.counting()));
+
+    for (Map.Entry<Integer, Long> entry : quantityByEvent.entrySet()) {
+        int eventId = entry.getKey();
+        int quantity = entry.getValue().intValue();
+
+        Event event = eventRepository.findById(eventId);
+
+        if (event == null) {
+            throw new IllegalStateException("Event not found: " + eventId);
+        }
+
+        int buyerId;
+        if (userId == null) {
+            buyerId = -1;
+        } else {
+            buyerId = userId;
+        }
+
+        PurchaseContext context = new PurchaseContext(
+                buyerId,
+                buyerAge,
+                event.getId(),
+                event.getCompanyId(),
+                quantity
+        );
+
+        event.validatePurchasePolicy(context);
+    }
+}
+    private Integer getBuyerAgeByUserId(int userId) {
+    User user = userRepository.getUserById(userId);
+
+    if (user == null) {
+        throw new IllegalStateException("User not found: " + userId);
+    }
+
+    return user.getAge();
+}
 
 
 
@@ -1067,8 +1120,6 @@ public class CheckoutService {
             String buyerKey,
             CheckoutResultDTO result) {
     }
-
-    
 
 }
 

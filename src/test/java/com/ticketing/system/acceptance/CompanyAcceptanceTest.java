@@ -42,6 +42,7 @@ import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
+import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -66,11 +67,13 @@ class CompanyAcceptanceTest {
         private AuthTokenDTO registerAndLoginMember(String name) {
                 String sid = authService.startGuestSession().sessionId();
 
-                authService.register(new RegisterRequestDTO(
-                                name,
-                                name + "@test.com",
-                                "Password1",
-                                sid));
+    authService.register(new RegisterRequestDTO(
+            name,
+            name + "@test.com",
+            "Password1",
+            sid,
+            20
+    ));
 
                 return authService
                                 .login(new LoginRequestDTO(name, "Password1", sid))
@@ -103,15 +106,19 @@ class CompanyAcceptanceTest {
                                 owner.token(),
                                 new CompanyRegistrationDTO("capacityCompany", "desc")).companyId();
 
-                EventCreationDTO eventRequest = new EventCreationDTO(
-                                companyId,
-                                "Capacity Test Event",
-                                "Testing inventory zone capacity",
-                                EventCategory.CONCERT,
-                                new Location("Test Venue", "Test City"),
-                                List.of(new ShowDate(LocalDateTime.now().plusDays(1),
-                                                LocalDateTime.now().plusDays(30))));
-                EventDetailDTO event = eventManagementService.addEvent(owner.token(), eventRequest);
+   EventCreationDTO eventRequest = new EventCreationDTO(
+        companyId,
+        "Capacity Test Event",
+        "Testing inventory zone capacity",
+        EventCategory.CONCERT,
+        new Location("Test Venue", "Test City"),
+        List.of(new ShowDate(
+                LocalDateTime.now().plusDays(1),
+                LocalDateTime.now().plusDays(30)
+        )),
+        null
+);
+    EventDetailDTO event = eventManagementService.addEvent(owner.token(), eventRequest);
 
                 eventManagementService.configureVenueMap(owner.token(), companyId, new VenueMapConfigDTO(
                                 event.eventId(),

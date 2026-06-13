@@ -175,7 +175,7 @@ public class AuthenticationService {
 
         // 4. Create user.
         String hashed = passwordHasher.hash(request.rawPassword());
-        User user = new User(userRepository.nextId(), request.username(), request.email(), hashed);
+        User user = new User(userRepository.nextId(), request.username(), request.email(), hashed, request.age());
         userRepository.save(user);
 
         // 5. Session stays Guest — just touch the activity timestamp.
