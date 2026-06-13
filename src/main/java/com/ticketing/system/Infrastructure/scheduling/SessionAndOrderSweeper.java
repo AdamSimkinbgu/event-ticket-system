@@ -17,6 +17,7 @@ import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventorySelection;
+import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.Session;
 
@@ -132,8 +133,12 @@ public class SessionAndOrderSweeper {
                         ));
         // For each (event, zone) group, release the appropriate quantity back to inventory
         for (Map.Entry<Integer, Map<Integer, List<CartLineItem>>> eventEntry : grouped.entrySet()) {
-            Event event = eventRepository.findById(eventEntry.getKey());
-            if (event == null) {
+            Event event = null;
+            try {
+                event = eventRepository.findById(eventEntry.getKey());
+            } catch (EventNotFoundException e) {
+                // If the event is not found, log a warning and skip releasing tickets for this event
+                log.warn("Event with ID {} not found while releasing tickets for order of user id {}. Skipping.", eventEntry.getKey(), order.getUserId());
                 continue;
             }
             // For each zone in the event, determine how many tickets to release

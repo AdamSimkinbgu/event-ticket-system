@@ -21,6 +21,7 @@ public class MemoryEventRepository implements IEventRepository {
 
     private final ConcurrentHashMap<Integer, Event> events = new ConcurrentHashMap<>();
     private final AtomicInteger idSequence = new AtomicInteger(1);
+    private final AtomicInteger venueMapIdSequence = new AtomicInteger(1);
     private final RepositoryLocks<Integer> locks = new RepositoryLocks<>();    // Key is eventId for event-level locks.
 
     @Override
@@ -36,6 +37,11 @@ public class MemoryEventRepository implements IEventRepository {
     @Override
     public int nextId() {
         return idSequence.getAndIncrement();
+    }
+
+    @Override
+    public int nextVenueMapId() {
+        return venueMapIdSequence.getAndIncrement();
     }
 
     @Override

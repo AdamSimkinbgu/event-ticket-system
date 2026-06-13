@@ -134,7 +134,7 @@ public class CompanyManagementService {
         CompanyAppointment appointment;
 
         if (response.accept()) {
-            appointment = user.acceptInvitation(response.companyId());
+            appointment = user.acceptInvitation(response.companyId());  // transitions the pending appointment to accepted state
             if (appointment.getRole() == CompanyRole.Owner) {
                 company.addOwner(appointment.getInviterId(), userId);
             } else if (appointment.getRole() == CompanyRole.Manager) {
@@ -142,7 +142,7 @@ public class CompanyManagementService {
             }
             log.info("Appointment accepted: userId={}, companyId={}", userId, response.companyId());
         } else {
-            user.rejectInvitation(response.companyId());   // this will remove the pending appointment from the user's list, so no need to check role here.
+            user.rejectInvitation(response.companyId()); // transitions the pending appointment to rejected state, status-based lookups will no longer return it.
             log.info("Appointment rejected: userId={}, companyId={}", userId, response.companyId());
         }
         userRepository.updateUser(user);

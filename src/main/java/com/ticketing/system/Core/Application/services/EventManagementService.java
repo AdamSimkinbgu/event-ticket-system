@@ -114,7 +114,7 @@ public class EventManagementService {
         user.requirePermissionInCompany(request.companyId(), Permission.CONFIGURE_VENUE);
 
         int newEventId = eventRepository.nextId();
-        VenueMap venueMap = new VenueMap(this.nextVenueMapId(), request.location(), List.of()); // TODO: need an INTERNAL incremantal ID counter for venue maps, did this for now.
+        VenueMap venueMap = new VenueMap(eventRepository.nextVenueMapId(), request.location(), List.of()); // TODO: need an INTERNAL incremantal ID counter for venue maps, did this for now.
         //! Note: Discount policy is currently not in the implementation plan so just put as 0 discount for every event here
         // not doing discount automatically without the ability to change this from the outside right now.
         DiscountPolicy discountPolicy = new DiscountPolicy(0);
@@ -234,6 +234,8 @@ public class EventManagementService {
     public void editEventDetails(String token, EventUpdateDTO update) {
         throw new UnsupportedOperationException("UC-19: not implemented");
     }
+
+
 
     // UC-19 — soft cancel; fires EventCancelled domain event for UC-4 refund
     // pipeline.
@@ -401,11 +403,6 @@ public class EventManagementService {
         eventRepository.save(event);
         log.info("Zone {} at company {} capacity updated successfully", zone_id, company_id);
 
-    }
-    
-    private int nextVenueMapId() {
-        this.currentVenueMapIdCounter++;
-        return this.currentVenueMapIdCounter;
     }
 
     // UC-21 — set / replace event-level purchase + discount policies.

@@ -28,4 +28,6 @@ public interface IEventRepository extends IRepository<Event, Integer> {
     List<Event> search(CatalogSearchFiltersDTO filters);
 
     int nextId();
+
+    int nextVenueMapId();
 }

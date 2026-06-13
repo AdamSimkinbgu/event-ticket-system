@@ -38,22 +38,12 @@ public class OrderReceiptMapper {
      * company that happened to be bought in the same order.
      */
     public PurchaseHistoryDTO.PurchaseRecordDTO toPurchaseRecordDTO(OrderReceipt receipt,
-            List<Ticket> selectedTickets) { // overloading of the above function
-        return map(receipt, safeList(selectedTickets), true, false);
+                    List<Ticket> selectedTickets) { // overloading of the above function
+            return map(receipt, safeList(selectedTickets), true, false);
     }
 
-    //// Backward-compatible wrappers for current code that uses the old method name.
-////     @Deprecated
-////     public PurchaseHistoryDTO.PurchaseRecordDTO OrderReceiptToPurchaseRecordDTO(OrderReceipt receipt,
-////             ITicketRepository ticketRepository) {
-////         return toPurchaseRecordDTO(receipt, ticketRepository);
-////     }
-////
-////     @Deprecated
-////     public PurchaseHistoryDTO.PurchaseRecordDTO OrderReceiptToPurchaseRecordDTO(OrderReceipt receipt,
-////             List<Ticket> tickets) {
-////         return toPurchaseRecordDTO(receipt, tickets);
-////     }
+    
+    // Deprecated wrappers removed from here; use toPurchaseRecordDTO(...) overloads directly.
 
 
     // this function does the actual mapping work from *OrderReceipt to
