@@ -3,7 +3,6 @@ package com.ticketing.system.unit.domain;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,9 +10,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.ticketing.system.Core.Domain.company.CompanyAppointment;
-import com.ticketing.system.Core.Domain.users.CompanyRole;
-import com.ticketing.system.Core.Domain.users.ManagementInvitation;
+import com.ticketing.system.Core.Domain.users.CompanyAppointment;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.support.BaseDomainTest;
@@ -35,7 +32,6 @@ public class UserTest extends BaseDomainTest {
         owner = track(new User(OWNER_ID, "ownerUser", "owner@example.com", "password", 30));
 
                 defaultPermissions = new ArrayList<>();
-                defaultPermissions.add(Permission.APPOINT_MANAGER);
                 defaultPermissions.add(Permission.CONFIGURE_VENUE);
                 defaultPermissions.add(Permission.MANAGE_INVENTORY);
                 owner.addFounderAppointment(COMPANY_ID);
@@ -72,7 +68,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.acceptInvitation(COMPANY_ID);
 
-                assertEquals(null, user.getPendingCompanyAppointments(COMPANY_ID));
+                assertEquals(null, user.getPendingCompanyAppointment(COMPANY_ID));
         }
 
         @Test
@@ -84,7 +80,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.acceptInvitation(COMPANY_ID);
 
-                assertNotEquals(null, user.getActiveCompanyAppointments(COMPANY_ID));
+                assertNotEquals(null, user.getActiveCompanyAppointment(COMPANY_ID));
         }
 
         @Test
@@ -110,7 +106,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.rejectInvitation(COMPANY_ID);
 
-                assertEquals(null, user.getPendingCompanyAppointments(COMPANY_ID));
+                assertEquals(null, user.getPendingCompanyAppointment(COMPANY_ID));
         }
 
         @Test
@@ -122,7 +118,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.rejectInvitation(COMPANY_ID);
 
-                assertEquals(null, user.getActiveCompanyAppointments(COMPANY_ID));
+                assertEquals(null, user.getActiveCompanyAppointment(COMPANY_ID));
         }
 
         @Test
@@ -164,14 +160,14 @@ public class UserTest extends BaseDomainTest {
 
                 user.acceptInvitation(COMPANY_ID);
 
-                user.revokeManagerAppointment(COMPANY_ID, OWNER_ID);
+                user.revokeAppointment(COMPANY_ID, OWNER_ID);
 
-                assertEquals(null, user.getActiveCompanyAppointments(COMPANY_ID));
+                assertEquals(null, user.getActiveCompanyAppointment(COMPANY_ID));
         }
 
         @Test
         public void GivenNoAppointment_WhenrevokeManagerAppointment_ThenThrowException() {
-                assertThrows(RuntimeException.class, () -> user.revokeManagerAppointment(COMPANY_ID, OWNER_ID));
+                assertThrows(RuntimeException.class, () -> user.revokeAppointment(COMPANY_ID, OWNER_ID));
         }
 
         @Test
@@ -183,7 +179,7 @@ public class UserTest extends BaseDomainTest {
 
                 user.acceptInvitation(OTHER_COMPANY_ID);
 
-                assertThrows(RuntimeException.class, () -> user.revokeManagerAppointment(COMPANY_ID, OWNER_ID));
+                assertThrows(RuntimeException.class, () -> user.revokeAppointment(COMPANY_ID, OWNER_ID));
         }
 
         @Test
@@ -203,7 +199,7 @@ public class UserTest extends BaseDomainTest {
                                 OWNER_ID,
                                 newPermissions);
 
-                CompanyAppointment appointment = user.getActiveCompanyAppointments(COMPANY_ID);
+                CompanyAppointment appointment = user.getActiveCompanyAppointment(COMPANY_ID);
 
                 assertEquals(newPermissions, appointment.getPermissions().stream().toList());
         }

@@ -21,7 +21,17 @@ public class OrPurchasePolicy implements PurchasePolicy {
 
     @Override
     public String getFailureMessage() {
-        return leftPolicy.getFailureMessage() + " OR " + rightPolicy.getFailureMessage();
+        String left = leftPolicy.getFailureMessage();
+        String right = rightPolicy.getFailureMessage();
+
+        if (left == null || left.isBlank()) {
+            return right == null ? "" : right;
+        }
+        if (right == null || right.isBlank()) {
+            return left;
+        }
+
+        return left + " OR " + right;
     }
     public PurchasePolicy getLeftPolicy()  { return leftPolicy; }
 public PurchasePolicy getRightPolicy() { return rightPolicy; }

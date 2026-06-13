@@ -67,17 +67,14 @@ ReservationService {
         return remove(authenticateMember(token), eventId, zoneId, toDomainSelection(selectionDto));
     }
 
-    public ReservationResultDTO removeForGuest(String sessionId, int eventId, int zoneId, InventorySelectionDTO selectionDto) {
+    public ReservationResultDTO removeForGuest(String sessionId, int eventId, int zoneId,
+            InventorySelectionDTO selectionDto) {
         return remove(authenticateGuest(sessionId), eventId, zoneId, toDomainSelection(selectionDto));
     }
 
-    private InventorySelection toDomainSelection(InventorySelectionDTO selectionDto) {
-        if (selectionDto == null) {
-            throw new IllegalArgumentException("Inventory selection is required");
-        }
+    
 
-        return selectionDto.toDomainSelection();
-    }
+    
 
 
 
@@ -111,6 +108,7 @@ ReservationService {
                 ? "user:" + buyer.userId()
                 : "sess:" + buyer.sessionId();
 
+        //* locks activeOrder before event. Good — no deadlock risk between them. Just keep this rule in mind for any future service that touches both.
         activeOrderRepository.lockForUpdate(orderLockKey);
         eventRepository.lockForUpdate(eventId);
 
@@ -222,6 +220,17 @@ ReservationService {
 
 
 
+    // Helper method to convert the InventorySelectionDTO from the API layer to the InventorySelection domain object that is used in the service layer and domain layer.
+    private InventorySelection toDomainSelection(InventorySelectionDTO selectionDto) {
+        if (selectionDto == null) {
+            throw new IllegalArgumentException("Inventory selection is required");
+        }
+        return selectionDto.toDomainSelection();
+    }
+
+    
+
+
 
     // ---------------------------------------------------------------------
     // Authentication / request parsing
@@ -326,18 +335,13 @@ ReservationService {
         if (event.getVenueMap() == null) {
             throw new IllegalStateException("Venue map is not configured for event: " + event.getId());
         }
-
         InventoryZone zone;
         try {
             zone = event.getVenueMap().getZone(zoneId);
         } catch (IllegalArgumentException e) {
+            log.warn("Request rejected: zone not found. eventId={}, zoneId={}", event.getId(), zoneId);
             throw new IllegalArgumentException("Zone not found: " + zoneId);
         }
-
-        if (zone == null) {
-            throw new IllegalArgumentException("Zone not found: " + zoneId);
-        }
-
         return zone;
     }
 

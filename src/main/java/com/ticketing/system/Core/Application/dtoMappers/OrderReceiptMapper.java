@@ -42,18 +42,19 @@ public class OrderReceiptMapper {
         return map(receipt, safeList(selectedTickets), true, false);
     }
 
-    // Backward-compatible wrappers for current code that uses the old method name.
-    @Deprecated
-    public PurchaseHistoryDTO.PurchaseRecordDTO OrderReceiptToPurchaseRecordDTO(OrderReceipt receipt,
-            ITicketRepository ticketRepository) {
-        return toPurchaseRecordDTO(receipt, ticketRepository);
-    }
+    //// Backward-compatible wrappers for current code that uses the old method name.
+////     @Deprecated
+////     public PurchaseHistoryDTO.PurchaseRecordDTO OrderReceiptToPurchaseRecordDTO(OrderReceipt receipt,
+////             ITicketRepository ticketRepository) {
+////         return toPurchaseRecordDTO(receipt, ticketRepository);
+////     }
+////
+////     @Deprecated
+////     public PurchaseHistoryDTO.PurchaseRecordDTO OrderReceiptToPurchaseRecordDTO(OrderReceipt receipt,
+////             List<Ticket> tickets) {
+////         return toPurchaseRecordDTO(receipt, tickets);
+////     }
 
-    @Deprecated
-    public PurchaseHistoryDTO.PurchaseRecordDTO OrderReceiptToPurchaseRecordDTO(OrderReceipt receipt,
-            List<Ticket> tickets) {
-        return toPurchaseRecordDTO(receipt, tickets);
-    }
 
     // this function does the actual mapping work from *OrderReceipt to
     // PurchaseRecordDTO* , with options to include only selected tickets and to

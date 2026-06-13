@@ -2,7 +2,6 @@ package com.ticketing.system.Infrastructure.scheduling;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -125,7 +124,7 @@ public class SessionAndOrderSweeper {
     
     /**
      * Groups the cart's line items by (eventId, zoneId) and releases the
-     * aggregated quantity per zone via {@link Event#releaseTickets(int, int)},
+     * aggregated quantity per zone via {@link Event#releaseInventory(int, InventorySelection)},
      * matching what {@code CheckoutService.returnTicketsToStock} does on
      * failed checkout.
      */
@@ -147,15 +146,17 @@ public class SessionAndOrderSweeper {
             for (Map.Entry<Integer, List<CartLineItem>> zoneEntry : eventEntry.getValue().entrySet()) {
                 int zoneId = zoneEntry.getKey();
                 List<CartLineItem> items = zoneEntry.getValue();
-                // If any line item has a seat number, we need to release specific seats; otherwise, we can release a quantity of standing tickets
+                // Release seated seats (by seat label) and standing inventory (by quantity) independently.
                 List<String> seatNumbers = items.stream()
                         .map(CartLineItem::getSeatNumber)
                         .filter(s -> s != null)
                         .toList();
-                // If there are no seat numbers, it's a standing reservation, so we release by quantity. Otherwise, we release specific seats.
-                if (seatNumbers.isEmpty()) {
-                    event.releaseInventory(zoneId, InventorySelection.standing(items.size()));
-                } else {
+                
+                int standingCount = (int) items.stream().filter(i -> i.getSeatNumber() == null).count();
+                if (standingCount > 0) {
+                    event.releaseInventory(zoneId, InventorySelection.standing(standingCount));
+                }
+                if (!seatNumbers.isEmpty()) {
                     event.releaseInventory(zoneId, InventorySelection.seated(seatNumbers));
                 }
             }
