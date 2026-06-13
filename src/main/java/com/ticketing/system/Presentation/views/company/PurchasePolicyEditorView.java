@@ -110,6 +110,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
 
     private Span          plainEnglishText;
     private PolicyTreeMap mapPanel;
+    private final Div     loadErrorSlot = new Div();
     private int     companyId    = -1;
     private int     eventId      = -1;
     private boolean isEventLevel = true;
@@ -144,6 +145,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
         subtitle("Click a node to edit it · drag the canvas to pan · scroll to zoom.");
 
         add(buildScopeToolbar());
+        add(loadErrorSlot);
         add(buildPlainEnglishBanner());
         add(buildCanvas());
         add(buildActionBar());
@@ -169,6 +171,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
     // ---------------------------------------------------------------------
 
     private void loadExistingPolicy() {
+        loadErrorSlot.removeAll();
         try {
             String token = resolveToken();
             if (token == null || companyId <= 0) return;
@@ -183,7 +186,15 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
                         root.children.add(dtoToNode(child));
                 }
             }
-        } catch (Exception ignored) { }
+        } catch (Exception e) {
+            LkBanner err = new LkBanner(LkBanner.Tone.error,
+                new LkIcon("alert-circle", 16),
+                "Could not load existing policy: " + e.getMessage());
+            LkBtn retry = new LkBtn("Retry").variant(LkBtn.Variant.secondary);
+            retry.addClickListener(ev -> { loadExistingPolicy(); rebuildTree(); });
+            err.setAction(retry);
+            loadErrorSlot.add(err);
+        }
     }
 
     private Node dtoToNode(PurchasePolicyDTO dto) {
