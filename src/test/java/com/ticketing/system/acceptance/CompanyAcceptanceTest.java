@@ -1,40 +1,36 @@
 package com.ticketing.system.acceptance;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
+import com.ticketing.system.Core.Application.dto.AppointmentRevokeDTO;
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
 import com.ticketing.system.Core.Application.dto.EventCreationDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
+import com.ticketing.system.Core.Application.dto.ManagerAppointmentRequestDTO;
+import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
-import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
-import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
-import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
@@ -42,11 +38,10 @@ import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
-import com.ticketing.system.Core.Domain.users.CompanyRole;
+
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
-import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -198,16 +193,13 @@ class CompanyAcceptanceTest {
                                 Permission.MANAGE_INVENTORY,
                                 Permission.CONFIGURE_VENUE);
 
-                companyService.inviteManager(
-                                owner.token(),
-                                companyId,
-                                manager.userId(),
-                                permissions);
+                companyService.appointManager(owner.token(),
+                                new ManagerAppointmentRequestDTO(companyId, manager.userId(), permissions));
 
                 User managerUser = userRepository.getUserById(manager.userId());
 
-                assertNotEquals(null, managerUser.getPendingCompanyAppointments(companyId));
-                assertEquals(permissions, managerUser.getPendingCompanyAppointments(companyId).getPermissions().stream()
+                assertNotEquals(null, managerUser.getPendingCompanyAppointment(companyId));
+                assertEquals(permissions, managerUser.getPendingCompanyAppointment(companyId).getPermissions().stream()
                                 .toList());
         }
 
@@ -220,28 +212,22 @@ class CompanyAcceptanceTest {
                                 owner.token(),
                                 new CompanyRegistrationDTO("company24b", "desc")).companyId();
 
-                companyService.inviteManager(
-                                owner.token(),
-                                companyId,
-                                manager.userId(),
-                                List.of(Permission.MANAGE_INVENTORY));
+                companyService.appointManager(owner.token(), new ManagerAppointmentRequestDTO(companyId,
+                                manager.userId(), List.of(Permission.MANAGE_INVENTORY, Permission.CONFIGURE_VENUE)));
 
-                companyService.acceptManagerInvitation(manager.token(), companyId);
+                companyService.respondToAppointment(manager.token(), new AppointmentResponseDTO(companyId, true));
 
                 List<Permission> updated = List.of(
                                 Permission.CONFIGURE_VENUE,
                                 Permission.EDIT_POLICIES);
 
-                companyService.ModifyManagerPermissions(
-                                owner.token(),
-                                companyId,
-                                manager.userId(),
-                                updated);
+                companyService.editManagerPermissions(owner.token(),
+                                new PermissionEditDTO(companyId, manager.userId(), updated));
 
                 User managerUser = userRepository.getUserById(manager.userId());
 
                 assertEquals(updated,
-                                managerUser.getActiveCompanyAppointments(companyId).getPermissions().stream().toList());
+                                managerUser.getActiveCompanyAppointment(companyId).getPermissions().stream().toList());
         }
 
         @Test
@@ -256,23 +242,18 @@ class CompanyAcceptanceTest {
 
                 List<Permission> original = List.of(Permission.MANAGE_INVENTORY);
 
-                companyService.inviteManager(
-                                owner.token(),
-                                companyId,
-                                manager.userId(),
-                                original);
+                companyService.appointManager(owner.token(),
+                                new ManagerAppointmentRequestDTO(companyId, manager.userId(), original));
 
-                companyService.acceptManagerInvitation(manager.token(), companyId);
+                companyService.respondToAppointment(manager.token(), new AppointmentResponseDTO(companyId, true));
 
-                assertThrows(RuntimeException.class, () -> companyService.ModifyManagerPermissions(
+                assertThrows(RuntimeException.class, () -> companyService.editManagerPermissions(
                                 other.token(),
-                                companyId,
-                                manager.userId(),
-                                List.of(Permission.EDIT_POLICIES)));
+                                new PermissionEditDTO(companyId, manager.userId(), List.of(Permission.EDIT_POLICIES))));
 
-                ProductionCompany company = companyRepository.getCompanyById(companyId);
-
-                assertEquals(original, company.getManagers().get(manager.userId()));
+                User managerUser = userRepository.getUserById(manager.userId());
+                assertEquals(original,
+                                managerUser.getActiveCompanyAppointment(companyId).getPermissions().stream().toList());
         }
 
         @Test
@@ -284,23 +265,20 @@ class CompanyAcceptanceTest {
                                 owner.token(),
                                 new CompanyRegistrationDTO("company24d", "desc")).companyId();
 
-                companyService.inviteManager(
+                companyService.appointManager(
                                 owner.token(),
-                                companyId,
-                                manager.userId(),
-                                List.of(Permission.MANAGE_INVENTORY));
+                                new ManagerAppointmentRequestDTO(companyId, manager.userId(),
+                                                List.of(Permission.MANAGE_INVENTORY)));
 
-                companyService.acceptManagerInvitation(manager.token(), companyId);
+                companyService.respondToAppointment(manager.token(), new AppointmentResponseDTO(companyId, true));
 
-                companyService.RevokeManager(
+                companyService.RevokeAppointment(
                                 owner.token(),
-                                companyId,
-                                manager.userId());
+                                new AppointmentRevokeDTO(companyId, manager.userId()));
 
-                ProductionCompany company = companyRepository.getCompanyById(companyId);
                 User managerUser = userRepository.getUserById(manager.userId());
 
-                assertNull(managerUser.getActiveCompanyAppointments(companyId));
+                assertNull(managerUser.getActiveCompanyAppointment(companyId));
         }
 
         // UC-25

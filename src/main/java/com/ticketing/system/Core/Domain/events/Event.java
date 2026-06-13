@@ -4,9 +4,7 @@ package com.ticketing.system.Core.Domain.events;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
-import com.ticketing.system.Core.Domain.policies.purchase.AndPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchaseContext;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
@@ -37,10 +35,13 @@ public class Event implements InvariantChecked {
         this.venueMap = venueMap;
         this.showDates = showDates;
          if (PurchasePolicy == null) {
-    this.purchasePolicy = new NoPurchasePolicy();
-} else {
-    this.purchasePolicy = PurchasePolicy;
-}
+            this.purchasePolicy = new NoPurchasePolicy();
+        } else {
+            this.purchasePolicy = PurchasePolicy;
+        }
+        // Discount Policies are not currently in the implementation plan so in the creation of the event we manually, 
+        // without outside intervention, set the discount to 0, not doing any discount automatically without the ability to
+        // change this from the outside right now.
         this.discountPolicy = discountPolicy;
     }
 
@@ -116,11 +117,11 @@ public class Event implements InvariantChecked {
         return id;
     }
 
+    
     public double calculatePrice(int quantity, Double priceAtoneticketReservation, LocalDateTime now) {
         return discountPolicy.calculate(quantity, priceAtoneticketReservation, now);
     }
-
-
+    //? These 2 functions are not in the implementation plan, so above for each event we just give discount 0, so not doing any discount.
     public double calculatePriceforoneticket(int quantity, Double priceAtoneticketReservation, LocalDateTime now) {
         return discountPolicy.calculatePriceforoneticket(quantity, priceAtoneticketReservation, now);
     }
@@ -211,7 +212,7 @@ public class Event implements InvariantChecked {
 
         checkInvariants(); // enforce all invariants before allowing sales to start
 
-        //TODO:   <<------------------  see what more checks are needed to be added here
+        //TODO:   <<------------------  see what more checks are needed to be added here   <----------------
 
         if (status != EventStatus.SCHEDULED) {
             throw new IllegalStateException("Only scheduled events can go on sale");
@@ -350,12 +351,11 @@ public class Event implements InvariantChecked {
             throw new IllegalStateException("Event invariant violated: showDates list must not be null");
         }
         if (purchasePolicy == null) {
-    throw new IllegalStateException("Event invariant violated: purchasePolicy must not be null");
-}
-
-if (discountPolicy == null) {
-    throw new IllegalStateException("Event invariant violated: discountPolicy must not be null");
-}
+            throw new IllegalStateException("Event invariant violated: purchasePolicy must not be null");
+        }
+        if (discountPolicy == null) {
+            throw new IllegalStateException("Event invariant violated: discountPolicy must not be null");
+        }
         // venueMap may be null in DRAFT state (UC-19) before UC-20 binds it — don't enforce non-null.
         // If present, the VenueMap's own invariants apply (cascade-check when implemented).
     }

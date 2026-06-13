@@ -40,27 +40,27 @@ public class StubPaymentGateway implements IPaymentGateway {
     public PaymentResultDTO charge(PaymentRequestDTO request) {
         validateChargeRequest(request);
 
-        PaymentRequestDTO existingRequest = requestsByIdempotencyKey.putIfAbsent(request.idempotencyKey(), request);
-        if (existingRequest != null) {
-            if (!samePaymentRequest(existingRequest, request)) {
-                throw new IdempotencyConflictException(request.idempotencyKey());
-            }
-
-            return chargesByIdempotencyKey.get(request.idempotencyKey());
+        String key = request.idempotencyKey();
+            
+        PaymentRequestDTO existingRequest = requestsByIdempotencyKey.putIfAbsent(key, request);
+         if (existingRequest != null && !samePaymentRequest(existingRequest, request)) {
+             throw new IdempotencyConflictException(key);
         }
 
-        int transactionId = transactionIds.getAndIncrement();
+        PaymentRequestDTO canonicalRequest = existingRequest != null ? existingRequest : request;
 
-        PaymentResultDTO result = new PaymentResultDTO(
-                transactionId,
-                GATEWAY_ID,
-                request.amount(),
-                request.currency(),
-                LocalDateTime.now()
-        );
-
-        chargesByIdempotencyKey.put(request.idempotencyKey(), result);
-        chargesByTransactionId.put(transactionId, result);
+        PaymentResultDTO result = chargesByIdempotencyKey.computeIfAbsent(key, k -> {
+             int transactionId = transactionIds.getAndIncrement();
+             PaymentResultDTO created = new PaymentResultDTO(
+                     transactionId,
+                     GATEWAY_ID,
+                     canonicalRequest.amount(),
+                     canonicalRequest.currency(),
+                     LocalDateTime.now()
+             );
+             chargesByTransactionId.put(transactionId, created);
+             return created;
+         });
 
         return result;
     }

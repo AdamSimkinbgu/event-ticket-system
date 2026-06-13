@@ -269,7 +269,7 @@ void GivenZoneDoesNotExist_WhenreserveStandingTicketsForMember_ThenThrowExceptio
     when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
     when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
     when(eventRepository.findById(EVENT_ID)).thenReturn(event);
-    when(event.getVenueMap().getZone(ZONE_ID)).thenReturn(null);
+    when(event.getVenueMap().getZone(ZONE_ID)).thenThrow(new IllegalArgumentException("Zone not found: " + ZONE_ID));
 
     assertThrows(IllegalArgumentException.class, () ->
             reservationService.reserveForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, InventorySelectionDTO.standing(QUANTITY))
@@ -367,7 +367,7 @@ void GivenZoneDoesNotExist_WhenreserveStandingTicketsForGuest_ThenThrowException
     String sessionId = "guest-session";
 
     when(eventRepository.findById(EVENT_ID)).thenReturn(event);
-    when(event.getVenueMap().getZone(ZONE_ID)).thenReturn(null);
+    when(event.getVenueMap().getZone(ZONE_ID)).thenThrow(new IllegalArgumentException("Zone not found: " + ZONE_ID));
 
     assertThrows(IllegalArgumentException.class,
             () -> reservationService.reserveForGuest(sessionId, EVENT_ID, ZONE_ID, InventorySelectionDTO.standing(QUANTITY)));

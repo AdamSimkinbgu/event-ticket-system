@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
+import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Application.dto.EventCreationDTO;
@@ -59,6 +60,7 @@ public class EventManagementService {
     private final IOrderReceiptRepository orderReceiptRepository;
     private final IPaymentGateway paymentGateway;
     private final IUserRepository userRepository;
+    private int currentVenueMapIdCounter;
 
     public EventManagementService(
             IEventRepository eventRepository,
@@ -75,6 +77,7 @@ public class EventManagementService {
         this.orderReceiptRepository = orderReceiptRepository;
         this.paymentGateway = paymentGateway;
         this.userRepository = userRepository;
+        this.currentVenueMapIdCounter = 0;  // Initialize the venue map ID counter, change the counter to be internal but here for now.
     }
 
     // Flow:
@@ -97,42 +100,52 @@ public class EventManagementService {
     // UC-19 — Owner adds an Event in DRAFT state.
     public EventDetailDTO addEvent(String token, EventCreationDTO request) {
         int ownerId = validateTokenAndGetUserId(token);
-        ProductionCompany company = companyRepository.getCompanyById(request.companyId());
+
+        ProductionCompany company = null;
+        //TODO: see about all the other exceptions throws handlings/catches.
+        try {
+            company = companyRepository.getCompanyById(request.companyId());
+        } catch (RuntimeException e) {
+            log.error("Error - company not found: {}, {}", request.companyId(), e.getMessage());
+            throw new RuntimeException("Company not found");
+        }
+
         User user = userRepository.getUserById(ownerId);
         user.requirePermissionInCompany(request.companyId(), Permission.CONFIGURE_VENUE);
 
         int newEventId = eventRepository.nextId();
-        VenueMap venueMap = new VenueMap(1, request.location(), List.of()); // TODO: need an incremantal ID counter for
-                                                                            // venue maps
-        DiscountPolicy discountPolicy = new DiscountPolicy(10.0); // Note: support policies later
+        VenueMap venueMap = new VenueMap(this.nextVenueMapId(), request.location(), List.of()); // TODO: need an INTERNAL incremantal ID counter for venue maps, did this for now.
+        //! Note: Discount policy is currently not in the implementation plan so just put as 0 discount for every event here
+        // not doing discount automatically without the ability to change this from the outside right now.
+        DiscountPolicy discountPolicy = new DiscountPolicy(0);
 
 
 
-PurchasePolicy companyPurchasePolicy = company.getPurchasePolicy();
-if (companyPurchasePolicy == null) {
-    companyPurchasePolicy = new NoPurchasePolicy();
-}
+        PurchasePolicy companyPurchasePolicy = company.getPurchasePolicy();
+        if (companyPurchasePolicy == null) {
+            companyPurchasePolicy = new NoPurchasePolicy();
+        }
 
-PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(request.purchasePolicy());
+        PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(request.purchasePolicy());
 
-PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
-        companyPurchasePolicy,
-        eventSpecificPurchasePolicy
-);
+        PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
+                companyPurchasePolicy,
+                eventSpecificPurchasePolicy
+        );
 
-Event newEvent = new Event(
-        newEventId,
-        request.name(),
-        5.00,
-        List.of("sss", "ddd"),
-        request.category(),
-        request.companyId(),
-        EventStatus.DRAFT,
-        venueMap,
-        request.showDates(),
-        inheritedAndExtendedPurchasePolicy,
-        discountPolicy
-);
+        Event newEvent = new Event(
+                newEventId,
+                request.name(),
+                5.00,
+                List.of("sss", "ddd"),
+                request.category(),
+                request.companyId(),
+                EventStatus.DRAFT,
+                venueMap,
+                request.showDates(),
+                inheritedAndExtendedPurchasePolicy,
+                discountPolicy
+        );
         eventRepository.save(newEvent);
 
         log.info("Event {} created successfully with ID {}", request.name(), newEventId);
@@ -149,21 +162,25 @@ Event newEvent = new Event(
                 newEvent.getShowDates());
     }
 
+    
+
     // configureVenueMap is a separate method that can be called multiple times to
     // update the venue map and inventory zones *before* the event goes live.
     // It also allows for a more iterative setup process where the owner/manager can
     // first create the event with basic details and then configure the venue map in
     // a second step.
-
     public void configureVenueMap(String token, int companyId, VenueMapConfigDTO config) {
         int userId = validateTokenAndGetUserId(token);
         log.info("Configuring venue map for company {}, event {}, by user {}", companyId, config.eventId(), userId);
         User user = userRepository.getUserById(userId);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         user.requirePermissionInCompany(companyId, Permission.CONFIGURE_VENUE);
-
-        Event event = eventRepository.findById(Integer.parseInt(config.eventId()));
-        if (event == null) {
+        
+        Event event = null;
+        try {
+            event = eventRepository.findById(Integer.parseInt(config.eventId()));
+        } catch (EventNotFoundException e) {
+            log.warn("Event {} not found", config.eventId());
             throw new RuntimeException("Event not found");
         }
 
@@ -228,10 +245,7 @@ Event newEvent = new Event(
         eventRepository.lockForUpdate(eventId);
 
         try {
-            Event event = eventRepository.findById(eventId);
-            if (event == null) {
-                throw new RuntimeException("Event not found");
-            }
+            Event event = eventRepository.findById(eventId); // throws if not found, which is what we want here.
             ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
             User user = userRepository.getUserById(ownerId);
             user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
@@ -320,6 +334,16 @@ Event newEvent = new Event(
 
             log.info("Event {} canceled and refund flow completed", eventId);
 
+        } catch (EventNotFoundException e) {    //TODO: check if these Catches are good
+            log.warn("Event {} not found for cancellation", eventId);
+            throw new RuntimeException("Event not found");
+        } catch (RefundFailedException e) {
+            log.error("Refund failed during cancellation of event {}: {}", eventId, e.getMessage());
+            throw new RuntimeException("Refund failed: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error during cancellation of event {}: {}", eventId, e.getMessage());
+            throw new RuntimeException("Error during cancellation: " + e.getMessage());
+
         } finally {
             eventRepository.unlock(eventId);
         }
@@ -352,11 +376,22 @@ Event newEvent = new Event(
 
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
+
+        // check if company id exists
+        ProductionCompany company = null;
+        try {
+            company = companyRepository.getCompanyById(company_id);
+        } catch (RuntimeException e) {
+            log.error("Error - company not found: {}, {}", company_id, e.getMessage());
+            throw new RuntimeException("Company not found");
+        }
+
         user.requirePermissionInCompany(company_id, Permission.CONFIGURE_VENUE);
 
-        Event event = eventRepository.findById(event_id);
-
-        if (event == null) {
+        Event event = null;
+        try {
+            event = eventRepository.findById(event_id);
+        } catch (EventNotFoundException e) {
             log.warn("Event {} not found", event_id);
             throw new RuntimeException("Event not found");
         }
@@ -366,6 +401,11 @@ Event newEvent = new Event(
         eventRepository.save(event);
         log.info("Zone {} at company {} capacity updated successfully", zone_id, company_id);
 
+    }
+    
+    private int nextVenueMapId() {
+        this.currentVenueMapIdCounter++;
+        return this.currentVenueMapIdCounter;
     }
 
     // UC-21 — set / replace event-level purchase + discount policies.

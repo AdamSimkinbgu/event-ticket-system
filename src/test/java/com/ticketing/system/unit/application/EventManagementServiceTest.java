@@ -138,12 +138,7 @@ class EventManagementServiceTest {
     @Test
     public void GivenManagerWithConfigureVenuePermission_WhenUpdateZoneCapacity_ThenZoneCapacityUpdated() {
 
-        company.validateManagerInvitation(
-                COMPANY_ID,
-                MANAGER_ID,
-                OWNER_ID,
-                List.of(Permission.CONFIGURE_VENUE));
-        company.acceptManagerInvitation(MANAGER_ID);
+        company.addManager(MANAGER_ID);
 
         when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
@@ -178,7 +173,7 @@ class EventManagementServiceTest {
     public void GivenCompanyDoesNotExist_WhenUpdateZoneCapacity_ThenThrowException() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenThrow(RuntimeException.class);
 
         assertThrows(RuntimeException.class, () -> eventService.updateStandingZoneCapacity(
                 OWNER_TOKEN,
@@ -193,7 +188,7 @@ class EventManagementServiceTest {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-        when(mockEventRepo.findById(EVENT_ID)).thenReturn(null);
+        when(mockEventRepo.findById(EVENT_ID)).thenThrow(RuntimeException.class);
 
         assertThrows(RuntimeException.class, () -> eventService.updateStandingZoneCapacity(
                 OWNER_TOKEN,
@@ -219,12 +214,8 @@ class EventManagementServiceTest {
 
     @Test
     public void GivenManagerWithoutConfigureVenuePermission_WhenUpdateZoneCapacity_ThenThrowException() {
-        company.validateManagerInvitation(
-                COMPANY_ID,
-                MANAGER_ID,
-                OWNER_ID,
-                List.of(Permission.MANAGE_INVENTORY));
-        company.acceptManagerInvitation(MANAGER_ID);
+
+        company.addManager(MANAGER_ID);
 
         when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
@@ -308,7 +299,7 @@ class EventManagementServiceTest {
     public void GivenEventDoesNotExist_WhenCancelEventAndRefund_ThenThrowException() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-        when(mockEventRepo.findById(EVENT_ID)).thenReturn(null);
+        when(mockEventRepo.findById(EVENT_ID)).thenThrow(RuntimeException.class);
 
         assertThrows(RuntimeException.class, () -> eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID));
     }
@@ -318,7 +309,7 @@ class EventManagementServiceTest {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
-        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenThrow(RuntimeException.class);
 
         assertThrows(RuntimeException.class, () -> eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID));
     }

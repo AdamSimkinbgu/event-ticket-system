@@ -151,7 +151,7 @@ public class ReservationAcceptanceTests {
 
     @Test
     void GivenZoneNotFound_WhenreserveStandingTicketsForMember_ThenThrowException() {
-        when(event.getVenueMap().getZone(1)).thenReturn(null);
+        when(event.getVenueMap().getZone(1)).thenThrow(new IllegalArgumentException("Zone not found: " + 1));
 
         String result;
 

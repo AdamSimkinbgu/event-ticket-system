@@ -35,6 +35,7 @@ import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Session;
 import com.ticketing.system.Core.Domain.users.User;
+import com.ticketing.system.Infrastructure.persistence.MemoryActiveOrderRepository;
 
 import java.util.Optional;
 
@@ -176,6 +177,7 @@ public class AuthenticationService {
         // 4. Create user.
         String hashed = passwordHasher.hash(request.rawPassword());
         User user = new User(userRepository.nextId(), request.username(), request.email(), hashed, request.age());
+        // throws IllegalArgumentException("Age cannot be negative") if age < 0.
         userRepository.save(user);
 
         // 5. Session stays Guest — just touch the activity timestamp.

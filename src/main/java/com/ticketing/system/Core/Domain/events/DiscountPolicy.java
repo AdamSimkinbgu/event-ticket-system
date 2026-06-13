@@ -3,14 +3,17 @@ package com.ticketing.system.Core.Domain.events;
 import java.time.LocalDateTime;
 import java.util.Map;
 
-public class DiscountPolicy {
-    //TODO: needs to be implemented according to the requirements, for now it just has a simple percentage discount that can be applied to the price of a ticket.
-    private final double discountPercentage;
+public class DiscountPolicy { //? Note: but not in implementation plan  <------------   <-----------    <---------------
+    
+    private final double discountPercentage;  // Discount percentage (0-100)
 
     public DiscountPolicy(double discountPercentage) {
         if (discountPercentage < 0 || discountPercentage > 100) {
             throw new IllegalArgumentException("Invalid discount percentage");
         }
+        // if(discountPercentage == null) {
+        //     throw new IllegalArgumentException("Discount percentage cannot be null");
+        // }
         this.discountPercentage = discountPercentage;
     }
 
