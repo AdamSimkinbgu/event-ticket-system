@@ -26,6 +26,7 @@ import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
 import com.ticketing.system.Core.Domain.events.Seat;
 import com.ticketing.system.Core.Domain.events.SeatStatus;
 import com.ticketing.system.Core.Domain.events.SeatedZone;
+import com.ticketing.system.Core.Domain.events.ShowDate;
 
 // Unit tests for the Event aggregate (Event + VenueMap + InventoryZone + ShowDate + policies).
 class EventTest extends BaseDomainTest {
@@ -55,7 +56,7 @@ class EventTest extends BaseDomainTest {
                 COMPANY_ID,
                 EventStatus.SCHEDULED,
                 venueMap,
-                List.of(),
+                List.of(new ShowDate(LocalDateTime.now().plusDays(30), LocalDateTime.now().plusDays(30).plusHours(2))),
                 null,
                 new DiscountPolicy(0) ));
                    
@@ -257,7 +258,7 @@ class EventTest extends BaseDomainTest {
                 COMPANY_ID,
                 EventStatus.SCHEDULED,
                 new VenueMap(1, LOCATION, zones),
-                List.of(),
+                List.of(new ShowDate(LocalDateTime.now().plusDays(30), LocalDateTime.now().plusDays(30).plusHours(2))),
                 acceptingPurchasePolicy(),
                 noDiscountPolicy()));
     }

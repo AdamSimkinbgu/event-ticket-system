@@ -5,10 +5,14 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
+import lombok.extern.slf4j.Slf4j;
+
 import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchaseContext;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
 
+@Slf4j
 public class Event implements InvariantChecked {
     private final int id;
     private final String name;
@@ -26,14 +30,46 @@ public class Event implements InvariantChecked {
             EventStatus status, VenueMap venueMap, List<ShowDate> showDates, PurchasePolicy PurchasePolicy,
          DiscountPolicy discountPolicy) {
         this.id = id;
+
+        if (name == null || name.isBlank()) {
+            log.error("Attempted to create Event with invalid name: '{}'", name);
+            throw new IllegalArgumentException("Event name is required");
+        }
         this.name = name;
+
+        if(rating != null && (rating < 0 || rating > 5)) {
+            log.error("Attempted to create Event with invalid rating: '{}'", rating);
+            throw new IllegalArgumentException("Event rating must be between 0 and 5");
+        }
         this.rating = rating;
+
+        if(artistsNames == null || artistsNames.isEmpty()) {
+            log.error("Attempted to create Event with null/empty artistsNames list");
+            throw new IllegalArgumentException("Artists names list is required");
+        }
         this.artistsNames = artistsNames;
+
+        if (category == null) {
+            log.error("Attempted to create Event with null category");
+            throw new IllegalArgumentException("Event category is required");
+        }
         this.category = category;
+
+        if (comapnyid <= 0) {
+            log.error("Attempted to create Event with invalid companyId: '{}'", comapnyid);
+            throw new IllegalArgumentException("Company ID must be positive");
+        }
+        
         this.comapnyid = comapnyid;
         this.status = status;
         this.venueMap = venueMap;
-        this.showDates = showDates;
+
+        if(showDates == null || showDates.isEmpty()) {
+            log.error("Attempted to create Event with null/empty showDates list");
+            throw new IllegalArgumentException("Show dates list is required");
+         }
+         this.showDates = showDates;
+        
          if (PurchasePolicy == null) {
             this.purchasePolicy = new NoPurchasePolicy();
         } else {

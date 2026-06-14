@@ -141,6 +141,10 @@ public class SessionAndOrderSweeper {
                 log.warn("Event with ID {} not found while releasing tickets for order of user id {}. Skipping.", eventEntry.getKey(), order.getUserId());
                 continue;
             }
+            if (event == null) {
+                log.warn("Event with ID {} not found while releasing tickets for order of user id {}. Skipping.", eventEntry.getKey(), order.getUserId());
+                continue;
+            }
             // For each zone in the event, determine how many tickets to release
             for (Map.Entry<Integer, List<CartLineItem>> zoneEntry : eventEntry.getValue().entrySet()) {
                 int zoneId = zoneEntry.getKey();

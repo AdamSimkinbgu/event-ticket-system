@@ -108,8 +108,10 @@ class CompanyAcceptanceTest {
    EventCreationDTO eventRequest = new EventCreationDTO(
         companyId,
         "Capacity Test Event",
-        "Testing inventory zone capacity",
-        EventCategory.CONCERT,
+                   "Testing inventory zone capacity",
+                        List.of("Test Artist", "Another Artist"),
+                   EventCategory.CONCERT,
+                        4.5,
         new Location("Test Venue", "Test City"),
         List.of(new ShowDate(
                 LocalDateTime.now().plusDays(1),

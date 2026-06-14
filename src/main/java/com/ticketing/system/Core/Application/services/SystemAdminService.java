@@ -1,11 +1,13 @@
 package com.ticketing.system.Core.Application.services;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.ticketing.system.Core.Application.dto.GlobalHistoryFiltersDTO;
 import com.ticketing.system.Core.Application.dto.MarketControlRequestDTO;
 import com.ticketing.system.Core.Application.dto.MarketStateDTO;
-import com.ticketing.system.Core.Application.dto.PageDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dtoMappers.OrderReceiptMapper;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
@@ -83,22 +85,103 @@ public class SystemAdminService {
 
 
 
+
     // UC-31 — global purchase history with filters (admin-only RBAC enforced inside).
     public List<PurchaseHistoryDTO> viewGlobalHistory(String token, GlobalHistoryFiltersDTO filters) {
+        log.info("Admin request to view global purchase history with filters: {}", filters);
         requireSystemAdmin(token);
 
-        log.info("Viewing global purchase history with filters: {}", filters);
+        GlobalHistoryFiltersDTO effectiveFilters = normalizeGlobalHistoryFilters(filters);
+        Set<Integer> selectedEventIds = selectedEventIdsOrNull(effectiveFilters);
+
         OrderReceiptMapper mapper = new OrderReceiptMapper();
 
-        List<PurchaseHistoryDTO.PurchaseRecordDTO> records = orderReceiptRepository.findGlobal(filters)
+        List<PurchaseHistoryDTO.PurchaseRecordDTO> records = orderReceiptRepository.findGlobal(effectiveFilters)
                 .stream()
-                .map(receipt -> mapper.toPurchaseRecordDTO(receipt, ticketRepository))
+                .map(receipt -> {
+                    if (selectedEventIds == null) {
+                        return mapper.toPurchaseRecordDTO(receipt, ticketRepository);
+                    }
+
+                    return mapper.toFilteredPurchaseRecordDTO(receipt, selectedEventIds, ticketRepository);
+                })
+                .filter(record -> !record.tickets().isEmpty())
                 .toList();
 
-        log.info("Found {} records for global purchase history with filters: {}", records.size(), filters);
+        log.info("Found {} records for admin global purchase history with filters: {}", records.size(), effectiveFilters);
         return List.of(new PurchaseHistoryDTO(records));
     }
+
+
+
+
+    // *HELPER METHODS* for viewGlobalHistory() that normalize and validate the filters, and enforce admin RBAC. 
+    // this method enforces that the event filter is consistent with the company filter (if provided), and that the date range is valid. 
+    // It also logs the filters being applied for audit purposes.
+    private GlobalHistoryFiltersDTO normalizeGlobalHistoryFilters(GlobalHistoryFiltersDTO filters) {
+        // If no filters are provided, return a default filter that matches all receipts.
+        GlobalHistoryFiltersDTO f = filters == null
+                ? new GlobalHistoryFiltersDTO(null, null, null, null, null)
+                : filters;
+        // Validate that fromDate is not after toDate if both are provided.
+        if (f.fromDate() != null && f.toDate() != null && f.fromDate().isAfter(f.toDate())) {
+            throw new IllegalArgumentException("fromDate must be before or equal to toDate");
+        }
+
+        // If companyId is provided but eventIds is not, we need to fetch the event IDs for that company and use them as the effective filter.
+        if (f.companyId() == null) {
+            return new GlobalHistoryFiltersDTO(
+                    f.buyerUserId(),
+                    null,
+                    f.eventIds(),
+                    f.fromDate(),
+                    f.toDate());
+        }
+
+        // If companyId is provided, we need to ensure that the eventIds filter (if provided) is a subset of the events for that company. 
+        // If eventIds is null, we will use all events for that company.
+        List<Integer> companyEventIds = eventRepository.findIdsByCompany(f.companyId());
+
+        List<Integer> effectiveEventIds;
+
+        if (f.eventIds() == null) {
+            // No event filter provided, use all events for the company.
+            effectiveEventIds = companyEventIds;
+        } else {
+            // Event filter provided, ensure it is a subset of the company's events. If not, throw an exception.
+            Set<Integer> requestedSet = new HashSet<>(f.eventIds());
+            // Retain only the event IDs that are both in the requested set and in the company's events.(Intersection of the two sets)
+            effectiveEventIds = companyEventIds.stream()
+                    .filter(requestedSet::contains)
+                    .toList();
+        }
+
+        return new GlobalHistoryFiltersDTO(
+                f.buyerUserId(),
+                null,
+                effectiveEventIds,
+                f.fromDate(),
+                f.toDate());
+    }
+
+   
+    // *HELPER METHOD* to convert the list of event IDs in the filters to a set for efficient lookup later. Returns null if no event filter is applied.
+    private Set<Integer> selectedEventIdsOrNull(GlobalHistoryFiltersDTO filters) {
+        if (filters.eventIds() == null) {
+            return null;
+        }
+        // Convert to set for efficient lookup later.
+        return filters.eventIds().stream().collect(Collectors.toSet());
+    }
     
+
+
+
+
+
+
+
+
     // *HELPER METHOD* to enforce that the requester is a system admin. Throws if not.
     private void requireSystemAdmin(String token) {
         if (!sessionManager.validateToken(token)) {

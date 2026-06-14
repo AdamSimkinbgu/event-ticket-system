@@ -12,8 +12,6 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
-import com.ticketing.system.Core.Application.dto.PageDTO;
-import com.ticketing.system.Core.Application.dto.ShowDateDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapDTO;
 import com.ticketing.system.Core.Application.dtoMappers.VenueMapMapper;
 import com.ticketing.system.Core.Application.dtoMappers.EventMapper;
@@ -53,73 +51,194 @@ public class CatalogService {
 
 
 
-
-    // UC-3: Browse Events as Guest. Lists active events from active production companies.
+    //* UC-3: Browse the catalog, returning a list of EventSummaryDTOs. Accepts either a JWT (Member) or a raw sessionId (Guest) — catalog 
+    //* browsing is open to anyone with an active session per UC-3 / UC-7 (auth rework #181 / Phase 4.3).
     public List<EventSummaryDTO> browseEventCatalog() {
-        throw new UnsupportedOperationException("UC-3: not implemented");
+        EventMapper mapper = new EventMapper();
+        // Return all events that are ON_SALE and associated with an ACTIVE company.
+        return productionCompanyRepository.findActive().stream()
+                .flatMap(company -> eventRepository.findActiveByCompany(company.getCompanyId()).stream())
+                .filter(event -> event.getStatus() == EventStatus.ON_SALE)
+                .map(event -> mapper.convertEventToEventSummaryDTO(event, productionCompanyRepository))
+                .toList();
     }
 
 
 
 
-
-
-
-
-    // UC-7: Global search with filters (price/date/location/rating, plus name/artist/category/keywords).
-    public List<EventSummaryDTO> searchGlobal(String token, CatalogSearchFiltersDTO filters) {
+    //* UC-7: Search the catalog with filters, returning a list of EventSummaryDTOs. Accepts either a JWT (Member) or a raw sessionId (Guest) — 
+    //* catalog search is open to anyone with an active session per UC-3 / UC-7 (auth rework #181 / Phase 4.3).
+    public List<EventSummaryDTO> searchGlobal(String credential, CatalogSearchFiltersDTO filters) {
         log.info("Starting global search with filters: {}", filters);
-        if (!this.sessionManager.validateToken(token)) {
-            log.warn("Invalid Token provided while performing global search with filters: {}", filters);
-            throw new InvalidTokenException();
+        // Validate the credential (JWT or sessionId) before proceeding with the search.
+        if (!this.sessionManager.validateCredential(credential)) {
+            log.warn("Invalid credential provided while performing global search with filters: {}", filters);
+            throw new InvalidTokenException("Invalid credential provided while performing global search with filters: " + filters);
         }
+        // Normalize and validate the filters, THROWING ---> IllegalArgumentException for invalid ranges or dates.
+        CatalogSearchFiltersDTO effectiveFilters = normalizeAndValidateCatalogFilters(filters);
+        // Create an EventMapper to convert Event entities to EventSummaryDTOs.
+        EventMapper mapper = new EventMapper();
 
-        ArrayList<EventSummaryDTO> results = new ArrayList<>();
-        // get all events matching the search criteria
-        List<Event> eventFilteration = eventRepository.search(filters);
+        List<EventSummaryDTO> results = new ArrayList<>();
 
-        for (Event event : eventFilteration) {
-            // company rating filter that is added in the global search but not the company-scoped search
-            if (filters.minCompanyRating() != null && productionCompanyRepository.getCompanyById(event.getCompanyId())
-                    .getRating() < filters.minCompanyRating()) {
+        // Iterate over all events returned by the eventRepository.searchONSALE() method, applying the effective filters.
+        for (Event event : eventRepository.searchONSALE(effectiveFilters)) {
+            // Check if the event is associated with an active company and is publicly visible (ON_SALE).
+            
+            ProductionCompany company = activeCompanyOrNull(event.getCompanyId());
+
+            // If the event is not publicly visible or the company does not match the company rating filters, skip to the next event.
+            if (!isCompanyPubliclyVisible(company)) {
                 continue;
             }
-            if (filters.maxCompanyRating() != null && productionCompanyRepository.getCompanyById(event.getCompanyId())
-                    .getRating() > filters.maxCompanyRating()) {
+            if (!matchesCompanyRating(company, effectiveFilters)) {
                 continue;
             }
-            results.add(new EventMapper().convertEventToEventSummaryDTO(event, productionCompanyRepository));
+
+            results.add(mapper.convertEventToEventSummaryDTO(event, productionCompanyRepository));
         }
-        log.info("Global search with filters: {} returning {} results", filters, results.size());
+
+        log.info("Global search with filters: {} returning {} results", effectiveFilters, results.size());
         return results;
     }
 
 
 
 
-    // UC-7: Company-scoped search (no rating filter per II.2.3.2).
-    public List<EventSummaryDTO> searchByCompany(String token, int companyId, CatalogSearchFiltersDTO filters) {
+
+    //* the searchByCompany method is similar to searchGlobal but scoped to a specific company and without company-rating filters.
+    public List<EventSummaryDTO> searchByCompany(String credential, int companyId, CatalogSearchFiltersDTO filters) {
         log.info("Starting company-scoped search for companyId: {} with filters: {}", companyId, filters);
-        if (!this.sessionManager.validateToken(token)) {
-            log.warn("Invalid Token provided while performing company-scoped search for companyId: {} with filters: {}", companyId, filters);
-            throw new InvalidTokenException();
+        // Validate the credential (JWT or sessionId) before proceeding with the search.
+        if (!this.sessionManager.validateCredential(credential)) {
+            log.warn("Invalid credential provided while performing company-scoped search for companyId: {} with filters: {}",
+                    companyId, filters);
+            throw new InvalidTokenException("Invalid credential provided while performing company-scoped search for companyId: " + companyId);
         }
 
-        List<EventSummaryDTO> results = new ArrayList<>();
-        List<Event> eventFilteration = eventRepository.search(filters);
+        // Validate that the specified company exists and is active, throwing CompanyNotFoundException or CompanyClosedException if not.
+        requireActiveCompany(companyId);
 
-        for (Event event : eventFilteration) {
-            // only include this current company's events
+        // Normalize and validate the filters, THROWING ---> IllegalArgumentException for invalid ranges or dates. 
+        // Without company-rating filters since this is a company-scoped search.
+        CatalogSearchFiltersDTO effectiveFilters = normalizeAndValidateCatalogFilters(filters).withoutCompanyRating();
+        EventMapper mapper = new EventMapper();
+
+        List<EventSummaryDTO> results = new ArrayList<>();
+
+        for (Event event : eventRepository.searchONSALE(effectiveFilters)) {
+
             if (event.getCompanyId() != companyId) {
                 continue;
             }
-            results.add(new EventMapper().convertEventToEventSummaryDTO(event, productionCompanyRepository));
+            // Check if the event is associated with an active company and is publicly visible (ON_SALE). this check is 
+            ProductionCompany company = activeCompanyOrNull(event.getCompanyId());
+            if (!isCompanyPubliclyVisible(company)) {
+                continue;
+            }
+
+            results.add(mapper.convertEventToEventSummaryDTO(event, productionCompanyRepository));
         }
-        log.info("Company-scoped search for companyId: {} with filters: {} returning {} results", companyId, filters, results.size());
+
+        log.info("Company-scoped search for companyId: {} with filters: {} returning {} results",
+                companyId, effectiveFilters, results.size());
+
         return results;
     }
 
+    
 
+
+
+
+
+
+    // *HELPER METHOD* to normalize and validate the search filters, throwing IllegalArgumentException for invalid ranges or dates.
+    private CatalogSearchFiltersDTO normalizeAndValidateCatalogFilters(CatalogSearchFiltersDTO filters) {
+        CatalogSearchFiltersDTO f = filters == null
+                ? CatalogSearchFiltersDTO.empty()
+                : filters.normalized();
+
+        validateDoubleRange(f.minPrice(), f.maxPrice(), "price");
+        validateDoubleRange(f.minEventRating(), f.maxEventRating(), "event rating");
+        validateDoubleRange(f.minCompanyRating(), f.maxCompanyRating(), "company rating");
+
+        // validate that fromDate is before or equal to toDate if both are provided.
+        if (f.fromDate() != null && f.toDate() != null && f.fromDate().isAfter(f.toDate())) {
+            throw new IllegalArgumentException("fromDate must be before or equal to toDate");
+        }
+
+        return f;
+    }
+
+    // *HELPER METHOD* to validate that a min/max double range is valid, throwing IllegalArgumentException if min > max.
+    private void validateDoubleRange(Double min, Double max, String name) {
+        // if either min or max is null, we consider it unbounded and therefore valid, so only throw if both are non-null and min > max.
+        if (min != null && max != null && min > max) {
+            throw new IllegalArgumentException("min " + name + " must be <= max " + name);
+        }
+    }
+
+    // *HELPER METHOD* to return the active ProductionCompany for a given companyId, or null if not found or not active.
+    private ProductionCompany activeCompanyOrNull(int companyId) {
+        try {
+            ProductionCompany company = productionCompanyRepository.getCompanyById(companyId);
+            // will throw if company not found, and if it doesn't throw but the company is not active, we'll return null to indicate that the company is not publicly visible.
+            if (company == null || company.getStatus() != CompanyStatus.ACTIVE) {
+                return null;
+            }
+            return company;
+        } catch (RuntimeException e) {
+            // If the company is not found or any other exception occurs, return null to indicate that the company does not exist.
+            return null;
+        }
+    }
+
+    // *HELPER METHOD* to require that a ProductionCompany exists and is active, throwing CompanyNotFoundException or CompanyClosedException if not.
+    private ProductionCompany requireActiveCompany(int companyId) {
+        ProductionCompany company;
+        try {
+            company = productionCompanyRepository.getCompanyById(companyId);
+        } catch (RuntimeException e) {
+            throw new CompanyNotFoundException(companyId);
+        }
+
+        if (company == null) {
+            throw new CompanyNotFoundException(companyId);
+        }
+
+        if (company.getStatus() != CompanyStatus.ACTIVE) {
+            throw new CompanyClosedException(companyId);
+        }
+
+        return company;
+    }
+
+    // *HELPER METHOD* to check if a ProductionCompany is publicly visible, i.e., ACTIVE.
+    private boolean isCompanyPubliclyVisible(ProductionCompany company) {
+        return company != null && company.getStatus() == CompanyStatus.ACTIVE;
+    }
+
+    // *HELPER METHOD* to check if a ProductionCompany's rating matches the min/max company rating filters, returning true if it does, false otherwise.
+    private boolean matchesCompanyRating(ProductionCompany company, CatalogSearchFiltersDTO filters) {
+        Double rating = company.getRating();
+
+        if (filters.minCompanyRating() != null && (rating == null || rating < filters.minCompanyRating())) {
+            return false;
+        }
+
+        if (filters.maxCompanyRating() != null && (rating == null || rating > filters.maxCompanyRating())) {
+            return false;
+        }
+
+        return true;
+    }
+
+
+
+
+    
 
 
 

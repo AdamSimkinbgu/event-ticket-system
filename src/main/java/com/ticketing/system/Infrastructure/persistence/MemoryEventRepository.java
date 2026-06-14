@@ -90,16 +90,32 @@ public class MemoryEventRepository implements IEventRepository {
                 .collect(Collectors.toList());
     }
 
+
+
+
+
+
     @Override
-    public List<Event> search(CatalogSearchFiltersDTO filters) {
+    public List<Event> searchONSALE(CatalogSearchFiltersDTO filters) {
+        // we'll just call the full search and then filter ON_SALE in-memory since this is an in-memory repo;
+        // a real DB implementation would push the ON_SALE filter down into the query for efficiency.
+        return searchAll(filters).stream()
+                .filter(e -> e.getStatus() == EventStatus.ON_SALE)
+                .collect(Collectors.toList());
+    }
+
+
+    // UC-7: Global search with multiple optional filters.
+    @Override
+    public List<Event> searchAll(CatalogSearchFiltersDTO filters) {
         return events.values().stream()
                 .filter(e -> matchesSearch(e, filters))
                 .collect(Collectors.toList());
     }
 
     /*
-     * A helper method to apply the various search filters to an event; used in the
-     * search() implementation above.
+     * A helper method to apply the various search filters to an event and return a boolean indicating
+     * whether the event matches the filters; used in the search() implementation above.
      */
     private boolean matchesSearch(Event event, CatalogSearchFiltersDTO filters) {
         // eventName — case-insensitive substring match on event name.
@@ -193,8 +209,8 @@ public class MemoryEventRepository implements IEventRepository {
             }
         }
 
-        return true; // if the event passed into all the filters, it got to here and we'll return
-                     // true
+        return true; // if the event passed into all the filters, it got to here and we'll return true
     }
+
 
 }

@@ -114,7 +114,7 @@ public class EventManagementService {
         user.requirePermissionInCompany(request.companyId(), Permission.CONFIGURE_VENUE);
 
         int newEventId = eventRepository.nextId();
-        VenueMap venueMap = new VenueMap(eventRepository.nextVenueMapId(), request.location(), List.of()); // TODO: need an INTERNAL incremantal ID counter for venue maps, did this for now.
+        VenueMap venueMap = new VenueMap(eventRepository.nextVenueMapId(), request.location(), List.of());
         //! Note: Discount policy is currently not in the implementation plan so just put as 0 discount for every event here
         // not doing discount automatically without the ability to change this from the outside right now.
         DiscountPolicy discountPolicy = new DiscountPolicy(0);
@@ -136,8 +136,8 @@ public class EventManagementService {
         Event newEvent = new Event(
                 newEventId,
                 request.name(),
-                5.00,
-                List.of("sss", "ddd"),
+                request.rating(),
+                request.artistsNames(),
                 request.category(),
                 request.companyId(),
                 EventStatus.DRAFT,

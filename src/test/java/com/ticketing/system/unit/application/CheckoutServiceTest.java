@@ -53,6 +53,7 @@ import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.Seat;
 import com.ticketing.system.Core.Domain.events.SeatStatus;
 import com.ticketing.system.Core.Domain.events.SeatedZone;
+import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
@@ -1957,7 +1958,7 @@ void GivenTicketsFromDifferentEventsAndSecondEventBelowMinPolicy_WhenCheckout_Th
                 100,
                 EventStatus.SCHEDULED,
                 new VenueMap(1, new Location("Israel", "Tel Aviv"), List.of(zone)),
-                List.of(),
+                List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
                 acceptingPurchasePolicy(),
                 noDiscountPolicy()
         );
@@ -2033,7 +2034,7 @@ private Event createRealEventWithPolicyAndZone(int eventId, InventoryZone zone, 
             100,
             EventStatus.SCHEDULED,
             new VenueMap(1, new Location("Israel", "Tel Aviv"), List.of(zone)),
-            List.of(),
+            List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
             purchasePolicy,
             noDiscountPolicy()
     );

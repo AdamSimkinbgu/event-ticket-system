@@ -24,8 +24,11 @@ public interface IEventRepository extends IRepository<Event, Integer> {
     // UC-3 / UC-19 — events grouped by lifecycle state.
     List<Event> findByStatus(EventStatus status);
 
-    // UC-7 — search across all events (filters from DTO; pagination handled in service).
-    List<Event> search(CatalogSearchFiltersDTO filters);
+    // search across all events (filters from DTO).
+    List<Event> searchAll(CatalogSearchFiltersDTO filters);
+    // UC-7 — search across all events that are ON_SALE (filters from DTO).
+    List<Event> searchONSALE(CatalogSearchFiltersDTO filters);
+    
 
     int nextId();
 

@@ -37,7 +37,6 @@ import com.ticketing.system.Core.Domain.users.Session;
 import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.Infrastructure.persistence.MemoryActiveOrderRepository;
 
-import java.util.Optional;
 
 /**
  * Application service for the auth slice — registration (UC-11), login

@@ -148,14 +148,20 @@ class SystemAdminServiceTest {
     @Test
     void givenFilters_whenViewGlobalHistory_thenFiltersPassedToRepository() {
         GlobalHistoryFiltersDTO filters = new GlobalHistoryFiltersDTO(
-                7, 3, List.of("10", "11"),
+                7, 3, List.of(10, 11),
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 12, 31));
-        when(orderReceiptRepository.findGlobal(filters)).thenReturn(List.of());
+        // normalizeGlobalHistoryFilters resolves companyId → null and intersects eventIds
+        GlobalHistoryFiltersDTO expectedFilters = new GlobalHistoryFiltersDTO(
+                7, null, List.of(10, 11),
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 12, 31));
+        when(eventRepository.findIdsByCompany(3)).thenReturn(List.of(10, 11));
+        when(orderReceiptRepository.findGlobal(expectedFilters)).thenReturn(List.of());
 
         service.viewGlobalHistory(ADMIN_TOKEN, filters);
 
-        verify(orderReceiptRepository).findGlobal(filters);
+        verify(orderReceiptRepository).findGlobal(expectedFilters);
     }
 
     @Test
