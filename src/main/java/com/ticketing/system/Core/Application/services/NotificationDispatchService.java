@@ -44,7 +44,55 @@ public class NotificationDispatchService {
     // interface in code
     // (events are off-diagram per the design walkthrough).
     public void dispatchFromEvent(Object domainEvent) {
-        throw new UnsupportedOperationException("UC-35: not implemented");
+        if (domainEvent == null) {
+            throw new IllegalArgumentException("domainEvent must not be null");
+        }
+
+        if (!(domainEvent instanceof Notification)) {
+            throw new IllegalArgumentException("Unsupported domain event type: " + domainEvent.getClass());
+        }
+
+        Notification notification = (Notification) domainEvent;
+        int recipient = notification.getRecipientUserId();
+
+        log.info("Dispatching notification for userId={} type={}", recipient, notification.getType());
+
+        try {
+            boolean online = sessionManager.isOnline(recipient);
+
+            if (online) {
+                // Try to push via the push-channel port. If push succeeds mark as DELIVERED
+                // and persist; otherwise fall back to storing as PENDING.
+                boolean pushed = false;
+                try {
+                    pushed = notificationService.send(recipient, notification);
+                } catch (Exception e) {
+                    log.warn("Push attempt failed for userId={} type={} error={}", recipient, notification.getType(),
+                            e.getMessage());
+                    pushed = false;
+                }
+
+                if (pushed) {
+                    try {
+                        notification.markDelivered();
+                    } catch (IllegalStateException ex) {
+                        // If the notification wasn't in PENDING state, ignore
+                    }
+                    notificationRepository.save(notification);
+                    return;
+                }
+                // fallthrough to offline persistence
+            }
+
+            // Offline path (or push failed): delegate to storePending to centralise
+            // PENDING persistence logic (UC-36).
+            storePending(notification);
+
+        } catch (RuntimeException e) {
+            log.error("dispatchFromEvent failed for userId={}, type={}. Error: {}", recipient, notification.getType(),
+                    e.getMessage());
+            throw e;
+        }
     }
 
     // UC-36: store an offline notification in PENDING state.
