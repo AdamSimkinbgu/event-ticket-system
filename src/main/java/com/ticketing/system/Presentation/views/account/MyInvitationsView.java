@@ -1,5 +1,9 @@
 package com.ticketing.system.Presentation.views.account;
 
+import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
+import com.ticketing.system.Core.Application.dto.PendingInvitationDTO;
+import com.ticketing.system.Core.Application.services.CompanyManagementService;
+import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
@@ -10,21 +14,28 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStatusDot;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.security.MockAuth;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Route(value = "my-invitations", layout = MainLayout.class)
 @PageTitle("Invitations · TicketHub")
 @PermitAll
 public class MyInvitationsView extends LkPage {
 
-    public MyInvitationsView() {
+    private final CompanyManagementService companyService;
+
+    public MyInvitationsView(CompanyManagementService companyService) {
+        this.companyService = companyService;
         title("Invitations");
         subtitle("Accept a role to manage events for a production company.");
         add(Lk.h2("Pending invitations"));
@@ -33,45 +44,88 @@ public class MyInvitationsView extends LkPage {
         add(buildHistoryCard());
     }
 
-    private Component buildPendingCard() {
+
+   private Component buildPendingCard() {
         LkCard card = new LkCard().pad(0);
         LkGrid grid = new LkGrid()
             .col("Company",     "company")
             .col("Role",        "role")
             .col("Invited by",  "by")
             .col("Permissions", "perms")
-            .col("Received",    "recv")
-            .col("",            "act",  LkGrid.Align.RIGHT);
+            .col("",            "act", LkGrid.Align.RIGHT);
 
-        pending(grid, "Live Nation Israel", "Manager",  "success", "Bob Mizrahi", "Manage events · Respond to inquiries", "2 days ago");
-        pending(grid, "Zappa Group",        "Co-owner", "primary", "Dana Peretz", "Full company access",                  "5 days ago");
+        String token = MockAuth.token();
+        if (token != null) {
+            try {
+                List<PendingInvitationDTO> invitations = companyService.listPendingInvitations(token);
+                if (invitations.isEmpty()) {
+                    card.add(Lk.muted("No pending invitations."));
+                    return card;
+                }
+                for (PendingInvitationDTO inv : invitations) {
+                    pending(grid, inv);
+                }
+            } catch (Exception e) {
+                card.add(Lk.muted("Could not load invitations: " + e.getMessage()));
+                return card;
+            }
+        } else {
+            card.add(Lk.muted("Not signed in."));
+            return card;
+        }
 
         grid.build();
         card.add(grid);
         return card;
     }
+    private void pending(LkGrid grid, PendingInvitationDTO inv) {
+    Map<String, Object> row = new LinkedHashMap<>();
+    Span c = new Span();
+    c.getElement().setProperty("innerHTML", "<b>" + escape(inv.companyName()) + "</b>");
+    row.put("company", c);
 
-    private void pending(LkGrid grid, String company, String role, String roleTone, String by, String perms, String recv) {
-        Map<String, Object> row = new LinkedHashMap<>();
-        Span c = new Span();
-        c.getElement().setProperty("innerHTML", "<b>" + escape(company) + "</b>");
-        row.put("company", c);
-        row.put("role", new LkBadge(role, LkBadge.Tone.valueOf(roleTone)).small());
-        row.put("by", by);
-        row.put("perms", Lk.muted(perms));
-        row.put("recv", recv);
+    String roleTone = inv.role().equalsIgnoreCase("Owner") ? "primary" : "success";
+    row.put("role", new LkBadge(inv.role(), LkBadge.Tone.valueOf(roleTone)).small());
+    row.put("by", inv.inviterName());
 
-        LkRow actions = new LkRow().gap(6).noWrap();
-        actions.add(
-            new LkBtn("Accept").variant(LkBtn.Variant.primary).size(LkBtn.Size.s)
-                .onClick(e -> Toasts.success("Accepted — you are now a " + role.toLowerCase() + " at " + company + ".")),
-            new LkBtn("Reject").variant(LkBtn.Variant.tertiary).size(LkBtn.Size.s)
-                .onClick(e -> Toasts.warn("Invitation from " + company + " rejected."))
-        );
-        row.put("act", actions);
-        grid.row(row);
+    String permsText = inv.permissions().isEmpty()
+        ? "Full company access"
+        : inv.permissions().stream()
+              .map(Permission::name)
+              .map(n -> n.replace("_", " ").toLowerCase())
+              .collect(Collectors.joining(" · "));
+    row.put("perms", Lk.muted(permsText));
+
+    LkRow actions = new LkRow().gap(6).noWrap();
+    actions.add(
+        new LkBtn("Accept").variant(LkBtn.Variant.primary).size(LkBtn.Size.s)
+            .onClick(e -> respond(inv, true)),
+        new LkBtn("Reject").variant(LkBtn.Variant.tertiary).size(LkBtn.Size.s)
+            .onClick(e -> respond(inv, false))
+    );
+    row.put("act", actions);
+    grid.row(row);
+}
+
+    private void respond(PendingInvitationDTO inv, boolean accept) {
+        String token = MockAuth.token();
+        if (token == null) {
+            Toasts.failure("Session token missing — please log in again.");
+            return;
+        }
+        try {
+            companyService.respondToAppointment(
+                token, new AppointmentResponseDTO(inv.companyId(), accept));
+            if (accept) {
+                Toasts.success("Accepted — you are now a " + inv.role().toLowerCase() + " at " + inv.companyName() + ".");
+            } else {
+                Toasts.warn("Invitation from " + inv.companyName() + " rejected.");
+            }
+            UI.getCurrent().getPage().reload();
+        } catch (Exception e) {
+            Toasts.failure("Could not respond to invitation: " + e.getMessage());
+        }
     }
-
     private Component buildHistoryCard() {
         LkCard card = new LkCard().pad(0);
         LkGrid grid = new LkGrid()

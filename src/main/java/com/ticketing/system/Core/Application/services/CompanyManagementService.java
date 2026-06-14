@@ -5,12 +5,14 @@ import java.util.HashMap;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import lombok.extern.slf4j.Slf4j;
 
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO;
+import com.ticketing.system.Core.Application.dto.PendingInvitationDTO;
 import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
 import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
 import com.ticketing.system.Core.Application.dto.AppointmentRevokeDTO;
@@ -26,6 +28,7 @@ import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
+import com.ticketing.system.Core.Domain.users.AppointmentStatus;
 import com.ticketing.system.Core.Domain.users.CompanyAppointment;
 import com.ticketing.system.Core.Domain.users.CompanyRole;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
@@ -150,6 +153,34 @@ public class CompanyManagementService {
     }
 
 
+    // UC-24 / II.4.7.3 — list all pending invitations for the signed-in user.
+    public List<PendingInvitationDTO> listPendingInvitations(String token) {
+        int userId = authenticate(token);
+        User user = userRepository.getUserById(userId);
+
+        return user.getAllCompanyAppointments().stream()
+            .filter(a -> a.getStatus() == AppointmentStatus.PENDING)
+            .map(a -> {
+                ProductionCompany company = companyRepository.getCompanyById(a.getCompanyId());
+                String companyName = company != null ? company.getName() : "Unknown company";
+                String inviterName;
+                try {
+                    inviterName = userRepository.getUserById(a.getInviterId()).getUsername();
+                } catch (Exception e) {
+                    inviterName = "Unknown";
+                }
+                return new PendingInvitationDTO(
+                    a.getCompanyId(),
+                    companyName,
+                    a.getRole().name(),
+                    a.getPermissions().stream().toList(),
+                    inviterName
+                );
+            })
+            .toList();
+    }
+
+
 
 
 
@@ -203,7 +234,19 @@ public class CompanyManagementService {
     }
 
 
+    // Resolves a username-or-email string to a userId — used by the invite flow.
+    public int resolveUserId(String identifier) {
+        if (identifier == null || identifier.isBlank())
+            throw new IllegalArgumentException("Identifier must not be blank");
 
+        Optional<User> byName = userRepository.findByUsername(identifier.trim());
+        if (byName.isPresent()) return byName.get().getUserId();
+
+        Optional<User> byEmail = userRepository.findByEmail(identifier.trim());
+        if (byEmail.isPresent()) return byEmail.get().getUserId();
+
+        throw new RuntimeException("No user found with username or email: " + identifier);
+    }
 
     
     // ---------------------------------------------------------------------------

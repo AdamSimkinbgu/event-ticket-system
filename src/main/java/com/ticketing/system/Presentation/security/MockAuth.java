@@ -102,4 +102,17 @@ public final class MockAuth {
         if (s == null) return null;
         return (String) s.getAttribute(NAME_KEY);
     }
+
+    /** Store the JWT returned by AuthenticationService.login() at sign-in time. */
+public static void setToken(String token) {
+    VaadinSession s = VaadinSession.getCurrent();
+    if (s != null) s.setAttribute("mockAuth.token", token);
+}
+
+/** Retrieve the stored JWT for passing to application-service calls. */
+public static String token() {
+    VaadinSession s = VaadinSession.getCurrent();
+    if (s == null) return null;
+    return (String) s.getAttribute("mockAuth.token");
+}
 }

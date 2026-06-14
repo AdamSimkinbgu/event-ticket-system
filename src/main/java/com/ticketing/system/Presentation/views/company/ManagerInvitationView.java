@@ -1,5 +1,8 @@
 package com.ticketing.system.Presentation.views.company;
 
+import com.ticketing.system.Core.Application.dto.ManagerAppointmentRequestDTO;
+import com.ticketing.system.Core.Application.services.CompanyManagementService;
+import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
@@ -9,7 +12,9 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.MockAuth;
 import com.ticketing.system.Presentation.security.RequireCapability;
+import com.ticketing.system.Presentation.session.MockSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -18,7 +23,10 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Route(value = "owner/managers/invite", layout = WorkspaceLayout.class)
 @PageTitle("Invite manager · TicketHub")
@@ -26,23 +34,28 @@ import java.util.List;
 @RequireCapability(Capability.APPOINT_MANAGER)
 public class ManagerInvitationView extends LkPage {
 
-    private static final List<String> PERMS = List.of(
-        "Manage events",
-        "View sales history",
-        "Edit purchase policies",
-        "Respond to inquiries",
-        "Manage venue maps"
-    );
+        // Map each display label to its domain Permission value (same order as PERMS list).
+    private static final Map<String, Permission> PERM_MAP = new LinkedHashMap<>();
+    static {
+        PERM_MAP.put("Manage events",          Permission.MANAGE_INVENTORY);
+        PERM_MAP.put("View sales history",     Permission.VIEW_SALES);
+        PERM_MAP.put("Edit purchase policies", Permission.EDIT_POLICIES);
+        PERM_MAP.put("Respond to inquiries",   Permission.RESPOND_TO_INQUIRIES);
+        PERM_MAP.put("Manage venue maps",      Permission.CONFIGURE_VENUE);
+    }
 
+    private final CompanyManagementService companyService;
     private final TextField invitee = new TextField("Username or email");
+    // Keep references so we can read isChecked() on submit.
+    private final Map<LkCheckRow, Permission> checkRows = new LinkedHashMap<>();
 
-    public ManagerInvitationView() {
+    public ManagerInvitationView(CompanyManagementService companyService) {
+        this.companyService = companyService;
         title("Invite a manager");
         subtitle("Grant a member scoped access to manage this company.");
         add(buildForm());
     }
-
-    private Component buildForm() {
+   private Component buildForm() {
         Div narrow = new Div();
         narrow.addClassName("form-narrow");
 
@@ -54,9 +67,12 @@ public class ManagerInvitationView extends LkPage {
 
         LkCard permsCard = new LkCard("Permissions").pad(20);
         LkCol col = new LkCol().gap(4);
-        for (int i = 0; i < PERMS.size(); i++) {
-            // First two permissions checked by default to match the React reference.
-            col.add(new LkCheckRow(PERMS.get(i), i < 2));
+        int i = 0;
+        for (Map.Entry<String, Permission> entry : PERM_MAP.entrySet()) {
+            LkCheckRow row = new LkCheckRow(entry.getKey(), i < 2);
+            checkRows.put(row, entry.getValue());
+            col.add(row);
+            i++;
         }
         permsCard.add(col);
 
@@ -65,17 +81,46 @@ public class ManagerInvitationView extends LkPage {
             new LkBtn("Cancel").variant(LkBtn.Variant.tertiary)
                 .onClick(e -> UI.getCurrent().navigate(ManagerListView.class)),
             new LkBtn("Send invitation").variant(LkBtn.Variant.primary)
-                .onClick(e -> {
-                    if (invitee.isEmpty()) {
-                        Toasts.failure("Enter a username or email to invite.");
-                        return;
-                    }
-                    Toasts.success("Invitation sent to " + invitee.getValue() + ".");
-                    UI.getCurrent().navigate(ManagerListView.class);
-                })
+                .onClick(e -> sendInvitation())
         );
 
         narrow.add(inviteeCard, permsCard, actions);
         return narrow;
     }
+
+    private void sendInvitation() {
+        if (invitee.isEmpty()) {
+            Toasts.failure("Enter a username or email to invite.");
+            return;
+        }
+
+        List<Permission> selected = new ArrayList<>();
+        for (Map.Entry<LkCheckRow, Permission> entry : checkRows.entrySet()) {
+            if (entry.getKey().isChecked()) selected.add(entry.getValue());
+        }
+        if (selected.isEmpty()) {
+            Toasts.failure("Select at least one permission.");
+            return;
+        }
+
+        String token = MockAuth.token();
+        if (token == null) {
+            Toasts.failure("Session token missing — please log in again.");
+            return;
+        }
+
+        try {
+            int targetUserId = companyService.resolveUserId(invitee.getValue());
+            int companyId    = Integer.parseInt(MockSession.currentCompanyId());
+            companyService.appointManager(
+                token,
+                new ManagerAppointmentRequestDTO(companyId, targetUserId, selected)
+            );
+            Toasts.success("Invitation sent to " + invitee.getValue() + ".");
+            UI.getCurrent().navigate(ManagerListView.class);
+        } catch (Exception ex) {
+            Toasts.failure("Could not send invitation: " + ex.getMessage());
+        }
+    }
+
 }
