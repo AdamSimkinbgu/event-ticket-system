@@ -2,7 +2,6 @@ package com.ticketing.system.Core.Domain.events;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -11,7 +10,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import com.ticketing.system.Core.Domain.events.InventorySelection;
 
 /**
  * Zone with addressable, named seats. Replaces the bare counter of
@@ -23,8 +21,8 @@ import com.ticketing.system.Core.Domain.events.InventorySelection;
  * between two concurrent buyers picking overlapping seats.
  *
  * <p>Capacity is derived from the seat map size, not a separate field.
- * Adding/removing seats from a SeatedZone after tickets are issued is
- * intentionally not supported — re-create the zone if the layout changes.
+ * Adding/removing seats from a SeatedZone after tickets are issued, so after ON_SALE turned on is
+ * intentionally not supported — cannot change zones or their internals after event goes ON_SALE.
  */
 public class SeatedZone extends InventoryZone {
 

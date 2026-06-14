@@ -136,7 +136,7 @@ public class MemoryOrderReceiptRepository implements IOrderReceiptRepository {
                 .filter(receipt -> {
                     boolean matches = true;
                     
-                    // Filter by companyId if provided
+                    // Filter by buyerUserId if provided
                     if (filters.buyerUserId() != null) {
                         matches &= receipt.isMemberReceipt()
                                 && receipt.getHolderUserId().equals(filters.buyerUserId());

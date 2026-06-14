@@ -2,8 +2,6 @@ package com.ticketing.system.Core.Domain.events;
 
 import java.util.List;
 
-import com.ticketing.system.Core.Domain.events.InventorySelection;
-
 import java.util.ArrayList;
 
 public class VenueMap {

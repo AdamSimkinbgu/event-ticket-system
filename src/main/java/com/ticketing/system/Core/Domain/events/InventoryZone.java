@@ -1,6 +1,5 @@
 package com.ticketing.system.Core.Domain.events;
 
-import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 /**

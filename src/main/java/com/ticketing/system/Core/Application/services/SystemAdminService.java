@@ -16,7 +16,6 @@ import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
 import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
-import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 
@@ -87,10 +86,12 @@ public class SystemAdminService {
 
 
     // UC-31 — global purchase history with filters (admin-only RBAC enforced inside).
+    // this function filters by buyer, production company, or specific event, and by date range. All filters are optional and can be combined.
     public List<PurchaseHistoryDTO> viewGlobalHistory(String token, GlobalHistoryFiltersDTO filters) {
         log.info("Admin request to view global purchase history with filters: {}", filters);
         requireSystemAdmin(token);
 
+        // If companyId is provided, we ensure that the eventIds filter (if provided) is a subset of the events for that company, in the normalizeGlobalHistoryFilters() method.
         GlobalHistoryFiltersDTO effectiveFilters = normalizeGlobalHistoryFilters(filters);
         Set<Integer> selectedEventIds = selectedEventIdsOrNull(effectiveFilters);
 
@@ -155,7 +156,7 @@ public class SystemAdminService {
                     .filter(requestedSet::contains)
                     .toList();
         }
-
+        // now the company filter is effectively translated into an event filter that is guaranteed to be consistent with the company constraint, and we can proceed with the query.
         return new GlobalHistoryFiltersDTO(
                 f.buyerUserId(),
                 null,

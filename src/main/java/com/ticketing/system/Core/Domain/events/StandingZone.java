@@ -1,7 +1,5 @@
 package com.ticketing.system.Core.Domain.events;
 
-import com.ticketing.system.Core.Domain.events.InventorySelection;
-
 /**
  * Counter-based zone — no addressable seats, just "N tickets available".
  *

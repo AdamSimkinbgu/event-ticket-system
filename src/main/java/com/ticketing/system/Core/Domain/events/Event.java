@@ -47,7 +47,7 @@ public class Event implements InvariantChecked {
             log.error("Attempted to create Event with null/empty artistsNames list");
             throw new IllegalArgumentException("Artists names list is required");
         }
-        this.artistsNames = artistsNames;
+        this.artistsNames = List.copyOf(artistsNames);
 
         if (category == null) {
             log.error("Attempted to create Event with null category");
@@ -68,7 +68,7 @@ public class Event implements InvariantChecked {
             log.error("Attempted to create Event with null/empty showDates list");
             throw new IllegalArgumentException("Show dates list is required");
          }
-         this.showDates = showDates;
+         this.showDates = List.copyOf(showDates);
         
          if (PurchasePolicy == null) {
             this.purchasePolicy = new NoPurchasePolicy();
@@ -374,14 +374,6 @@ public class Event implements InvariantChecked {
     }
 
     
-
-
-    // UC-19 — II.3.5.2 immutability check; returns false if 'field' is frozen by sales.
-    public boolean canBeEdited(String field) {  //TODO:     see what to do and if really needed        <<-----------------------------
-        throw new UnsupportedOperationException("UC-19: not implemented");
-    }
-    
-
 
 
 
