@@ -118,16 +118,8 @@ public class Event implements InvariantChecked {
     private void validateCanReserve(InventorySelection selection) {
         validateInventoryAction(selection);
 
-        if (status == EventStatus.CANCELED) {
-            throw new IllegalStateException("Cannot reserve tickets for a canceled event");
-        }
-
-        if (status == EventStatus.SOLD_OUT) {
-            throw new IllegalStateException("Cannot reserve tickets for a sold-out event");
-        }
-
-        if (status == EventStatus.COMPLETED) {
-            throw new IllegalStateException("Cannot reserve tickets for a completed event");
+        if (status != EventStatus.ON_SALE) {
+            throw new IllegalStateException("Cannot reserve tickets for an event that is not on sale");
         }
 
 
@@ -169,7 +161,7 @@ public class Event implements InvariantChecked {
 
 
     // UC-20 — only company that owns the event can configure the venue map; must be done before going ON_SALE.
-    // For simplicity, we allow configuring the entire map at once, rather than incremental updates.
+    // this is simply a setter for the venue map.
     public void configureVenueMap(VenueMap venueMap, int incomingCompanyId) {
         if (comapnyid != incomingCompanyId) {
             throw new RuntimeException("Unauthorized to configure venue map");
@@ -179,9 +171,7 @@ public class Event implements InvariantChecked {
             throw new IllegalArgumentException("Venue map cannot be null");
         }
 
-        if (status == EventStatus.ON_SALE || status == EventStatus.SOLD_OUT || status == EventStatus.COMPLETED) {
-            throw new IllegalStateException("Cannot reconfigure venue map after event is on sale");
-        }
+        validateCanEditInventoryForCompany(incomingCompanyId);
 
         if (this.venueMap != null && hasReservedOrSoldInventory()) {
             throw new IllegalStateException("Cannot reconfigure venue map while tickets are reserved or sold");
@@ -199,30 +189,108 @@ public class Event implements InvariantChecked {
                 .anyMatch(zone -> zone.getReservedAmount() > 0 || zone.getSoldAmount() > 0);
     }
 
+
+
+
+
+
+
+
+    public int addStandingZone(String zoneName, int capacity, double pricePerTicket, int incomingCompanyId) {
+        validateCanEditExistingVenueInventory(incomingCompanyId);
+        int newZoneId = venueMap.getNextZoneId();
+
+        StandingZone standingZone = new StandingZone(
+                newZoneId,
+                zoneName,
+                capacity,
+                pricePerTicket);
+        venueMap.addZone(standingZone);
+        return newZoneId;
+    }
+
+    
+    public int addSeatedZone(String zoneName, double pricePerTicket, List<Seat> seats, int incomingCompanyId) {
+        validateCanEditExistingVenueInventory(incomingCompanyId);
+
+        if (seats == null || seats.isEmpty()) {
+            throw new IllegalArgumentException("Seated zone must contain at least one seat");
+        }
+        int newZoneId = venueMap.getNextZoneId();
+
+        SeatedZone seatedZone = new SeatedZone(
+                newZoneId,
+                zoneName,
+                pricePerTicket,
+                seats);
+        venueMap.addZone(seatedZone);
+        return newZoneId;
+    }
+
+    
+    public void removeInventoryZone(int zoneId, int incomingCompanyId) {
+        validateCanEditExistingVenueInventory(incomingCompanyId);
+        venueMap.removeZone(zoneId);
+    }
+
     
 
 
 
 
 
-    public void updateStandingZoneCapacity(int zoneId, int newCapacity, int incomingCompanyId) {
 
-        if (comapnyid != incomingCompanyId) {
-            throw new RuntimeException("Unauthorized to update zone capacity");
-        }
 
+
+
+
+    public void addPlacesToStandingZone(int zoneId, int amountToAdd, int incomingCompanyId) {
+        validateCanEditExistingVenueInventory(incomingCompanyId);
+        this.getVenueMapOrThrow().addPlacesToStandingZone(zoneId, amountToAdd);
+    }
+
+    public void removePlacesFromStandingZone(int zoneId, int amountToRemove, int incomingCompanyId) {
+        validateCanEditExistingVenueInventory(incomingCompanyId);
+        this.getVenueMapOrThrow().removePlacesFromStandingZone(zoneId, amountToRemove);
+    }
+
+
+
+    public void addSeatsToSeatedZone(int zoneId, List<Seat> seatsToAdd, int incomingCompanyId) {
+        validateCanEditExistingVenueInventory(incomingCompanyId);
+        this.getVenueMapOrThrow().addSeatsToSeatedZone(zoneId, seatsToAdd);
+    }
+
+    public void removeSeatsFromSeatedZone(int zoneId, List<String> seatLabelsToRemove, int incomingCompanyId) {
+        validateCanEditExistingVenueInventory(incomingCompanyId);
+        this.getVenueMapOrThrow().removeSeatsFromSeatedZone(zoneId, seatLabelsToRemove);
+    }
+
+
+
+
+    
+
+
+
+
+    private void validateCanEditExistingVenueInventory(int incomingCompanyId) {
+        validateCanEditInventoryForCompany(incomingCompanyId);
         if (this.venueMap == null) {
             throw new RuntimeException("Venue map must be initialized first");
         }
-
-        InventoryZone zone = this.venueMap.getZone(zoneId);
-
-        if (!zone.isStanding()) {
-            throw new IllegalStateException("Cannot update capacity of seated zone directly");
-        }
-
-        zone.setStandingCapacity(newCapacity);
     }
+
+    private void validateCanEditInventoryForCompany(int incomingCompanyId) {
+        if (comapnyid != incomingCompanyId) {
+            throw new RuntimeException("Unauthorized to edit event inventory, only company that owns the event can edit inventory");
+        }
+        if (status != EventStatus.DRAFT && status != EventStatus.SCHEDULED) {
+            throw new IllegalStateException("Inventory can only be edited while event is DRAFT or SCHEDULED");
+        }
+    }
+
+
 
 
 
@@ -354,6 +422,14 @@ public class Event implements InvariantChecked {
         return venueMap;
     }
 
+    // private getter
+    private VenueMap getVenueMapOrThrow() {
+        if (this.venueMap == null) {
+            throw new IllegalStateException("Venue map must be initialized first");
+        }
+        return this.venueMap;
+    }
+
     public PurchasePolicy getPurchasePolicy() {
         return purchasePolicy;
     }
@@ -361,6 +437,42 @@ public class Event implements InvariantChecked {
     public DiscountPolicy getDiscountPolicy() {
         return discountPolicy;
     }
+
+
+
+
+
+    public void setPurchasePolicy(PurchasePolicy purchasePolicy) {
+        if (purchasePolicy == null) {
+            throw new IllegalArgumentException("Purchase policy cannot be null");
+        }
+
+        this.purchasePolicy = purchasePolicy;
+    }
+
+    public void validatePurchasePolicy(PurchaseContext context) {
+        if (context == null) {
+            throw new IllegalArgumentException("Purchase context cannot be null");
+        }
+
+        if (purchasePolicy == null) {
+            purchasePolicy = new NoPurchasePolicy();
+        }
+
+        if (!purchasePolicy.isSatisfiedBy(context)) {
+            throw new IllegalStateException(purchasePolicy.getFailureMessage());
+        }
+    }
+
+
+
+
+
+
+
+
+
+
 
     @Override
     public void checkInvariants() {
@@ -398,32 +510,6 @@ public class Event implements InvariantChecked {
 
 
 
-
-
-
-
-
-
-    public void setPurchasePolicy(PurchasePolicy purchasePolicy) {
-    if (purchasePolicy == null) {
-        throw new IllegalArgumentException("Purchase policy cannot be null");
-    }
-
-    this.purchasePolicy = purchasePolicy;
-}
-
-public void validatePurchasePolicy(PurchaseContext context) {
-    if (context == null) {
-        throw new IllegalArgumentException("Purchase context cannot be null");
-    }
-
-    if (purchasePolicy == null) {
-        purchasePolicy = new NoPurchasePolicy();
-    }
-
-    if (!purchasePolicy.isSatisfiedBy(context)) {
-        throw new IllegalStateException(purchasePolicy.getFailureMessage());
-    }
-}
+    
 
 }

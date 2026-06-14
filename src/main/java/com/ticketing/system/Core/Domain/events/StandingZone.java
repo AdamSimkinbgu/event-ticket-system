@@ -165,20 +165,52 @@ public class StandingZone extends InventoryZone {
     }
 
 
-    @Override
-    public void setStandingCapacity(int newCapacity) {
+
+    //? Note: for riskness reasons, we'll just ignore this and we can just use the addPlaces and removePlaces methods to adjust capacity up or down as needed.
+    // public void setStandingCapacity(int newCapacity) {
+    //     synchronized (inventoryLock) {
+    //         if (newCapacity < 0) {
+    //             throw new IllegalArgumentException("Capacity cannot be negative");
+    //         }
+
+    //         if (newCapacity < reservedAmount + soldAmount) {
+    //             throw new IllegalArgumentException("New capacity cannot be less than reserved + sold tickets");
+    //         }
+
+    //         this.capacity = newCapacity;
+    //     }
+    // }
+
+
+
+    public void addPlaces(int amountToAdd) {
+        // can add places without really checking, not harmful
         synchronized (inventoryLock) {
-            if (newCapacity < 0) {
-                throw new IllegalArgumentException("Capacity cannot be negative");
-            }
-
-            if (newCapacity < reservedAmount + soldAmount) {
-                throw new IllegalArgumentException("New capacity cannot be less than reserved + sold tickets");
-            }
-
-            this.capacity = newCapacity;
+            validatePositiveQuantity(amountToAdd);
+            this.capacity += amountToAdd;
         }
     }
+
+    public void removePlaces(int amountToRemove) {
+        // can only remove places if it doesn't cause capacity to drop below reserved + sold, 
+        // otherwise we would have to cancel existing reservations or sales, which is not allowed.
+        synchronized (inventoryLock) {
+            validatePositiveQuantity(amountToRemove);
+
+            int availableAmount = this.getAvailableAmount();
+            if (amountToRemove > availableAmount) {
+                throw new IllegalArgumentException(
+                        "Cannot remove " + amountToRemove + " places; only "
+                                + availableAmount + " places are available to remove");
+            }
+
+            this.capacity -= amountToRemove;
+        }
+    }
+
+
+
+
 
 
     @Override

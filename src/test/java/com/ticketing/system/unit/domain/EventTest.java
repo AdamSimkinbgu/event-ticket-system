@@ -63,23 +63,6 @@ class EventTest extends BaseDomainTest {
     }
 
     @Test
-    public void GivenExistingZone_WhenUpdateZoneCapacity_ThenCapacityUpdated() {
-        event.updateStandingZoneCapacity(ZONE_ID, 20, COMPANY_ID);
-
-        assertEquals(20, zone.getAvailableAmount());
-    }
-
-    @Test
-    public void GivenMissingZone_WhenUpdateZoneCapacity_ThenThrowException() {
-        assertThrows(IllegalArgumentException.class, () -> event.updateStandingZoneCapacity(999, 20, COMPANY_ID));
-    }
-
-    @Test
-    public void GivenWrongCompany_WhenUpdateZoneCapacity_ThenThrowException() {
-        assertThrows(RuntimeException.class, () -> event.updateStandingZoneCapacity(ZONE_ID, 20, 999));
-    }
-
-    @Test
     @Disabled("V1: getZone returns matching zone")
     void givenEvent_whenGetZoneById_thenReturnsZone() {
     }
@@ -109,6 +92,7 @@ class EventTest extends BaseDomainTest {
         StandingZone standingZone = track(new StandingZone(1, "General Admission", 10, 50.0));
         Event event = createEventWithZones(List.of(standingZone));
 
+        event.transitionToOnSale();
         event.reserveInventory(1, InventorySelection.standing(3));
 
         assertEquals(7, standingZone.getAvailableAmount());
@@ -126,7 +110,8 @@ class EventTest extends BaseDomainTest {
                         new Seat("A2", 1, 0),
                         new Seat("A3", 2, 0))));
         Event event = createEventWithZones(List.of(seatedZone));
-
+        
+        event.transitionToOnSale();
         event.reserveInventory(2, InventorySelection.seated(List.of("A1", "A2")));
 
         assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A1"));
@@ -144,7 +129,8 @@ class EventTest extends BaseDomainTest {
                         new Seat("A1", 0, 0),
                         new Seat("A2", 1, 0))));
         Event event = createEventWithZones(List.of(seatedZone));
-
+        
+        event.transitionToOnSale();
         event.reserveInventory(2, InventorySelection.seated(List.of("A1", "A2")));
         event.releaseInventory(2, InventorySelection.seated(List.of("A1")));
 
@@ -163,6 +149,7 @@ class EventTest extends BaseDomainTest {
                         new Seat("A2", 1, 0))));
         Event event = createEventWithZones(List.of(seatedZone));
 
+        event.transitionToOnSale();
         event.reserveInventory(2, InventorySelection.seated(List.of("A1")));
         event.confirmInventorySale(2, InventorySelection.seated(List.of("A1")));
 
@@ -170,57 +157,272 @@ class EventTest extends BaseDomainTest {
         assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A2"));
     }
 
+    
     @Test
-    void GivenSeatedZone_WhenUpdateZoneCapacity_ThenThrowsException() {
+    void GivenPurchasePolicyRejectsQuantity_WhenReserveInventory_ThenThrowsException() {
+        StandingZone standingZone = track(new StandingZone(1, "General Admission", 10, 50.0));
+
+        PurchasePolicy rejectingPolicy = new NoPurchasePolicy();
+
+        Event event = track(new Event(
+                EVENT_ID,
+                "Concert",
+                4.5,
+                ARTISTS,
+                EventCategory.CONCERT,
+                COMPANY_ID,
+                EventStatus.SCHEDULED,
+                new VenueMap(1, LOCATION, List.of(standingZone)),
+                List.of(new ShowDate(LocalDateTime.now().plusDays(15), LocalDateTime.now().plusDays(15).plusHours(2))),
+                rejectingPolicy,
+                noDiscountPolicy()));
+
+        assertThrows(IllegalStateException.class, () -> event.reserveInventory(1, InventorySelection.standing(1)));
+
+        assertEquals(10, standingZone.getAvailableAmount());
+        assertEquals(0, standingZone.getReservedAmount());
+    }
+
+
+
+
+
+
+    @Test
+    void GivenScheduledEvent_WhenAddStandingZone_ThenZoneIsAdded() {
+        StandingZone existingZone = track(new StandingZone(1, "General", 100, 50));
+        Event event = createEventWithZones(List.of(existingZone));
+
+        int newZoneId = event.addStandingZone("VIP Standing", 30, 120.0, COMPANY_ID);
+
+        InventoryZone addedZone = event.getVenueMap().getZone(newZoneId);
+
+        assertEquals("VIP Standing", addedZone.getName());
+        assertEquals(30, addedZone.getCapacity());
+        assertEquals(30, addedZone.getAvailableAmount());
+    }
+
+    @Test
+    void GivenScheduledEvent_WhenAddSeatedZone_ThenZoneIsAdded() {
+        StandingZone existingZone = track(new StandingZone(1, "General", 100, 50));
+        Event event = createEventWithZones(List.of(existingZone));
+
+        int newZoneId = event.addSeatedZone(
+                "Balcony",
+                150.0,
+                List.of(
+                        new Seat("B1", 0, 0),
+                        new Seat("B2", 1, 0)
+                ),
+                COMPANY_ID
+        );
+
+        InventoryZone addedZone = event.getVenueMap().getZone(newZoneId);
+
+        assertEquals("Balcony", addedZone.getName());
+        assertEquals(2, addedZone.getCapacity());
+        assertEquals(2, addedZone.getAvailableAmount());
+    }
+
+    @Test
+    void GivenScheduledEvent_WhenRemoveEmptyZone_ThenZoneIsRemoved() {
+        StandingZone zoneToRemove = track(new StandingZone(1, "General", 100, 50));
+        StandingZone remainingZone = track(new StandingZone(2, "VIP", 20, 150));
+
+        Event event = createEventWithZones(List.of(zoneToRemove, remainingZone));
+
+        event.removeInventoryZone(1, COMPANY_ID);
+
+        assertThrows(IllegalArgumentException.class, () -> event.getVenueMap().getZone(1));
+        assertEquals("VIP", event.getVenueMap().getZone(2).getName());
+    }
+
+    @Test
+    void GivenReservedInventoryInZone_WhenRemoveZone_ThenThrowsException() {
+        StandingZone zone = track(new StandingZone(1, "General", 100, 50));
+        Event event = createEventWithZones(List.of(zone));
+
+        event.transitionToOnSale();
+        event.reserveInventory(1, InventorySelection.standing(5));
+
+        assertThrows(IllegalStateException.class, () ->
+                event.removeInventoryZone(1, COMPANY_ID)
+        );
+
+        assertEquals(100, zone.getCapacity());
+        assertEquals(5, zone.getReservedAmount());
+    }
+
+    @Test
+    void GivenOnSaleEvent_WhenAddStandingZone_ThenThrowsException() {
+        StandingZone existingZone = track(new StandingZone(1, "General", 100, 50));
+
+        Event event = track(new Event(
+                EVENT_ID,
+                "Concert",
+                4.5,
+                ARTISTS,
+                EventCategory.CONCERT,
+                COMPANY_ID,
+                EventStatus.ON_SALE,
+                new VenueMap(1, LOCATION, List.of(existingZone)),
+                List.of(new ShowDate(
+                        LocalDateTime.now().plusDays(30),
+                        LocalDateTime.now().plusDays(30).plusHours(2)
+                )),
+                acceptingPurchasePolicy(),
+                noDiscountPolicy()
+        ));
+
+        assertThrows(IllegalStateException.class, () ->
+                event.addStandingZone("Late Zone", 50, 90.0, COMPANY_ID)
+        );
+    }
+
+    @Test
+    void GivenOnSaleEvent_WhenRemoveZone_ThenThrowsException() {
+        StandingZone existingZone = track(new StandingZone(1, "General", 100, 50));
+
+        Event event = track(new Event(
+                EVENT_ID,
+                "Concert",
+                4.5,
+                ARTISTS,
+                EventCategory.CONCERT,
+                COMPANY_ID,
+                EventStatus.ON_SALE,
+                new VenueMap(1, LOCATION, List.of(existingZone)),
+                List.of(new ShowDate(
+                        LocalDateTime.now().plusDays(30),
+                        LocalDateTime.now().plusDays(30).plusHours(2)
+                )),
+                acceptingPurchasePolicy(),
+                noDiscountPolicy()
+        ));
+
+        assertThrows(IllegalStateException.class, () ->
+                event.removeInventoryZone(1, COMPANY_ID)
+        );
+    }
+
+    @Test
+    void GivenWrongCompany_WhenAddZone_ThenThrowsException() {
+        StandingZone existingZone = track(new StandingZone(1, "General", 100, 50));
+        Event event = createEventWithZones(List.of(existingZone));
+
+        assertThrows(RuntimeException.class, () ->
+                event.addStandingZone("Wrong Company Zone", 50, 90.0, 999)
+        );
+    }
+
+    @Test
+    void GivenDuplicateZoneName_WhenAddZone_ThenThrowsException() {
+        StandingZone existingZone = track(new StandingZone(1, "General", 100, 50));
+        Event event = createEventWithZones(List.of(existingZone));
+
+        assertThrows(IllegalArgumentException.class, () -> event.addStandingZone("General", 50, 90.0, COMPANY_ID));
+    }
+
+
+
+
+
+
+
+
+    @Test
+    void GivenScheduledEvent_WhenAddSeatsToSeatedZone_ThenSeatsAdded() {
         SeatedZone seatedZone = track(new SeatedZone(
                 ZONE_ID,
                 "Orchestra",
                 120.0,
-                List.of(
-                        new Seat("A1", 0, 0),
-                        new Seat("A2", 1, 0))));
+                List.of(new Seat("A1", 0, 0))
+        ));
+
         Event event = createEventWithZones(List.of(seatedZone));
 
-        assertThrows(IllegalStateException.class, () -> event.updateStandingZoneCapacity(ZONE_ID, 100, COMPANY_ID));
+        event.addSeatsToSeatedZone(
+                ZONE_ID,
+                List.of(new Seat("A2", 1, 0), new Seat("A3", 2, 0)),
+                COMPANY_ID
+        );
 
-        assertEquals(2, seatedZone.getCapacity());
+        assertEquals(3, seatedZone.getCapacity());
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A2"));
     }
 
     @Test
-    void GivenStandingZone_WhenUpdateZoneCapacity_ThenCapacityUpdated() {
-        StandingZone standingZone = track(new StandingZone(ZONE_ID, "General Admission", 10, 50.0));
+    void GivenOnSaleEvent_WhenAddSeatsToSeatedZone_ThenThrowsException() {
+        SeatedZone seatedZone = track(new SeatedZone(
+                ZONE_ID,
+                "Orchestra",
+                120.0,
+                List.of(new Seat("A1", 0, 0))
+        ));
+
+        Event event = track(new Event(
+                EVENT_ID,
+                "Concert",
+                4.5,
+                ARTISTS,
+                EventCategory.CONCERT,
+                COMPANY_ID,
+                EventStatus.ON_SALE,
+                new VenueMap(1, LOCATION, List.of(seatedZone)),
+                List.of(new ShowDate(
+                        LocalDateTime.now().plusDays(30),
+                        LocalDateTime.now().plusDays(30).plusHours(2)
+                )),
+                acceptingPurchasePolicy(),
+                noDiscountPolicy()
+        ));
+
+        assertThrows(IllegalStateException.class, () ->
+                event.addSeatsToSeatedZone(
+                        ZONE_ID,
+                        List.of(new Seat("A2", 1, 0)),
+                        COMPANY_ID
+                )
+        );
+    }
+
+    @Test
+    void GivenScheduledEvent_WhenAddAndRemovePlacesFromStandingZone_ThenCapacityUpdated() {
+        StandingZone standingZone = track(new StandingZone(ZONE_ID, "General", 100, 50));
         Event event = createEventWithZones(List.of(standingZone));
 
-        event.updateStandingZoneCapacity(ZONE_ID, 20, COMPANY_ID);
+        event.addPlacesToStandingZone(ZONE_ID, 20, COMPANY_ID);
+        event.removePlacesFromStandingZone(ZONE_ID, 10, COMPANY_ID);
 
-        assertEquals(20, standingZone.getCapacity());
-        assertEquals(20, standingZone.getAvailableAmount());
+        assertEquals(110, standingZone.getCapacity());
+        assertEquals(110, standingZone.getAvailableAmount());
     }
 
     @Test
-    // void GivenPurchasePolicyRejectsQuantity_WhenReserveInventory_ThenThrowsException() {
-    //     StandingZone standingZone = track(new StandingZone(1, "General Admission", 10, 50.0));
+    void GivenOnSaleEvent_WhenRemovePlacesFromStandingZone_ThenThrowsException() {
+        StandingZone standingZone = track(new StandingZone(ZONE_ID, "General", 100, 50));
 
-    //     PurchasePolicy rejectingPolicy = new NoPurchasePolicy();
+        Event event = track(new Event(
+                EVENT_ID,
+                "Concert",
+                4.5,
+                ARTISTS,
+                EventCategory.CONCERT,
+                COMPANY_ID,
+                EventStatus.ON_SALE,
+                new VenueMap(1, LOCATION, List.of(standingZone)),
+                List.of(new ShowDate(
+                        LocalDateTime.now().plusDays(30),
+                        LocalDateTime.now().plusDays(30).plusHours(2)
+                )),
+                acceptingPurchasePolicy(),
+                noDiscountPolicy()
+        ));
 
-    //     Event event = track(new Event(
-    //             EVENT_ID,
-    //             "Concert",
-    //             4.5,
-    //             ARTISTS,
-    //             EventCategory.CONCERT,
-    //             COMPANY_ID,
-    //             EventStatus.SCHEDULED,
-    //             new VenueMap(1, LOCATION, List.of(standingZone)),
-    //             List.of(),
-    //             rejectingPolicy,
-    //             noDiscountPolicy()));
-
-    //     assertThrows(IllegalStateException.class, () -> event.reserveInventory(1, InventorySelection.standing(1)));
-
-    //     assertEquals(10, standingZone.getAvailableAmount());
-    //     assertEquals(0, standingZone.getReservedAmount());
-    // }
+        assertThrows(IllegalStateException.class, () ->
+                event.removePlacesFromStandingZone(ZONE_ID, 10, COMPANY_ID)
+        );
+    }
 
 
 

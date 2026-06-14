@@ -634,6 +634,7 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         when(eventRepository.findById(EVENT_ID)).thenReturn(realEvent);
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(null);
 
+        realEvent.transitionToOnSale();
         ReservationResultDTO result =
                 reservationService.reserveForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, InventorySelectionDTO.seated(List.of("A1", "A2")));
 
@@ -672,7 +673,8 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
 
         when(eventRepository.findById(EVENT_ID)).thenReturn(realEvent);
         when(activeOrderRepository.getBySessionId(sessionId)).thenReturn(Optional.empty());
-
+        
+        realEvent.transitionToOnSale();
         ReservationResultDTO result =
                 reservationService.reserveForGuest(sessionId, EVENT_ID, ZONE_ID, InventorySelectionDTO.seated(List.of("B1", "B2")));
 
@@ -704,6 +706,7 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         when(eventRepository.findById(EVENT_ID)).thenReturn(realEvent);
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(null);
 
+        realEvent.transitionToOnSale();
         assertThrows(IllegalArgumentException.class, () ->
                 reservationService.reserveForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, InventorySelectionDTO.seated(List.of("A1")))
         );
@@ -727,6 +730,7 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         when(eventRepository.findById(EVENT_ID)).thenReturn(realEvent);
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(null);
 
+        realEvent.transitionToOnSale();
         assertThrows(IllegalArgumentException.class, () ->
                 reservationService.reserveForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, InventorySelectionDTO.standing(1))
         );

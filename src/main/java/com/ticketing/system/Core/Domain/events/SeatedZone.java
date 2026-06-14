@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.ticketing.system.Core.Domain.events.InventorySelection;
 
@@ -29,6 +30,7 @@ public class SeatedZone extends InventoryZone {
 
     private final ConcurrentHashMap<String, Seat> seats;
     private final ConcurrentHashMap<String, ReentrantLock> seatLocks;
+    private final ReentrantReadWriteLock layoutLock = new ReentrantReadWriteLock();
 
     public SeatedZone(int id, String name, double price, List<Seat> initialSeats) {
         super(id, name, price);
@@ -87,15 +89,11 @@ public class SeatedZone extends InventoryZone {
             throw new IllegalArgumentException("Seated zone requires selected seat numbers");
         }
 
-        List<String> labels = selection.getSeatNumbers();
-
-        if (labels == null || labels.isEmpty()) {
-            throw new IllegalArgumentException("labels must be non-empty");
-        }
-
-        List<String> sorted = validateAndSortLabels(labels);
-
+        List<String> sorted = validateAndSortLabels(selection.getSeatNumbers());
+        // lock the layout for reading while we acquire the individual seat locks. This prevents the layout from being modified (seats added/removed) while we are reserving seats.
+        layoutLock.readLock().lock();
         List<ReentrantLock> acquired = new ArrayList<>();
+
         try {
             // Acquire all locks in sorted order to prevent deadlock with concurrent reservers.
             for (String label : sorted) {
@@ -106,6 +104,7 @@ public class SeatedZone extends InventoryZone {
                 lock.lock();
                 acquired.add(lock);
             }
+
             // Verify all available before any mutation — all-or-nothing.
             for (String label : sorted) {
                 Seat seat = seats.get(label);
@@ -114,6 +113,7 @@ public class SeatedZone extends InventoryZone {
                             "Seat " + label + " is not available (status: " + seat.getStatus() + ")");
                 }
             }
+
             // Commit.
             for (String label : sorted) {
                 seats.get(label).setStatus(SeatStatus.RESERVED);
@@ -122,10 +122,12 @@ public class SeatedZone extends InventoryZone {
             for (ReentrantLock lock : acquired) {
                 lock.unlock();
             }
+            layoutLock.readLock().unlock();
         }
 
         return true;
     }
+    
 
     /**
      * Release the given seats back to AVAILABLE. Same locking discipline as
@@ -139,15 +141,12 @@ public class SeatedZone extends InventoryZone {
             throw new IllegalArgumentException("Seated zone requires selected seat numbers");
         }
 
-        List<String> labels = selection.getSeatNumbers();
+        List<String> sorted = validateAndSortLabels(selection.getSeatNumbers());
 
-        if (labels == null || labels.isEmpty()) {
-            throw new IllegalArgumentException("labels must be non-empty");
-        }
-
-        List<String> sorted = validateAndSortLabels(labels);
-
+        // lock the layout for reading while we acquire the individual seat locks. This prevents the layout from being modified (seats added/removed) while we are reserving seats.
+        layoutLock.readLock().lock();
         List<ReentrantLock> acquired = new ArrayList<>();
+
         try {
             for (String label : sorted) {
                 ReentrantLock lock = seatLocks.get(label);
@@ -171,10 +170,12 @@ public class SeatedZone extends InventoryZone {
             for (ReentrantLock lock : acquired) {
                 lock.unlock();
             }
+            layoutLock.readLock().unlock();
         }
 
         return true;
     }
+
 
     /**
      * Mark seats as SOLD (e.g. after successful checkout). Same locking discipline.
@@ -187,15 +188,12 @@ public class SeatedZone extends InventoryZone {
             throw new IllegalArgumentException("Seated zone requires selected seat numbers");
         }
 
-        List<String> labels = selection.getSeatNumbers();
+        List<String> sorted = validateAndSortLabels(selection.getSeatNumbers());
 
-        if (labels == null || labels.isEmpty()) {
-            throw new IllegalArgumentException("labels must be non-empty");
-        }
-
-        List<String> sorted = validateAndSortLabels(labels);
-
+        // lock the layout for reading while we acquire the individual seat locks. This prevents the layout from being modified (seats added/removed) while we are reserving seats.
+        layoutLock.readLock().lock();
         List<ReentrantLock> acquired = new ArrayList<>();
+
         try {
             for (String label : sorted) {
                 ReentrantLock lock = seatLocks.get(label);
@@ -219,10 +217,18 @@ public class SeatedZone extends InventoryZone {
             for (ReentrantLock lock : acquired) {
                 lock.unlock();
             }
+            layoutLock.readLock().unlock();
         }
 
         return true;
     }
+
+
+
+
+
+
+
 
     private List<String> validateAndSortLabels(List<String> labels) {
         if (labels == null || labels.isEmpty()) {
@@ -234,10 +240,17 @@ public class SeatedZone extends InventoryZone {
             throw new IllegalArgumentException("Duplicate seat labels are not allowed");
         }
 
+        for (String label : labels) {
+            if (label == null || label.isBlank()) {
+                throw new IllegalArgumentException("Seat label must be non-blank");
+            }
+        }
+
         List<String> sorted = new ArrayList<>(labels);
         Collections.sort(sorted);
         return sorted;
     }
+
 
     @Override
     public boolean checkAvailability(int quantity) {
@@ -248,6 +261,101 @@ public class SeatedZone extends InventoryZone {
         }
         return true;
     }
+
+
+
+
+
+
+
+
+
+    
+    public void addSeats(List<Seat> seatsToAdd) {
+        if (seatsToAdd == null || seatsToAdd.isEmpty()) {
+            throw new IllegalArgumentException("seatsToAdd must be non-empty");
+        }
+
+        layoutLock.writeLock().lock();
+        try {
+            Set<String> labelsToAdd = new HashSet<>();
+
+            for (Seat seat : seatsToAdd) {
+                validateSeatForInsertion(seat);
+
+                if (!labelsToAdd.add(seat.getLabel())) {
+                    throw new IllegalArgumentException("Duplicate seat label in request: " + seat.getLabel());
+                }
+
+                if (seats.containsKey(seat.getLabel())) {
+                    throw new IllegalArgumentException("Seat already exists in zone: " + seat.getLabel());
+                }
+            }
+
+            for (Seat seat : seatsToAdd) {
+                seats.put(seat.getLabel(), seat);
+                seatLocks.put(seat.getLabel(), new ReentrantLock());
+            }
+        } finally {
+            layoutLock.writeLock().unlock();
+        }
+    }
+
+    
+
+
+    public void removeSeats(List<String> labelsToRemove) {
+        List<String> sorted = validateAndSortLabels(labelsToRemove);
+
+        layoutLock.writeLock().lock();
+        try {
+            for (String label : sorted) {
+                Seat seat = seats.get(label);
+                if (seat == null) {
+                    throw new IllegalArgumentException("Seat not found in zone: " + label);
+                }
+
+                if (seat.getStatus() != SeatStatus.AVAILABLE) {
+                    throw new IllegalStateException(
+                            "Cannot remove seat " + label + " because it is "
+                                    + seat.getStatus() + " and not AVAILABLE");
+                }
+            }
+
+            for (String label : sorted) {
+                seats.remove(label);
+                seatLocks.remove(label);
+            }
+        } finally {
+            layoutLock.writeLock().unlock();
+        }
+    }
+
+
+
+    private void validateSeatForInsertion(Seat seat) {
+        if (seat == null) {
+            throw new IllegalArgumentException("Seat must not be null");
+        }
+
+        seat.checkInvariants();
+
+        if (seat.getStatus() != SeatStatus.AVAILABLE) {
+            throw new IllegalArgumentException("New seat must be AVAILABLE: " + seat.getLabel());
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
 
     @Override
     public ZoneType getZoneType() {
