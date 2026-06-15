@@ -106,7 +106,12 @@ abstract class IActiveOrderRepositoryContractTest {
         repo.save(cartV1);
 
         ActiveOrder cartV2 = ActiveOrder.forMember(5, "sid-B");
-        repo.save(cartV2);
+        repo.lockForUpdate("user:5");
+        try {
+            repo.save(cartV2);
+        } finally {
+            repo.unlock("user:5");
+        }
 
         // Only one cart for user 5 — the second one wins.
         assertEquals("sid-B", repo.getByUserId(5).getSessionId());

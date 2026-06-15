@@ -94,7 +94,6 @@ public class SessionAndOrderSweeper {
         List<ActiveOrder> expired = activeOrderRepository.findExpired();
         for (ActiveOrder order : expired) {
             releaseTicketsToInventory(order);
-            activeOrderRepository.delete(order);
         }
         return expired.size();
     }
@@ -111,60 +110,93 @@ public class SessionAndOrderSweeper {
         Optional<ActiveOrder> cartOpt = activeOrderRepository.getBySessionId(session.getSessionId());
         if (cartOpt.isPresent()) {
             releaseTicketsToInventory(cartOpt.get());
-            activeOrderRepository.delete(cartOpt.get());
         }
     }
 
     
     
     /**
-     * Groups the cart's line items by (eventId, zoneId) and releases the
-     * aggregated quantity per zone via {@link Event#releaseInventory(int, InventorySelection)},
-     * matching what {@code CheckoutService.returnTicketsToStock} does on
-     * failed checkout.
+     * Acquires locks in the same order as checkout/reservation
+     * (active-order lock first, then events sorted by id), releases
+     * inventory, deletes the order, and unlocks in reverse.
+     *
+     * <p>Lock order: {@code activeOrder → events[sorted]} prevents
+     * deadlocks with {@code ReservationService} and {@code CheckoutService}
+     * which follow the identical acquire sequence.
      */
     private void releaseTicketsToInventory(ActiveOrder order) {
-        // Group line items by event and zone to aggregate the release calls
-        Map<Integer, Map<Integer, List<CartLineItem>>> grouped =
-                order.getItems().stream()
-                        .collect(Collectors.groupingBy(
-                                CartLineItem::geteventId,
-                                Collectors.groupingBy(CartLineItem::getzoneId)
-                        ));
-        // For each (event, zone) group, release the appropriate quantity back to inventory
-        for (Map.Entry<Integer, Map<Integer, List<CartLineItem>>> eventEntry : grouped.entrySet()) {
-            Event event = null;
-            try {
-                event = eventRepository.findById(eventEntry.getKey());
-            } catch (EventNotFoundException e) {
-                // If the event is not found, log a warning and skip releasing tickets for this event
-                log.warn("Event with ID {} not found while releasing tickets for order of user id {}. Skipping.", eventEntry.getKey(), order.getUserId());
-                continue;
-            }
-            if (event == null) {
-                log.warn("Event with ID {} not found while releasing tickets for order of user id {}. Skipping.", eventEntry.getKey(), order.getUserId());
-                continue;
-            }
-            // For each zone in the event, determine how many tickets to release
-            for (Map.Entry<Integer, List<CartLineItem>> zoneEntry : eventEntry.getValue().entrySet()) {
-                int zoneId = zoneEntry.getKey();
-                List<CartLineItem> items = zoneEntry.getValue();
-                // Release seated seats (by seat label) and standing inventory (by quantity) independently.
-                List<String> seatNumbers = items.stream()
-                        .map(CartLineItem::getSeatNumber)
-                        .filter(s -> s != null)
-                        .toList();
-                
-                int standingCount = (int) items.stream().filter(i -> i.getSeatNumber() == null).count();
-                if (standingCount > 0) {
-                    event.releaseInventory(zoneId, InventorySelection.standing(standingCount));
-                }
-                if (!seatNumbers.isEmpty()) {
-                    event.releaseInventory(zoneId, InventorySelection.seated(seatNumbers));
-                }
-            }
+        // Derive the same lock key that ReservationService / CheckoutService use.
+        String orderLockKey = order.isMember()
+                ? "user:" + order.getUserId()
+                : "sess:" + order.getSessionId();
 
-            eventRepository.save(event);
+        // Sort event IDs to guarantee a consistent lock order and avoid deadlocks.
+        List<Integer> sortedEventIds = order.getItems().stream()
+                .map(CartLineItem::geteventId)
+                .distinct()
+                .sorted()
+                .toList();
+
+        activeOrderRepository.lockForUpdate(orderLockKey);
+        try {
+            for (Integer eventId : sortedEventIds) {
+                eventRepository.lockForUpdate(eventId);
+            }
+            try {
+                // Group line items by event and zone to aggregate the release calls
+                Map<Integer, Map<Integer, List<CartLineItem>>> grouped =
+                        order.getItems().stream()
+                                .collect(Collectors.groupingBy(
+                                        CartLineItem::geteventId,
+                                        Collectors.groupingBy(CartLineItem::getzoneId)
+                                ));
+                // For each (event, zone) group, release the appropriate quantity back to inventory
+                for (Map.Entry<Integer, Map<Integer, List<CartLineItem>>> eventEntry : grouped.entrySet()) {
+                    Event event = null;
+                    try {
+                        event = eventRepository.findById(eventEntry.getKey());
+                    } catch (EventNotFoundException e) {
+                        // If the event is not found, log a warning and skip releasing tickets for this event
+                        log.warn("Event with ID {} not found while releasing tickets for order of user id {}. Skipping.", eventEntry.getKey(), order.getUserId());
+                        continue;
+                    }
+                    if (event == null) {
+                        log.warn("Event with ID {} not found while releasing tickets for order of user id {}. Skipping.", eventEntry.getKey(), order.getUserId());
+                        continue;
+                    }
+                    // For each zone in the event, determine how many tickets to release
+                    for (Map.Entry<Integer, List<CartLineItem>> zoneEntry : eventEntry.getValue().entrySet()) {
+                        int zoneId = zoneEntry.getKey();
+                        List<CartLineItem> items = zoneEntry.getValue();
+                        // Release seated seats (by seat label) and standing inventory (by quantity) independently.
+                        List<String> seatNumbers = items.stream()
+                                .map(CartLineItem::getSeatNumber)
+                                .filter(s -> s != null)
+                                .toList();
+
+                        String orderKey = order.getOrderKey();
+                        int standingCount = (int) items.stream().filter(i -> i.getSeatNumber() == null).count();
+                        if (standingCount > 0) {
+                            event.releaseInventory(zoneId, InventorySelection.standing(standingCount, orderKey));
+                        }
+                        if (!seatNumbers.isEmpty()) {
+                            event.releaseInventory(zoneId, InventorySelection.seated(seatNumbers, orderKey));
+                        }
+                    }
+
+                    eventRepository.save(event);
+                }
+                // Delete the order inside the lock so no other thread can observe
+                // it after the inventory has already been released.
+                activeOrderRepository.delete(order);
+            } finally {
+                // Unlock events in reverse order of acquisition.
+                for (int i = sortedEventIds.size() - 1; i >= 0; i--) {
+                    eventRepository.unlock(sortedEventIds.get(i));
+                }
+            }
+        } finally {
+            activeOrderRepository.unlock(orderLockKey);
         }
     }
 }

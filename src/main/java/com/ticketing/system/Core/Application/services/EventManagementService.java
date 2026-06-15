@@ -174,63 +174,62 @@ public class EventManagementService {
     // first create the event with basic details and then configure the venue map in
     // a second step.
     public void configureVenueMap(String token, int companyId, VenueMapConfigDTO config) {
-        int userId = validateTokenAndGetUserId(token);
-        log.info("Configuring venue map for company {}, event {}, by user {}", companyId, config.eventId(), userId);
-        User user = userRepository.getUserById(userId);
-        ProductionCompany company = companyRepository.getCompanyById(companyId);
-        user.requirePermissionInCompany(companyId, Permission.CONFIGURE_VENUE);
+        int eventId = Integer.parseInt(config.eventId());
 
-        Event event = null;
+        eventRepository.lockForUpdate(eventId);
         try {
-            event = eventRepository.findById(Integer.parseInt(config.eventId()));
-        } catch (EventNotFoundException e) {
-            log.warn("Event {} not found", config.eventId());
-            throw new RuntimeException("Event not found");
-        }
+            int userId = validateTokenAndGetUserId(token);
 
-        List<InventoryZone> zones = new ArrayList<>();
-        int nextZoneId = 1;
+            log.info("Configuring venue map for company {}, event {}, by user {}", companyId, config.eventId(), userId);
 
-        for (VenueMapConfigDTO.ZoneConfigDTO zoneConfig : config.zones()) {
-            if (zoneConfig.seated()) {
+            User user = userRepository.getUserById(userId);
+            ProductionCompany company = companyRepository.getCompanyById(companyId);
+            user.requirePermissionInCompany(companyId, Permission.CONFIGURE_VENUE);
 
-                if (zoneConfig.seats() == null || zoneConfig.seats().isEmpty()) {
-                    throw new IllegalArgumentException("Seated zone must contain seats");
-                }
+            Event event = eventRepository.findById(eventId);
 
-                List<Seat> seats = zoneConfig.seats().stream()
-                        .map(seatConfig -> new Seat(seatConfig.label(), seatConfig.x(), seatConfig.y()))
-                        .toList();
-
-                zones.add(new SeatedZone(
-                        nextZoneId,
-                        zoneConfig.zoneName(),
-                        zoneConfig.pricePerTicket(),
-                        seats));
-            } else {
-
-                if (zoneConfig.capacity() == null || zoneConfig.capacity() <= 0) {
-                    throw new IllegalArgumentException("Standing zone capacity must be positive");
-                }
-
-                zones.add(new StandingZone(
-                        nextZoneId,
-                        zoneConfig.zoneName(),
-                        zoneConfig.capacity(),
-                        zoneConfig.pricePerTicket()));
+            if (event.getCompanyId() != companyId) {
+                throw new RuntimeException("Event does not belong to this company");
             }
 
-            nextZoneId++;
+            List<InventoryZone> zones = new ArrayList<>();
+            int nextZoneId = 1;
+
+            for (VenueMapConfigDTO.ZoneConfigDTO zoneConfig : config.zones()) {
+                if (zoneConfig.seated()) {
+                    List<Seat> seats = toDomainSeats(zoneConfig.seats());
+                    zones.add(new SeatedZone(
+                            nextZoneId,
+                            zoneConfig.zoneName(),
+                            zoneConfig.pricePerTicket(),
+                            seats));
+                } else {
+                    if (zoneConfig.capacity() == null || zoneConfig.capacity() <= 0) {
+                        throw new IllegalArgumentException("Standing zone capacity must be positive");
+                    }
+
+                    zones.add(new StandingZone(
+                            nextZoneId,
+                            zoneConfig.zoneName(),
+                            zoneConfig.capacity(),
+                            zoneConfig.pricePerTicket()));
+                }
+
+                nextZoneId++;
+            }
+
+            VenueMap venueMap = new VenueMap(
+                    event.getVenueMap() != null ? event.getVenueMap().getId() : eventRepository.nextVenueMapId(),
+                    event.getVenueMap() != null ? event.getVenueMap().getLocation() : null,
+                    zones);
+
+            event.configureVenueMap(venueMap, companyId);
+            eventRepository.save(event);
+
+            log.info("Venue map for event {} configured successfully", event.getId());
+        } finally {
+            eventRepository.unlock(eventId);
         }
-
-        VenueMap venueMap = new VenueMap(
-                event.getVenueMap() != null ? event.getVenueMap().getId() : 1,
-                event.getVenueMap() != null ? event.getVenueMap().getLocation() : null,
-                zones);
-
-        event.configureVenueMap(venueMap, companyId);
-        eventRepository.save(event);
-        log.info("Venue map for event {} configured successfully", event.getId());
     }
 
     
@@ -729,6 +728,8 @@ public class EventManagementService {
     // this function replaces any existing event-level purchase policy with a new one built from the provided DTO, while also inheriting 
     // and combining with the company-level purchase policy. If the company does not have a purchase policy, it simply uses the event-specific 
     // one. The resulting combined purchase policy is then set on the event and saved to the repository.
+
+    // in this function, lock the event as well to prevent concurrent modifications to the event's purchase policy while we're updating it. This ensures that we have a consistent view of the event's state and that we don't accidentally overwrite changes made by another user at the same time.
     public void setEventPolicies(String token, EventPolicyConfigDTO config) {
         if (!sessionManager.validateToken(token)) {
             throw new RuntimeException("Invalid token");
@@ -738,41 +739,47 @@ public class EventManagementService {
             throw new IllegalArgumentException("Event policy config cannot be null");
         }
 
-        int userId = sessionManager.extractUserId(token);
+        eventRepository.lockForUpdate(config.eventId());
 
-        ProductionCompany company = companyRepository.getCompanyById(config.companyId());
-        if (company == null) {
-            throw new RuntimeException("Company not found");
+        try {
+            int userId = sessionManager.extractUserId(token);
+
+            ProductionCompany company = companyRepository.getCompanyById(config.companyId());
+            if (company == null) {
+                throw new RuntimeException("Company not found");
+            }
+
+            company.checkowner(userId);
+
+            Event event = eventRepository.findById(config.eventId());
+            if (event == null) {
+                throw new RuntimeException("Event not found");
+            }
+
+            if (event.getCompanyId() != config.companyId()) {
+                throw new RuntimeException("Event does not belong to this company");
+            }
+
+            PurchasePolicy companyPurchasePolicy = company.getPurchasePolicy();
+            if (companyPurchasePolicy == null) {
+                companyPurchasePolicy = new NoPurchasePolicy();
+            }
+
+            PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(config.purchasePolicy());
+
+            PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
+                    companyPurchasePolicy,
+                    eventSpecificPurchasePolicy
+            );
+
+            event.setPurchasePolicy(inheritedAndExtendedPurchasePolicy);
+
+            eventRepository.save(event);
+
+            log.info("Purchase policy for event {} was updated by user {}", event.getId(), userId);
+        } finally {
+            eventRepository.unlock(config.eventId());
         }
-
-        company.checkowner(userId);
-
-        Event event = eventRepository.findById(config.eventId());
-        if (event == null) {
-            throw new RuntimeException("Event not found");
-        }
-
-        if (event.getCompanyId() != config.companyId()) {
-            throw new RuntimeException("Event does not belong to this company");
-        }
-
-        PurchasePolicy companyPurchasePolicy = company.getPurchasePolicy();
-        if (companyPurchasePolicy == null) {
-            companyPurchasePolicy = new NoPurchasePolicy();
-        }
-
-        PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(config.purchasePolicy());
-
-        PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
-                companyPurchasePolicy,
-                eventSpecificPurchasePolicy
-        );
-
-        event.setPurchasePolicy(inheritedAndExtendedPurchasePolicy);
-
-        eventRepository.save(event);
-
-        log.info("Purchase policy for event {} was updated by user {}", event.getId(), userId);
     }
 
 

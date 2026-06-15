@@ -246,6 +246,8 @@ class SessionAndOrderSweeperTest {
 
     @Test
     void expiredSeatedOrder_releasesExactReservedSeats() {
+        ActiveOrder expiredCart = ActiveOrder.forMember(5, "sid-1");
+
         SeatedZone seatedZone = new SeatedZone(
                 20,
                 "Orchestra",
@@ -255,11 +257,10 @@ class SessionAndOrderSweeperTest {
                         new Seat("A2", 1, 0),
                         new Seat("A3", 2, 0)));
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2")));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2"), expiredCart.getOrderKey()));
 
         Event event = createEventWithZones(2, List.of(seatedZone));
 
-        ActiveOrder expiredCart = ActiveOrder.forMember(5, "sid-1");
         expiredCart.addSeatedReservation(
                 2,
                 20,
@@ -285,6 +286,8 @@ class SessionAndOrderSweeperTest {
 
     @Test
     void expiredMixedOrder_releasesStandingQuantityAndExactSeatedSeats() {
+        ActiveOrder expiredCart = ActiveOrder.forGuest("sid-mixed");
+
         StandingZone standingZone = new StandingZone(10, "General Admission", 5, 50.0);
         SeatedZone seatedZone = new SeatedZone(
                 20,
@@ -294,12 +297,11 @@ class SessionAndOrderSweeperTest {
                         new Seat("A1", 0, 0),
                         new Seat("A2", 1, 0)));
 
-        standingZone.reserve(InventorySelection.standing(2));
-        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+        standingZone.reserve(InventorySelection.standing(2, expiredCart.getOrderKey()));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1"), expiredCart.getOrderKey()));
 
         Event event = createEventWithZones(1, List.of(standingZone, seatedZone));
 
-        ActiveOrder expiredCart = ActiveOrder.forGuest("sid-mixed");
         expiredCart.addStandingReservation(1, 10, 2, 50.0, LocalDateTime.now());
         expiredCart.addSeatedReservation(1, 20, List.of("A1"), 120.0, LocalDateTime.now());
 
@@ -325,6 +327,8 @@ class SessionAndOrderSweeperTest {
         Session guest = new Session("guest-seated-sid", null, T0.minusSeconds(7200), T0.minusSeconds(60));
         when(sessionRepo.findExpiredBefore(T0)).thenReturn(List.of(guest));
 
+        ActiveOrder cart = ActiveOrder.forGuest("guest-seated-sid");
+
         SeatedZone seatedZone = new SeatedZone(
                 20,
                 "Orchestra",
@@ -335,11 +339,10 @@ class SessionAndOrderSweeperTest {
                 )
         );
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1"), cart.getOrderKey()));
 
         Event event = createEventWithZones(1, List.of(seatedZone));
 
-        ActiveOrder cart = ActiveOrder.forGuest("guest-seated-sid");
         cart.addSeatedReservation(1, 20, List.of("A1"), 120.0, LocalDateTime.now());
 
         when(orderRepo.getBySessionId("guest-seated-sid")).thenReturn(Optional.of(cart));

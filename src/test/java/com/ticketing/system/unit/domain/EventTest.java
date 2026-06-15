@@ -112,7 +112,7 @@ class EventTest extends BaseDomainTest {
         Event event = createEventWithZones(List.of(seatedZone));
         
         event.transitionToOnSale();
-        event.reserveInventory(2, InventorySelection.seated(List.of("A1", "A2")));
+        event.reserveInventory(2, InventorySelection.seated(List.of("A1", "A2"), "test-order"));
 
         assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A1"));
         assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A2"));
@@ -131,8 +131,8 @@ class EventTest extends BaseDomainTest {
         Event event = createEventWithZones(List.of(seatedZone));
         
         event.transitionToOnSale();
-        event.reserveInventory(2, InventorySelection.seated(List.of("A1", "A2")));
-        event.releaseInventory(2, InventorySelection.seated(List.of("A1")));
+        event.reserveInventory(2, InventorySelection.seated(List.of("A1", "A2"), "test-order"));
+        event.releaseInventory(2, InventorySelection.seated(List.of("A1"), "test-order"));
 
         assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
         assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A2"));
@@ -150,8 +150,8 @@ class EventTest extends BaseDomainTest {
         Event event = createEventWithZones(List.of(seatedZone));
 
         event.transitionToOnSale();
-        event.reserveInventory(2, InventorySelection.seated(List.of("A1")));
-        event.confirmInventorySale(2, InventorySelection.seated(List.of("A1")));
+        event.reserveInventory(2, InventorySelection.seated(List.of("A1"), "test-order"));
+        event.confirmInventorySale(2, InventorySelection.seated(List.of("A1"), "test-order"));
 
         assertEquals(SeatStatus.SOLD, seatedZone.getSeatStatus("A1"));
         assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A2"));

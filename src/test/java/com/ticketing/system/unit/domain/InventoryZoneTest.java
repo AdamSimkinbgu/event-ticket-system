@@ -132,11 +132,11 @@ public class InventoryZoneTest extends BaseDomainTest {
                 100,
                 List.of(new Seat("A1", 0, 0)));
 
-        zone.reserve(InventorySelection.seated(List.of("A1")));
+        zone.reserve(InventorySelection.seated(List.of("A1"), "test-order"));
 
         assertThrows(
                 IllegalStateException.class,
-                () -> zone.reserve(InventorySelection.seated(List.of("A1"))));
+                () -> zone.reserve(InventorySelection.seated(List.of("A1"), "test-order")));
     }
     
 
@@ -207,7 +207,7 @@ public class InventoryZoneTest extends BaseDomainTest {
                 )
         ));
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2")));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2"), "test-order"));
 
         assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A1"));
         assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A2"));
@@ -229,7 +229,7 @@ public class InventoryZoneTest extends BaseDomainTest {
         ));
 
         assertThrows(IllegalArgumentException.class, () ->
-                seatedZone.reserve(InventorySelection.seated(List.of("A1", "A1")))
+                seatedZone.reserve(InventorySelection.seated(List.of("A1", "A1"), "test-order"))
         );
 
         assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
@@ -251,7 +251,7 @@ public class InventoryZoneTest extends BaseDomainTest {
         ));
 
         assertThrows(IllegalArgumentException.class, () ->
-                seatedZone.reserve(InventorySelection.seated(List.of("A1", "Z9")))
+                seatedZone.reserve(InventorySelection.seated(List.of("A1", "Z9"), "test-order"))
         );
 
         assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
@@ -268,10 +268,10 @@ public class InventoryZoneTest extends BaseDomainTest {
                 List.of(new Seat("A1", 0, 0))
         ));
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1"), "test-order"));
 
         assertThrows(IllegalStateException.class, () ->
-                seatedZone.reserve(InventorySelection.seated(List.of("A1")))
+                seatedZone.reserve(InventorySelection.seated(List.of("A1"), "test-order"))
         );
 
         assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A1"));
@@ -289,8 +289,8 @@ public class InventoryZoneTest extends BaseDomainTest {
                 )
         ));
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2")));
-        seatedZone.release(InventorySelection.seated(List.of("A1")));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2"), "test-order"));
+        seatedZone.release(InventorySelection.seated(List.of("A1"), "test-order"));
 
         assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
         assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A2"));
@@ -327,8 +327,8 @@ public class InventoryZoneTest extends BaseDomainTest {
                 )
         ));
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2")));
-        seatedZone.confirmSale(InventorySelection.seated(List.of("A1", "A2")));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2"), "test-order"));
+        seatedZone.confirmSale(InventorySelection.seated(List.of("A1", "A2"), "test-order"));
 
         assertEquals(SeatStatus.SOLD, seatedZone.getSeatStatus("A1"));
         assertEquals(SeatStatus.SOLD, seatedZone.getSeatStatus("A2"));
@@ -409,7 +409,7 @@ public class InventoryZoneTest extends BaseDomainTest {
                         readyLatch.countDown();
                         startLatch.await();
 
-                        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
+                        seatedZone.reserve(InventorySelection.seated(List.of("A1"), "test-order"));
                         successCount.incrementAndGet();
 
                     } catch (Exception e) {
@@ -521,7 +521,7 @@ public class InventoryZoneTest extends BaseDomainTest {
                 100,
                 List.of(new Seat("A1", 0, 0)));
 
-        zone.reserve(InventorySelection.seated(List.of("A1")));
+        zone.reserve(InventorySelection.seated(List.of("A1"), "test-order"));
 
         assertThrows(IllegalStateException.class, () -> zone.removeSeats(List.of("A1")));
 

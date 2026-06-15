@@ -546,10 +546,10 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         int numberOfThreads = 20;
         int quantityPerRemove = 1;
 
-        InventoryZone realZone = new StandingZone(ZONE_ID, "VIP", capacity, 100.0);
-        realZone.reserve(InventorySelection.standing(initialReservedTickets));
-
         ActiveOrder realActiveOrder = new ActiveOrder(USER_ID);
+        InventoryZone realZone = new StandingZone(ZONE_ID, "VIP", capacity, 100.0);
+        realZone.reserve(InventorySelection.standing(initialReservedTickets, realActiveOrder.getOrderKey()));
+
         realActiveOrder.addStandingReservation(
                 EVENT_ID,
                 ZONE_ID,
@@ -779,9 +779,9 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
                 )
         );
         Event realEvent = createEventWithZone(seatedZone);
-        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2", "A3")));
-
         ActiveOrder realOrder = new ActiveOrder(USER_ID);
+        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2", "A3"), realOrder.getOrderKey()));
+
         realOrder.addSeatedReservation(EVENT_ID, ZONE_ID, List.of("A1", "A2", "A3"), 120.0, LocalDateTime.now());
 
         when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);

@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.UUID;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Domain.events.InventorySelection;
@@ -30,12 +31,23 @@ import com.ticketing.system.Core.Domain.shared.InvariantChecked;
  */
 public class ActiveOrder implements InvariantChecked {
 
+    /** Status value: order is being processed by checkout — no new items or concurrent checkouts. */
+    public static final String STATUS_CHECKOUT_IN_PROGRESS = "CHECKOUT_IN_PROGRESS";
+
     private Integer userId;
     private String sessionId;
     private String status;
     private final List<CartLineItem> items;
     private final LocalDateTime createdAt;
     private final Object itemsLock = new Object();
+    /**
+     * Stable identity assigned at construction. Passed to {@link com.ticketing.system.Core.Domain.events.InventorySelection}
+     * so that {@link com.ticketing.system.Core.Domain.events.StandingZone} and
+     * {@link com.ticketing.system.Core.Domain.events.SeatedZone} can record which
+     * order holds each reservation. Enables the 3-phase checkout to verify ownership
+     * in Phase 3 without holding event locks during Phase 2 (payment/issuance).
+     */
+    private final String orderKey = UUID.randomUUID().toString();
 
     public ActiveOrder(Integer userId, String sessionId) {
         if (userId == null && sessionId == null) {
@@ -437,6 +449,46 @@ public class ActiveOrder implements InvariantChecked {
         return status;
     }
 
+    /**
+     * Returns the stable key that identifies this order's inventory holds.
+     * Passed into {@link com.ticketing.system.Core.Domain.events.InventorySelection}
+     * on every reserve/release/confirmSale call so zones can enforce ownership.
+     */
+    public String getOrderKey() {
+        return orderKey;
+    }
+
+    /**
+     * Phase 1 of the 3-phase checkout: freeze the order so that no concurrent
+     * checkout or new reservations can touch it during the payment/issuance phase.
+     *
+     * @throws IllegalStateException if the order is already in checkout
+     */
+    public void markCheckoutInProgress() {
+        if (STATUS_CHECKOUT_IN_PROGRESS.equals(status)) {
+            throw new IllegalStateException("Order is already in checkout progress");
+        }
+        this.status = STATUS_CHECKOUT_IN_PROGRESS;
+    }
+
+    /**
+     * Rolls back Phase 1: resets the status to {@code null} (active) so the order
+     * can be retried or abandoned after a checkout failure during Phase 2.
+     *
+     * @throws IllegalStateException if the order is not in checkout progress
+     */
+    public void cancelCheckoutInProgress() {
+        if (!STATUS_CHECKOUT_IN_PROGRESS.equals(status)) {
+            throw new IllegalStateException("Order is not in checkout progress");
+        }
+        this.status = null;
+    }
+
+    /** Returns {@code true} while this order is locked by an ongoing checkout attempt. */
+    public boolean isCheckoutInProgress() {
+        return STATUS_CHECKOUT_IN_PROGRESS.equals(status);
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -502,6 +554,10 @@ public class ActiveOrder implements InvariantChecked {
 
   public boolean validateCanCheckout() {
         synchronized (itemsLock) {
+            if (STATUS_CHECKOUT_IN_PROGRESS.equals(status)) {
+                throw new IllegalStateException("Order is already being checked out");
+            }
+
             if (items.isEmpty()) {
                 throw new IllegalStateException("Cannot checkout an empty order");
             }

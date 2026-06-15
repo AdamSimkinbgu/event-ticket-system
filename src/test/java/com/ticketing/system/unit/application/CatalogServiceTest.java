@@ -412,9 +412,9 @@ class CatalogServiceTest {
                 )
         );
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
-        seatedZone.reserve(InventorySelection.seated(List.of("A2")));
-        seatedZone.confirmSale(InventorySelection.seated(List.of("A2")));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1"), "test-order"));
+        seatedZone.reserve(InventorySelection.seated(List.of("A2"), "test-order"));
+        seatedZone.confirmSale(InventorySelection.seated(List.of("A2"), "test-order"));
 
         VenueMap venueMap = new VenueMap(
                 1,

@@ -30,6 +30,8 @@ public class SeatedZone extends InventoryZone {
     private final ConcurrentHashMap<String, ReentrantLock> seatLocks;
     private final ReentrantReadWriteLock layoutLock = new ReentrantReadWriteLock();
 
+
+
     public SeatedZone(int id, String name, double price, List<Seat> initialSeats) {
         super(id, name, price);
         if (initialSeats == null) {
@@ -63,6 +65,20 @@ public class SeatedZone extends InventoryZone {
         return seat.getStatus();
     }
 
+    /**
+     * Returns the {@link Seat} for the given label, allowing callers to inspect
+     * hold identity (e.g. {@link Seat#getReservedByOrderKey()}) in Phase 3 of checkout.
+     *
+     * @throws IllegalArgumentException if the label is not known to this zone
+     */
+    public Seat getSeatByLabel(String label) {
+        Seat seat = seats.get(label);
+        if (seat == null) {
+            throw new IllegalArgumentException("Seat not found: " + label);
+        }
+        return seat;
+    }
+
 
 
 
@@ -77,6 +93,8 @@ public class SeatedZone extends InventoryZone {
 
     /**
      * Reserve the given seats atomically. Either all flip to RESERVED or none do.
+     * Records the {@code orderKey} from the selection on each seat so that
+     * Phase 3 of checkout can verify ownership before confirming the sale.
      *
      * @throws IllegalArgumentException if any label is unknown to this zone
      * @throws IllegalStateException    if any requested seat is not AVAILABLE
@@ -85,6 +103,12 @@ public class SeatedZone extends InventoryZone {
     public boolean reserve(InventorySelection selection) {
         if (!selection.isSeatedSelection()) {
             throw new IllegalArgumentException("Seated zone requires selected seat numbers");
+        }
+
+        String orderKey = selection.getOrderKey();
+        if (orderKey == null || orderKey.isBlank()) {
+            throw new IllegalArgumentException(
+                    "InventorySelection must carry a non-blank orderKey for seated reservations");
         }
 
         List<String> sorted = validateAndSortLabels(selection.getSeatNumbers());
@@ -112,9 +136,10 @@ public class SeatedZone extends InventoryZone {
                 }
             }
 
-            // Commit.
+            // Commit — stamp each seat with the holding order key.
+            java.time.LocalDateTime reservedUntil = java.time.LocalDateTime.now().plusMinutes(10);
             for (String label : sorted) {
-                seats.get(label).setStatus(SeatStatus.RESERVED);
+                seats.get(label).markReservedBy(orderKey, reservedUntil);
             }
         } finally {
             for (ReentrantLock lock : acquired) {
@@ -129,9 +154,10 @@ public class SeatedZone extends InventoryZone {
 
     /**
      * Release the given seats back to AVAILABLE. Same locking discipline as
-     * {@link #reserveSeats}.
+     * {@link #reserve}. If the selection carries an {@code orderKey}, each
+     * seat is verified to be held by that order before releasing.
      *
-     * @throws IllegalStateException if any seat is not RESERVED
+     * @throws IllegalStateException if any seat is not RESERVED (or belongs to a different order)
      */
     @Override
     public boolean release(InventorySelection selection) {
@@ -139,6 +165,7 @@ public class SeatedZone extends InventoryZone {
             throw new IllegalArgumentException("Seated zone requires selected seat numbers");
         }
 
+        String orderKey = selection.getOrderKey();
         List<String> sorted = validateAndSortLabels(selection.getSeatNumbers());
 
         // lock the layout for reading while we acquire the individual seat locks. This prevents the layout from being modified (seats added/removed) while we are reserving seats.
@@ -159,10 +186,18 @@ public class SeatedZone extends InventoryZone {
                 if (seat.getStatus() != SeatStatus.RESERVED) {
                     throw new IllegalStateException(
                             "Seat " + label + " is not RESERVED (status: " + seat.getStatus() + ")");
+                }   //TODO:  see if ok that skips ownership check when key is null seats, since those will fail the status check anyway. Otherwise, would need to check ownership before status, which is a bit weird but would be more precise in error reporting.
+                String seatOwner = seat.getReservedByOrderKey();
+                if (orderKey != null && !orderKey.isBlank() && !orderKey.equals(seatOwner)) {
+                    throw new IllegalStateException(
+                            "Seat " + label + " is reserved by order '" + seatOwner
+                                    + "', not by '" + orderKey + "'");
                 }
             }
             for (String label : sorted) {
-                seats.get(label).setStatus(SeatStatus.AVAILABLE);
+                Seat seat = seats.get(label);
+                seat.clearReservation();
+                seat.setStatus(SeatStatus.AVAILABLE);
             }
         } finally {
             for (ReentrantLock lock : acquired) {
@@ -177,8 +212,10 @@ public class SeatedZone extends InventoryZone {
 
     /**
      * Mark seats as SOLD (e.g. after successful checkout). Same locking discipline.
+     * If the selection carries an {@code orderKey}, each seat is verified to be
+     * held by that order before confirming — this is the Phase 3 ownership check.
      *
-     * @throws IllegalStateException if any seat is not RESERVED
+     * @throws IllegalStateException if any seat is not RESERVED (or belongs to a different order)
      */
     @Override
     public boolean confirmSale(InventorySelection selection) {
@@ -186,6 +223,7 @@ public class SeatedZone extends InventoryZone {
             throw new IllegalArgumentException("Seated zone requires selected seat numbers");
         }
 
+        String orderKey = selection.getOrderKey();
         List<String> sorted = validateAndSortLabels(selection.getSeatNumbers());
 
         // lock the layout for reading while we acquire the individual seat locks. This prevents the layout from being modified (seats added/removed) while we are reserving seats.
@@ -206,10 +244,18 @@ public class SeatedZone extends InventoryZone {
                 if (seat.getStatus() != SeatStatus.RESERVED) {
                     throw new IllegalStateException(
                             "Cannot mark SOLD — seat " + label + " is " + seat.getStatus() + " (must be RESERVED)");
+                } //TODO:  see if ok that skips ownership check when key is null seats, since those will fail the status check anyway. Otherwise, would need to check ownership before status, which is a bit weird but would be more precise in error reporting.
+                String seatOwner = seat.getReservedByOrderKey();
+                if (orderKey != null && !orderKey.isBlank() && !orderKey.equals(seatOwner)) {
+                    throw new IllegalStateException(
+                            "Cannot confirm sale — seat " + label + " is reserved by order '"
+                                    + seatOwner + "', not by '" + orderKey + "'");
                 }
             }
             for (String label : sorted) {
-                seats.get(label).setStatus(SeatStatus.SOLD);
+                Seat seat = seats.get(label);
+                seat.clearReservation();
+                seat.setStatus(SeatStatus.SOLD);
             }
         } finally {
             for (ReentrantLock lock : acquired) {

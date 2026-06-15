@@ -12,7 +12,6 @@ import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
-import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 
 import org.springframework.stereotype.Repository;
 
@@ -54,11 +53,16 @@ public class MemoryEventRepository implements IEventRepository {
 
     @Override
     public boolean save(Event event) {
+        // New events (not yet in the map) may be saved without a lock — no other
+        // thread can know the ID before the first save completes.
+        // Existing events must be locked by the calling thread to prevent
+        // unguarded read-modify-write races.
+        if (events.containsKey(event.getId()) && !locks.isHeldByCurrentThread(event.getId())) {
+            throw new IllegalStateException(
+                    "Event " + event.getId() + " must be locked via lockForUpdate before saving");
+        }
         events.put(event.getId(), event);
         return true;
-        // In a real implementation, we might return false if the save failed for some
-        // reason (e.g. DB error);
-        // here we'll just assume it always works.
     }
 
     @Override

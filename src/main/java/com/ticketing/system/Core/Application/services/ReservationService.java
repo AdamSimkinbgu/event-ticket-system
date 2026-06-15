@@ -118,8 +118,12 @@ public class ReservationService {
 
             double pricePerTicket = zone.getprice();
 
+            // Bind the selection to this order's key so the zone records which order holds the reservation.
+            // This enables the 3-phase checkout to verify ownership in Phase 3 without holding event locks during payment/issuance.
+            InventorySelection selectionWithKey = selectionWithOrderKey(selection, activeOrder.getOrderKey());
+
             // Reserve inventory first before modifying the active order, so that if we fail to reserve inventory (e.g. not enough tickets available), we do not end up with an active order that has reservations that were not successfully made. This also ensures that we only modify the active order if we are able to successfully reserve the requested tickets, which keeps our data consistent and avoids having active orders that reflect reservations that do not actually exist.
-            event.reserveInventory(zoneId, selection);
+            event.reserveInventory(zoneId, selectionWithKey);
             inventoryReserved = true;
 
             // Now that we have successfully reserved the inventory, we can safely modify the active order to reflect the new reservation. If any of the validations for modifying the active order fail (e.g. trying to reserve more tickets than allowed by purchase policy, etc.), we will throw an exception and roll back the inventory reservation in the catch block, ensuring that we do not end up with an active order that has reservations that were not successfully made.
@@ -182,8 +186,10 @@ public class ReservationService {
 
             // Validate first so we do not release inventory for tickets that are not in the active order.
             activeOrder.validateContainsReservation(eventId, zoneId, selection);
+            // Bind the selection to this order's key so the zone can verify ownership when releasing.
+            InventorySelection selectionWithKey = selectionWithOrderKey(selection, activeOrder.getOrderKey());
             // Now that we have validated that the active order contains the reservation we are trying to remove, we can safely release the inventory and modify the active order to reflect the removed reservation. If any of the validations for releasing inventory or modifying the active order fail (e.g. trying to remove more tickets than are reserved in the active order, etc.), we will throw an exception and roll back any changes in the catch block, ensuring that we do not end up with an active order that reflects removals that were not successfully made or inventory that was released without a corresponding reservation in the active order.
-            event.releaseInventory(zoneId, selection);
+            event.releaseInventory(zoneId, selectionWithKey);
             // Note: for simplicity, we assume that the price per ticket does not change when removing a reservation. If there are any discounts or promotions that apply to the reservation, we would need to handle that logic here as well to ensure that the active order reflects the correct pricing after the reservation is removed.
             activeOrder.removeReservation(eventId, zoneId, selection);
 
@@ -224,6 +230,18 @@ public class ReservationService {
             throw new IllegalArgumentException("Inventory selection is required");
         }
         return selectionDto.toDomainSelection();
+    }
+
+    /**
+     * Returns a copy of the given selection that carries the provided {@code orderKey}.
+     * Used to stamp every reserve/release call with the owning order's identity.
+     */
+    private InventorySelection selectionWithOrderKey(InventorySelection selection, String orderKey) {
+        if (selection.isStandingSelection()) {
+            return InventorySelection.standing(selection.getQuantity(), orderKey);
+        } else {
+            return InventorySelection.seated(selection.getSeatNumbers(), orderKey);
+        }
     }
 
     
@@ -405,7 +423,11 @@ public class ReservationService {
 
         try {
             if (event != null) {
-                event.releaseInventory(zoneId, selection);
+                // Pass the orderKey so the zone can verify ownership during rollback release.
+                InventorySelection selectionWithKey = activeOrder != null
+                        ? selectionWithOrderKey(selection, activeOrder.getOrderKey())
+                        : selection;
+                event.releaseInventory(zoneId, selectionWithKey);
                 eventRepository.save(event);
             }
         } catch (RuntimeException ignored) {
@@ -509,14 +531,15 @@ public class ReservationService {
             ActiveOrder activeOrder = activeOrderRepository.getByUserId(buyer.userId());
 
             if (activeOrder != null) {
+                String orderKey = activeOrder.getOrderKey();
                 // release inventory back to events before deleting the active order
                 for (ActiveOrderDTO.CartLineDTO line : activeOrder.toDTO().lines()) {
                     try {
                         Event event = eventRepository.findById(line.eventId());
                         if (event != null) {
                             InventorySelection selection = (line.seatNumber() != null)
-                                    ? InventorySelection.seated(List.of(line.seatNumber()))
-                                    : InventorySelection.standing(1);
+                                    ? InventorySelection.seated(List.of(line.seatNumber()), orderKey)
+                                    : InventorySelection.standing(1, orderKey);
                             event.releaseInventory(line.zoneId(), selection);
                             eventRepository.save(event);
                         }
@@ -537,14 +560,15 @@ public class ReservationService {
                     .orElse(null);
 
             if (activeOrder != null) {
+                String orderKey = activeOrder.getOrderKey();
                 // release inventory back to events before deleting the active order
                 for (ActiveOrderDTO.CartLineDTO line : activeOrder.toDTO().lines()) {
                     try {
                         Event event = eventRepository.findById(line.eventId());
                         if (event != null) {
                             InventorySelection selection = (line.seatNumber() != null)
-                                    ? InventorySelection.seated(List.of(line.seatNumber()))
-                                    : InventorySelection.standing(1);
+                                    ? InventorySelection.seated(List.of(line.seatNumber()), orderKey)
+                                    : InventorySelection.standing(1, orderKey);
                             event.releaseInventory(line.zoneId(), selection);
                             eventRepository.save(event);
                         }
