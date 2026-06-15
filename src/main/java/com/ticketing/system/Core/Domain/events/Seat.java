@@ -23,11 +23,10 @@ public class Seat implements InvariantChecked {
     private final double x;
     private final double y;
     private SeatStatus status;
-
     /** Non-null only while status == RESERVED; identifies the holding ActiveOrder. */
     private String reservedByOrderKey;
     /** When the hold expires (informational — enforcement is in the sweep job). */
-    private LocalDateTime reservedUntil;
+    private LocalDateTime reservedUntil; //TODO: when going to checkout, this should be set to {time now} + {reservation timeout period}.
 
     public Seat(String label, double x, double y) {
         if (label == null || label.isBlank()) {

@@ -107,8 +107,13 @@ public class ReservationService {
                 : "sess:" + buyer.sessionId();
 
         //* locks activeOrder before event. Good — no deadlock risk between them. Just keep this rule in mind for any future service that touches both.
+        // active-order lock remains per buyer/session
         activeOrderRepository.lockForUpdate(orderLockKey);
-        eventRepository.lockForUpdate(eventId);
+        // many buyers can reserve unrelated inventory in the same event concurrently:
+        // StandingZone.inventoryLock protects standing counters & SeatedZone.seatLocks protect individual seats
+        // structural event edits still block buyers because they use write lock. event lock becomes shared buyer lifecycle lock.
+        // zone/seat locks help concurrency.
+        eventRepository.lockForBuyerOperation(eventId);
 
         try {
             // Validate event and zone exist before doing anything else (e.g. before creating an active order if needed, before checking inventory, etc.) to fail fast on invalid input and avoid doing unnecessary work or creating entities that we will not use if the event/zone is invalid. This also ensures that we do not create an active order for a buyer if the event or zone they are trying to reserve does not exist, which keeps our data cleaner and avoids having orphaned active orders that are not associated with any valid events or zones.
@@ -151,7 +156,7 @@ public class ReservationService {
 
             throw e;
         } finally {
-            eventRepository.unlock(eventId);
+            eventRepository.unlockBuyerOperation(eventId);
             activeOrderRepository.unlock(orderLockKey);
         }
     }
@@ -176,7 +181,7 @@ public class ReservationService {
                 : "sess:" + buyer.sessionId();
 
         activeOrderRepository.lockForUpdate(orderLockKey);
-        eventRepository.lockForUpdate(eventId);
+        eventRepository.lockForBuyerOperation(eventId);
 
         try {
             // Validate event and zone exist before doing anything else (e.g. before checking the active order, etc.) to fail fast on invalid input and avoid doing unnecessary work or creating entities that we will not use if the event/zone is invalid. This also ensures that we do not attempt to remove reservations for an event or zone that does not exist, which keeps our data consistent and avoids having active orders that reflect removals for events or zones that do not actually exist.
@@ -213,7 +218,7 @@ public class ReservationService {
 
             throw e;
         } finally {
-            eventRepository.unlock(eventId);
+            eventRepository.unlockBuyerOperation(eventId);
             activeOrderRepository.unlock(orderLockKey);
         }
     }

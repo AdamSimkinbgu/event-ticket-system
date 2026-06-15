@@ -21,16 +21,26 @@ public class MemoryEventRepository implements IEventRepository {
     private final ConcurrentHashMap<Integer, Event> events = new ConcurrentHashMap<>();
     private final AtomicInteger idSequence = new AtomicInteger(1);
     private final AtomicInteger venueMapIdSequence = new AtomicInteger(1);
-    private final RepositoryLocks<Integer> locks = new RepositoryLocks<>();    // Key is eventId for event-level locks.
+    private final RepositoryReadWriteLocks<Integer> locks = new RepositoryReadWriteLocks<>();  // per-event locks for lifecycle synchronization
 
     @Override
     public void lockForUpdate(Integer id) {
-        locks.lock(id);
+        locks.lockWrite(id);
     }
 
     @Override
     public void unlock(Integer id) {
-        locks.unlock(id);
+        locks.unlockWrite(id);
+    }
+
+    @Override
+    public void lockForBuyerOperation(int eventId) {
+        locks.lockRead(eventId);
+    }
+
+    @Override
+    public void unlockBuyerOperation(int eventId) {
+        locks.unlockRead(eventId);
     }
 
     @Override
@@ -57,9 +67,10 @@ public class MemoryEventRepository implements IEventRepository {
         // thread can know the ID before the first save completes.
         // Existing events must be locked by the calling thread to prevent
         // unguarded read-modify-write races.
-        if (events.containsKey(event.getId()) && !locks.isHeldByCurrentThread(event.getId())) {
-            throw new IllegalStateException(
-                    "Event " + event.getId() + " must be locked via lockForUpdate before saving");
+        if (events.containsKey(event.getId())
+                && !locks.isWriteHeldByCurrentThread(event.getId())
+                && !locks.isReadHeldByCurrentThread(event.getId())) {
+            throw new IllegalStateException("Event " + event.getId() + " must be locked before saving");
         }
         events.put(event.getId(), event);
         return true;

@@ -115,8 +115,12 @@ public class CheckoutService {
         double totalPrice = 0.0;
         boolean inventorySaleConfirmed = false;
         boolean phase1Complete = false;
+        boolean checkoutSucceeded = false;
+        List<ReceiptLine> receiptLinesToNotifyAfterUnlock = null;
 
+        // orderLockKey is for locking the ActiveOrder to prevent concurrent modifications during checkout.
         String orderLockKey = null;
+        // lockedEventIds tracks which events we have locked in Phase 3 so we can unlock them in the finally block.
         List<Integer> lockedEventIds = List.of();
 
         try {
@@ -125,6 +129,7 @@ public class CheckoutService {
 
             String buyerKey = memberBuyerKey(userId);
 
+            // Check the cache for an existing completed checkout with the same idempotency key and buyer. If found, return the cached result to ensure idempotency.
             CheckoutResultDTO cached = getCachedCheckoutResult(idempotencyKey, buyerKey);
             if (cached != null) {
                 return cached;
@@ -142,6 +147,10 @@ public class CheckoutService {
             List<CartLineItem> snapshotItems = List.copyOf(order.getItems());
             String orderKey = order.getOrderKey();
 
+            // Mark the order as checkout in progress and save it to the repository. This is important for preventing other concurrent checkout 
+            // attempts on the same order and for providing visibility into the order's state during the checkout process. 
+            // By marking the order as CHECKOUT_IN_PROGRESS, we can also implement logic in other parts of the system 
+            // (e.g. inventory management) to treat this order differently while it is in this state.
             order.markCheckoutInProgress();
             activeOrderRepository.save(order);
 
@@ -149,7 +158,7 @@ public class CheckoutService {
             phase1Complete = true;
 
             // ---------------------------------------------------------------
-            // Phase 2: no domain locks — slow external calls
+            // Phase 2: no domain locks — slow external calls - cart is frozen here, 
             // ---------------------------------------------------------------
             List<Integer> eventIds = extractSortedEventIds(snapshotItems);
             Integer buyerAge = getBuyerAgeByUserId(userId);
@@ -165,10 +174,13 @@ public class CheckoutService {
             validateIssuanceResult(issuanceResult, snapshotItems, userId);
 
             // ---------------------------------------------------------------
-            // Phase 3: short locks — verify ownership, confirm, persist
+            // Phase 3: short locks — verify reservation ownership, re-check cart snapshot, confirm, persist
             // ---------------------------------------------------------------
             activeOrderRepository.lockForUpdate(orderLockKey);
             order = activeOrderRepository.getByUserId(userId);
+
+            validateOrderStillInCheckout(order);
+            validateCheckoutSnapshotStillMatches(order, snapshotItems);
 
             lockedEventIds = eventIds;
             lockEvents(lockedEventIds);
@@ -184,20 +196,36 @@ public class CheckoutService {
             order.buy();
             activeOrderRepository.save(order);
 
-            notifyPurchaseCompleted(userId, totalPrice, receiptLines);
-
             CheckoutResultDTO result = buildCheckoutResult(totalPrice, orderReceiptId, paymentResult, issuanceResult);
             cacheCheckoutResult(idempotencyKey, buyerKey, result);
+
+            receiptLinesToNotifyAfterUnlock = receiptLines;
+            checkoutSucceeded = true;
 
             return result;
 
         } catch (Exception e) {
-            handleCheckoutFailure(userId, order, paymentResult, totalPrice, inventorySaleConfirmed, phase1Complete, e);
-            throw new RuntimeException("Checkout failed, tickets returned to stock", e);
+            handleCheckoutFailure(userId, orderLockKey, paymentResult, totalPrice, inventorySaleConfirmed,
+                    phase1Complete, e);
+            // failure handling does not mutate inventory without locks
+            // checkout failure handling will: reset CHECKOUT_IN_PROGRESS safely, refund payment if needed, not release inventory without locks, not clear the cart unsafely.
+            throw new RuntimeException("Checkout failed", e);
         } finally {
             unlockEvents(lockedEventIds);
+
             if (orderLockKey != null && activeOrderRepository != null) {
-                try { activeOrderRepository.unlock(orderLockKey); } catch (Exception ignored) {}
+                try {
+                    activeOrderRepository.unlock(orderLockKey);
+                } catch (Exception ignored) {
+                }
+            }
+
+            if (checkoutSucceeded && userId > 0 && receiptLinesToNotifyAfterUnlock != null) {
+                try {
+                    notifyPurchaseCompleted(userId, totalPrice, receiptLinesToNotifyAfterUnlock);
+                } catch (RuntimeException notificationFailure) {
+                    log.warn("Purchase completed but notification failed for userId={}", userId, notificationFailure);
+                }
             }
         }
     }
@@ -279,6 +307,10 @@ public class CheckoutService {
             order = activeOrderRepository.getBySessionId(guestSessionId)
                     .orElseThrow(() -> new IllegalStateException("Active guest order not found in Phase 3"));
 
+
+            validateOrderStillInCheckout(order);
+            validateCheckoutSnapshotStillMatches(order, snapshotItems);
+
             lockedEventIds = eventIds;
             lockEvents(lockedEventIds);
 
@@ -299,7 +331,7 @@ public class CheckoutService {
             return result;
 
         } catch (Exception e) {
-            handleGuestCheckoutFailure(guestSessionId, order, paymentResult, totalPrice, inventorySaleConfirmed, phase1Complete, e);
+            handleGuestCheckoutFailure(guestSessionId, orderLockKey, paymentResult, totalPrice, inventorySaleConfirmed, phase1Complete, e);
             throw new RuntimeException("Guest checkout failed", e);
         } finally {
             unlockEvents(lockedEventIds);
@@ -401,21 +433,17 @@ public class CheckoutService {
 
 
 
-
-    // We lock the events for update to prevent concurrent modifications to the event's inventory and pricing during the checkout process. This ensures that we have a consistent view of the event's state while we are processing the checkout and that we can safely confirm inventory sale and issue tickets without running into
+    // 
     private void lockEvents(List<Integer> eventIds) {
         for (Integer eventId : eventIds) {
-            eventRepository.lockForUpdate(eventId);
+            eventRepository.lockForBuyerOperation(eventId);
         }
     }
-
-
-
-
-    // We unlock in reverse order of locking as a defensive measure to reduce the likelihood of deadlocks in the database. If two threads are trying to lock the same set of events but in different orders, unlocking in reverse order can help mitigate the risk of them blocking each other indefinitely.
+    //? Note: checkout Phase 3 still blocks structural event editing, but it no longer blocks unrelated buyer operations unnecessarily.
+    // 
     private void unlockEvents(List<Integer> eventIds) {
         for (int i = eventIds.size() - 1; i >= 0; i--) {
-            eventRepository.unlock(eventIds.get(i));
+            eventRepository.unlockBuyerOperation(eventIds.get(i));
         }
     }
 
@@ -593,6 +621,48 @@ public class CheckoutService {
                 throw new IllegalStateException("Issued barcode value must not be blank");
             }
         }
+    }
+
+
+
+
+
+    private void validateOrderStillInCheckout(ActiveOrder order) {
+        if (order == null) {
+            throw new IllegalStateException("Active order disappeared during checkout");
+        }
+
+        if (!order.isCheckoutInProgress()) {
+            throw new IllegalStateException("Active order is no longer in checkout progress");
+        }
+    }
+
+
+    private void validateCheckoutSnapshotStillMatches(ActiveOrder order, List<CartLineItem> snapshotItems) {
+        List<String> currentSignature = cartLineSignature(order.getItems());
+        List<String> snapshotSignature = cartLineSignature(snapshotItems);
+
+        if (!currentSignature.equals(snapshotSignature)) {
+            throw new IllegalStateException("Active order changed during checkout");
+        }
+    }
+
+
+    private List<String> cartLineSignature(List<CartLineItem> items) {
+        return items.stream()
+                .map(this::cartLineSignature)
+                .sorted()
+                .toList();
+    }
+
+    private String cartLineSignature(CartLineItem item) {
+        return item.geteventId()
+                + "|"
+                + item.getzoneId()
+                + "|"
+                + String.valueOf(item.getSeatNumber())
+                + "|"
+                + item.getPriceAtReservation();
     }
 
 
@@ -884,7 +954,7 @@ public class CheckoutService {
     // We handle checkout failures by logging the error with relevant information (user ID, total price, whether payment was done, whether inventory sale was confirmed) and then attempting to roll back any changes that were made during the checkout process. If the inventory sale was not confirmed, we try to return the reserved tickets back to stock. If the payment was done, we try to refund the payment. We also send a notification to the user that the purchase failed. This method centralizes all the error handling and rollback logic for member checkouts in one place, making it easier to maintain and ensuring that we consistently handle failures across different failure points in the checkout process.
     private void handleCheckoutFailure(
             int userId,
-            ActiveOrder order,
+            String orderLockKey,
             PaymentResultDTO paymentResult,
             double totalPrice,
             boolean inventorySaleConfirmed,
@@ -897,27 +967,16 @@ public class CheckoutService {
                 totalPrice,
                 paymentResult != null,
                 inventorySaleConfirmed,
-                originalFailure);
+                originalFailure
+        );
 
-        // If Phase 1 completed, the order is marked CHECKOUT_IN_PROGRESS. Reset it
-        // so the buyer can retry (unless inventory sale already confirmed — at that point
-        // manual recovery is needed regardless).
-        if (phase1Complete && order != null && !inventorySaleConfirmed) {
-            try {
-                if (order.isCheckoutInProgress()) {
-                    order.cancelCheckoutInProgress();
-                }
-            } catch (Exception ignored) {
-                log.warn("Could not cancel checkout-in-progress state for userId={}", userId);
-            }
-        }
-
-        safelyReturnTicketsToStock(order);
+        resetCheckoutStatusAfterFailure(orderLockKey, phase1Complete, inventorySaleConfirmed);
 
         if (inventorySaleConfirmed) {
             log.error(
                     "Checkout failed after inventory was confirmed as SOLD. Manual recovery may be required. userId={}",
-                    userId);
+                    userId
+            );
         }
 
         if (paymentResult != null) {
@@ -925,7 +984,11 @@ public class CheckoutService {
         }
 
         if (userId > 0) {
-            notificationService.notifyPurchaseFailed(userId, "Checkout failed.");
+            try {
+                notificationService.notifyPurchaseFailed(userId, "Checkout failed.");
+            } catch (RuntimeException notificationFailure) {
+                log.warn("Checkout failed and failure-notification also failed for userId={}", userId, notificationFailure);
+            }
         }
     }
 
@@ -934,7 +997,7 @@ public class CheckoutService {
     // We handle guest checkout failures by logging the error with relevant information (guest session ID, total price, whether payment was done, whether inventory sale was confirmed) and then attempting to roll back any changes that were made during the checkout process. If the inventory sale was not confirmed, we try to return the reserved tickets back to stock. If the payment was done, we try to refund the payment. Since we don't have a user ID for guests, we cannot send a notification about the failure, but we log enough information to allow for manual follow-up if needed. This method centralizes all the error handling and rollback logic for guest checkouts in one place, making it easier to maintain and ensuring that we consistently handle failures across different failure points in the checkout process.
     private void handleGuestCheckoutFailure(
             String guestSessionId,
-            ActiveOrder order,
+            String orderLockKey,
             PaymentResultDTO paymentResult,
             double totalPrice,
             boolean inventorySaleConfirmed,
@@ -947,32 +1010,65 @@ public class CheckoutService {
                 totalPrice,
                 paymentResult != null,
                 inventorySaleConfirmed,
-                originalFailure
-        );
+                originalFailure);
 
-        if (phase1Complete && order != null && !inventorySaleConfirmed) {
-            try {
-                if (order.isCheckoutInProgress()) {
-                    order.cancelCheckoutInProgress();
-                }
-            } catch (Exception ignored) {
-                log.warn("Could not cancel checkout-in-progress state for guestSessionId={}", guestSessionId);
-            }
-        }
+        resetCheckoutStatusAfterFailure(orderLockKey, phase1Complete, inventorySaleConfirmed);
 
-        if (!inventorySaleConfirmed) {
-            safelyReturnTicketsToStock(order);
-        } else {
+        if (inventorySaleConfirmed) {
             log.error(
                     "Guest checkout failed after inventory was confirmed as SOLD. Manual recovery may be required. guestSessionId={}",
-                    guestSessionId
-            );
+                    guestSessionId);
         }
 
         if (paymentResult != null) {
             safelyRefundPayment(paymentResult, totalPrice);
         }
     }
+    
+
+
+
+
+    // helper
+    private void resetCheckoutStatusAfterFailure(
+            String orderLockKey,
+            boolean phase1Complete,
+            boolean inventorySaleConfirmed
+    ) {
+        if (!phase1Complete || inventorySaleConfirmed || orderLockKey == null) {
+            return;
+        }
+
+        activeOrderRepository.lockForUpdate(orderLockKey);
+        try {
+            ActiveOrder orderToReset = getOrderByLockKey(orderLockKey);
+
+            if (orderToReset != null && orderToReset.isCheckoutInProgress()) {
+                orderToReset.cancelCheckoutInProgress();
+                activeOrderRepository.save(orderToReset);
+            }
+        } catch (RuntimeException resetFailure) {
+            log.warn("Could not reset checkout-in-progress state for orderLockKey={}", orderLockKey, resetFailure);
+        } finally {
+            activeOrderRepository.unlock(orderLockKey);
+        }
+    }
+
+    private ActiveOrder getOrderByLockKey(String orderLockKey) {
+        if (orderLockKey.startsWith("user:")) {
+            int userId = Integer.parseInt(orderLockKey.substring("user:".length()));
+            return activeOrderRepository.getByUserId(userId);
+        }
+
+        if (orderLockKey.startsWith("sess:")) {
+            String sessionId = orderLockKey.substring("sess:".length());
+            return activeOrderRepository.getBySessionId(sessionId).orElse(null);
+        }
+
+        throw new IllegalArgumentException("Unknown order lock key format: " + orderLockKey);
+    }
+
+
 
 
 

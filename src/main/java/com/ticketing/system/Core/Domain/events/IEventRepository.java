@@ -12,6 +12,22 @@ public interface IEventRepository extends IRepository<Event, Integer> {
 
     boolean save(Event event);
 
+    /**
+     * Shared lifecycle lock for buyer inventory operations.
+     *
+     * Many buyers may hold this lock for the same event at the same time.
+     * It blocks structural/event-lifecycle writes such as venue editing, policy changes,
+     * cancellation, publishing, etc.
+     *
+     * Actual inventory correctness is still protected by StandingZone / SeatedZone locks.
+     */
+    void lockForBuyerOperation(int eventId);
+
+    /**
+     * Releases a buyer lifecycle lock acquired by lockForBuyerOperation.
+     */
+    void unlockBuyerOperation(int eventId);
+
     // UC-3 / UC-22 / UC-31 — events of a given company (by-ID cross-aggregate query).
     List<Event> findByCompanyId(int companyId);
 

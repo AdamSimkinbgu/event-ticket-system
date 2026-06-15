@@ -31,12 +31,10 @@ import com.ticketing.system.Core.Domain.shared.InvariantChecked;
  */
 public class ActiveOrder implements InvariantChecked {
 
-    /** Status value: order is being processed by checkout — no new items or concurrent checkouts. */
-    public static final String STATUS_CHECKOUT_IN_PROGRESS = "CHECKOUT_IN_PROGRESS";
-
     private Integer userId;
     private String sessionId;
-    private String status;
+    /** Status value: order is being processed by checkout — no new items or concurrent checkouts. */
+    private ActiveOrderStatus status;
     private final List<CartLineItem> items;
     private final LocalDateTime createdAt;
     private final Object itemsLock = new Object();
@@ -45,83 +43,20 @@ public class ActiveOrder implements InvariantChecked {
      * so that {@link com.ticketing.system.Core.Domain.events.StandingZone} and
      * {@link com.ticketing.system.Core.Domain.events.SeatedZone} can record which
      * order holds each reservation. Enables the 3-phase checkout to verify ownership
-     * in Phase 3 without holding event locks during Phase 2 (payment/issuance).
+     * in checkout's Phase 3 without holding event locks during checkout's Phase 2 (payment/issuance).
      */
     private final String orderKey = UUID.randomUUID().toString();
 
     public ActiveOrder(Integer userId, String sessionId) {
         if (userId == null && sessionId == null) {
-            throw new IllegalArgumentException(
-                    "ActiveOrder must have at least a userId or a sessionId");
+            throw new IllegalArgumentException("ActiveOrder must have at least a userId or a sessionId");
         }
         this.userId = userId;
         this.sessionId = sessionId;
+        this.status = ActiveOrderStatus.PRE_CHECKOUT;
         this.items = new ArrayList<>();
         this.createdAt = LocalDateTime.now();
     }
-
-
-
-
-
-    
-
-    /**
-     * Generic reservation entry point used by application services.
-     * Standing/seated branching stays inside the domain object instead of being
-     * duplicated in ReservationService.
-     */
-    public void addReservation(int eventId, int zoneId, InventorySelection selection, double price,
-            LocalDateTime addedAt) {
-        if (selection == null) {
-            throw new IllegalArgumentException("Inventory selection is required");
-        }
-
-        if (selection.isStandingSelection()) {
-            addStandingReservation(eventId, zoneId, selection.getQuantity(), price, addedAt);
-        } else {
-            addSeatedReservation(eventId, zoneId, selection.getSeatNumbers(), price, addedAt);
-        }
-    }
-
-    
-    /**
-     * Generic removal entry point used by application services.
-     */
-    public void removeReservation(int eventId, int zoneId, InventorySelection selection) {
-        if (selection == null) {
-            throw new IllegalArgumentException("Inventory selection is required");
-        }
-
-        if (selection.isStandingSelection()) {
-            removeStandingSpots(eventId, zoneId, selection.getQuantity());
-        } else {
-            removeSeats(eventId, zoneId, selection.getSeatNumbers());
-        }
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -165,11 +100,57 @@ public class ActiveOrder implements InvariantChecked {
 
 
 
+    /**
+     * Generic reservation entry point used by application services.
+     * Standing/seated branching stays inside the domain object instead of being
+     * duplicated in ReservationService.
+     */
+    public void addReservation(int eventId, int zoneId, InventorySelection selection, double price,
+            LocalDateTime addedAt) {
+        ensureModifiable();
+        if (selection == null) {
+            throw new IllegalArgumentException("Inventory selection is required");
+        }
+
+        if (selection.isStandingSelection()) {
+            addStandingReservation(eventId, zoneId, selection.getQuantity(), price, addedAt);
+        } else {
+            addSeatedReservation(eventId, zoneId, selection.getSeatNumbers(), price, addedAt);
+        }
+    }
+
+    
+    /**
+     * Generic removal entry point used by application services.
+     */
+    public void removeReservation(int eventId, int zoneId, InventorySelection selection) {
+        ensureModifiable();
+        if (selection == null) {
+            throw new IllegalArgumentException("Inventory selection is required");
+        }
+
+        if (selection.isStandingSelection()) {
+            removeStandingSpots(eventId, zoneId, selection.getQuantity());
+        } else {
+            removeSeats(eventId, zoneId, selection.getSeatNumbers());
+        }
+    }
+
+
+
+
+
+
+
+
+
 
 
     // changed name from addReservation to addStandingReservation and added addSeatedReservation to support seated zones as well.
     public void addStandingReservation(int eventId, int zoneId, int quantity, double price, LocalDateTime addedAt) {
         synchronized (itemsLock) {
+            ensureModifiable();
+
             if (quantity <= 0) {
                 throw new IllegalArgumentException("Quantity must be positive");
             }
@@ -181,8 +162,10 @@ public class ActiveOrder implements InvariantChecked {
     }
 
 
-    public void addSeatedReservation(int eventId, int zoneId, List<String> seatNumbers, double price, LocalDateTime addedAt) {
+    public void addSeatedReservation(int eventId, int zoneId, List<String> seatNumbers, double price,
+            LocalDateTime addedAt) {
         synchronized (itemsLock) {
+            ensureModifiable();
             if (seatNumbers == null || seatNumbers.isEmpty()) {
                 throw new IllegalArgumentException("Seat numbers must be non-empty");
             }
@@ -211,6 +194,8 @@ public class ActiveOrder implements InvariantChecked {
 
     public void removeStandingSpots(int eventId, int zoneId, int quantity) {
         synchronized (itemsLock) {
+            ensureModifiable();
+
             if (quantity <= 0) {
                 throw new IllegalArgumentException("Quantity must be positive");
             }
@@ -247,6 +232,8 @@ public class ActiveOrder implements InvariantChecked {
         this.checkThatSeatNumbersListDoesNotContainDuplicates(seatNumbers);
 
         synchronized (itemsLock) {
+            ensureModifiable();
+
             if (!hasReservationForEventWithoutLock(eventId)) {
                 throw new IllegalArgumentException("Active order does not contain this event");
             }
@@ -445,7 +432,7 @@ public class ActiveOrder implements InvariantChecked {
         return userId == null;
     }
 
-    public String getStatus() {
+    public ActiveOrderStatus getStatus() {
         return status;
     }
 
@@ -465,10 +452,10 @@ public class ActiveOrder implements InvariantChecked {
      * @throws IllegalStateException if the order is already in checkout
      */
     public void markCheckoutInProgress() {
-        if (STATUS_CHECKOUT_IN_PROGRESS.equals(status)) {
+        if (status == ActiveOrderStatus.CHECKOUT_IN_PROGRESS) {
             throw new IllegalStateException("Order is already in checkout progress");
         }
-        this.status = STATUS_CHECKOUT_IN_PROGRESS;
+        this.status = ActiveOrderStatus.CHECKOUT_IN_PROGRESS;
     }
 
     /**
@@ -478,15 +465,22 @@ public class ActiveOrder implements InvariantChecked {
      * @throws IllegalStateException if the order is not in checkout progress
      */
     public void cancelCheckoutInProgress() {
-        if (!STATUS_CHECKOUT_IN_PROGRESS.equals(status)) {
-            throw new IllegalStateException("Order is not in checkout progress");
+        if (status != ActiveOrderStatus.CHECKOUT_IN_PROGRESS) {
+            throw new IllegalStateException("Order is already not in checkout progress");
         }
-        this.status = null;
+        this.status = ActiveOrderStatus.PRE_CHECKOUT;
     }
 
     /** Returns {@code true} while this order is locked by an ongoing checkout attempt. */
     public boolean isCheckoutInProgress() {
-        return STATUS_CHECKOUT_IN_PROGRESS.equals(status);
+        return status == ActiveOrderStatus.CHECKOUT_IN_PROGRESS;
+    }
+
+    // Ensures that the active order can be modified (i.e., not in checkout progress).
+    private void ensureModifiable() {
+        if (isCheckoutInProgress()) {
+            throw new IllegalStateException("Cannot modify active order while checkout is in progress");
+        }
     }
 
     public LocalDateTime getCreatedAt() {
@@ -554,7 +548,7 @@ public class ActiveOrder implements InvariantChecked {
 
   public boolean validateCanCheckout() {
         synchronized (itemsLock) {
-            if (STATUS_CHECKOUT_IN_PROGRESS.equals(status)) {
+            if (status == ActiveOrderStatus.CHECKOUT_IN_PROGRESS) {
                 throw new IllegalStateException("Order is already being checked out");
             }
 
@@ -588,6 +582,7 @@ public class ActiveOrder implements InvariantChecked {
 
     public void clear() {
         synchronized (itemsLock) {
+            ensureModifiable();
             items.clear();
         }
     }
