@@ -368,46 +368,18 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowExceptio
     @Test
     @Disabled("Enable after test-data builder supports seated venue maps")
     void GivenMemberSelectsAvailableSeats_WhenReserveSeats_ThenSeatsAreLockedAndCartShowsSeatNumbers() {
-        // Arrange:
-        // 1. create active member session
-        // 2. create ON_SALE event with SeatedZone seats A1, A2, A3
-        // 3. save event
-
-        // Act:
-        // ReservationResultDTO result =
-        //     reservationService.reserveSeatsForMember(token, eventId, zoneId, List.of("A1", "A2"));
-
-        // Assert:
-        // assertEquals(List.of("A1", "A2"), result.getSeatNumbers());
-        // assert venue map shows A1/A2 RESERVED and A3 AVAILABLE
-        // assert active order contains two lines with seatNumber A1/A2
+        
     }
 
     @Test
     @Disabled("Enable after test-data builder supports seated venue maps")
     void GivenTwoMembersSelectSameSeat_WhenReserveConcurrently_ThenOnlyOneReservationSucceeds() {
-        // Arrange:
-        // 1. create two member sessions
-        // 2. create event with one seated seat A1
-
-        // Act:
-        // two concurrent calls reserveSeatsForMember(..., List.of("A1"))
-
-        // Assert:
-        // exactly one succeeds
-        // exactly one fails
-        // seat A1 is RESERVED only once
+        
     }
 
     @Test
     @Disabled("Enable after test-data builder supports seated venue maps")
     void GivenGuestSelectsSeats_WhenReserveSeats_ThenGuestCartContainsSeatNumbers() {
-        // Arrange guest session + event with seated zone
-
-        // Act reserveSeatsForGuest(sessionId, eventId, zoneId, List.of("B1", "B2"))
-
-        // Assert result quantity = 2
-        // Assert result seatNumbers = B1, B2
-        // Assert cart for guest session contains B1, B2
+        
     }
 }

@@ -892,37 +892,13 @@ public class CheckoutServiceAcceptanceTest {
     @Test
     @Disabled("Enable after seated reservation flow is wired end-to-end")
     void GivenReservedSeatedTickets_WhenCheckoutSucceeds_ThenTicketsHaveSeatNumbersAndSeatsBecomeSold() {
-        // Arrange:
-        // 1. create member session
-        // 2. create event with SeatedZone A1, A2
-        // 3. reserve A1, A2 for member
-        // 4. stub payment gateway success
-        // 5. stub ticket issuer success
-
-        // Act:
-        // CheckoutResultDTO result =
-        //     checkoutService.checkout(token, "idem-1", "ILS", "payment-token");
-
-        // Assert:
-        // result contains two ticket IDs
-        // ticket repository saved tickets with seatNumber A1 and A2
-        // venue map shows A1 and A2 as SOLD
-        // order receipt lines contain zoneId and seatNumber
+        
     }
 
     @Test
     @Disabled("Enable after checkout rollback supports seated zones")
     void GivenSeatedCheckoutPaymentSucceedsButIssuanceFails_WhenCheckout_ThenSeatsReturnToAvailable() {
-        // Arrange:
-        // reserve A1
-        // payment succeeds
-        // issuer fails
-
-        // Act + Assert:
-        // checkout throws
-        // seat A1 becomes AVAILABLE
-        // active order is cleared
-        // refund is requested
+        
     }
 
     
