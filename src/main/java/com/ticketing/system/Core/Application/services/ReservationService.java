@@ -102,6 +102,10 @@ public class ReservationService {
         boolean inventoryReserved = false;
         boolean orderModified = false;
 
+        boolean notifySuccessAfterUnlock = false;
+        boolean notifyFailureAfterUnlock = false;
+        String failureNotificationReason = null;
+
         String orderLockKey = buyer.isMember()
                 ? "user:" + buyer.userId()
                 : "sess:" + buyer.sessionId();
@@ -122,15 +126,15 @@ public class ReservationService {
             activeOrder = getOrCreateActiveOrder(buyer);
 
             double pricePerTicket = zone.getprice();
-
+            
             // Bind the selection to this order's key so the zone records which order holds the reservation.
             // This enables the 3-phase checkout to verify ownership in Phase 3 without holding event locks during payment/issuance.
             InventorySelection selectionWithKey = selectionWithOrderKey(selection, activeOrder.getOrderKey());
-
+            
             // Reserve inventory first before modifying the active order, so that if we fail to reserve inventory (e.g. not enough tickets available), we do not end up with an active order that has reservations that were not successfully made. This also ensures that we only modify the active order if we are able to successfully reserve the requested tickets, which keeps our data consistent and avoids having active orders that reflect reservations that do not actually exist.
             event.reserveInventory(zoneId, selectionWithKey);
             inventoryReserved = true;
-
+            //* */
             // Now that we have successfully reserved the inventory, we can safely modify the active order to reflect the new reservation. If any of the validations for modifying the active order fail (e.g. trying to reserve more tickets than allowed by purchase policy, etc.), we will throw an exception and roll back the inventory reservation in the catch block, ensuring that we do not end up with an active order that has reservations that were not successfully made.
             activeOrder.addReservation(eventId, zoneId, selection, pricePerTicket, LocalDateTime.now());
             orderModified = true;
@@ -138,15 +142,18 @@ public class ReservationService {
             eventRepository.save(event);
             activeOrderRepository.save(activeOrder);
             // Notify the member of the successful reservation. For guests, we do not have a user ID to send notifications to, so we skip this step for guests. The notification can be used to trigger email notifications, app push notifications, etc. to inform the member of their successful reservation and any details they may need (e.g. event name, zone, quantity reserved, etc.).
-            notifyReservationSuccessIfMember(buyer, eventId, zoneId, selection.getQuantity());
+            notifySuccessAfterUnlock = true;
             // Return the reservation result, which includes details about the reservation such as event ID, zone ID, quantity reserved, seat numbers if applicable, and the expiration time of the reservation (based on the current time plus the configured reservation timeout). This information can be used by the frontend to show the user their current reservations and how long they have before they expire, etc.
             return buildReservationResult(eventId, zoneId, selection);
 
         } catch (RuntimeException e) {
             // If any exception occurs during the reservation process, we need to roll back any actions that were taken to keep our data consistent. This includes releasing any inventory that was reserved and removing any reservations that were added to the active order. We also log the error for monitoring and debugging purposes, and rethrow the exception to indicate that the reservation failed. The frontend can catch this exception and show an appropriate error message to the user (e.g. "Failed to reserve tickets: not enough availability", "Failed to reserve tickets: event not found", "Failed to reserve tickets: invalid input", etc.).
-            rollbackReservationIfNeeded(event, activeOrder, eventId, zoneId, selection, inventoryReserved, orderModified);
+            rollbackReservationIfNeeded(event, activeOrder, eventId, zoneId, selection, inventoryReserved,
+                    orderModified);
+
+            notifyFailureAfterUnlock = true;
+            failureNotificationReason = "Reservation failed: " + e.getMessage();
             // Notify the member of the failed reservation attempt. For guests, we do not have a user ID to send notifications to, so we skip this step for guests. The notification can be used to trigger email notifications, app push notifications, etc. to inform the member that their reservation attempt failed and provide any details that may be relevant (e.g. event name, zone, quantity they tried to reserve, reason for failure if known, etc.).
-            notifyReservationFailureIfMember(buyer, eventId, zoneId, "Reservation failed: " + e.getMessage());
 
             log.warn("reserve failed: eventId={}, zoneId={}, selectionQuantity={}, seats={}, reason={}",
                     eventId, zoneId,
@@ -155,11 +162,50 @@ public class ReservationService {
                     e.getMessage());
 
             throw e;
+
         } finally {
-            eventRepository.unlockBuyerOperation(eventId);
-            activeOrderRepository.unlock(orderLockKey);
+            try {
+                eventRepository.unlockBuyerOperation(eventId);
+            } finally {
+                activeOrderRepository.unlock(orderLockKey);
+            }
+
+            if (notifySuccessAfterUnlock) {
+                try {
+                    notifyReservationSuccessIfMember(buyer, eventId, zoneId, selection.getQuantity());
+                } catch (RuntimeException notificationFailure) {
+                    log.warn("Reservation succeeded but notification failed. userId={}, eventId={}, zoneId={}",
+                            buyer.isMember() ? buyer.userId() : null,
+                            eventId,
+                            zoneId,
+                            notificationFailure);
+                }
+            }
+
+            if (notifyFailureAfterUnlock) {
+                try {
+                    notifyReservationFailureIfMember(buyer, eventId, zoneId, failureNotificationReason);
+                } catch (RuntimeException notificationFailure) {
+                    log.warn(
+                            "Reservation failed and failure-notification also failed. userId={}, eventId={}, zoneId={}",
+                            buyer.isMember() ? buyer.userId() : null,
+                            eventId,
+                            zoneId,
+                            notificationFailure);
+                }
+            }
         }
+        
     }
+    
+
+
+
+
+
+
+
+
 
     
 
@@ -175,6 +221,10 @@ public class ReservationService {
                 selection == null ? null : selection.getSeatNumbers());
         // Validate input arguments before doing anything else to fail fast on invalid input and avoid doing unnecessary work. This also ensures that we do not attempt to remove reservations for an event or zone that does not exist, which keeps our data consistent and avoids having active orders that reflect removals for events or zones that do not actually exist.
         validateReservationArguments(eventId, zoneId, selection);
+
+        boolean notifySuccessAfterUnlock = false;
+        boolean notifyFailureAfterUnlock = false;
+        String failureNotificationReason = null;
 
         String orderLockKey = buyer.isMember()
                 ? "user:" + buyer.userId()
@@ -202,14 +252,15 @@ public class ReservationService {
             activeOrderRepository.save(activeOrder);
 
             // Notify the member of the successful removal. For guests, we do not have a user ID to send notifications to, so we skip this step for guests. The notification can be used to trigger email notifications, app push notifications, etc. to inform the member of their successful reservation removal and any details they may need (e.g. event name, zone, quantity removed, etc.).
-            notifyRemoveSuccessIfMember(buyer, eventId, zoneId, selection.getQuantity());
+            notifySuccessAfterUnlock = true;
 
             // Return the reservation result, which includes details about the removed reservation such as event ID, zone ID, quantity removed, seat numbers if applicable, and the expiration time of the reservation (based on the current time plus the configured reservation timeout). This information can be used by the frontend to show the user their current reservations and how long they have before they expire, etc.
             return buildReservationResult(eventId, zoneId, selection);
 
         } catch (RuntimeException e) {
             // If any exception occurs during the removal process, we need to roll back any actions that were taken to keep our data consistent. This includes re-reserving any inventory that was released and re-adding any reservations that were removed from the active order. We also log the error for monitoring and debugging purposes, and rethrow the exception to indicate that the removal failed. The frontend can catch this exception and show an appropriate error message to the user (e.g. "Failed to remove reservation: reservation not found in active order", "Failed to remove reservation: event not found", "Failed to remove reservation: invalid input", etc.).
-            notifyRemoveFailureIfMember(buyer, eventId, zoneId, "Remove reservation failed: " + e.getMessage());
+            notifyFailureAfterUnlock = true;
+            failureNotificationReason = "Remove reservation failed: " + e.getMessage();
 
             log.warn("remove failed: eventId={}, zoneId={}, selectionQuantity={}, seats={}, reason={}",
                     eventId, zoneId,
@@ -218,9 +269,38 @@ public class ReservationService {
 
             throw e;
         } finally {
-            eventRepository.unlockBuyerOperation(eventId);
-            activeOrderRepository.unlock(orderLockKey);
+            try {
+                eventRepository.unlockBuyerOperation(eventId);
+            } finally {
+                activeOrderRepository.unlock(orderLockKey);
+            }
+
+            if (notifySuccessAfterUnlock) {
+                try {
+                    notifyRemoveSuccessIfMember(buyer, eventId, zoneId, selection.getQuantity());
+                } catch (RuntimeException notificationFailure) {
+                    log.warn("Remove reservation succeeded but notification failed. userId={}, eventId={}, zoneId={}",
+                            buyer.isMember() ? buyer.userId() : null,
+                            eventId,
+                            zoneId,
+                            notificationFailure);
+                }
+            }
+
+            if (notifyFailureAfterUnlock) {
+                try {
+                    notifyRemoveFailureIfMember(buyer, eventId, zoneId, failureNotificationReason);
+                } catch (RuntimeException notificationFailure) {
+                    log.warn(
+                            "Remove reservation failed and failure-notification also failed. userId={}, eventId={}, zoneId={}",
+                            buyer.isMember() ? buyer.userId() : null,
+                            eventId,
+                            zoneId,
+                            notificationFailure);
+                }
+            }
         }
+        
     }
 
     
@@ -532,63 +612,99 @@ public class ReservationService {
 
     // Helper method to abandon the active order for a user (member or guest) - this is used by the frontend when a user explicitly clicks "Abandon Cart" or when they log out, to clear their active order and release any reserved inventory back to the events. For members, we look up the active order by their user ID. For guests, we look up the active order by their session ID. If an active order is found, we release any reserved inventory back to the events and then delete the active order. If no active order is found, we simply return without doing anything. This ensures that we do not leave any reserved inventory hanging around for abandoned carts, which keeps our inventory accurate and allows other users to purchase those tickets if they are still available.
     public void abandonActiveOrder(BuyerContextDTO buyer) {
-        if (buyer.isMember()) {
-            ActiveOrder activeOrder = activeOrderRepository.getByUserId(buyer.userId());
+        if (buyer == null) {
+            throw new IllegalArgumentException("Buyer context is required");
+        }
+        // Determine the lock key based on whether the buyer is a member or a guest.
+        String orderLockKey = buyer.isMember()
+                ? "user:" + buyer.userId()
+                : "sess:" + buyer.sessionId();
 
-            if (activeOrder != null) {
-                String orderKey = activeOrder.getOrderKey();
-                // release inventory back to events before deleting the active order
-                for (ActiveOrderDTO.CartLineDTO line : activeOrder.toDTO().lines()) {
-                    try {
-                        Event event = eventRepository.findById(line.eventId());
-                        if (event != null) {
-                            InventorySelection selection = (line.seatNumber() != null)
-                                    ? InventorySelection.seated(List.of(line.seatNumber()), orderKey)
-                                    : InventorySelection.standing(1, orderKey);
-                            event.releaseInventory(line.zoneId(), selection);
-                            eventRepository.save(event);
-                        }
-                    } catch (RuntimeException e) {
-                        log.warn("Failed to release inventory for eventId={}, zoneId={}, seatNumber={}: {}",
-                                line.eventId(), line.zoneId(), line.seatNumber(), e.getMessage());
-                        // continue trying to release other lines even if one fails; we will still delete the active order to avoid leaving it in an inconsistent state, and the failed release can be cleaned up later by an admin or a background job
-                    }
+        List<Integer> lockedEventIds = new ArrayList<>();
+        // Lock the active order for update to prevent concurrent modifications while we are abandoning it. This ensures that
+        activeOrderRepository.lockForUpdate(orderLockKey);
+
+        try {
+            // For members, we look up the active order by their user ID. For guests, we look up the active order by their session ID. 
+            ActiveOrder activeOrder = buyer.isMember()
+                    ? activeOrderRepository.getByUserId(buyer.userId())
+                    : activeOrderRepository.getBySessionId(buyer.sessionId()).orElse(null);
+
+            if (activeOrder == null) {
+                if (buyer.isMember()) {
+                    log.info("No active order to abandon for userId={}", buyer.userId());
+                } else {
+                    log.info("No active order to abandon for sessionId={}", buyer.sessionId());
                 }
-                activeOrderRepository.delete(activeOrder);
+                return;
+            }
+
+            if (activeOrder.isCheckoutInProgress()) {
+                throw new IllegalStateException("Cannot abandon active order while checkout is in progress");
+            }
+
+            // Release any reserved inventory back to the events before deleting the active order. 
+            // We need to lock each event for update to prevent concurrent modifications while we are releasing inventory. This ensures that we
+            // do not accidentally oversell tickets or release inventory that is being modified by another process.
+            String orderKey = activeOrder.getOrderKey();
+            List<ActiveOrderDTO.CartLineDTO> lines = activeOrder.toDTO().lines();
+
+            // Get the distinct event IDs from the active order lines to avoid locking the same event multiple times. 
+            // We sort the event IDs to ensure a consistent locking order, which helps prevent deadlocks when multiple 
+            // threads are trying to lock events in different orders.
+            List<Integer> eventIds = lines.stream()
+                    .map(ActiveOrderDTO.CartLineDTO::eventId)
+                    .distinct()
+                    .sorted()
+                    .toList();
+
+            // Lock each event for update to prevent concurrent modifications while we are releasing inventory. 
+            // This ensures that we do not accidentally oversell tickets or release inventory that is being modified by another process. 
+            // We also keep track of the locked event IDs so we can unlock them in reverse order after we are done releasing inventory 
+            // and deleting the active order.
+            for (Integer eventId : eventIds) {
+                eventRepository.lockForUpdate(eventId);
+                lockedEventIds.add(eventId);
+            }
+
+            // Release the reserved inventory for each line in the active order back to the corresponding event.
+            for (ActiveOrderDTO.CartLineDTO line : lines) {
+                try {
+                    Event event = eventRepository.findById(line.eventId());
+
+                    if (event == null) {
+                        log.warn("Event {} not found while abandoning active order. Skipping inventory release.", line.eventId());
+                        continue;
+                    }
+                    // Create an InventorySelection for the line item. If the line has a seat number, we create a seated selection with that seat number. 
+                    // If the line does not have a seat number, we create a standing selection with quantity 1. 
+                    // We also pass the order key to the selection so that the event can verify ownership of the reservation when releasing inventory.
+                    InventorySelection selection = (line.seatNumber() != null)
+                            ? InventorySelection.seated(List.of(line.seatNumber()), orderKey)
+                            : InventorySelection.standing(1, orderKey);
+
+                    event.releaseInventory(line.zoneId(), selection);
+                    eventRepository.save(event);
+                } catch (RuntimeException e) {
+                    log.warn("Failed to release inventory while abandoning active order. eventId={}, zoneId={}, seatNumber={}, reason={}",
+                            line.eventId(), line.zoneId(), line.seatNumber(), e.getMessage());
+                }
+            }
+            // After releasing all reserved inventory, we can safely delete the active order from the repository.
+            activeOrderRepository.delete(activeOrder);
+
+            if (buyer.isMember()) {
                 log.info("Abandoned active order for userId={}", buyer.userId());
-
             } else {
-                log.info("No active order to abandon for userId={}", buyer.userId());
-            }
-        } else {
-            ActiveOrder activeOrder = activeOrderRepository.getBySessionId(buyer.sessionId())
-                    .orElse(null);
-
-            if (activeOrder != null) {
-                String orderKey = activeOrder.getOrderKey();
-                // release inventory back to events before deleting the active order
-                for (ActiveOrderDTO.CartLineDTO line : activeOrder.toDTO().lines()) {
-                    try {
-                        Event event = eventRepository.findById(line.eventId());
-                        if (event != null) {
-                            InventorySelection selection = (line.seatNumber() != null)
-                                    ? InventorySelection.seated(List.of(line.seatNumber()), orderKey)
-                                    : InventorySelection.standing(1, orderKey);
-                            event.releaseInventory(line.zoneId(), selection);
-                            eventRepository.save(event);
-                        }
-                    } catch (RuntimeException e) {
-                        log.warn("Failed to release inventory for eventId={}, zoneId={}, seatNumber={}: {}",
-                                line.eventId(), line.zoneId(), line.seatNumber(), e.getMessage());
-                        // continue trying to release other lines even if one fails; we will still delete the active order to avoid leaving it in an inconsistent state, and the failed release can be cleaned up later by an admin or a background job
-                    }
-                }
-                activeOrderRepository.delete(activeOrder);
                 log.info("Abandoned active order for sessionId={}", buyer.sessionId());
-
-            } else {
-                log.info("No active order to abandon for sessionId={}", buyer.sessionId());
             }
+
+        } finally {
+            for (int i = lockedEventIds.size() - 1; i >= 0; i--) {
+                eventRepository.unlock(lockedEventIds.get(i));
+            }
+
+            activeOrderRepository.unlock(orderLockKey);
         }
     }
 

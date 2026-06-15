@@ -103,7 +103,7 @@ public class Event implements InvariantChecked {
     }
 
     public void confirmInventorySale(int zoneId, InventorySelection selection) {
-        validateInventoryAction(selection);
+        validateCanConfirmSale(selection);
         this.venueMap.confirmSale(zoneId, selection);
     }
 
@@ -115,14 +115,23 @@ public class Event implements InvariantChecked {
 
 
 
+
+
+
+
     private void validateCanReserve(InventorySelection selection) {
         validateInventoryAction(selection);
-
         if (status != EventStatus.ON_SALE) {
             throw new IllegalStateException("Cannot reserve tickets for an event that is not on sale");
         }
+    }
 
+    private void validateCanConfirmSale(InventorySelection selection) {
+        validateInventoryAction(selection);
 
+        if (status != EventStatus.ON_SALE) {
+            throw new IllegalStateException("Cannot confirm ticket sale for an event that is not on sale");
+        }
     }
 
 

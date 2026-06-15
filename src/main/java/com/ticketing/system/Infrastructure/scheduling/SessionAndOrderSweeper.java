@@ -123,6 +123,10 @@ public class SessionAndOrderSweeper {
      * <p>Lock order: {@code activeOrder → events[sorted]} prevents
      * deadlocks with {@code ReservationService} and {@code CheckoutService}
      * which follow the identical acquire sequence.
+     * Policy: 
+     * If an ActiveOrder is CHECKOUT_IN_PROGRESS, the sweeper must not release/delete it.
+     * Checkout failure already resets the order back to PRE_CHECKOUT.
+     * Then the sweeper can clean it later if it is still expired.
      */
     private void releaseTicketsToInventory(ActiveOrder order) {
         // Derive the same lock key that ReservationService / CheckoutService use.
@@ -139,9 +143,24 @@ public class SessionAndOrderSweeper {
 
         activeOrderRepository.lockForUpdate(orderLockKey);
         try {
+            // If the order is in the middle of checkout, we should skip it and let the checkout flow handle it 
+            // (either complete successfully or fail and revert to PRE_CHECKOUT). Releasing inventory underneath an 
+            // active checkout risks causing a failed checkout for the user, which is disruptive. It's safer to let 
+            // the checkout flow handle expiration after it finishes its current work, since it will check for expiration 
+            // at that point and can clean up accordingly.
+            
+            // Note that this means expired orders that are CHECKOUT_IN_PROGRESS may not be cleaned up until their next expiration time 
+            // (10 min after the last item was added), but this is an acceptable tradeoff to avoid disrupting active checkouts.
+            if (order.isCheckoutInProgress()) {
+                log.info("Skipping expired active order {} because checkout is in progress", orderLockKey);
+                return;
+            }
+
+            // Acquire locks for all events in the order in a consistent order to prevent deadlocks with concurrent checkouts/reservations.
             for (Integer eventId : sortedEventIds) {
                 eventRepository.lockForUpdate(eventId);
             }
+            
             try {
                 // Group line items by event and zone to aggregate the release calls
                 Map<Integer, Map<Integer, List<CartLineItem>>> grouped =

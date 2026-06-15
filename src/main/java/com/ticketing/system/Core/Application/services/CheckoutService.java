@@ -26,6 +26,7 @@ import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
@@ -185,6 +186,7 @@ public class CheckoutService {
             lockedEventIds = eventIds;
             lockEvents(lockedEventIds);
 
+            validateEventsStillOnSale(snapshotItems);
             validateCanConfirmInventorySale(snapshotItems, orderKey);
             confirmInventorySale(snapshotItems, orderKey);
             inventorySaleConfirmed = true;
@@ -314,6 +316,7 @@ public class CheckoutService {
             lockedEventIds = eventIds;
             lockEvents(lockedEventIds);
 
+            validateEventsStillOnSale(snapshotItems);
             validateCanConfirmInventorySale(snapshotItems, orderKey);
             confirmInventorySale(snapshotItems, orderKey);
             inventorySaleConfirmed = true;
@@ -448,6 +451,25 @@ public class CheckoutService {
     }
 
 
+    private void validateEventsStillOnSale(List<CartLineItem> boughtItems) {
+        List<Integer> eventIds = extractSortedEventIds(boughtItems);
+
+        for (Integer eventId : eventIds) {
+            Event event = eventRepository.findById(eventId);
+
+            if (event == null) {
+                throw new IllegalStateException("Event not found: " + eventId);
+            }
+
+            if (event.getStatus() != EventStatus.ON_SALE) {
+                throw new IllegalStateException(
+                        "Cannot complete checkout because event " + eventId + " is no longer on sale");
+            }
+        }
+    }
+
+
+    
 
 
 

@@ -400,29 +400,47 @@ class EventTest extends BaseDomainTest {
 
     @Test
     void GivenOnSaleEvent_WhenRemovePlacesFromStandingZone_ThenThrowsException() {
-        StandingZone standingZone = track(new StandingZone(ZONE_ID, "General", 100, 50));
+            StandingZone standingZone = track(new StandingZone(ZONE_ID, "General", 100, 50));
 
-        Event event = track(new Event(
-                EVENT_ID,
-                "Concert",
-                4.5,
-                ARTISTS,
-                EventCategory.CONCERT,
-                COMPANY_ID,
-                EventStatus.ON_SALE,
-                new VenueMap(1, LOCATION, List.of(standingZone)),
-                List.of(new ShowDate(
-                        LocalDateTime.now().plusDays(30),
-                        LocalDateTime.now().plusDays(30).plusHours(2)
-                )),
-                acceptingPurchasePolicy(),
-                noDiscountPolicy()
-        ));
+            Event event = track(new Event(
+                            EVENT_ID,
+                            "Concert",
+                            4.5,
+                            ARTISTS,
+                            EventCategory.CONCERT,
+                            COMPANY_ID,
+                            EventStatus.ON_SALE,
+                            new VenueMap(1, LOCATION, List.of(standingZone)),
+                            List.of(new ShowDate(
+                                            LocalDateTime.now().plusDays(30),
+                                            LocalDateTime.now().plusDays(30).plusHours(2))),
+                            acceptingPurchasePolicy(),
+                            noDiscountPolicy()));
 
-        assertThrows(IllegalStateException.class, () ->
-                event.removePlacesFromStandingZone(ZONE_ID, 10, COMPANY_ID)
-        );
+            assertThrows(IllegalStateException.class,
+                            () -> event.removePlacesFromStandingZone(ZONE_ID, 10, COMPANY_ID));
     }
+    
+
+
+
+        @Test
+        void GivenEventCanceledAfterReservation_WhenConfirmInventorySale_ThenThrowException() {
+                StandingZone standingZone = track(new StandingZone(1, "General Admission", 10, 50.0));
+                Event event = createEventWithZones(List.of(standingZone));
+
+                event.transitionToOnSale();
+                event.reserveInventory(1, InventorySelection.standing(1, "order-1"));
+
+                event.transitionToCanceled("Cancelled during checkout");
+
+                assertThrows(IllegalStateException.class, () ->
+                        event.confirmInventorySale(1, InventorySelection.standing(1, "order-1"))
+                );
+
+                assertEquals(1, standingZone.getReservedAmount());
+                assertEquals(0, standingZone.getSoldAmount());
+        }
 
 
 

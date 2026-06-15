@@ -809,6 +809,36 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
 
 
 
+    @Test
+    void GivenSuccessfulMemberReservation_WhenReserve_ThenNotifyAfterUnlocking() {
+        when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+
+        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(event.getVenueMap().getZone(ZONE_ID)).thenReturn(zone);
+        when(zone.getprice()).thenReturn(50.0);
+
+        when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(activeOrder);
+        when(activeOrder.getOrderKey()).thenReturn("order-1");
+
+        reservationService.reserveForMember(
+                VALID_TOKEN,
+                EVENT_ID,
+                ZONE_ID,
+                InventorySelectionDTO.standing(QUANTITY));
+
+        org.mockito.InOrder inOrder = inOrder(eventRepository, activeOrderRepository, notificationService);
+
+        inOrder.verify(eventRepository).unlockBuyerOperation(EVENT_ID);
+        inOrder.verify(activeOrderRepository).unlock("user:" + USER_ID);
+        inOrder.verify(notificationService)
+                .notifyTicketReservationSuccess(USER_ID, EVENT_ID, ZONE_ID, QUANTITY);
+    }
+
+
+
+
+
 
 
 

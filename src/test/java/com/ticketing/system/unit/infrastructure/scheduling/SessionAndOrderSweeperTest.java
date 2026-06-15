@@ -362,6 +362,24 @@ class SessionAndOrderSweeperTest {
 
 
 
+    @Test
+    void GivenExpiredCartInCheckoutProgress_WhenSweepExpiredOrders_ThenDoNotReleaseOrDelete() {
+        ActiveOrder cart = ActiveOrder.forMember(5, "sid-checkout");
+        cart.addStandingReservation(1, 10, 2, 50.0, LocalDateTime.now().minusMinutes(30));
+        cart.markCheckoutInProgress();
+
+        when(orderRepo.findExpired()).thenReturn(List.of(cart));
+
+        int scanned = sweeper.sweepExpiredOrders();
+
+        assertEquals(1, scanned);
+        verify(orderRepo).lockForUpdate("user:5");
+        verify(orderRepo).unlock("user:5");
+        verify(orderRepo, never()).delete(any());
+        verify(eventRepo, never()).lockForUpdate(anyInt());
+        verify(eventRepo, never()).save(any());
+    }
+
 
 
 
