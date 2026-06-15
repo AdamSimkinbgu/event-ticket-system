@@ -79,4 +79,25 @@ public final class MockPermissions {
         for (Capability c : caps) if (GRANTABLE.contains(c)) filtered.add(c);
         s.setAttribute(KEY_PREFIX + companyId, filtered);
     }
+
+    /**
+     * Translates domain Permission values to the corresponding grantable
+     * Capability set. Called when a manager accepts an invitation to seed
+     * their session caps to exactly what the owner granted.
+     */
+    public static Set<Capability> fromDomainPermissions(
+            java.util.Collection<com.ticketing.system.Core.Domain.users.Permission> perms) {
+        Set<Capability> caps = EnumSet.noneOf(Capability.class);
+        for (var p : perms) {
+            switch (p) {
+                case MANAGE_INVENTORY     -> { caps.add(Capability.VIEW_COMPANY_EVENTS);
+                                            caps.add(Capability.EDIT_COMPANY_EVENTS); }
+                case CONFIGURE_VENUE      -> caps.add(Capability.MANAGE_VENUE_MAPS);
+                case EDIT_POLICIES        -> caps.add(Capability.EDIT_PURCHASE_POLICIES);
+                case VIEW_SALES           -> caps.add(Capability.VIEW_COMPANY_SALES);
+                case RESPOND_TO_INQUIRIES -> caps.add(Capability.RESPOND_INQUIRIES);
+            }
+        }
+        return caps;
+    }
 }

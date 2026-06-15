@@ -15,6 +15,9 @@ import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStatusDot;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.security.MockAuth;
+import com.ticketing.system.Presentation.session.MockCompanies;
+import com.ticketing.system.Presentation.session.MockPermissions;
+import com.ticketing.system.Presentation.session.MockSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Span;
@@ -117,7 +120,16 @@ public class MyInvitationsView extends LkPage {
             companyService.respondToAppointment(
                 token, new AppointmentResponseDTO(inv.companyId(), accept));
             if (accept) {
-                Toasts.success("Accepted — you are now a " + inv.role().toLowerCase() + " at " + inv.companyName() + ".");
+                // Seed the UI session with exactly the permissions the owner granted.
+                // Without this, Capabilities.forCurrentUser() falls back to DEFAULT_GRANTS.
+                String cid = String.valueOf(inv.companyId());
+                MockCompanies.add(new MockCompanies.Company(
+                    cid, inv.companyName(), "", "", "Manager", "Active", 0, 0));
+                MockSession.setCurrentCompany(cid);
+                MockPermissions.setAll(
+                    cid, MockPermissions.fromDomainPermissions(inv.permissions()));
+                Toasts.success("Accepted — you are now a " +
+                    inv.role().toLowerCase() + " at " + inv.companyName() + ".");
             } else {
                 Toasts.warn("Invitation from " + inv.companyName() + " rejected.");
             }

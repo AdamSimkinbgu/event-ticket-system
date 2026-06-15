@@ -1,7 +1,9 @@
 package com.ticketing.system.Core.Application.services;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import lombok.extern.slf4j.Slf4j;
 // Owner / Manager-side write service for the Event aggregate and its lifecycle.
@@ -18,6 +20,7 @@ import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
+import com.ticketing.system.Core.Application.dto.ZoneDetailDTO;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
@@ -160,6 +163,86 @@ public class EventManagementService {
                 company.getName(),
                 newEvent.getStatus(),
                 newEvent.getShowDates());
+    }
+
+
+    // II.4.1.1 — Owner lists all events under their company.
+    public List<EventDetailDTO> listEventsForCompany(String token, int companyId) {
+        int userId = validateTokenAndGetUserId(token);
+        User user = userRepository.getUserById(userId);
+        user.requirePermissionInCompany(companyId, Permission.CONFIGURE_VENUE);
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+
+        return eventRepository.findByCompanyId(companyId).stream()
+            .map(e -> new EventDetailDTO(
+                String.valueOf(e.getId()),
+                e.getName(),
+                e.getRating(),
+                null,
+                e.getCategory(),
+                e.getVenueMap() != null ? e.getVenueMap().getLocation() : null,
+                String.valueOf(companyId),
+                company.getName(),
+                e.getStatus(),
+                e.getShowDates()
+            ))
+            .toList();
+    }
+
+    // II.4.1.1 — Load a single event for the edit form.
+    public EventDetailDTO getEvent(String token, int eventId) {
+        int userId = validateTokenAndGetUserId(token);
+        Event event = eventRepository.findById(eventId);
+        User user = userRepository.getUserById(userId);
+        user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+        ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
+
+        return new EventDetailDTO(
+            String.valueOf(event.getId()),
+            event.getName(),
+            event.getRating(),
+            null,
+            event.getCategory(),
+            event.getVenueMap() != null ? event.getVenueMap().getLocation() : null,
+            String.valueOf(event.getCompanyId()),
+            company.getName(),
+            event.getStatus(),
+            event.getShowDates()
+        );
+    }
+
+    // II.4.2.3 — Read back the current zone states from the domain so the
+    // editor reflects real-time inventory (capacity consumed by sales, etc.).
+    public List<ZoneDetailDTO> getEventZones(String token, int eventId) {
+        int userId = validateTokenAndGetUserId(token);
+        User user = userRepository.getUserById(userId);
+        Event event = eventRepository.findById(eventId);
+        user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+
+        VenueMap map = event.getVenueMap();
+        if (map == null || map.getInventoryZones().isEmpty()) return List.of();
+
+        List<ZoneDetailDTO> result = new ArrayList<>();
+        for (InventoryZone zone : map.getInventoryZones()) {
+            if (zone.isSeated()) {
+                SeatedZone sz = (SeatedZone) zone;
+                List<Seat> seats = sz.getSeats();
+                int rows = 0, seatsPerRow = 0;
+                if (!seats.isEmpty()) {
+                    Set<Character> rowLetters = new HashSet<>();
+                    for (Seat s : seats) {
+                        if (!s.getLabel().isEmpty()) rowLetters.add(s.getLabel().charAt(0));
+                    }
+                    rows = rowLetters.size();
+                    seatsPerRow = rows > 0 ? seats.size() / rows : seats.size();
+                }
+                result.add(new ZoneDetailDTO(zone.getName(), true, rows, seatsPerRow, 0, zone.getprice()));
+            } else {
+                result.add(new ZoneDetailDTO(
+                    zone.getName(), false, 0, 0, zone.getAvailableAmount(), zone.getprice()));
+            }
+        }
+        return result;
     }
 
     

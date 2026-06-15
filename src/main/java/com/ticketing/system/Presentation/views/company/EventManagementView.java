@@ -1,5 +1,7 @@
 package com.ticketing.system.Presentation.views.company;
 
+import com.ticketing.system.Core.Application.dto.EventDetailDTO;
+import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
@@ -12,6 +14,7 @@ import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.MockAuth;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.views.admin.CompanySalesView;
 import com.vaadin.flow.component.Component;
@@ -21,6 +24,8 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
@@ -29,7 +34,7 @@ import jakarta.annotation.security.PermitAll;
 @PageTitle("Edit event · TicketHub")
 @PermitAll
 @RequireCapability(Capability.EDIT_COMPANY_EVENTS)
-public class EventManagementView extends LkPage {
+public class EventManagementView extends LkPage implements BeforeEnterObserver {
 
     private final TextField title = new TextField("Title");
     private final TextField category = new TextField("Category");
@@ -40,18 +45,58 @@ public class EventManagementView extends LkPage {
     private final IntegerField maxAttend = new IntegerField("Max attendance");
     private final TextArea description = new TextArea("Description");
 
-    public EventManagementView() {
+    private final EventManagementService eventService;
+    private String eventId = null;   // null = new event
+    public EventManagementView(EventManagementService eventService) {
+        this.eventService = eventService;
         title("Edit event");
-        subtitle("Coldplay · Music of the Spheres");
+        subtitle("Configure event details.");
         actions(
-                new LkBtn("Discard").variant(LkBtn.Variant.tertiary)
-                        .onClick(e -> UI.getCurrent().navigate(CompanyEventListView.class)),
-                new LkBtn("Save changes").variant(LkBtn.Variant.primary)
-                        .onClick(e -> {
-                            Toasts.success("Event saved.");
-                            UI.getCurrent().navigate(CompanyEventListView.class);
-                        }));
+            new LkBtn("Discard").variant(LkBtn.Variant.tertiary)
+                .onClick(e -> UI.getCurrent().navigate(CompanyEventListView.class)),
+            new LkBtn("Save changes").variant(LkBtn.Variant.primary)
+                .onClick(e -> saveEvent())
+        );
         add(buildSplit());
+    }
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        eventId = event.getRouteParameters().get("eventId").orElse(null);
+        if (eventId != null && !"new".equals(eventId)) {
+            loadEvent(eventId);
+        }
+    }
+
+
+    private void loadEvent(String id) {
+        String token = MockAuth.token();
+        if (token == null) return;
+        try {
+            EventDetailDTO ev = eventService.getEvent(token, Integer.parseInt(id));
+            title.setValue(ev.name() != null ? ev.name() : "");
+            category.setValue(ev.category() != null ? ev.category().name() : "");
+            venue.setValue(ev.location() != null ? ev.location().toString() : "");
+        } catch (Exception ex) {
+            Toasts.failure("Could not load event: " + ex.getMessage());
+        }
+    }
+
+    private void saveEvent() {
+        String token = MockAuth.token();
+        if (token == null) { Toasts.failure("Session token missing."); return; }
+
+        if ("new".equals(eventId) || eventId == null) {
+            // Create flow — editEventDetails() is not yet implemented,
+            // so creation via addEvent() requires a full DTO (show dates, location, etc.).
+            // For now, show a toast to signal the integration point.
+            Toasts.warn("Create-event flow (addEvent) — pending full form wiring.");
+            return;
+        }
+
+        // Edit flow — editEventDetails() currently throws UnsupportedOperationException.
+        // Once implemented it will be called here.
+        Toasts.warn("Save-event not yet implemented in EventManagementService.editEventDetails().");
     }
 
     private Component buildSplit() {
@@ -177,8 +222,22 @@ public class EventManagementView extends LkPage {
         warn.getStyle().set("font-size", "13px").set("display", "block").set("margin-bottom", "10px");
         card.add(warn);
         card.add(new LkBtn("Cancel this event").variant(LkBtn.Variant.error).full()
-                .icon(new LkIcon("warning", 16))
-                .onClick(e -> Toasts.warn("Cancel-event dialog refunds all holders + emails them.")));
+        .icon(new LkIcon("warning", 16))
+        .onClick(e -> cancelEvent()));
         return card;
+    }
+
+    private void cancelEvent() {
+        if (eventId == null || "new".equals(eventId)) return;
+        String token = MockAuth.token();
+        if (token == null) { Toasts.failure("Session token missing."); return; }
+        try {
+            eventService.cancelEventAndRefund(token, Integer.parseInt(eventId));
+            Toasts.success("Event cancelled — all holders refunded.");
+            UI.getCurrent().navigate(CompanyEventListView.class);
+        } catch (Exception ex) {
+            Toasts.failure("Could not cancel event: " + ex.getMessage());
+        }
+        
     }
 }
