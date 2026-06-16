@@ -6,9 +6,8 @@ import com.vaadin.flow.server.VaadinSession;
 import java.util.Set;
 
 /**
- * Session-scoped holder for member auth state. Replaces the earlier
- * {@code MockAuth} shim: stores the JWT returned by
- * {@code AuthenticationService.login()} alongside the userId, display
+ * Session-scoped holder for member auth state. Stores the JWT returned
+ * by {@code AuthenticationService.login()} alongside the userId, display
  * name, and admin flag, so views can both pass the token to services
  * and render the persona without re-querying.
  *
