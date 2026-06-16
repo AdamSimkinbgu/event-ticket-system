@@ -1,11 +1,13 @@
 package com.ticketing.system.Presentation.dev;
 
+import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.session.GuestSession;
 import com.ticketing.system.Presentation.session.MockCart;
 import com.ticketing.system.Presentation.session.MockCompanies;
 import com.ticketing.system.Presentation.session.MockPermissions;
@@ -58,6 +60,32 @@ public final class DevPanel {
         SIGN_OUT_FLOW = signOutFlow;
     }
 
+    /**
+     * Real-login persona switch — used by every dev-panel control that
+     * needs to flip the currently signed-in user. If a session is already
+     * active we route through {@link SignOutFlow} first so the
+     * server-side {@code Session} row is killed and a fresh guest
+     * sessionId is minted (required by {@code AuthenticationService.login()}
+     * per spec D10a). Best-effort: dev-panel state mutations should
+     * never crash the panel.
+     */
+    private static void signInAs(String username, String password) {
+        try {
+            if (AuthSession.isSignedIn()) {
+                SIGN_OUT_FLOW.execute();
+            }
+            String guestSid = GuestSession.sessionId();
+            if (guestSid == null) {
+                guestSid = AUTH.startGuestSession().sessionId();
+                GuestSession.setSessionId(guestSid);
+            }
+            var dto = AUTH.login(new LoginRequestDTO(username, password, guestSid));
+            AuthSession.storeAuth(dto.authToken());
+        } catch (RuntimeException ignored) {
+            // Dev-panel best effort — surface the previous state on refresh.
+        }
+    }
+
     /** Floating trigger pill in the bottom-right corner. */
     public static Button trigger() {
         Icon bug = new Icon(VaadinIcon.BUG);
@@ -99,8 +127,8 @@ public final class DevPanel {
         content.add(
             section("Persona shortcuts",  "Click to toggle. Member auto-engages with role buttons; Admin stacks with the rest.",
                 buildPersonaRow(dialog)),
-            section("Identity",           null,
-                buildIdentityRow()),
+            section("Identity",           "Switches log in via the real AuthenticationService against the dev-seeded users.",
+                buildIdentityRow(dialog)),
             section("Companies",          "Drives OWNER_WORKSPACE + the manager-vs-owner branch.",
                 buildCompaniesBlock(dialog)),
             section("Manager permissions", currentManagerSubtitle(),
@@ -249,7 +277,7 @@ public final class DevPanel {
         switch (name) {
             case "Guest" -> {
                 if (AuthSession.isSignedIn() || AuthSession.isAdmin()) {
-                    AuthSession.signOut();
+                    SIGN_OUT_FLOW.execute();
                     MockCart.clear();
                     MockCompanies.clear();
                     MockSession.clearCurrentCompany();
@@ -257,10 +285,10 @@ public final class DevPanel {
             }
             case "Member" -> {
                 if (!AuthSession.isSignedIn()) {
-                    AuthSession.signIn("adam");
+                    signInAs(DevUserSeeder.MEMBER_USERNAME, DevUserSeeder.SHARED_PASSWORD);
                 } else if (!hasAnyCompanyRole() && !AuthSession.isAdmin()) {
                     // Plain member with nothing else attached → sign out
-                    AuthSession.signOut();
+                    SIGN_OUT_FLOW.execute();
                     MockCart.clear();
                 }
                 // else: signed in with companies/admin attached — can't unsign
@@ -275,7 +303,9 @@ public final class DevPanel {
                         MockSession.clearCurrentCompany();
                     }
                 } else {
-                    if (!AuthSession.isSignedIn()) AuthSession.signIn("adam");
+                    if (!AuthSession.isSignedIn()) {
+                        signInAs(DevUserSeeder.MEMBER_USERNAME, DevUserSeeder.SHARED_PASSWORD);
+                    }
                     String id = "demo-" + name.toLowerCase().replace("-", "");
                     MockCompanies.add(new MockCompanies.Company(
                         id, seededCompanyName(name),
@@ -292,7 +322,18 @@ public final class DevPanel {
                     }
                 }
             }
-            case "Admin" -> AuthSession.setAdmin(!AuthSession.isAdmin());
+            case "Admin" -> {
+                // Real-auth swap: one token at a time. Toggling admin on
+                // (re)logs in as dev.admin; toggling off demotes back to
+                // dev.member so the user stays in a signed-in state.
+                if (AuthSession.isAdmin()) {
+                    signInAs(DevUserSeeder.MEMBER_USERNAME, DevUserSeeder.SHARED_PASSWORD);
+                } else {
+                    signInAs(DevUserSeeder.ADMIN_USERNAME, DevUserSeeder.SHARED_PASSWORD);
+                    MockCompanies.clear();
+                    MockSession.clearCurrentCompany();
+                }
+            }
         }
         refresh(dialog);
     }
@@ -310,32 +351,23 @@ public final class DevPanel {
     // Identity — name + signed-in + admin
     // ---------------------------------------------------------------------
 
-    private static Component buildIdentityRow() {
+    private static Component buildIdentityRow(Dialog dialog) {
         TextField name = new TextField();
         name.setLabel("Display name");
         name.setValue(AuthSession.displayName() == null ? "" : AuthSession.displayName());
         name.setWidth("220px");
+        // Username is now the JWT subject — editing has no effect at this
+        // layer. Read-only keeps the field useful for "what am I signed
+        // in as?" at a glance without offering misleading affordance.
+        name.setReadOnly(true);
 
         Checkbox signedIn = new Checkbox("Signed in", AuthSession.isSignedIn());
         Checkbox isAdmin  = new Checkbox("Admin pool", AuthSession.isAdmin());
 
-        signedIn.addValueChangeListener(e -> {
-            if (e.getValue()) AuthSession.signIn(name.isEmpty() ? "adam" : name.getValue());
-            else              AuthSession.signOut();
-        });
-        isAdmin.addValueChangeListener(e -> {
-            if (e.getValue()) {
-                AuthSession.signInAsAdmin(name.isEmpty() ? "admin" : name.getValue());
-                MockCompanies.clear();
-                MockSession.clearCurrentCompany();
-            } else if (AuthSession.isAdmin()) {
-                AuthSession.signIn(name.isEmpty() ? "adam" : name.getValue());
-            }
-        });
-        name.addValueChangeListener(e -> {
-            if (AuthSession.isAdmin())            AuthSession.signInAsAdmin(e.getValue());
-            else if (AuthSession.isSignedIn())    AuthSession.signIn(e.getValue());
-        });
+        // Route both checkboxes through togglePersona so the real-login
+        // flow runs exactly once and the dialog refreshes consistently.
+        signedIn.addValueChangeListener(e -> togglePersona("Member", dialog));
+        isAdmin.addValueChangeListener(e -> togglePersona("Admin", dialog));
 
         return hrow(16, name, signedIn, isAdmin);
     }
@@ -392,7 +424,9 @@ public final class DevPanel {
 
     private static Button addCompanyBtn(String label, String role, Dialog dialog) {
         return ghostBtn(label, () -> {
-            if (!AuthSession.isSignedIn()) AuthSession.signIn("adam");
+            if (!AuthSession.isSignedIn()) {
+                signInAs(DevUserSeeder.MEMBER_USERNAME, DevUserSeeder.SHARED_PASSWORD);
+            }
             String id = "dev-" + UUID.randomUUID().toString().substring(0, 8);
             MockCompanies.add(new MockCompanies.Company(
                 id, role + " company",
