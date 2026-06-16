@@ -3,7 +3,7 @@ package com.ticketing.system.Presentation.dev;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
-import com.ticketing.system.Presentation.security.MockAuth;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.MockCart;
 import com.ticketing.system.Presentation.session.MockCompanies;
 import com.ticketing.system.Presentation.session.MockPermissions;
@@ -186,7 +186,7 @@ public final class DevPanel {
             personaToggle("Manager",  hasRole("Manager"),   () -> togglePersona("Manager",  dialog)),
             personaToggle("Co-owner", hasRole("Co-owner"),  () -> togglePersona("Co-owner", dialog)),
             personaToggle("Founder",  hasRole("Founder"),   () -> togglePersona("Founder",  dialog)),
-            personaToggle("Admin",    MockAuth.isAdmin(),   () -> togglePersona("Admin",    dialog))
+            personaToggle("Admin",    AuthSession.isAdmin(),   () -> togglePersona("Admin",    dialog))
         );
     }
 
@@ -213,11 +213,11 @@ public final class DevPanel {
     }
 
     private static boolean isGuestSelected() {
-        return !MockAuth.isSignedIn() && !MockAuth.isAdmin();
+        return !AuthSession.isSignedIn() && !AuthSession.isAdmin();
     }
 
     private static boolean isMemberSelected() {
-        return MockAuth.isSignedIn();
+        return AuthSession.isSignedIn();
     }
 
     private static boolean hasRole(String role) {
@@ -232,19 +232,19 @@ public final class DevPanel {
     private static void togglePersona(String name, Dialog dialog) {
         switch (name) {
             case "Guest" -> {
-                if (MockAuth.isSignedIn() || MockAuth.isAdmin()) {
-                    MockAuth.signOut();
+                if (AuthSession.isSignedIn() || AuthSession.isAdmin()) {
+                    AuthSession.signOut();
                     MockCart.clear();
                     MockCompanies.clear();
                     MockSession.clearCurrentCompany();
                 }
             }
             case "Member" -> {
-                if (!MockAuth.isSignedIn()) {
-                    MockAuth.signIn("adam");
-                } else if (!hasAnyCompanyRole() && !MockAuth.isAdmin()) {
+                if (!AuthSession.isSignedIn()) {
+                    AuthSession.signIn("adam");
+                } else if (!hasAnyCompanyRole() && !AuthSession.isAdmin()) {
                     // Plain member with nothing else attached → sign out
-                    MockAuth.signOut();
+                    AuthSession.signOut();
                     MockCart.clear();
                 }
                 // else: signed in with companies/admin attached — can't unsign
@@ -259,7 +259,7 @@ public final class DevPanel {
                         MockSession.clearCurrentCompany();
                     }
                 } else {
-                    if (!MockAuth.isSignedIn()) MockAuth.signIn("adam");
+                    if (!AuthSession.isSignedIn()) AuthSession.signIn("adam");
                     String id = "demo-" + name.toLowerCase().replace("-", "");
                     MockCompanies.add(new MockCompanies.Company(
                         id, seededCompanyName(name),
@@ -276,7 +276,7 @@ public final class DevPanel {
                     }
                 }
             }
-            case "Admin" -> MockAuth.setAdmin(!MockAuth.isAdmin());
+            case "Admin" -> AuthSession.setAdmin(!AuthSession.isAdmin());
         }
         refresh(dialog);
     }
@@ -297,28 +297,28 @@ public final class DevPanel {
     private static Component buildIdentityRow() {
         TextField name = new TextField();
         name.setLabel("Display name");
-        name.setValue(MockAuth.displayName() == null ? "" : MockAuth.displayName());
+        name.setValue(AuthSession.displayName() == null ? "" : AuthSession.displayName());
         name.setWidth("220px");
 
-        Checkbox signedIn = new Checkbox("Signed in", MockAuth.isSignedIn());
-        Checkbox isAdmin  = new Checkbox("Admin pool", MockAuth.isAdmin());
+        Checkbox signedIn = new Checkbox("Signed in", AuthSession.isSignedIn());
+        Checkbox isAdmin  = new Checkbox("Admin pool", AuthSession.isAdmin());
 
         signedIn.addValueChangeListener(e -> {
-            if (e.getValue()) MockAuth.signIn(name.isEmpty() ? "adam" : name.getValue());
-            else              MockAuth.signOut();
+            if (e.getValue()) AuthSession.signIn(name.isEmpty() ? "adam" : name.getValue());
+            else              AuthSession.signOut();
         });
         isAdmin.addValueChangeListener(e -> {
             if (e.getValue()) {
-                MockAuth.signInAsAdmin(name.isEmpty() ? "admin" : name.getValue());
+                AuthSession.signInAsAdmin(name.isEmpty() ? "admin" : name.getValue());
                 MockCompanies.clear();
                 MockSession.clearCurrentCompany();
-            } else if (MockAuth.isAdmin()) {
-                MockAuth.signIn(name.isEmpty() ? "adam" : name.getValue());
+            } else if (AuthSession.isAdmin()) {
+                AuthSession.signIn(name.isEmpty() ? "adam" : name.getValue());
             }
         });
         name.addValueChangeListener(e -> {
-            if (MockAuth.isAdmin())            MockAuth.signInAsAdmin(e.getValue());
-            else if (MockAuth.isSignedIn())    MockAuth.signIn(e.getValue());
+            if (AuthSession.isAdmin())            AuthSession.signInAsAdmin(e.getValue());
+            else if (AuthSession.isSignedIn())    AuthSession.signIn(e.getValue());
         });
 
         return hrow(16, name, signedIn, isAdmin);
@@ -376,7 +376,7 @@ public final class DevPanel {
 
     private static Button addCompanyBtn(String label, String role, Dialog dialog) {
         return ghostBtn(label, () -> {
-            if (!MockAuth.isSignedIn()) MockAuth.signIn("adam");
+            if (!AuthSession.isSignedIn()) AuthSession.signIn("adam");
             String id = "dev-" + UUID.randomUUID().toString().substring(0, 8);
             MockCompanies.add(new MockCompanies.Company(
                 id, role + " company",

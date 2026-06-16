@@ -4,7 +4,7 @@ import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.LkAuthCard;
 import com.ticketing.system.Presentation.components.kit.LkCheckRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Presentation.security.MockAuth;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.vaadin.flow.component.Key;
@@ -87,14 +87,14 @@ public class LoginView extends LkAuthCard {
             return;
         }
         // Single sign-in surface for both pools — the username decides the route.
-        // The pools are still disjoint (MockAuth.ADMIN_USERNAMES is the source of
-        // truth) and RegisterView still refuses admin names.
-        if (MockAuth.isAdminUsername(username.getValue())) {
-            MockAuth.signInAsAdmin(username.getValue());
+        // The pools are still disjoint (AuthSession.ADMIN_USERNAMES is the source
+        // of truth) and RegisterView still refuses admin names.
+        if (AuthSession.isAdminUsername(username.getValue())) {
+            AuthSession.signInAsAdmin(username.getValue());
             Toasts.success("Signed in as admin · " + username.getValue());
             UI.getCurrent().navigate(AdminDashboardView.class);
         } else {
-            MockAuth.signIn(username.getValue());
+            AuthSession.signIn(username.getValue());
             Toasts.success("Signed in as " + username.getValue());
             UI.getCurrent().navigate(BrowseEventsView.class);
         }

@@ -4,7 +4,7 @@ import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.LkAuthCard;
 import com.ticketing.system.Presentation.components.kit.LkCheckRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Presentation.security.MockAuth;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.vaadin.flow.component.Key;
 import com.vaadin.flow.component.UI;
@@ -75,11 +75,11 @@ public class RegisterView extends LkAuthCard {
             Toasts.failure("Password must be at least 8 characters.");
             return;
         }
-        if (MockAuth.isAdminUsername(username.getValue())) {
+        if (AuthSession.isAdminUsername(username.getValue())) {
             Toasts.failure("That username is reserved for the platform-admin pool.");
             return;
         }
-        MockAuth.signIn(username.getValue());
+        AuthSession.signIn(username.getValue());
         Toasts.success("Welcome, " + username.getValue() + "! Account created.");
         UI.getCurrent().navigate(BrowseEventsView.class);
     }

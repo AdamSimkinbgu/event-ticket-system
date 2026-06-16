@@ -5,7 +5,7 @@ import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
-import com.ticketing.system.Presentation.security.MockAuth;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.MockCart;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.company.CompanyRegistrationView;
@@ -41,7 +41,7 @@ import java.util.stream.Stream;
  * Buyer-facing shell — composes {@link LkTopBar} with the tickethub
  * design system. Rebuilds the navbar on every navigation via
  * {@link AfterNavigationObserver} so the avatar menu reflects current
- * {@link MockAuth} state and the top-nav highlights the active section.
+ * {@link AuthSession} state and the top-nav highlights the active section.
  *
  * <p>System-admin entry points are deliberately not exposed here — the
  * admin workspace lives at its own endpoint behind a separate sign-in.
@@ -72,8 +72,8 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
     private void rebuildTopBar(String activeLabel) {
         if (topBar != null) topBar.getElement().removeFromParent();
 
-        boolean signedIn = MockAuth.isSignedIn();
-        String name = signedIn ? MockAuth.displayName() : "Guest";
+        boolean signedIn = AuthSession.isSignedIn();
+        String name = signedIn ? AuthSession.displayName() : "Guest";
 
         List<LkTopBar.NavItem> nav = new ArrayList<>();
         nav.add(new LkTopBar.NavItem("Browse",     BrowseEventsView.class));
@@ -102,7 +102,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         addToNavbar(topBar);
     }
 
-    /** Member-persona account menu — wired to {@link MockAuth} + view routes. */
+    /** Member-persona account menu — wired to {@link AuthSession} + view routes. */
     private LkAccountMenu buildMemberMenu(String name) {
         LkMenu menu = new LkMenu(
             new LkMenu.Item("ticket",    "My account").onClick(() -> UI.getCurrent().navigate(MyAccountView.class)),
@@ -128,7 +128,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         menu.add(
             new LkMenu.Divider(),
             new LkMenu.Item("logout", "Sign out").danger().onClick(() -> {
-                MockAuth.signOut();
+                AuthSession.signOut();
                 UI.getCurrent().navigate(LoginView.class);
             })
         );
