@@ -149,7 +149,8 @@ public class SystemAdminService {
             // No event filter provided, use all events for the company.
             effectiveEventIds = companyEventIds;
         } else {
-            // Event filter provided, ensure it is a subset of the company's events. If not, throw an exception.
+            // Event filter provided: intersect the requested event IDs with the company's events.
+            // (No exception is thrown; out-of-company eventIds are silently dropped.)
             Set<Integer> requestedSet = new HashSet<>(f.eventIds());
             // Retain only the event IDs that are both in the requested set and in the company's events.(Intersection of the two sets)
             effectiveEventIds = companyEventIds.stream()
