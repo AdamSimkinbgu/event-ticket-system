@@ -222,6 +222,12 @@ public class ReservationService {
         // Validate input arguments before doing anything else to fail fast on invalid input and avoid doing unnecessary work. This also ensures that we do not attempt to remove reservations for an event or zone that does not exist, which keeps our data consistent and avoids having active orders that reflect removals for events or zones that do not actually exist.
         validateReservationArguments(eventId, zoneId, selection);
 
+        Event event = null;
+        ActiveOrder activeOrder = null;
+        boolean orderModified = false;
+        boolean inventoryReleased = false;
+        double removedPricePerTicket = 0.0;
+
         boolean notifySuccessAfterUnlock = false;
         boolean notifyFailureAfterUnlock = false;
         String failureNotificationReason = null;
@@ -230,23 +236,58 @@ public class ReservationService {
                 ? "user:" + buyer.userId()
                 : "sess:" + buyer.sessionId();
 
+        /*
+        * Lock order first, then event.
+        * This must stay consistent with reserve(...) and checkout-related flows
+        * to avoid deadlocks.
+        */
         activeOrderRepository.lockForUpdate(orderLockKey);
+
+        /*
+        * Use buyer-operation lock, NOT full update/write lock.
+        *
+        * remove(...) is like reserve(...): it is a buyer inventory operation.
+        * It does not structurally edit the event, venue map, zones, rows, seats, price,
+        * status, or policies.
+        *
+        * The event buyer-operation lock blocks structural event edits while allowing
+        * multiple buyers to reserve/remove different inventory concurrently.
+        * The actual inventory correctness is protected inside the zones:
+        * - StandingZone uses its inventory lock.
+        * - SeatedZone uses layout/read lock + sorted seat locks.
+        */
         eventRepository.lockForBuyerOperation(eventId);
 
         try {
             // Validate event and zone exist before doing anything else (e.g. before checking the active order, etc.) to fail fast on invalid input and avoid doing unnecessary work or creating entities that we will not use if the event/zone is invalid. This also ensures that we do not attempt to remove reservations for an event or zone that does not exist, which keeps our data consistent and avoids having active orders that reflect removals for events or zones that do not actually exist.
-            Event event = getEventOrThrow(eventId);
-            getZoneOrThrow(event, zoneId); // validates venue map + zone exists before touching the order
-            ActiveOrder activeOrder = getActiveOrderOrThrow(buyer);
+            event = getEventOrThrow(eventId);
+            InventoryZone zone = getZoneOrThrow(event, zoneId); // validates venue map + zone exists before touching the order
+            removedPricePerTicket = zone.getprice();
+            activeOrder = getActiveOrderOrThrow(buyer);
 
             // Validate first so we do not release inventory for tickets that are not in the active order.
             activeOrder.validateContainsReservation(eventId, zoneId, selection);
             // Bind the selection to this order's key so the zone can verify ownership when releasing.
             InventorySelection selectionWithKey = selectionWithOrderKey(selection, activeOrder.getOrderKey());
-            // Now that we have validated that the active order contains the reservation we are trying to remove, we can safely release the inventory and modify the active order to reflect the removed reservation. If any of the validations for releasing inventory or modifying the active order fail (e.g. trying to remove more tickets than are reserved in the active order, etc.), we will throw an exception and roll back any changes in the catch block, ensuring that we do not end up with an active order that reflects removals that were not successfully made or inventory that was released without a corresponding reservation in the active order.
+
+            /*
+            * Release inventory first.
+            *
+            * Why this order?
+            * If inventory release fails, the cart was not changed yet.
+            * If inventory release succeeds but cart removal/save fails, the catch block
+            * re-reserves the inventory.
+            */
             event.releaseInventory(zoneId, selectionWithKey);
-            // Note: for simplicity, we assume that the price per ticket does not change when removing a reservation. If there are any discounts or promotions that apply to the reservation, we would need to handle that logic here as well to ensure that the active order reflects the correct pricing after the reservation is removed.
+            inventoryReleased = true;
+
+            /*
+            * Now remove the reservation from the active order.
+            * If this fails after inventory was released, rollbackRemoveIfNeeded(...)
+            * will re-reserve the inventory.
+            */
             activeOrder.removeReservation(eventId, zoneId, selection);
+            orderModified = true;
 
             eventRepository.save(event);
             activeOrderRepository.save(activeOrder);
@@ -259,6 +300,17 @@ public class ReservationService {
 
         } catch (RuntimeException e) {
             // If any exception occurs during the removal process, we need to roll back any actions that were taken to keep our data consistent. This includes re-reserving any inventory that was released and re-adding any reservations that were removed from the active order. We also log the error for monitoring and debugging purposes, and rethrow the exception to indicate that the removal failed. The frontend can catch this exception and show an appropriate error message to the user (e.g. "Failed to remove reservation: reservation not found in active order", "Failed to remove reservation: event not found", "Failed to remove reservation: invalid input", etc.).
+            rollbackRemoveIfNeeded(
+                    event,
+                    activeOrder,
+                    eventId,
+                    zoneId,
+                    selection,
+                    orderModified,
+                    inventoryReleased,
+                    removedPricePerTicket
+            );
+            
             notifyFailureAfterUnlock = true;
             failureNotificationReason = "Remove reservation failed: " + e.getMessage();
 
@@ -268,6 +320,7 @@ public class ReservationService {
                     e.getMessage());
 
             throw e;
+
         } finally {
             try {
                 eventRepository.unlockBuyerOperation(eventId);
@@ -443,6 +496,10 @@ public class ReservationService {
             log.warn("Request rejected: zone not found. eventId={}, zoneId={}", event.getId(), zoneId);
             throw new IllegalArgumentException("Zone not found: " + zoneId);
         }
+        if (zone == null) {
+            log.warn("Request rejected: zone not found. eventId={}, zoneId={}", event.getId(), zoneId);
+            throw new IllegalArgumentException("Zone not found: " + zoneId);
+        }
         return zone;
     }
 
@@ -491,7 +548,7 @@ public class ReservationService {
 
     // Helper method to roll back any changes made during the reservation or removal process if an exception occurs, in order to keep our data consistent. This includes releasing any inventory that was reserved and re-adding any reservations that were removed from the active order. We also log any exceptions that occur during the rollback process for monitoring and debugging purposes, but we do not rethrow those exceptions since we want to ensure that the original exception from the reservation or removal process is what gets propagated to indicate the failure of the operation, while still making a best effort to roll back any changes to keep our data consistent.
     private void rollbackReservationIfNeeded(Event event, ActiveOrder activeOrder, int eventId, int zoneId,
-                    InventorySelection selection, boolean inventoryReserved, boolean orderModified) {
+            InventorySelection selection, boolean inventoryReserved, boolean orderModified) {
 
         if (!inventoryReserved) {
             return;
@@ -517,6 +574,47 @@ public class ReservationService {
             }
         } catch (RuntimeException ignored) {
             // best-effort rollback; the main exception is rethrown by caller
+        }
+    }
+    
+
+    // rollback the cart if inventory release fails, and rollback inventory if the later cart/save flow fails
+    private void rollbackRemoveIfNeeded(Event event, ActiveOrder activeOrder, int eventId, int zoneId,
+                                        InventorySelection selection, boolean orderModified,
+                                        boolean inventoryReleased,double pricePerTicket) {
+        if (!inventoryReleased && !orderModified) {
+            return;
+        }
+
+        /*
+        * If inventory was released, put it back under the same order ownership key.
+        */
+        try {
+            if (inventoryReleased && event != null && activeOrder != null) {
+                InventorySelection selectionWithKey = selectionWithOrderKey(selection, activeOrder.getOrderKey());
+                event.reserveInventory(zoneId, selectionWithKey);
+                eventRepository.save(event);
+            }
+        } catch (RuntimeException rollbackFailure) {
+            log.error("Rollback failed while re-reserving inventory after remove failure. eventId={}, zoneId={}",
+                    eventId,
+                    zoneId,
+                    rollbackFailure);
+        }
+
+        /*
+        * If the active order was modified, put the reservation line back.
+        */
+        try {
+            if (orderModified && activeOrder != null) {
+                activeOrder.addReservation(eventId, zoneId, selection, pricePerTicket, LocalDateTime.now());
+                activeOrderRepository.save(activeOrder);
+            }
+        } catch (RuntimeException rollbackFailure) {
+            log.error("Rollback failed while re-adding cart lines after remove failure. eventId={}, zoneId={}",
+                    eventId,
+                    zoneId,
+                    rollbackFailure);
         }
     }
 

@@ -18,7 +18,7 @@ import java.util.Map;
 public class StandingZone extends InventoryZone {
 
     private int capacity;
-    /** Maps orderKey → quantity reserved by that order. */
+    /** Maps orderKey → quantity reserved by that order. used for tracking reservations per order. */
     private final Map<String, Integer> reservedByOrderKey = new HashMap<>();
     private int soldAmount;
     private final Object inventoryLock = new Object();

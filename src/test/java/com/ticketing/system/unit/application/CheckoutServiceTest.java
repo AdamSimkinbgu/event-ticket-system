@@ -178,6 +178,11 @@ class CheckoutServiceTest {
         when(event1.getCompanyId()).thenReturn(100);
         when(event2.getId()).thenReturn(EVENT_ID_2);
         when(event2.getCompanyId()).thenReturn(100);
+        when(event1.getStatus()).thenReturn(EventStatus.ON_SALE);
+        when(event2.getStatus()).thenReturn(EventStatus.ON_SALE);
+
+        when(mockOrder.isCheckoutInProgress()).thenReturn(true);
+        when(mockOrder.getOrderKey()).thenReturn("mock-order-key");
     }
 
     @Test
@@ -1092,7 +1097,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                 when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
 
                 SeatedZone seatedZoneA1 = new SeatedZone(ZONE_ID_1, "Orchestra", 120.0, List.of(new Seat("A1", 0, 0)));
-                seatedZoneA1.reserve(InventorySelection.seated(List.of("A1"), "test-order-key"));
+                seatedZoneA1.reserve(InventorySelection.seated(List.of("A1"), "mock-order-key"));
                 when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(seatedZoneA1);
 
                 checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
@@ -1301,7 +1306,7 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                 standingZone.reserve(InventorySelection.standing(1));
 
                 SeatedZone seatedZone = new SeatedZone(ZONE_ID_2, "Seated", 120.0, List.of(new Seat("B7", 0, 0)));
-                seatedZone.reserve(InventorySelection.seated(List.of("B7"), "test-order-key"));
+                seatedZone.reserve(InventorySelection.seated(List.of("B7"), "mock-order-key"));
 
                 when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(standingZone);
                 when(event1.getVenueMap().getZone(ZONE_ID_2)).thenReturn(seatedZone);
@@ -1974,7 +1979,7 @@ void GivenTicketsFromDifferentEventsAndSecondEventBelowMinPolicy_WhenCheckout_Th
                 List.of("Artist"),
                 EventCategory.CONCERT,
                 100,
-                EventStatus.SCHEDULED,
+                EventStatus.ON_SALE,
                 new VenueMap(1, new Location("Israel", "Tel Aviv"), List.of(zone)),
                 List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
                 acceptingPurchasePolicy(),
@@ -2050,7 +2055,7 @@ private Event createRealEventWithPolicyAndZone(int eventId, InventoryZone zone, 
             List.of("Artist"),
             EventCategory.CONCERT,
             100,
-            EventStatus.SCHEDULED,
+            EventStatus.ON_SALE,
             new VenueMap(1, new Location("Israel", "Tel Aviv"), List.of(zone)),
             List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
             purchasePolicy,

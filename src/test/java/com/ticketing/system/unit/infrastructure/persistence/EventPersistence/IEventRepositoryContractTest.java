@@ -17,15 +17,12 @@ import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
-import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.events.EventCategory;
-import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
-import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 
 // Contract tests every IEventRepository implementation must satisfy. Future JPA-backed
 // adapter will subclass this with its own newRepository() factory; tests are reused.

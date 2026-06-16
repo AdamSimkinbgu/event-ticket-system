@@ -207,11 +207,11 @@ public class CheckoutService {
             return result;
 
         } catch (Exception e) {
-            handleCheckoutFailure(userId, orderLockKey, paymentResult, totalPrice, inventorySaleConfirmed,
+            handleCheckoutFailure(order, userId, orderLockKey, paymentResult, totalPrice, inventorySaleConfirmed,
                     phase1Complete, e);
             // failure handling does not mutate inventory without locks
             // checkout failure handling will: reset CHECKOUT_IN_PROGRESS safely, refund payment if needed, not release inventory without locks, not clear the cart unsafely.
-            throw new RuntimeException("Checkout failed", e);
+            throw new RuntimeException("Checkout failed, tickets returned to stock", e);
         } finally {
             unlockEvents(lockedEventIds);
 
@@ -221,7 +221,6 @@ public class CheckoutService {
                 } catch (Exception ignored) {
                 }
             }
-
             if (checkoutSucceeded && userId > 0 && receiptLinesToNotifyAfterUnlock != null) {
                 try {
                     notifyPurchaseCompleted(userId, totalPrice, receiptLinesToNotifyAfterUnlock);
@@ -334,8 +333,8 @@ public class CheckoutService {
             return result;
 
         } catch (Exception e) {
-            handleGuestCheckoutFailure(guestSessionId, orderLockKey, paymentResult, totalPrice, inventorySaleConfirmed, phase1Complete, e);
-            throw new RuntimeException("Guest checkout failed", e);
+            handleGuestCheckoutFailure(order, guestSessionId, orderLockKey, paymentResult, totalPrice, inventorySaleConfirmed, phase1Complete, e);
+            throw new RuntimeException("Checkout failed, tickets returned to stock", e);
         } finally {
             unlockEvents(lockedEventIds);
             if (orderLockKey != null) {
@@ -975,6 +974,7 @@ public class CheckoutService {
     
     // We handle checkout failures by logging the error with relevant information (user ID, total price, whether payment was done, whether inventory sale was confirmed) and then attempting to roll back any changes that were made during the checkout process. If the inventory sale was not confirmed, we try to return the reserved tickets back to stock. If the payment was done, we try to refund the payment. We also send a notification to the user that the purchase failed. This method centralizes all the error handling and rollback logic for member checkouts in one place, making it easier to maintain and ensuring that we consistently handle failures across different failure points in the checkout process.
     private void handleCheckoutFailure(
+            ActiveOrder order,
             int userId,
             String orderLockKey,
             PaymentResultDTO paymentResult,
@@ -993,6 +993,8 @@ public class CheckoutService {
         );
 
         resetCheckoutStatusAfterFailure(orderLockKey, phase1Complete, inventorySaleConfirmed);
+
+        safelyReturnTicketsToStock(order);
 
         if (inventorySaleConfirmed) {
             log.error(
@@ -1018,6 +1020,7 @@ public class CheckoutService {
 
     // We handle guest checkout failures by logging the error with relevant information (guest session ID, total price, whether payment was done, whether inventory sale was confirmed) and then attempting to roll back any changes that were made during the checkout process. If the inventory sale was not confirmed, we try to return the reserved tickets back to stock. If the payment was done, we try to refund the payment. Since we don't have a user ID for guests, we cannot send a notification about the failure, but we log enough information to allow for manual follow-up if needed. This method centralizes all the error handling and rollback logic for guest checkouts in one place, making it easier to maintain and ensuring that we consistently handle failures across different failure points in the checkout process.
     private void handleGuestCheckoutFailure(
+            ActiveOrder order,
             String guestSessionId,
             String orderLockKey,
             PaymentResultDTO paymentResult,
@@ -1035,6 +1038,10 @@ public class CheckoutService {
                 originalFailure);
 
         resetCheckoutStatusAfterFailure(orderLockKey, phase1Complete, inventorySaleConfirmed);
+
+        if (!inventorySaleConfirmed) {
+            safelyReturnTicketsToStock(order);
+        }
 
         if (inventorySaleConfirmed) {
             log.error(
