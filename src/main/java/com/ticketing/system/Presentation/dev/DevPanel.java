@@ -1,8 +1,10 @@
 package com.ticketing.system.Presentation.dev;
 
+import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.MockCart;
 import com.ticketing.system.Presentation.session.MockCompanies;
@@ -40,7 +42,21 @@ public final class DevPanel {
     private static final String SECTION_SUB_COLOR   = "#94a3b8";
     private static final String DIVIDER_COLOR       = "#e2e8f0";
 
+    // Spring-managed beans bridged in by DevPanelInitializer at boot. The
+    // panel is a static helper (no Vaadin lifecycle of its own) so the
+    // beans live here as package-private statics. Never null in dev
+    // profile because the initializer constructor runs before any UI is
+    // created.
+    static AuthenticationService AUTH;
+    static SignOutFlow SIGN_OUT_FLOW;
+
     private DevPanel() { }
+
+    /** Called once by {@code DevPanelInitializer} at boot. */
+    public static void bindBeans(AuthenticationService auth, SignOutFlow signOutFlow) {
+        AUTH = auth;
+        SIGN_OUT_FLOW = signOutFlow;
+    }
 
     /** Floating trigger pill in the bottom-right corner. */
     public static Button trigger() {
