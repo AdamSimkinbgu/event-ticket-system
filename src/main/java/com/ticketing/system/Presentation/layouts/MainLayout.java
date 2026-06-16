@@ -5,6 +5,7 @@ import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
+import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.MockCart;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
@@ -59,8 +60,10 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
     );
 
     private LkTopBar topBar;
+    private final SignOutFlow signOutFlow;
 
-    public MainLayout() {
+    public MainLayout(SignOutFlow signOutFlow) {
+        this.signOutFlow = signOutFlow;
         rebuildTopBar(null);
     }
 
@@ -128,7 +131,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         menu.add(
             new LkMenu.Divider(),
             new LkMenu.Item("logout", "Sign out").danger().onClick(() -> {
-                AuthSession.signOut();
+                signOutFlow.execute();
                 UI.getCurrent().navigate(LoginView.class);
             })
         );

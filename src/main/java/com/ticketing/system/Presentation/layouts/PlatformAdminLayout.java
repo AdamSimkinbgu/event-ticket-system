@@ -4,6 +4,7 @@ import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkSideNav;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
+import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.admin.AdminAnnouncementsView;
 import com.ticketing.system.Presentation.views.admin.AdminComplaintQueueView;
@@ -43,8 +44,10 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
 
     private LkTopBar topBar;
     private LkSideNav adminNav;
+    private final SignOutFlow signOutFlow;
 
-    public PlatformAdminLayout() {
+    public PlatformAdminLayout(SignOutFlow signOutFlow) {
+        this.signOutFlow = signOutFlow;
         rebuildTopBar();
         buildDrawerOnce();
     }
@@ -88,7 +91,7 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
             new LkMenu.Item("arrowLeft", "Back to site").onClick(() -> UI.getCurrent().navigate(LandingView.class)),
             new LkMenu.Divider(),
             new LkMenu.Item("logout",    "Sign out").danger().onClick(() -> {
-                AuthSession.signOut();
+                signOutFlow.execute();
                 UI.getCurrent().navigate(LoginView.class);
             })
         );
