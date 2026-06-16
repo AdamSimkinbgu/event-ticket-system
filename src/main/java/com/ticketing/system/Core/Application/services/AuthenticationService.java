@@ -37,7 +37,6 @@ import com.ticketing.system.Core.Domain.users.Session;
 import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.Infrastructure.persistence.MemoryActiveOrderRepository;
 
-import java.util.Optional;
 
 /**
  * Application service for the auth slice — registration (UC-11), login
@@ -284,20 +283,36 @@ public class AuthenticationService {
      * by userId, so the stale Member cart is replaced automatically.
      */
     private void handleCartOnPromotion(Session session, User user) {
-        Optional<ActiveOrder> guestCart = activeOrderRepository.getBySessionId(session.getSessionId());
-        if (guestCart.isPresent() && guestCart.get().isGuest()) {
-            guestCart.get().attachToUser(user.getUserId());
-            activeOrderRepository.save(guestCart.get());
-            log.debug("cart promoted to member userId={} sid={}",
-                    user.getUserId(), session.getSessionId());
-            return;
-        }
-        ActiveOrder priorMemberCart = activeOrderRepository.getByUserId(user.getUserId());
-        if (priorMemberCart != null) {
-            priorMemberCart.attachToSession(session.getSessionId());
-            activeOrderRepository.save(priorMemberCart);
-            log.debug("member cart restored userId={} sid={}",
-                    user.getUserId(), session.getSessionId());
+        String guestKey = "sess:" + session.getSessionId();
+        String userKey  = "user:" + user.getUserId();
+
+        // Lock both keys in lexicographic order so every caller acquires them
+        // in the same sequence, preventing deadlocks with ReservationService
+        // and the SessionAndOrderSweeper which use the same key convention.
+        String firstKey  = guestKey.compareTo(userKey) <= 0 ? guestKey : userKey;
+        String secondKey = guestKey.compareTo(userKey) <= 0 ? userKey  : guestKey;
+
+        activeOrderRepository.lockForUpdate(firstKey);
+        activeOrderRepository.lockForUpdate(secondKey);
+        try {
+            Optional<ActiveOrder> guestCart = activeOrderRepository.getBySessionId(session.getSessionId());
+            if (guestCart.isPresent() && guestCart.get().isGuest()) {
+                guestCart.get().attachToUser(user.getUserId());
+                activeOrderRepository.save(guestCart.get());
+                log.debug("cart promoted to member userId={} sid={}",
+                        user.getUserId(), session.getSessionId());
+                return;
+            }
+            ActiveOrder priorMemberCart = activeOrderRepository.getByUserId(user.getUserId());
+            if (priorMemberCart != null) {
+                priorMemberCart.attachToSession(session.getSessionId());
+                activeOrderRepository.save(priorMemberCart);
+                log.debug("member cart restored userId={} sid={}",
+                        user.getUserId(), session.getSessionId());
+            }
+        } finally {
+            activeOrderRepository.unlock(secondKey);
+            activeOrderRepository.unlock(firstKey);
         }
     }
 

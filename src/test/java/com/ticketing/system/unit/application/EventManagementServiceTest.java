@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,7 @@ import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
+import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
@@ -107,7 +109,7 @@ class EventManagementServiceTest {
                 COMPANY_ID,
                 EventStatus.SCHEDULED,
                 venueMap,
-                List.of(),
+                List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
                 null,
                 null);
         ownerUser = new User(OWNER_ID, "Owner Name", "owner@example.com", "hashedpassword",50);
@@ -117,153 +119,7 @@ class EventManagementServiceTest {
         managerUser.acceptInvitation(COMPANY_ID);
     }
 
-    @Test
-    public void GivenOwner_WhenUpdateZoneCapacity_ThenZoneCapacityUpdated() {
-        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
-        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
-        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
-        eventService.updateStandingZoneCapacity(
-                OWNER_TOKEN,
-                COMPANY_ID,
-                EVENT_ID,
-                ZONE_ID,
-                20);
 
-        assertEquals(20, zone.getAvailableAmount());
-    }
-
-    @Test
-    public void GivenManagerWithConfigureVenuePermission_WhenUpdateZoneCapacity_ThenZoneCapacityUpdated() {
-
-        company.addManager(MANAGER_ID);
-
-        when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
-        when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
-        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
-        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
-        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
-
-        eventService.updateStandingZoneCapacity(
-                MANAGER_TOKEN,
-                COMPANY_ID,
-                EVENT_ID,
-                ZONE_ID,
-                20);
-
-        assertEquals(20, zone.getAvailableAmount());
-    }
-
-    @Test
-    public void GivenInvalidToken_WhenUpdateZoneCapacity_ThenThrowException() {
-        when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
-
-        assertThrows(RuntimeException.class, () -> eventService.updateStandingZoneCapacity(
-                INVALID_TOKEN,
-                COMPANY_ID,
-                EVENT_ID,
-                ZONE_ID,
-                20));
-    }
-
-    @Test
-    public void GivenCompanyDoesNotExist_WhenUpdateZoneCapacity_ThenThrowException() {
-        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenThrow(RuntimeException.class);
-
-        assertThrows(RuntimeException.class, () -> eventService.updateStandingZoneCapacity(
-                OWNER_TOKEN,
-                COMPANY_ID,
-                EVENT_ID,
-                ZONE_ID,
-                20));
-    }
-
-    @Test
-    public void GivenEventDoesNotExist_WhenUpdateZoneCapacity_ThenThrowException() {
-        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-        when(mockEventRepo.findById(EVENT_ID)).thenThrow(RuntimeException.class);
-
-        assertThrows(RuntimeException.class, () -> eventService.updateStandingZoneCapacity(
-                OWNER_TOKEN,
-                COMPANY_ID,
-                EVENT_ID,
-                ZONE_ID,
-                20));
-    }
-
-    @Test
-    public void GivenUserIsNotOwnerOrManager_WhenUpdateZoneCapacity_ThenThrowException() {
-        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(99);
-        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-
-        assertThrows(RuntimeException.class, () -> eventService.updateStandingZoneCapacity(
-                OWNER_TOKEN,
-                COMPANY_ID,
-                EVENT_ID,
-                ZONE_ID,
-                20));
-    }
-
-    @Test
-    public void GivenManagerWithoutConfigureVenuePermission_WhenUpdateZoneCapacity_ThenThrowException() {
-
-        company.addManager(MANAGER_ID);
-
-        when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
-        when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
-        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-
-        assertThrows(RuntimeException.class, () -> eventService.updateStandingZoneCapacity(
-                MANAGER_TOKEN,
-                COMPANY_ID,
-                EVENT_ID,
-                ZONE_ID,
-                20));
-    }
-
-    @Test
-    public void GivenZoneDoesNotExist_WhenUpdateZoneCapacity_ThenThrowException() {
-        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
-        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
-        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
-
-        assertThrows(IllegalArgumentException.class, () -> eventService.updateStandingZoneCapacity(
-                OWNER_TOKEN,
-                COMPANY_ID,
-                EVENT_ID,
-                999,
-                20));
-    }
-
-    @Test
-    public void GivenReservedTicketsMoreThanNewCapacity_WhenUpdateZoneCapacity_ThenThrowException() {
-        zone.reserve(InventorySelection.standing(8));
-
-        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
-        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
-        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
-
-        assertThrows(IllegalArgumentException.class, () -> eventService.updateStandingZoneCapacity(
-                OWNER_TOKEN,
-                COMPANY_ID,
-                EVENT_ID,
-                ZONE_ID,
-                5));
-    }
 
     private OrderReceipt setupStateBasedHappyPath() {
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);

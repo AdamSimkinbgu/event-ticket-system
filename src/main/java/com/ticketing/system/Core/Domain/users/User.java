@@ -41,11 +41,31 @@ public class User implements InvariantChecked {
             // If the user already has an active appointment in the company, accepting the new one will revoke the old one (per UC-23). 
             // This can only happen if the pending appointment is an owner appointment, and the active current one is a manager appointment.
             // because of the condition rules in the receive appointment methods.
-            companyAppointments.remove(activeAppointment); // doesn't even need to revoke because we remove completely for the list.
-            // // but we call revoke to trigger the permission checks and potential exceptions if the inviter doesn't have the right to revoke the old appointment.
-            // // so someone can't just make a manager into a new owner, without the original inviter of the manager, 
-            // // revoking his manager appointment first(only he can change because it's his manager that he appointed).
-            // activeAppointment.revoke(appointment.getInviterId());
+
+            // companyAppointments.remove(activeAppointment);
+            // doesn't apply the rules of only the original inviter can edit permissions and/or revoke, and only manager appointments can be revoked by the appointer, 
+            // so we can't just remove the old appointment.
+
+            //Note: this if is only as another layer of protection to protect the rules that if another active appointment
+            // exists, it can only be a manager appointment, and the pending one must be an owner appointment, because that's the only way we can 
+            // have 2 appointments at the same time for the same user in the same company, per the rules in the receive appointment methods, so we check that 
+            // here to make sure that the assumptions we rely on in the revoke call are correct, and to provide a clearer error message if those assumptions 
+            // are violated, rather than just calling revoke and having it fail with a more obscure error if those assumptions are violated.
+            if (appointment.getRole() != CompanyRole.Owner || activeAppointment.getRole() != CompanyRole.Manager) {
+                throw new RuntimeException(
+                        "Cannot accept invitation: user already has an active appointment in this company");
+            }
+            // this check is done in the revoke method ahead as well, but is here to provide an accurate error message.
+            if (activeAppointment.getInviterId() != appointment.getInviterId()) {
+                throw new RuntimeException(
+                "Cannot accept owner appointment while a manager appointment from a DIFFERENT appointer is active; revoke the manager appointment first");
+            }
+            
+            // ------->  we call revoke to trigger the *permission checks* and potential exceptions if the inviter doesn't have the right to revoke the old appointment,
+            // in that case he also doesn't have the right to promote him to owner(only original inviter can edit his permissions).
+            // so someone can't just make a manager into a new owner, without the original inviter of the manager,
+            // revoking his manager appointment first(only he can change because it's his manager that he appointed).
+            activeAppointment.revoke(appointment.getInviterId());  // checks are done in here to ensure that the revoker has the right to revoke this appointment, which also means they have the right to promote the user to owner by accepting the new appointment.
         }
         appointment.accept();
         return appointment;

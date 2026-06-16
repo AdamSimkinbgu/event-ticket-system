@@ -640,23 +640,7 @@ public class CompanyManagementServiceTest {
                 assertEquals("Database connection lost", exception.getCause().getMessage());
         }
 
-        // --- Skeleton placeholders for the remaining UCs (filled in by the assigned
-        // team members) ---
-
-        @Test
-        @Disabled("UC-21: setCompanyPolicies stores company-wide policies")
-        void givenOwner_whenSetCompanyPolicies_thenStored() {
-        }
-
-        @Test
-        @Disabled("UC-23: appointOwner creates PENDING appointment")
-        void givenOwner_whenAppointCoOwner_thenPending() {
-        }
-
-        @Test
-        @Disabled("UC-23: respond accepts and activates")
-        void givenPendingAppointment_whenAccept_thenActive() {
-        }
+       
 
         @Test
         public void GivenInvalidToken_WhenViewSalesHistory_ThenThrowException() {

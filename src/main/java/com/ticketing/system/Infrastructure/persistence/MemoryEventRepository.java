@@ -12,7 +12,6 @@ import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
-import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 
 import org.springframework.stereotype.Repository;
 
@@ -21,21 +20,37 @@ public class MemoryEventRepository implements IEventRepository {
 
     private final ConcurrentHashMap<Integer, Event> events = new ConcurrentHashMap<>();
     private final AtomicInteger idSequence = new AtomicInteger(1);
-    private final RepositoryLocks<Integer> locks = new RepositoryLocks<>();    // Key is eventId for event-level locks.
+    private final AtomicInteger venueMapIdSequence = new AtomicInteger(1);
+    private final RepositoryReadWriteLocks<Integer> locks = new RepositoryReadWriteLocks<>();  // per-event locks for lifecycle synchronization
 
     @Override
     public void lockForUpdate(Integer id) {
-        locks.lock(id);
+        locks.lockWrite(id);
     }
 
     @Override
     public void unlock(Integer id) {
-        locks.unlock(id);
+        locks.unlockWrite(id);
+    }
+
+    @Override
+    public void lockForBuyerOperation(int eventId) {
+        locks.lockRead(eventId);
+    }
+
+    @Override
+    public void unlockBuyerOperation(int eventId) {
+        locks.unlockRead(eventId);
     }
 
     @Override
     public int nextId() {
         return idSequence.getAndIncrement();
+    }
+
+    @Override
+    public int nextVenueMapId() {
+        return venueMapIdSequence.getAndIncrement();
     }
 
     @Override
@@ -48,11 +63,17 @@ public class MemoryEventRepository implements IEventRepository {
 
     @Override
     public boolean save(Event event) {
+        // New events (not yet in the map) may be saved without a lock — no other
+        // thread can know the ID before the first save completes.
+        // Existing events must be locked by the calling thread to prevent
+        // unguarded read-modify-write races.
+        if (events.containsKey(event.getId())
+                && !locks.isWriteHeldByCurrentThread(event.getId())
+                && !locks.isReadHeldByCurrentThread(event.getId())) {
+            throw new IllegalStateException("Event " + event.getId() + " must be locked before saving");
+        }
         events.put(event.getId(), event);
         return true;
-        // In a real implementation, we might return false if the save failed for some
-        // reason (e.g. DB error);
-        // here we'll just assume it always works.
     }
 
     @Override
@@ -84,16 +105,32 @@ public class MemoryEventRepository implements IEventRepository {
                 .collect(Collectors.toList());
     }
 
+
+
+
+
+
     @Override
-    public List<Event> search(CatalogSearchFiltersDTO filters) {
+    public List<Event> searchONSALE(CatalogSearchFiltersDTO filters) {
+        // we'll just call the full search and then filter ON_SALE in-memory since this is an in-memory repo;
+        // a real DB implementation would push the ON_SALE filter down into the query for efficiency.
+        return searchAll(filters).stream()
+                .filter(e -> e.getStatus() == EventStatus.ON_SALE)
+                .collect(Collectors.toList());
+    }
+
+
+    // UC-7: Global search with multiple optional filters.
+    @Override
+    public List<Event> searchAll(CatalogSearchFiltersDTO filters) {
         return events.values().stream()
                 .filter(e -> matchesSearch(e, filters))
                 .collect(Collectors.toList());
     }
 
     /*
-     * A helper method to apply the various search filters to an event; used in the
-     * search() implementation above.
+     * A helper method to apply the various search filters to an event and return a boolean indicating
+     * whether the event matches the filters; used in the search() implementation above.
      */
     private boolean matchesSearch(Event event, CatalogSearchFiltersDTO filters) {
         // eventName — case-insensitive substring match on event name.
@@ -187,8 +224,8 @@ public class MemoryEventRepository implements IEventRepository {
             }
         }
 
-        return true; // if the event passed into all the filters, it got to here and we'll return
-                     // true
+        return true; // if the event passed into all the filters, it got to here and we'll return true
     }
+
 
 }
