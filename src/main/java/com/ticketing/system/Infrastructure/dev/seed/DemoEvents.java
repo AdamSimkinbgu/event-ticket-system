@@ -10,10 +10,12 @@ import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO.ZoneConfigDTO
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventCategory;
+import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.ShowDate;
 
+import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -228,9 +230,26 @@ public final class DemoEvents {
             new VenueMapConfigDTO(created.eventId(), city + " venue", zones));
 
         Event event = eventRepository.findById(Integer.parseInt(created.eventId()));
-        event.transitionToOnSale();
+        forceStatusOnSale(event);
         eventRepository.save(event);
         return created;
+    }
+
+    /**
+     * Reflection bypass: the domain has no DRAFT → SCHEDULED path, so
+     * {@code Event.transitionToOnSale()} can't be reached through the
+     * legitimate API. For a fixture this is fine — we're materialising
+     * a state the production flow will eventually produce once the
+     * missing transition lands.
+     */
+    private static void forceStatusOnSale(Event event) {
+        try {
+            Field f = Event.class.getDeclaredField("status");
+            f.setAccessible(true);
+            f.set(event, EventStatus.ON_SALE);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("could not set Event.status for demo seed", e);
+        }
     }
 
     // -- Zone helpers -----------------------------------------------------
