@@ -459,7 +459,7 @@ public class ActiveOrder implements InvariantChecked {
     }
 
     /**
-     * Rolls back Phase 1: resets the status to {@code null} (active) so the order
+     * Rolls back Phase 1: resets the status to {@code PRE_CHECKOUT} (active) so the order
      * can be retried or abandoned after a checkout failure during Phase 2.
      *
      * @throws IllegalStateException if the order is not in checkout progress
