@@ -4,7 +4,8 @@ import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkSideNav;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
-import com.ticketing.system.Presentation.security.MockAuth;
+import com.ticketing.system.Presentation.security.SignOutFlow;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.admin.AdminAnnouncementsView;
 import com.ticketing.system.Presentation.views.admin.AdminComplaintQueueView;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
@@ -26,7 +27,7 @@ import java.util.Map;
  * Platform-admin shell — orange "Event Ticket Platform · Admin" top bar
  * with a single-section drawer of admin-only items. Reached after
  * signing in at the unified {@link LoginView} with an admin username
- * ({@link com.ticketing.system.Presentation.security.MockAuth#ADMIN_USERNAMES}).
+ * ({@link com.ticketing.system.Presentation.session.AuthSession#ADMIN_USERNAMES}).
  * Every view inside is gated by an admin {@link
  * com.ticketing.system.Presentation.security.Capability}, so members
  * who somehow type the URL bounce back to the sign-in form.
@@ -43,8 +44,10 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
 
     private LkTopBar topBar;
     private LkSideNav adminNav;
+    private final SignOutFlow signOutFlow;
 
-    public PlatformAdminLayout() {
+    public PlatformAdminLayout(SignOutFlow signOutFlow) {
+        this.signOutFlow = signOutFlow;
         rebuildTopBar();
         buildDrawerOnce();
     }
@@ -57,7 +60,7 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
 
     private void rebuildTopBar() {
         if (topBar != null) topBar.getElement().removeFromParent();
-        String name = MockAuth.isAdmin() ? MockAuth.displayName() : "Admin";
+        String name = AuthSession.isAdmin() ? AuthSession.displayName() : "Admin";
         topBar = new LkTopBar(LkTopBar.Variant.PLATFORM)
             .brand("Event Ticket Platform", " · Admin", LandingView.class)
             .rightLink("Back to site", "arrowLeft", LandingView.class)
@@ -88,7 +91,7 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
             new LkMenu.Item("arrowLeft", "Back to site").onClick(() -> UI.getCurrent().navigate(LandingView.class)),
             new LkMenu.Divider(),
             new LkMenu.Item("logout",    "Sign out").danger().onClick(() -> {
-                MockAuth.signOut();
+                signOutFlow.execute();
                 UI.getCurrent().navigate(LoginView.class);
             })
         );

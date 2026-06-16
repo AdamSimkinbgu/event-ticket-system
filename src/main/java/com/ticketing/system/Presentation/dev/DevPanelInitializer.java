@@ -1,5 +1,7 @@
 package com.ticketing.system.Presentation.dev;
 
+import com.ticketing.system.Core.Application.services.AuthenticationService;
+import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.vaadin.flow.server.ServiceInitEvent;
 import com.vaadin.flow.server.VaadinServiceInitListener;
 import org.springframework.stereotype.Component;
@@ -10,12 +12,21 @@ import org.springframework.stereotype.Component;
  * service init phase, the same way {@code AuthBootstrap} attaches its
  * navigation guard.
  *
+ * <p>Also bridges the Spring-managed {@link AuthenticationService} and
+ * {@link SignOutFlow} into {@link DevPanel}'s static surface so the
+ * persona toggles can drive the real login/logout flows instead of the
+ * earlier flag-toggle mocks.
+ *
  * <p>Removing this file (or its {@code @Component}) hides the dev
  * widget without touching any view code.
  */
 @Component
 @org.springframework.context.annotation.Profile("dev")
 public class DevPanelInitializer implements VaadinServiceInitListener {
+
+    public DevPanelInitializer(AuthenticationService authenticationService, SignOutFlow signOutFlow) {
+        DevPanel.bindBeans(authenticationService, signOutFlow);
+    }
 
     @Override
     public void serviceInit(ServiceInitEvent event) {

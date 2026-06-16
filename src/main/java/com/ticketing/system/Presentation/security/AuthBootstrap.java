@@ -1,5 +1,6 @@
 package com.ticketing.system.Presentation.security;
 
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.auth.LoginView;
 import com.ticketing.system.Presentation.views.company.CompanyRegistrationView;
 import com.ticketing.system.Presentation.views.company.MyCompaniesView;
@@ -86,7 +87,7 @@ public class AuthBootstrap implements VaadinServiceInitListener {
         // LoginView is the single sign-in surface; if the user types an admin
         // username, it auto-routes them to AdminDashboardView after auth.
         if (!target.isAnnotationPresent(AnonymousAllowed.class)) {
-            if (!MockAuth.isSignedIn()) {
+            if (!AuthSession.isSignedIn()) {
                 event.forwardTo(LoginView.class);
                 return;
             }

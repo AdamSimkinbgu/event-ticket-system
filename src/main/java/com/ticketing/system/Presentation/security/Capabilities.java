@@ -1,5 +1,6 @@
 package com.ticketing.system.Presentation.security;
 
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.MockCompanies;
 import com.ticketing.system.Presentation.session.MockPermissions;
 import com.ticketing.system.Presentation.session.MockSession;
@@ -14,7 +15,7 @@ import java.util.Set;
  *
  * <p>Callers use {@link #has(Capability)} from anywhere — drawer
  * builders, view bodies, button visibility checks. The resolution
- * itself reads the existing session-scoped state ({@link MockAuth},
+ * itself reads the existing session-scoped state ({@link AuthSession},
  * {@link MockCompanies}, {@link MockSession},
  * {@link MockPermissions}) so this layer doesn't introduce new data;
  * it only synthesises a derived view of it.
@@ -108,12 +109,12 @@ public final class Capabilities {
         Set<Capability> caps = EnumSet.copyOf(GUEST_BASE);
 
         // Admin caps stack independently — an admin can also be a member.
-        if (MockAuth.isAdmin()) {
+        if (AuthSession.isAdmin()) {
             caps.addAll(ADMIN_BUNDLE);
         }
 
         // Guest stops here (and so does an admin-without-signed-in edge case).
-        if (!MockAuth.isSignedIn()) return caps;
+        if (!AuthSession.isSignedIn()) return caps;
 
         // Signed-in member baseline.
         caps.addAll(MEMBER_BASE);
