@@ -1,10 +1,13 @@
 package com.ticketing.system.Presentation.views.auth;
 
+import com.ticketing.system.Core.Application.dto.LoginDTO;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.LkAuthCard;
 import com.ticketing.system.Presentation.components.kit.LkCheckRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.presenters.auth.LoginPresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.session.GuestSession;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.vaadin.flow.component.Key;
@@ -25,18 +28,19 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 @AnonymousAllowed
 public class LoginView extends LkAuthCard {
 
-    public LoginView() {
+    private final LoginPresenter presenter;
+
+    public LoginView(LoginPresenter presenter) {
         super("Welcome back",
               "Sign in to buy tickets, manage events, and track your orders.");
+        this.presenter = presenter;
 
         TextField username = new TextField("Username");
-        username.setValue("adam");
         username.setRequired(true);
         username.setAutofocus(true);
         username.setWidthFull();
 
         PasswordField password = new PasswordField("Password");
-        password.setValue("password123");
         password.setRequired(true);
         password.setWidthFull();
 
@@ -86,16 +90,32 @@ public class LoginView extends LkAuthCard {
             Toasts.failure("Please enter both username and password.");
             return;
         }
-        // Single sign-in surface for both pools — the username decides the route.
-        // The pools are still disjoint (AuthSession.ADMIN_USERNAMES is the source
-        // of truth) and RegisterView still refuses admin names.
-        if (AuthSession.isAdminUsername(username.getValue())) {
-            AuthSession.signInAsAdmin(username.getValue());
-            Toasts.success("Signed in as admin · " + username.getValue());
+
+        LoginPresenter.Outcome outcome = presenter.attemptLogin(
+            username.getValue(),
+            password.getValue(),
+            GuestSession.sessionId()
+        );
+
+        switch (outcome) {
+            case LoginPresenter.Outcome.Success ok -> onSuccess(ok.loginDTO());
+            case LoginPresenter.Outcome.InvalidCredentials ignored ->
+                Toasts.failure("Invalid username or password.");
+            case LoginPresenter.Outcome.GuestSessionMissing miss ->
+                Toasts.failure("Session expired — please refresh the page. (" + miss.reason() + ")");
+            case LoginPresenter.Outcome.Failure fail ->
+                Toasts.failure("Sign-in failed: " + fail.reason());
+        }
+    }
+
+    private void onSuccess(LoginDTO dto) {
+        AuthSession.storeAuth(dto.authToken());
+        String name = dto.authToken().username();
+        if (AuthSession.isAdmin()) {
+            Toasts.success("Signed in as admin · " + name);
             UI.getCurrent().navigate(AdminDashboardView.class);
         } else {
-            AuthSession.signIn(username.getValue());
-            Toasts.success("Signed in as " + username.getValue());
+            Toasts.success("Signed in as " + name);
             UI.getCurrent().navigate(BrowseEventsView.class);
         }
     }
