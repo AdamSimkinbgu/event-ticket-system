@@ -3,7 +3,11 @@
     Logger configuration for the Event Ticket System.
     SLR.8.1 (telemetry) + SLR.8.2 (real-time error logging) anchor here.
     Lecture 2 rule: NEVER log secrets, tokens, passwords, or PII.
-    Application code uses SLF4J: private static final Logger log = LoggerFactory.getLogger(...);
+
+    Application services use Lombok @Slf4j for SLF4J injection.
+    Cross-cutting entry/exit tracing is handled by LoggingAspect (DEBUG level on the
+    "com.ticketing.system.Infrastructure.logging" logger).
+    Domain code may also use @Slf4j for WARN/ERROR; everything funnels to the same file.
 -->
 <configuration>
 
@@ -35,6 +39,10 @@
             <appender-ref ref="FILE"/>
         </root>
         <logger name="com.ticketing.system" level="INFO"/>
+        <!-- Domain warnings/errors always reach the file -->
+        <logger name="com.ticketing.system.Core.Domain" level="WARN"/>
+        <!-- AOP entry/exit tracing off in prod by default -->
+        <logger name="com.ticketing.system.Infrastructure.logging" level="INFO"/>
     </springProfile>
 
     <!-- Test profile: DEBUG for our code, console only. -->
@@ -43,6 +51,8 @@
             <appender-ref ref="CONSOLE"/>
         </root>
         <logger name="com.ticketing.system" level="DEBUG"/>
+        <logger name="com.ticketing.system.Core.Domain" level="DEBUG"/>
+        <logger name="com.ticketing.system.Infrastructure.logging" level="DEBUG"/>
     </springProfile>
 
     <!-- Acceptance profile: INFO, console + file. -->
@@ -52,6 +62,8 @@
             <appender-ref ref="FILE"/>
         </root>
         <logger name="com.ticketing.system" level="DEBUG"/>
+        <logger name="com.ticketing.system.Core.Domain" level="DEBUG"/>
+        <logger name="com.ticketing.system.Infrastructure.logging" level="DEBUG"/>
     </springProfile>
 
 </configuration>

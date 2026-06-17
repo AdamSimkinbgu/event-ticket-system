@@ -2,13 +2,12 @@ package com.ticketing.system.Infrastructure.scheduling;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +16,8 @@ import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
+import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.Session;
 
@@ -45,9 +46,8 @@ import com.ticketing.system.Core.Domain.users.Session;
  * {@code @Scheduled} cadence).
  */
 @Component
+@Slf4j
 public class SessionAndOrderSweeper {
-
-    private static final Logger log = LoggerFactory.getLogger(SessionAndOrderSweeper.class);
 
     private final ISessionRepository sessionRepository;
     private final IActiveOrderRepository activeOrderRepository;
@@ -64,7 +64,7 @@ public class SessionAndOrderSweeper {
         this.eventRepository = eventRepository;
         this.clock = clock;
     }
-
+    
     @Scheduled(fixedDelayString = "${sweeper.fixed-delay-ms:60000}")
     public void sweep() {
         Instant now = clock.instant();
@@ -94,7 +94,6 @@ public class SessionAndOrderSweeper {
         List<ActiveOrder> expired = activeOrderRepository.findExpired();
         for (ActiveOrder order : expired) {
             releaseTicketsToInventory(order);
-            activeOrderRepository.delete(order);
         }
         return expired.size();
     }
@@ -106,34 +105,117 @@ public class SessionAndOrderSweeper {
      * own line-item expiry sweep.
      */
     private void cleanUpAttachedCart(Session session) {
-        if (session.isMember()) return;
+        if (session.isMember())
+            return;
         Optional<ActiveOrder> cartOpt = activeOrderRepository.getBySessionId(session.getSessionId());
         if (cartOpt.isPresent()) {
             releaseTicketsToInventory(cartOpt.get());
-            activeOrderRepository.delete(cartOpt.get());
         }
     }
 
+    
+    
     /**
-     * Groups the cart's line items by (eventId, zoneId) and releases the
-     * aggregated quantity per zone via {@link Event#releaseTickets(int, int)},
-     * matching what {@code CheckoutService.returnTicketsToStock} does on
-     * failed checkout.
+     * Acquires locks in the same order as checkout/reservation
+     * (active-order lock first, then events sorted by id), releases
+     * inventory, deletes the order, and unlocks in reverse.
+     *
+     * <p>Lock order: {@code activeOrder → events[sorted]} prevents
+     * deadlocks with {@code ReservationService} and {@code CheckoutService}
+     * which follow the identical acquire sequence.
+     * Policy: 
+     * If an ActiveOrder is CHECKOUT_IN_PROGRESS, the sweeper must not release/delete it.
+     * Checkout failure already resets the order back to PRE_CHECKOUT.
+     * Then the sweeper can clean it later if it is still expired.
      */
     private void releaseTicketsToInventory(ActiveOrder order) {
-        Map<Integer, Map<Integer, Integer>> countByEventThenZone = new HashMap<>();
-        for (CartLineItem item : order.getItems()) {
-            countByEventThenZone
-                    .computeIfAbsent(item.geteventId(), k -> new HashMap<>())
-                    .merge(item.getzoneId(), 1, Integer::sum);
-        }
-        for (Map.Entry<Integer, Map<Integer, Integer>> eventEntry : countByEventThenZone.entrySet()) {
-            Event event = eventRepository.findById(eventEntry.getKey());
-            if (event == null) continue;
-            for (Map.Entry<Integer, Integer> zoneEntry : eventEntry.getValue().entrySet()) {
-                event.releaseTickets(zoneEntry.getKey(), zoneEntry.getValue());
+        // Derive the same lock key that ReservationService / CheckoutService use.
+        String orderLockKey = order.isMember()
+                ? "user:" + order.getUserId()
+                : "sess:" + order.getSessionId();
+
+        // Sort event IDs to guarantee a consistent lock order and avoid deadlocks.
+        List<Integer> sortedEventIds = order.getItems().stream()
+                .map(CartLineItem::geteventId)
+                .distinct()
+                .sorted()
+                .toList();
+
+        activeOrderRepository.lockForUpdate(orderLockKey);
+        try {
+            // If the order is in the middle of checkout, we should skip it and let the checkout flow handle it 
+            // (either complete successfully or fail and revert to PRE_CHECKOUT). Releasing inventory underneath an 
+            // active checkout risks causing a failed checkout for the user, which is disruptive. It's safer to let 
+            // the checkout flow handle expiration after it finishes its current work, since it will check for expiration 
+            // at that point and can clean up accordingly.
+            
+            // Note that this means expired orders that are CHECKOUT_IN_PROGRESS may not be cleaned up until their next expiration time 
+            // (10 min after the last item was added), but this is an acceptable tradeoff to avoid disrupting active checkouts.
+            if (order.isCheckoutInProgress()) {
+                log.info("Skipping expired active order {} because checkout is in progress", orderLockKey);
+                return;
             }
-            eventRepository.save(event);
+
+            // Acquire locks for all events in the order in a consistent order to prevent deadlocks with concurrent checkouts/reservations.
+            for (Integer eventId : sortedEventIds) {
+                eventRepository.lockForUpdate(eventId);
+            }
+            
+            try {
+                // Group line items by event and zone to aggregate the release calls
+                Map<Integer, Map<Integer, List<CartLineItem>>> grouped =
+                        order.getItems().stream()
+                                .collect(Collectors.groupingBy(
+                                        CartLineItem::geteventId,
+                                        Collectors.groupingBy(CartLineItem::getzoneId)
+                                ));
+                // For each (event, zone) group, release the appropriate quantity back to inventory
+                for (Map.Entry<Integer, Map<Integer, List<CartLineItem>>> eventEntry : grouped.entrySet()) {
+                    Event event = null;
+                    try {
+                        event = eventRepository.findById(eventEntry.getKey());
+                    } catch (EventNotFoundException e) {
+                        // If the event is not found, log a warning and skip releasing tickets for this event
+                        log.warn("Event with ID {} not found while releasing tickets for order of user id {}. Skipping.", eventEntry.getKey(), order.getUserId());
+                        continue;
+                    }
+                    if (event == null) {
+                        log.warn("Event with ID {} not found while releasing tickets for order of user id {}. Skipping.", eventEntry.getKey(), order.getUserId());
+                        continue;
+                    }
+                    // For each zone in the event, determine how many tickets to release
+                    for (Map.Entry<Integer, List<CartLineItem>> zoneEntry : eventEntry.getValue().entrySet()) {
+                        int zoneId = zoneEntry.getKey();
+                        List<CartLineItem> items = zoneEntry.getValue();
+                        // Release seated seats (by seat label) and standing inventory (by quantity) independently.
+                        List<String> seatNumbers = items.stream()
+                                .map(CartLineItem::getSeatNumber)
+                                .filter(s -> s != null)
+                                .toList();
+
+                        String orderKey = order.getOrderKey();
+                        int standingCount = (int) items.stream().filter(i -> i.getSeatNumber() == null).count();
+                        if (standingCount > 0) {
+                            event.releaseInventory(zoneId, InventorySelection.standing(standingCount, orderKey));
+                        }
+                        if (!seatNumbers.isEmpty()) {
+                            event.releaseInventory(zoneId, InventorySelection.seated(seatNumbers, orderKey));
+                        }
+                    }
+
+                    eventRepository.save(event);
+                }
+                // Delete the order inside the lock so no other thread can observe
+                // it after the inventory has already been released.
+                activeOrderRepository.delete(order);
+            } finally {
+                // Unlock events in reverse order of acquisition.
+                for (int i = sortedEventIds.size() - 1; i >= 0; i--) {
+                    eventRepository.unlock(sortedEventIds.get(i));
+                }
+            }
+        } finally {
+            activeOrderRepository.unlock(orderLockKey);
         }
     }
 }

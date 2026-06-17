@@ -1,6 +1,5 @@
 package com.ticketing.system.Infrastructure.persistence;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -25,90 +24,149 @@ import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 @Repository
 public class MemoryOrderReceiptRepository implements IOrderReceiptRepository {
 
-    private final Map<String, OrderReceipt> receiptsById = new ConcurrentHashMap<>();
+    private final Map<Integer, OrderReceipt> receiptsById = new ConcurrentHashMap<>();
     private final AtomicInteger idSequence = new AtomicInteger(1);
+    private final RepositoryLocks<Integer> locks = new RepositoryLocks<>();
+    
+
+    @Override
+    public void lockForUpdate(Integer id) {
+        locks.lock(id);
+    }
+
+    @Override
+    public void unlock(Integer id) {
+        locks.unlock(id);
+    }
 
     @Override
     public int nextId() {
         return idSequence.getAndIncrement();
     }
 
+
+
     @Override
     public void save(OrderReceipt orderReceipt) {
-        receiptsById.put(String.valueOf(orderReceipt.getId()), orderReceipt);
-        // In a real implementation, we might return false if the save failed for some reason (e.g. DB error);
+        if (orderReceipt == null) {
+            throw new IllegalArgumentException("orderReceipt must not be null");
+        }
+
+        if (orderReceipt.getId() <= 0) {
+            throw new IllegalArgumentException("orderReceipt id must be positive");
+        }
+
+        orderReceipt.checkInvariants();
+        receiptsById.put(orderReceipt.getId(), orderReceipt);
     }
+
+    
     
     @Override
     public Optional<OrderReceipt> findByOrderReceiptId(int orderReceiptId) {
-        return Optional.ofNullable(receiptsById.get(String.valueOf(orderReceiptId)));
+        return Optional.ofNullable(receiptsById.get(orderReceiptId));
     }
 
     // UC-16 — member's own purchase history.
     @Override
     public List<OrderReceipt> findByHolderUserId(int holderUserId) {
         return receiptsById.values().stream()
-                .filter(receipt -> receipt.getHolderUserId() == holderUserId)
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    public List<OrderReceipt> findByEventIds(List<Integer> eventIds) {
-        // Implementation to find receipts by event IDs in memory
-        return receiptsById.values().stream()
-                .filter(receipt -> eventIds.contains(receipt.geteventId()))
-                .collect(Collectors.toList());
-    }
-
-
-    // UC-22 — company-scoped sales (filtered down to the company's events).
-    @Override
-    public List<OrderReceipt> findByCompanyId(int companyId) {
-        // Implementation to find receipts by company ID in memory
-        return receiptsById.values().stream()
-                .filter(receipt -> receipt.geteventId() == companyId) // Assuming eventId corresponds to companyId for simplicity; adjust as needed
+                .filter(OrderReceipt::isMemberReceipt) // Only consider member receipts since only they have holderUserId
+                .filter(receipt -> receipt.getHolderUserId().equals(holderUserId))
                 .collect(Collectors.toList());
     }
     
+
+
+    @Override
+    public List<OrderReceipt> findByEventId(int eventId) {
+        return receiptsById.values().stream()
+                .filter(receipt -> receipt.containsEventId(eventId))
+                .collect(Collectors.toList());
+    }
+
+
+
+    @Override
+    public List<OrderReceipt> findByEventIds(List<Integer> eventIds) {
+        if (eventIds == null || eventIds.isEmpty()) {
+            return List.of();
+        }
+
+        return receiptsById.values().stream()
+                .filter(receipt -> receipt.getReceiptLines().stream()
+                .anyMatch(line -> eventIds.contains(line.getEventId())))
+                .collect(Collectors.toList());
+    }
+
+    
+
+    public Map<Integer, OrderReceipt> getReceiptsById() {
+        return receiptsById;
+    }
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+    
+
 
 
     // UC-31 — global view with filters
     // A System Admin can query the full cross-company purchase history, with filters by buyer, production company, event, or date range.
     @Override
     public List<OrderReceipt> findGlobal(GlobalHistoryFiltersDTO filters) {
-        // Implementation to find receipts globally with filters in memory
+        if (filters == null) {
+            // If no filters are provided, return all receipts.
+            return List.copyOf(receiptsById.values());
+        }
+
         return receiptsById.values().stream()
                 .filter(receipt -> {
                     boolean matches = true;
+                    
+                    // Filter by buyerUserId if provided
                     if (filters.buyerUserId() != null) {
-                        matches &= receipt.getHolderUserId() == filters.buyerUserId();
+                        matches &= receipt.isMemberReceipt()
+                                && receipt.getHolderUserId().equals(filters.buyerUserId());
                     }
-                    if (filters.companyId() != null) {
-                        matches &= receipt.geteventId() == filters.companyId(); // Assuming eventId corresponds to companyId for simplicity; adjust as needed
-                    }
+
+                    // Filter by eventIds if provided
                     if (filters.eventIds() != null) {
-                        matches &= filters.eventIds().contains(receipt.geteventId());
+                        matches &= receipt.getReceiptLines().stream()
+                                .anyMatch(line -> filters.eventIds().contains(line.getEventId()));
                     }
+                    
+                    // Filter by date range if provided
                     if (filters.fromDate() != null) {
-                        matches &= !receipt.getPurchaseTime().isBefore(filters.fromDate().atStartOfDay());
+                        matches &= !receipt.getPurchaseTime()
+                                .isBefore(filters.fromDate().atStartOfDay());
                     }
+
+                    // Filter by date range if provided
                     if (filters.toDate() != null) {
-                        matches &= !receipt.getPurchaseTime().isAfter(filters.toDate().atTime(23, 59, 59));
+                        matches &= !receipt.getPurchaseTime()
+                                .isAfter(filters.toDate().atTime(23, 59, 59));
                     }
+
                     return matches;
                 })
                 .collect(Collectors.toList());
     }
-    @Override
-    public List<OrderReceipt> findByEventId(int eventId) {
-        return receiptsById.values().stream()
-                .filter(receipt -> receipt.getReceiptLines().stream()
-                        .anyMatch(line -> line.getEventId() == eventId))
-                .collect(Collectors.toList());
-    }
 
-    public Map<String, OrderReceipt> getReceiptsById() {
-        return receiptsById;
-    }
+
+    
+
 
 }

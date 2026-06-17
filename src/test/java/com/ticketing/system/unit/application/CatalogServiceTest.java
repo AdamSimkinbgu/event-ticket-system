@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapDTO;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.CatalogService;
@@ -26,13 +28,26 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.NullVenueMapException;
 import com.ticketing.system.Core.Domain.exceptions.SessionExpiredException;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.util.List;
+
+import com.ticketing.system.Core.Application.dto.InventoryZoneDTO;
+import com.ticketing.system.Core.Application.dto.SeatDTO;
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
+import com.ticketing.system.Core.Domain.events.Seat;
+import com.ticketing.system.Core.Domain.events.SeatedZone;
+import com.ticketing.system.Core.Domain.events.SeatStatus;
 
 class CatalogServiceTest {
 
@@ -83,10 +98,10 @@ class CatalogServiceTest {
     // UC-7: searchGlobal propagates SessionExpiredException from the session manager
     @Test
     void givenExpiredToken_whenSearchGlobal_thenThrowsSessionExpiredException() {
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenThrow(new SessionExpiredException());
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenThrow(new InvalidTokenException());
         CatalogSearchFiltersDTO filters = emptyFilters();
 
-        assertThrows(SessionExpiredException.class,
+        assertThrows(InvalidTokenException.class,
                 () -> catalogService.searchGlobal(VALID_TOKEN, filters));
     }
 
@@ -99,8 +114,8 @@ class CatalogServiceTest {
         ProductionCompany company1 = createMockCompany("Company A", 4.5);
         ProductionCompany company2 = createMockCompany("Company B", 3.0);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockEventRepository.search(filters)).thenReturn(List.of(event1, event2));
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of(event1, event2));
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(company1);
         when(mockCompanyRepository.getCompanyById(20)).thenReturn(company2);
 
@@ -119,8 +134,8 @@ class CatalogServiceTest {
         ProductionCompany highRated = createMockCompany("Company A", 4.5);
         ProductionCompany lowRated  = createMockCompany("Company B", 2.0);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockEventRepository.search(filters)).thenReturn(List.of(event1, event2));
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of(event1, event2));
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(highRated);
         when(mockCompanyRepository.getCompanyById(20)).thenReturn(lowRated);
 
@@ -140,8 +155,8 @@ class CatalogServiceTest {
         ProductionCompany highRated = createMockCompany("Company A", 4.5);
         ProductionCompany lowRated  = createMockCompany("Company B", 2.0);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockEventRepository.search(filters)).thenReturn(List.of(event1, event2));
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of(event1, event2));
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(highRated);
         when(mockCompanyRepository.getCompanyById(20)).thenReturn(lowRated);
 
@@ -155,8 +170,8 @@ class CatalogServiceTest {
     @Test
     void givenValidTokenAndEmptyRepository_whenSearchGlobal_thenReturnsEmptyList() {
         CatalogSearchFiltersDTO filters = emptyFilters();
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockEventRepository.search(filters)).thenReturn(List.of());
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of());
 
         List<EventSummaryDTO> results = catalogService.searchGlobal(VALID_TOKEN, filters);
 
@@ -171,7 +186,7 @@ class CatalogServiceTest {
     // UC-7: searchByCompany throws InvalidTokenException for an invalid token
     @Test
     void givenInvalidToken_whenSearchByCompany_thenThrowsInvalidTokenException() {
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(false);
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(false);
         CatalogSearchFiltersDTO filters = emptyFilters();
 
         assertThrows(InvalidTokenException.class,
@@ -181,10 +196,10 @@ class CatalogServiceTest {
     // UC-7: searchByCompany propagates SessionExpiredException from the session manager
     @Test
     void givenExpiredToken_whenSearchByCompany_thenThrowsSessionExpiredException() {
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenThrow(new SessionExpiredException());
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenThrow(new InvalidTokenException());
         CatalogSearchFiltersDTO filters = emptyFilters();
 
-        assertThrows(SessionExpiredException.class,
+        assertThrows(InvalidTokenException.class,
                 () -> catalogService.searchByCompany(VALID_TOKEN, 10, filters));
     }
 
@@ -196,8 +211,8 @@ class CatalogServiceTest {
         Event event2 = createMockEvent(2, 20);
         ProductionCompany company = createMockCompany("Company A", 4.5);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockEventRepository.search(filters)).thenReturn(List.of(event1, event2));
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of(event1, event2));
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
 
         List<EventSummaryDTO> results = catalogService.searchByCompany(VALID_TOKEN, 10, filters);
@@ -215,8 +230,8 @@ class CatalogServiceTest {
         Event event1 = createMockEvent(1, 10);
         ProductionCompany lowRated = createMockCompany("Company A", 1.5);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockEventRepository.search(filters)).thenReturn(List.of(event1));
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.searchONSALE(any())).thenReturn(List.of(event1));
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(lowRated);
 
         List<EventSummaryDTO> results = catalogService.searchByCompany(VALID_TOKEN, 10, filters);
@@ -229,9 +244,11 @@ class CatalogServiceTest {
     void givenValidTokenAndNoMatchingCompanyEvents_whenSearchByCompany_thenReturnsEmptyList() {
         CatalogSearchFiltersDTO filters = emptyFilters();
         Event event1 = createMockEvent(1, 20); // belongs to a different company
+        ProductionCompany company10 = createMockCompany("Company A", 4.5);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockEventRepository.search(filters)).thenReturn(List.of(event1));
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company10);
+        when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of(event1));
 
         List<EventSummaryDTO> results = catalogService.searchByCompany(VALID_TOKEN, 10, filters);
 
@@ -243,7 +260,7 @@ class CatalogServiceTest {
     // UC-8: getEventVenueMap returns correct venue map for event
     @Test
     void givenValidTokenAndEventWithVenueMap_whenGetEventVenueMap_thenReturnsCorrectVenueMapDTO() {
-        InventoryZone zone = new InventoryZone(10, "Floor", 200, 50);
+        InventoryZone zone = new StandingZone(10, "Floor", 200, 50);
         VenueMap venueMap = new VenueMap(5, LOCATION, List.of(zone));
         Event mockEvent = mock(Event.class);
         when(mockEvent.getVenueMap()).thenReturn(venueMap);
@@ -259,7 +276,7 @@ class CatalogServiceTest {
         VenueMapDTO result = catalogService.getEventVenueMap(VALID_TOKEN, EVENT_ID);
 
         assertNotNull(result);
-        assertEquals(5, result.eventId());
+        assertEquals(5, result.venueMapId());
         assertEquals(1, result.inventoryZones().size());
         assertEquals(10, result.inventoryZones().get(0).getId());
         assertEquals("Floor", result.inventoryZones().get(0).getName());
@@ -311,9 +328,9 @@ class CatalogServiceTest {
     // UC-8: mapper preserves all zones and their insertion order for a multi-zone venue map
     @Test
     void givenMultiZoneVenueMap_whenGetEventVenueMap_thenAllZonesReturnedInOrder() {
-        InventoryZone zone1 = new InventoryZone(1, "Floor",   100, 50);
-        InventoryZone zone2 = new InventoryZone(2, "Balcony",  80, 30);
-        InventoryZone zone3 = new InventoryZone(3, "VIP",      20, 150);
+        InventoryZone zone1 = new StandingZone(1, "Floor",   100, 50);
+        InventoryZone zone2 = new StandingZone(2, "Balcony",  80, 30);
+        InventoryZone zone3 = new StandingZone(3, "VIP",      20, 150);
         VenueMap venueMap = new VenueMap(5, LOCATION, List.of(zone1, zone2, zone3));
 
         Event mockEvent = mock(Event.class);
@@ -377,6 +394,117 @@ class CatalogServiceTest {
 
 
 
+
+
+
+
+
+    @Test
+    void givenSeatedZone_whenGetVenueMap_thenPerSeatStatusesReturned() {
+        SeatedZone seatedZone = new SeatedZone(
+                5,
+                "Orchestra",
+                120.0,
+                List.of(
+                        new Seat("A1", 0, 0),
+                        new Seat("A2", 1, 0),
+                        new Seat("A3", 2, 0)
+                )
+        );
+
+        seatedZone.reserve(InventorySelection.seated(List.of("A1"), "test-order"));
+        seatedZone.reserve(InventorySelection.seated(List.of("A2"), "test-order"));
+        seatedZone.confirmSale(InventorySelection.seated(List.of("A2"), "test-order"));
+
+        VenueMap venueMap = new VenueMap(
+                1,
+                LOCATION,
+                List.of(seatedZone)
+        );
+
+        Event event = createMockEvent(EVENT_ID, 10);
+        ProductionCompany company = createMockCompany("Company A", 4.5);
+
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(event.getVenueMap()).thenReturn(venueMap);
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
+        when(company.getStatus()).thenReturn(CompanyStatus.ACTIVE);
+
+        VenueMapDTO result = catalogService.getEventVenueMap(VALID_TOKEN, EVENT_ID);
+
+        assertEquals(1, result.inventoryZones().size());
+
+        InventoryZoneDTO zoneDTO = result.inventoryZones().get(0);
+
+        assertEquals(5, zoneDTO.getId());
+        assertEquals("Orchestra", zoneDTO.getName());
+        assertEquals("SEATED", zoneDTO.getZoneType());
+        assertEquals(3, zoneDTO.getCapacity());
+        assertEquals(1, zoneDTO.getAvailableAmount());
+        assertEquals(1, zoneDTO.getReservedAmount());
+        assertEquals(1, zoneDTO.getSoldAmount());
+
+        assertEquals(3, zoneDTO.getSeats().size());
+
+        SeatDTO a1 = zoneDTO.getSeats().stream()
+                .filter(seat -> seat.label().equals("A1"))
+                .findFirst()
+                .orElseThrow();
+
+        SeatDTO a2 = zoneDTO.getSeats().stream()
+                .filter(seat -> seat.label().equals("A2"))
+                .findFirst()
+                .orElseThrow();
+
+        SeatDTO a3 = zoneDTO.getSeats().stream()
+                .filter(seat -> seat.label().equals("A3"))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals("RESERVED", a1.status());
+        assertEquals("SOLD", a2.status());
+        assertEquals("AVAILABLE", a3.status());
+    }
+
+    @Test
+    void givenStandingZone_whenGetVenueMap_thenZoneCountAvailabilityReturned() {
+        StandingZone standingZone = new StandingZone(5, "General Admission", 10, 50.0);
+        standingZone.reserve(InventorySelection.standing(3));
+
+        VenueMap venueMap = new VenueMap(
+                1,
+                LOCATION,
+                List.of(standingZone)
+        );
+
+        Event event = createMockEvent(EVENT_ID, 10);
+        ProductionCompany company = createMockCompany("Company A", 4.5);
+
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(event.getVenueMap()).thenReturn(venueMap);
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
+        when(company.getStatus()).thenReturn(CompanyStatus.ACTIVE);
+
+        VenueMapDTO result = catalogService.getEventVenueMap(VALID_TOKEN, EVENT_ID);
+
+        InventoryZoneDTO zoneDTO = result.inventoryZones().get(0);
+
+        assertEquals("STANDING", zoneDTO.getZoneType());
+        assertEquals(10, zoneDTO.getCapacity());
+        assertEquals(7, zoneDTO.getAvailableAmount());
+        assertEquals(3, zoneDTO.getReservedAmount());
+        assertEquals(0, zoneDTO.getSoldAmount());
+        assertTrue(zoneDTO.getSeats().isEmpty());
+    }
+
+
+
+
+
+
+
     
     // -------------------------------------------------------------------------
     // Helpers
@@ -395,7 +523,7 @@ class CatalogServiceTest {
         when(mockEvent.getRating()).thenReturn(4.0);
         when(mockEvent.getCategory()).thenReturn(EventCategory.MUSIC);
         when(mockEvent.getCompanyId()).thenReturn(companyId);
-        InventoryZone zone = new InventoryZone(1, "Floor", 100, 50);
+        InventoryZone zone = new StandingZone(1, "Floor", 100, 50);
         VenueMap venueMap = new VenueMap(id, LOCATION, List.of(zone));
         when(mockEvent.getVenueMap()).thenReturn(venueMap);
         when(mockEvent.getShowDates()).thenReturn(List.of());
@@ -406,6 +534,7 @@ class CatalogServiceTest {
         ProductionCompany mockCompany = mock(ProductionCompany.class);
         when(mockCompany.getName()).thenReturn(name);
         when(mockCompany.getRating()).thenReturn(rating);
+        when(mockCompany.getStatus()).thenReturn(CompanyStatus.ACTIVE);
         return mockCompany;
     }
 }

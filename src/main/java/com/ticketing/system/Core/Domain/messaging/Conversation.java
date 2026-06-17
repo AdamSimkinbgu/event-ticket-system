@@ -3,6 +3,8 @@ package com.ticketing.system.Core.Domain.messaging;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
 // Aggregate root for the centralized messaging subsystem.
 // Replaces the per-User MessageInbox, per-Company Inbox, and the standalone Complaint aggregate.
 //
@@ -10,7 +12,7 @@ import java.util.List;
 // (MEMBER/COMPANY/ADMIN) or a broadcast descriptor (ADMIN_GROUP / BROADCAST_MEMBERS / SYSTEM).
 //
 // Cross-aggregate references by ID per course rules — never holds direct refs to User / ProductionCompany / Admin.
-public class Conversation {
+public class Conversation implements InvariantChecked {
 
     private final String conversationId;
     private final ConversationType type;
@@ -95,5 +97,36 @@ public class Conversation {
 
     public int unreadCountFor(int readerId) {
         throw new UnsupportedOperationException("messaging: not implemented");
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (conversationId == null || conversationId.isBlank()) {
+            throw new IllegalStateException("Conversation invariant violated: conversationId must be non-blank");
+        }
+        if (type == null) {
+            throw new IllegalStateException("Conversation invariant violated: type must not be null");
+        }
+        if (status == null) {
+            throw new IllegalStateException("Conversation invariant violated: status must not be null");
+        }
+        if (initiatorType == null) {
+            throw new IllegalStateException("Conversation invariant violated: initiatorType must not be null");
+        }
+        if (counterpartyType == null) {
+            throw new IllegalStateException("Conversation invariant violated: counterpartyType must not be null");
+        }
+        if (createdAt == null) {
+            throw new IllegalStateException("Conversation invariant violated: createdAt must not be null");
+        }
+        if (lastMessageAt == null) {
+            throw new IllegalStateException("Conversation invariant violated: lastMessageAt must not be null");
+        }
+        if (lastMessageAt.isBefore(createdAt)) {
+            throw new IllegalStateException("Conversation invariant violated: lastMessageAt must be >= createdAt");
+        }
+        if (messages == null) {
+            throw new IllegalStateException("Conversation invariant violated: messages list must not be null");
+        }
     }
 }

@@ -3,8 +3,12 @@ package com.ticketing.system.unit.domain;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.system.support.BaseDomainTest;
+
 // Unit tests for the Notification aggregate (UC-35/36/37).
-class NotificationTest {
+// Extends BaseDomainTest so future (currently @Disabled) tests get automatic
+// invariant verification via track(aggregate).
+class NotificationTest extends BaseDomainTest {
 
     @Test
     @Disabled("V1: markDelivered transitions PENDING -> DELIVERED (UC-37)")

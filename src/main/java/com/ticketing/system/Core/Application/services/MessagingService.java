@@ -10,6 +10,8 @@ import com.ticketing.system.Core.Application.dto.StartConversationRequestDTO;
 import com.ticketing.system.Core.Application.dto.SubmitComplaintRequestDTO;
 import com.ticketing.system.Core.Domain.messaging.IConversationRepository;
 
+import lombok.extern.slf4j.Slf4j;
+
 // Centralized messaging subsystem service.
 // Replaces per-User MessageInbox, per-Company Inbox, and the standalone Complaint flow.
 // Covers requirements II.3.3 (complaint), II.3.10 (contact company), II.4.4 (company support
@@ -17,6 +19,7 @@ import com.ticketing.system.Core.Domain.messaging.IConversationRepository;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class MessagingService {
 
     private final IConversationRepository conversationRepository;

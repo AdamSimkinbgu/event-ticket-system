@@ -1,29 +1,100 @@
 package com.ticketing.system.Core.Domain.users;
 
+import java.time.LocalDateTime;
+import java.util.EnumSet;
+import java.util.Set;
+
+import com.ticketing.system.Core.Domain.exceptions.InvalidPermissionException;
+
 import java.util.List;
 
 public class CompanyAppointment {
-    private int companyId;
-    private int targetId;
-    private int inviterId;
-    private List<Permission> permissions;
+    private final int appointmentId; // Unique identifier for the appointment (could be UUID or int)
+    private final int companyId; // ID of the company this appointment belongs to
+    private final int targetId; // ID of the user being appointed
+    private final int inviterId; // ID of the user who created the appointment
+    private final CompanyRole role; // Role assigned to the target user
+    private AppointmentStatus status; // Current status of the appointment
+    private EnumSet<Permission> permissions; // Permissions granted to the target user
+    private final LocalDateTime createdAt; // Timestamp of when the appointment was created
 
-    public CompanyAppointment(int companyId, int targetId, int inviterId, List<Permission> permissions) {
+    public CompanyAppointment(
+            int appointmentId,
+            int companyId,
+            int targetId,
+            int inviterId,
+            CompanyRole role,
+            AppointmentStatus status,
+            List<Permission> permissions) {
+        if (role == CompanyRole.Manager && (permissions == null || permissions.isEmpty())) {
+            throw new IllegalArgumentException("Manager role must have at least one permission.");
+        }
+        if (role == CompanyRole.Owner && permissions != null && !permissions.isEmpty()) {
+            throw new IllegalArgumentException("Owner role should not have explicit permissions.");
+        }
+
+        this.appointmentId = appointmentId;
         this.companyId = companyId;
         this.targetId = targetId;
         this.inviterId = inviterId;
-        this.permissions = permissions;
+        this.role = role;
+        this.status = status;
+        this.permissions = permissions != null
+                ? EnumSet.copyOf(permissions)
+                : EnumSet.noneOf(Permission.class);
+        this.createdAt = LocalDateTime.now();
     }
 
-    public int getCompanyId() {
-        return this.companyId;
+    // this constructor is specifically for the creation of the company founder
+    // appointment, which is always an active owner with no permissions (as owners
+    // have all permissions implicitly).
+    public static CompanyAppointment FoundingAppointment(
+            int appointmentId,
+            int companyId,
+            int targetId,
+            int inviterId) {
+        return new CompanyAppointment(
+                appointmentId,
+                companyId,
+                targetId,
+                inviterId,
+                CompanyRole.Owner,
+                AppointmentStatus.ACTIVE,  // active because the founder is active immediately, used when opening a company.
+                null);
     }
 
-    public int getTargetId() {
-      return this.targetId;
+    public static CompanyAppointment ManagerAppointment(
+            int appointmentId,
+            int companyId,
+            int targetId,
+            int inviterId,
+            List<Permission> permissions) {
+        return new CompanyAppointment(
+                appointmentId,
+                companyId,
+                targetId,
+                inviterId,
+                CompanyRole.Manager,
+                AppointmentStatus.PENDING,
+                permissions);
     }
 
-    public void setPermissions(List<Permission> newPermissions) {
+    public static CompanyAppointment OwnerAppointment(
+            int appointmentId,
+            int companyId,
+            int targetId,
+            int inviterId) {
+        return new CompanyAppointment(
+                appointmentId,
+                companyId,
+                targetId,
+                inviterId,
+                CompanyRole.Owner,
+                AppointmentStatus.PENDING,
+                null);
+    }
+
+    public void setPermissions(EnumSet<Permission> newPermissions) {
         this.permissions = newPermissions;
     }
 
@@ -33,45 +104,96 @@ public class CompanyAppointment {
 
     // UC-23 / UC-24 — PENDING -> ACTIVE on target acceptance.
     public void accept() {
-        throw new UnsupportedOperationException("UC-23/24: not implemented");
+        if (this.status != AppointmentStatus.PENDING) {
+            throw new IllegalStateException("Only pending appointments can be accepted.");
+        }
+        this.status = AppointmentStatus.ACTIVE;
     }
 
     // UC-23 / UC-24 — PENDING -> REJECTED on target rejection.
     public void reject() {
-        throw new UnsupportedOperationException("UC-23/24: not implemented");
+        if (this.status != AppointmentStatus.PENDING) {
+            throw new IllegalStateException("Only pending appointments can be rejected.");
+        }
+        this.status = AppointmentStatus.REJECTED;
     }
 
     // UC-24 — ACTIVE -> REVOKED. Owner appointments do NOT support revoke (II.4.9 Cancelled in v0).
-    public void revoke() {
-        throw new UnsupportedOperationException("UC-24: not implemented");
+    public void revoke(int revokerId) {
+        if (this.status != AppointmentStatus.ACTIVE) {
+            throw new IllegalStateException("Only active appointments can be revoked.");
+        }
+        if (this.role == CompanyRole.Owner) {
+            if (this.inviterId != revokerId && this.targetId != revokerId) {
+                // if the appointment is an owner appointment, either the original inviter or the target themselves can revoke it (per UC-24 owner revoke condition).
+                throw new IllegalArgumentException("Only the original inviter or target can revoke this appointment.");
+            }
+        } else {
+            if (this.inviterId != revokerId) {
+                throw new IllegalArgumentException("Only the original inviter can revoke this appointment.");
+            }
+        }
+        this.status = AppointmentStatus.REVOKED;
     }
 
-    // UC-24 — replace permission set with validation (existing setPermissions does raw set).
-    public void updatePermissions(List<Permission> newPermissions) {
-        throw new UnsupportedOperationException("UC-24: not implemented (with validation)");
+    // UC-24 — replace permission set with validation (existing setPermissions does
+    // raw set).
+    public void updatePermissions(EnumSet<Permission> newPermissions) {
+        if (this.role != CompanyRole.Manager) {
+            throw new InvalidPermissionException("Only manager appointments can have permissions.");
+        }
+        if (this.status != AppointmentStatus.ACTIVE) {
+            throw new IllegalStateException("Only active appointments can have permissions updated.");
+        }
+        if (newPermissions == null || newPermissions.isEmpty()) {
+            throw new IllegalArgumentException("Manager role must have at least one permission.");
+        }
+        this.permissions = EnumSet.copyOf(newPermissions);
     }
 
     public boolean hasPermission(Permission permission) {
-            return permissions.contains(permission);
+        if (this.status != AppointmentStatus.ACTIVE) {
+            return false; // Inactive appointments do not grant permissions
+        }
+        if (this.role == CompanyRole.Owner) {
+            return true; // Owners have all permissions
+        }
+        return this.permissions.contains(permission);
+    }
+    
+    
+    /// Getters for all fields (no setters except for permissions, as role/status
+    /// changes are handled by specific methods above to enforce lifecycle rules).
+
+    public int getCompanyId() {
+        return this.companyId;
+    }
+
+    public int getTargetId() {
+        return this.targetId;
     }
 
     public AppointmentStatus getStatus() {
-        throw new UnsupportedOperationException("not implemented (add status field)");
+        return this.status;
     }
 
     public CompanyRole getRole() {
-        throw new UnsupportedOperationException("not implemented (add role field)");
+        return this.role;
     }
 
     public int getInviterId() {
         return inviterId;
     }
 
-    public List<Permission> getPermissions() {
+    public EnumSet<Permission> getPermissions() {
         return permissions;
     }
 
-    public String getAppointmentId() {
-        throw new UnsupportedOperationException("not implemented (add appointmentId field)");
+    public int getAppointmentId() {
+        return this.appointmentId;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return this.createdAt;
     }
 }

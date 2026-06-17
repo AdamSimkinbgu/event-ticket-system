@@ -4,13 +4,15 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+import com.ticketing.system.Core.Domain.shared.IRepository;
+
 /**
  * Aggregate-root entry point for the {@link Session} aggregate.
  *
  * <p>Implemented in Infrastructure (V1: in-memory, V2: JPA-backed).
  * See docs/auth-rework-plan.md.
  */
-public interface ISessionRepository {
+public interface ISessionRepository extends IRepository<Session, String> {
 
     /** Persist a new or updated session. */
     void save(Session session);

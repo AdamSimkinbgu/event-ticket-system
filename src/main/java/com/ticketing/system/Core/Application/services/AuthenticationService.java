@@ -8,8 +8,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -36,8 +35,8 @@ import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Session;
 import com.ticketing.system.Core.Domain.users.User;
+import com.ticketing.system.Infrastructure.persistence.MemoryActiveOrderRepository;
 
-import java.util.Optional;
 
 /**
  * Application service for the auth slice — registration (UC-11), login
@@ -51,9 +50,8 @@ import java.util.Optional;
  * to a Member session in place).
  */
 @Service
+@Slf4j
 public class AuthenticationService {
-
-    private static final Logger log = LoggerFactory.getLogger(AuthenticationService.class);
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
@@ -177,7 +175,8 @@ public class AuthenticationService {
 
         // 4. Create user.
         String hashed = passwordHasher.hash(request.rawPassword());
-        User user = new User(userRepository.nextId(), request.username(), request.email(), hashed);
+        User user = new User(userRepository.nextId(), request.username(), request.email(), hashed, request.age());
+        // throws IllegalArgumentException("Age cannot be negative") if age < 0.
         userRepository.save(user);
 
         // 5. Session stays Guest — just touch the activity timestamp.
@@ -284,20 +283,36 @@ public class AuthenticationService {
      * by userId, so the stale Member cart is replaced automatically.
      */
     private void handleCartOnPromotion(Session session, User user) {
-        Optional<ActiveOrder> guestCart = activeOrderRepository.getBySessionId(session.getSessionId());
-        if (guestCart.isPresent() && guestCart.get().isGuest()) {
-            guestCart.get().attachToUser(user.getUserId());
-            activeOrderRepository.save(guestCart.get());
-            log.debug("cart promoted to member userId={} sid={}",
-                    user.getUserId(), session.getSessionId());
-            return;
-        }
-        ActiveOrder priorMemberCart = activeOrderRepository.getByUserId(user.getUserId());
-        if (priorMemberCart != null) {
-            priorMemberCart.attachToSession(session.getSessionId());
-            activeOrderRepository.save(priorMemberCart);
-            log.debug("member cart restored userId={} sid={}",
-                    user.getUserId(), session.getSessionId());
+        String guestKey = "sess:" + session.getSessionId();
+        String userKey  = "user:" + user.getUserId();
+
+        // Lock both keys in lexicographic order so every caller acquires them
+        // in the same sequence, preventing deadlocks with ReservationService
+        // and the SessionAndOrderSweeper which use the same key convention.
+        String firstKey  = guestKey.compareTo(userKey) <= 0 ? guestKey : userKey;
+        String secondKey = guestKey.compareTo(userKey) <= 0 ? userKey  : guestKey;
+
+        activeOrderRepository.lockForUpdate(firstKey);
+        activeOrderRepository.lockForUpdate(secondKey);
+        try {
+            Optional<ActiveOrder> guestCart = activeOrderRepository.getBySessionId(session.getSessionId());
+            if (guestCart.isPresent() && guestCart.get().isGuest()) {
+                guestCart.get().attachToUser(user.getUserId());
+                activeOrderRepository.save(guestCart.get());
+                log.debug("cart promoted to member userId={} sid={}",
+                        user.getUserId(), session.getSessionId());
+                return;
+            }
+            ActiveOrder priorMemberCart = activeOrderRepository.getByUserId(user.getUserId());
+            if (priorMemberCart != null) {
+                priorMemberCart.attachToSession(session.getSessionId());
+                activeOrderRepository.save(priorMemberCart);
+                log.debug("member cart restored userId={} sid={}",
+                        user.getUserId(), session.getSessionId());
+            }
+        } finally {
+            activeOrderRepository.unlock(secondKey);
+            activeOrderRepository.unlock(firstKey);
         }
     }
 

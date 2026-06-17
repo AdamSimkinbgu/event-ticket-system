@@ -1,78 +1,85 @@
 package com.ticketing.system.Core.Domain.events;
 
-public class InventoryZone {
-    private final int id;
-    private final String name;
-    private  int capacity;
-    private int reservedAmount;
-    private  double price;
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
-    public InventoryZone(int id, String name, int capacity, double price) {
+/**
+ * Abstract base for all inventory-zone types inside a {@link VenueMap}.
+ *
+ * <p>Two concrete shapes:
+ * <ul>
+ *   <li>{@link StandingZone} — counter-based. Capacity is a single number;
+ *       reservations and releases are integer arithmetic.</li>
+ *   <li>{@link SeatedZone} — catalog of named, addressable seats with
+ *       coordinates. Reservations target specific seat labels.</li>
+ * </ul>
+ *
+ * <p>Common state (id, name, price) lives on this class. Pre-purchase
+ * inventory state (capacity/reservations) lives on the subclass and is
+ * mediated through {@link #getCapacity()} / {@link #getAvailableAmount()} /
+ * {@link #getReservedAmount()}.
+ *
+ * <p>The legacy counter-based methods ({@code reserve(int)} / {@code release(int)} /
+ * {@code checkAvailability(int)} / {@code setCapacity(int)}) are defined here
+ * with default throwing implementations so existing callers that hold an
+ * {@code InventoryZone} reference continue to work for standing zones.
+ * Seated-zone callers must downcast or use the typed
+ * {@link SeatedZone#reserveSeats(java.util.List)} / {@link SeatedZone#releaseSeats(java.util.List)} methods.
+ */
+public abstract class InventoryZone implements InvariantChecked {
+
+    protected final int id;
+    protected final String name;
+    protected double price;
+
+    protected InventoryZone(int id, String name, double price) {
+        if (price < 0) {
+            throw new IllegalArgumentException("Price cannot be negative");
+        }
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Zone name must be non-blank");
+        }
+
         this.id = id;
         this.name = name;
-        this.capacity = capacity;
-        this.reservedAmount = 0;
-        this.price=price;
-    }
-
-    public int getAvailableAmount() {
-        return capacity - reservedAmount;
-    }
-
-    public boolean CheckAvailability(int quantity) {
-        if (quantity <= 0) {
-            throw new IllegalArgumentException("Quantity must be positive");
-        }
-
-        if (getAvailableAmount() < quantity) {
-            throw new IllegalStateException("remaining "+getAvailableAmount()+" tickets available");
-        }
-        return true;
-    }
-
-    public boolean reserve(int quantity) {
-        if (CheckAvailability(quantity)){
-          reservedAmount = reservedAmount + quantity;
-          return true;
-        }
-         throw new IllegalStateException("Not enough tickets available");
+        this.price = price;
     }
 
     public int getId() {
         return id;
     }
-    public double getprice() {
-        return price;
-    }
-
 
     public String getName() {
         return name;
     }
 
-    public int getCapacity() {
-        return capacity;
+    public double getprice() {
+        return price;
     }
 
-  
+    public abstract ZoneType getZoneType();
 
-    public boolean release(int quantity) {
-        if (quantity <= 0) {
-            throw new IllegalArgumentException("Quantity must be positive");
-        }
-        reservedAmount = reservedAmount - quantity;
-        return true;
+    public abstract int getCapacity();
+
+    public abstract int getAvailableAmount();
+
+    public abstract int getReservedAmount();
+
+    public abstract boolean checkAvailability(int quantity);
+
+    public abstract boolean reserve(InventorySelection selection);
+
+    public abstract boolean release(InventorySelection selection);
+
+    public abstract boolean confirmSale(InventorySelection selection);
+
+    public abstract int getSoldAmount();
+
+    public boolean isStanding() {
+        return getZoneType() == ZoneType.STANDING;
     }
 
-    public void setCapacity(int newCapacity) {
-        if (newCapacity < reservedAmount) {
-            throw new IllegalArgumentException("New capacity cannot be less than the number of reserved tickets");
+    public boolean isSeated() {
+        return getZoneType() == ZoneType.SEATED;
     }
-        this.capacity = newCapacity;
-    }
-
-    public int getReservedAmount() {
-        return reservedAmount;
-    }
-
+    
 }

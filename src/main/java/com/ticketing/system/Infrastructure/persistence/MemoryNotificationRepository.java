@@ -17,6 +17,13 @@ import org.springframework.stereotype.Repository;
 public class MemoryNotificationRepository implements INotificationRepository {
     private final Map<String, Notification> storage = new HashMap<>();
     private final AtomicInteger idSequence = new AtomicInteger(1);
+    private final RepositoryLocks<String> locks = new RepositoryLocks<>();
+
+    @Override
+    public void lockForUpdate(String id) { locks.lock(id); }
+
+    @Override
+    public void unlock(String id) { locks.unlock(id); }
 
     @Override
     public int nextId() {

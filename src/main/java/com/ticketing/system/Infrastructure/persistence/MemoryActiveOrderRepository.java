@@ -24,9 +24,30 @@ import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 public class MemoryActiveOrderRepository implements IActiveOrderRepository {
 
     private final List<ActiveOrder> carts = new CopyOnWriteArrayList<>();
+    private final RepositoryLocks<String> locks = new RepositoryLocks<>();   // Key is "user:{userId}" for Member carts, "sess:{sessionId}" for Guest carts.
+
+    @Override
+    public void lockForUpdate(String id) { locks.lock(id); }
+
+    @Override
+    public void unlock(String id) { locks.unlock(id); }
 
     @Override
     public void save(ActiveOrder activeOrder) {
+        // If a cart with the same identity already exists, the caller must hold
+        // the canonical lock for that cart before overwriting it.
+        // First-time saves (no prior cart with this identity) are allowed without
+        // a lock — no other thread can race on a cart that doesn't exist yet.
+        boolean existingCart = carts.stream().anyMatch(existing -> sameIdentity(existing, activeOrder));
+        if (existingCart) {
+            String lockKey = activeOrder.isMember()
+                    ? "user:" + activeOrder.getUserId()
+                    : "sess:" + activeOrder.getSessionId();
+            if (!locks.isHeldByCurrentThread(lockKey)) {
+                throw new IllegalStateException(
+                        "ActiveOrder for " + lockKey + " must be locked via lockForUpdate before saving");
+            }
+        }
         // Remove any existing cart with the same identity, then add.
         carts.removeIf(existing -> sameIdentity(existing, activeOrder));
         carts.add(activeOrder);

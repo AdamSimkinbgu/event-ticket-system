@@ -102,11 +102,16 @@ abstract class IActiveOrderRepositoryContractTest {
         // D9a edge: re-saving a Member cart (e.g., after promotion) replaces
         // any prior cart with the same userId.
         ActiveOrder cartV1 = ActiveOrder.forMember(5, "sid-A");
-        cartV1.addReservation(1, 10, 1, 50.0, java.time.LocalDateTime.now());
+        cartV1.addStandingReservation(1, 10, 1, 50.0, java.time.LocalDateTime.now());
         repo.save(cartV1);
 
         ActiveOrder cartV2 = ActiveOrder.forMember(5, "sid-B");
-        repo.save(cartV2);
+        repo.lockForUpdate("user:5");
+        try {
+            repo.save(cartV2);
+        } finally {
+            repo.unlock("user:5");
+        }
 
         // Only one cart for user 5 — the second one wins.
         assertEquals("sid-B", repo.getByUserId(5).getSessionId());
@@ -131,7 +136,7 @@ abstract class IActiveOrderRepositoryContractTest {
     @Test
     void findExpired_emptyWhenNoExpiredItems() {
         ActiveOrder cart = ActiveOrder.forGuest("sid-G");
-        cart.addReservation(1, 10, 1, 25.0, java.time.LocalDateTime.now());
+        cart.addStandingReservation(1, 10, 1, 25.0, java.time.LocalDateTime.now());
         repo.save(cart);
         assertTrue(repo.findExpired().isEmpty());
     }

@@ -29,7 +29,23 @@
 	<properties>
 		<java.version>21</java.version>
 		<jjwt.version>0.12.6</jjwt.version>
+		<!-- Vaadin Flow (V2-F-01) - compatible with Spring Boot 3.5 -->
+		<vaadin.version>24.7.0</vaadin.version>
 	</properties>
+
+	<!-- Vaadin BOM manages versions for the entire Vaadin Flow stack -->
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>com.vaadin</groupId>
+				<artifactId>vaadin-bom</artifactId>
+				<version>${vaadin.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -48,6 +64,12 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!-- AOP — used by LoggingAspect to log entry/exit of every service method -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-aop</artifactId>
 		</dependency>
 
 		<!-- BCrypt password hashing (IPasswordHasher impl) — lecture 2's recommended approach.
@@ -86,6 +108,14 @@
 			<artifactId>lombok</artifactId>
 			<optional>true</optional>
 		</dependency>
+
+		<!-- Vaadin Flow (V2-F-01) — version managed by vaadin-bom above.
+		     Pulls in vaadin-flow-components, vaadin-spring, and the dev server. -->
+		<dependency>
+			<groupId>com.vaadin</groupId>
+			<artifactId>vaadin-spring-boot-starter</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
@@ -150,7 +180,50 @@
 					</execution>
 				</executions>
 			</plugin>
+			<!-- Vaadin Maven plugin (V2-F-01).
+			     prepare-frontend runs every build to keep node_modules + dev-bundle in sync.
+			     build-frontend only runs in the 'production' profile (see below). -->
+			<plugin>
+				<groupId>com.vaadin</groupId>
+				<artifactId>vaadin-maven-plugin</artifactId>
+				<version>${vaadin.version}</version>
+				<executions>
+					<execution>
+						<id>frontend</id>
+						<goals>
+							<goal>prepare-frontend</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
 		</plugins>
 	</build>
+
+	<profiles>
+		<!-- Production profile (V2-F-01).
+		     Activate with -Pproduction. Bundles + minifies frontend assets at compile time.
+		     Dev mode (default) hot-reloads the frontend from a dev server instead. -->
+		<profile>
+			<id>production</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>com.vaadin</groupId>
+						<artifactId>vaadin-maven-plugin</artifactId>
+						<version>${vaadin.version}</version>
+						<executions>
+							<execution>
+								<id>frontend-prod</id>
+								<goals>
+									<goal>build-frontend</goal>
+								</goals>
+								<phase>compile</phase>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 </project>

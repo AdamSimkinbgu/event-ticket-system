@@ -25,7 +25,41 @@ class CatalogAcceptanceTest {
 
     // UC-8
     @Test @Disabled("UC-8 main: venue map shows seated zones with per-seat status")
-    void GivenSeatedZone_WhenGetMap_ThenPerSeatAvailability() {}
+    void GivenSeatedZone_WhenGetMap_ThenPerSeatAvailability() {
+        // Arrange:
+        // event has SeatedZone:
+        // A1 AVAILABLE
+        // A2 RESERVED
+        // A3 SOLD
+
+        // Act:
+        // VenueMapDTO map = catalogService.getEventVenueMap(credential, eventId);
+
+        // Assert:
+        // map contains zoneType SEATED
+        // map contains all seat labels
+        // A1 status AVAILABLE
+        // A2 status RESERVED
+        // A3 status SOLD
+    }
+
     @Test @Disabled("UC-8 main: standing zone shows count")
-    void GivenStandingZone_WhenGetMap_ThenCount() {}
+    void GivenStandingZone_WhenGetMap_ThenCount() {
+        // Arrange:
+        // event has StandingZone capacity 100, reserved 25
+
+        // Act:
+        // VenueMapDTO map = catalogService.getEventVenueMap(credential, eventId);
+
+        // Assert:
+        // zoneType STANDING
+        // capacity = 100
+        // reservedAmount = 25
+        // availableAmount = 75
+        // seats list is empty
+    }
+    
+
+
+
 }

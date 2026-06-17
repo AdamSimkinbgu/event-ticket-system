@@ -1,7 +1,9 @@
 package com.ticketing.system.Core.Domain.Admin;
 
+import com.ticketing.system.Core.Domain.shared.IRepository;
+
 // Aggregate-root entry point for the Admin aggregate.
-public interface IAdminRepository {
+public interface IAdminRepository extends IRepository<Admin, Integer> {
 
     Admin findById(int adminId);
 

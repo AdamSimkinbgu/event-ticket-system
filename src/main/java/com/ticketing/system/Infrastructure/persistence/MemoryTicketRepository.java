@@ -24,6 +24,13 @@ import com.ticketing.system.Core.Domain.Tickets.Ticket;
 public class MemoryTicketRepository implements ITicketRepository {
 
     private final Map<Integer, Ticket> ticketsById = new ConcurrentHashMap<>();
+    private final RepositoryLocks<Integer> locks = new RepositoryLocks<>();
+
+    @Override
+    public void lockForUpdate(Integer id) { locks.lock(id); }
+
+    @Override
+    public void unlock(Integer id) { locks.unlock(id); }
 
     @Override
     public boolean save(Ticket ticket) {
@@ -46,10 +53,15 @@ public class MemoryTicketRepository implements ITicketRepository {
         }
         List<Ticket> result = new ArrayList<>();
         for (Ticket t : ticketsById.values()) {
-            if (t.getEventId() == target) result.add(t);
+            if (t.getEventId() == target)
+                result.add(t);
         }
         return result;
     }
+
+    
+
+
 
     @Override
     public List<Ticket> findAvailableInZone(String eventId, String zoneId, int quantity) {
@@ -65,6 +77,7 @@ public class MemoryTicketRepository implements ITicketRepository {
         for (Ticket t : ticketsById.values()) {
             if (t.getEventId() == eventTarget
                     && t.getZoneId() == zoneTarget
+                    && t.isAvailable()
                     && quantity > result.size()) {
                 result.add(t);
             }
@@ -84,16 +97,23 @@ public class MemoryTicketRepository implements ITicketRepository {
         }
         int count = 0;
         for (Ticket t : ticketsById.values()) {
-            if (t.getEventId() == eventTarget && t.getZoneId() == zoneTarget) count++;
+            if (t.getEventId() == eventTarget && t.getZoneId() == zoneTarget && t.isAvailable())
+                count++;
         }
         return count;
     }
+    
+
+
+
 
     @Override
     public List<Ticket> findByOrderReceiptId(int orderReceiptId) {
-        // Ticket has no orderReceiptId field yet (UC-22 / receipt-join feature).
-        throw new UnsupportedOperationException(
-                "findByOrderReceiptId: Ticket entity needs an orderReceiptId field first");
+        List<Ticket> result = new ArrayList<>();
+        for (Ticket t : ticketsById.values()) {
+            if (t.getOrderReceiptId() == orderReceiptId) result.add(t);
+        }
+        return result;
     }
 
     @Override

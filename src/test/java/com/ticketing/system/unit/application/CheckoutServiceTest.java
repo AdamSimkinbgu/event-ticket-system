@@ -1,19 +1,30 @@
 package com.ticketing.system.unit.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import com.ticketing.system.Core.Application.dto.BarcodeDTO;
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
@@ -30,9 +41,32 @@ import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
+import com.ticketing.system.Core.Domain.Tickets.Ticket;
+import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.EventCategory;
+import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
+import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.Location;
+import com.ticketing.system.Core.Domain.events.Seat;
+import com.ticketing.system.Core.Domain.events.SeatStatus;
+import com.ticketing.system.Core.Domain.events.SeatedZone;
+import com.ticketing.system.Core.Domain.events.ShowDate;
+import com.ticketing.system.Core.Domain.events.StandingZone;
+import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
+import com.ticketing.system.Core.Domain.orders.OrderReceipt;
+import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
+import com.ticketing.system.Core.Domain.users.User;
+import com.ticketing.system.Core.Domain.policies.purchase.AgePurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.MaxTicketsPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.MinTicketsPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.AndPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.OrPurchasePolicy;
 
 class CheckoutServiceTest {
 
@@ -44,6 +78,7 @@ class CheckoutServiceTest {
     private IPaymentGateway mockPaymentGateway;
     private INotificationService mockNotificationService;
     private ISessionManager mockiSessionManager;
+    private IUserRepository mockUserRepository;
 
     private CheckoutService checkoutService;
 
@@ -82,11 +117,20 @@ class CheckoutServiceTest {
         mockActiveOrderRepo = mock(IActiveOrderRepository.class);
         mockEventRepo = mock(IEventRepository.class);
         mockTicketRepo = mock(ITicketRepository.class);
+        
         mockOrderReceiptRepo = mock(IOrderReceiptRepository.class);
+        AtomicInteger receiptIds = new AtomicInteger(1);
+        when(mockOrderReceiptRepo.nextId()).thenAnswer(invocation -> receiptIds.getAndIncrement());
+
         mockTicketIssuer = mock(ITicketIssuer.class);
         mockPaymentGateway = mock(IPaymentGateway.class);
         mockNotificationService = mock(INotificationService.class);
         mockiSessionManager = mock(ISessionManager.class);
+        mockUserRepository = mock(IUserRepository.class);
+        User mockUser = mock(User.class);
+        when(mockUser.getAge()).thenReturn(20);
+          when(mockUserRepository.getUserById(USER_ID)).thenReturn(mockUser); 
+        
 
         checkoutService = new CheckoutService(
                 mockActiveOrderRepo,
@@ -96,7 +140,8 @@ class CheckoutServiceTest {
                 mockTicketIssuer,
                 mockPaymentGateway,
                 mockNotificationService,
-                mockiSessionManager
+                mockiSessionManager,
+                mockUserRepository
         );
 
         mockOrder = mock(ActiveOrder.class);
@@ -105,8 +150,8 @@ class CheckoutServiceTest {
         itemEvent1Zone2 = mock(CartLineItem.class);
         itemEvent2Zone3 = mock(CartLineItem.class);
 
-        event1 = mock(Event.class);
-        event2 = mock(Event.class);
+        event1 = mock(Event.class, RETURNS_DEEP_STUBS);
+        event2 = mock(Event.class, RETURNS_DEEP_STUBS);
 
         when(mockiSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
         when(mockiSessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
@@ -129,19 +174,28 @@ class CheckoutServiceTest {
 
         when(event1.getName()).thenReturn("Concert");
         when(event2.getName()).thenReturn("Theater");
+        when(event1.getId()).thenReturn(EVENT_ID_1);
+        when(event1.getCompanyId()).thenReturn(100);
+        when(event2.getId()).thenReturn(EVENT_ID_2);
+        when(event2.getCompanyId()).thenReturn(100);
+        when(event1.getStatus()).thenReturn(EventStatus.ON_SALE);
+        when(event2.getStatus()).thenReturn(EventStatus.ON_SALE);
+
+        when(mockOrder.isCheckoutInProgress()).thenReturn(true);
+        when(mockOrder.getOrderKey()).thenReturn("mock-order-key");
     }
 
     @Test
     void GivenMissingToken_WhenCheckout_ThenThrowException() {
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout("", IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember("", IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
     @Test
     void GivenNullToken_WhenCheckout_ThenThrowException() {
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(null, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(null, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
@@ -150,7 +204,7 @@ class CheckoutServiceTest {
         when(mockiSessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
 
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(INVALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(INVALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
@@ -159,7 +213,7 @@ class CheckoutServiceTest {
         when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(null);
 
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
@@ -171,9 +225,58 @@ class CheckoutServiceTest {
         );
 
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
+    //////////////////////////////////////////////////////////added test for expired order with multiple tickets scenario after check1
+@Test
+void GivenExpiredOrderWithMultipleTickets_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    String orderKey = activeOrder.getOrderKey();
+    InventoryZone zone1 = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+    InventoryZone zone2 = new StandingZone(ZONE_ID_2, "REGULAR", 5, 150.0);
+
+    zone1.reserve(InventorySelection.standing(1, orderKey));
+    zone2.reserve(InventorySelection.standing(1, orderKey));
+
+    activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now().minusMinutes(20));
+    activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_2, 1, 150.0, LocalDateTime.now());
+
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
+
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelection.standing(1))).thenAnswer(invocation -> {
+        InventorySelection sel = invocation.getArgument(1);
+        zone1.release(sel);
+        return true;
+    });
+
+    when(event1.releaseInventory(ZONE_ID_2, InventorySelection.standing(1))).thenAnswer(invocation -> {
+        InventorySelection sel = invocation.getArgument(1);
+        zone2.release(sel);
+        return true;
+    });
+
+    assertThrows(RuntimeException.class, () ->
+            checkoutService.checkoutMember(
+                    VALID_TOKEN,
+                    IDEMPOTENCY_KEY,
+                    CURRENCY,
+                    PAYMENT_METHOD_TOKEN
+            )
+    );
+
+    assertEquals(0, activeOrder.countTickets(EVENT_ID_1, ZONE_ID_1));
+    assertEquals(0, activeOrder.countTickets(EVENT_ID_1, ZONE_ID_2));
+
+    assertEquals(5, zone1.getAvailableAmount());
+    assertEquals(5, zone2.getAvailableAmount());
+    assertEquals(0, zone1.getReservedAmount());
+    assertEquals(0, zone2.getReservedAmount());
+}
+
+
 
     @Test
     void GivenOrderCannotCheckout_WhenCheckout_ThenThrowException() {
@@ -181,357 +284,1805 @@ class CheckoutServiceTest {
         when(mockOrder.ReturnToStock()).thenReturn(List.of());
 
         assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
     }
 
     @Test
-    void GivenPaymentFails_WhenCheckout_ThenThrowException() {
-        when(mockOrder.validateCanCheckout()).thenReturn(true);
-        when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
-        when(mockOrder.ReturnToStock()).thenReturn(List.of(itemEvent1Zone1));
+void GivenOrderCannotCheckout_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    String orderKey = activeOrder.getOrderKey();
+    InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+    zone.reserve(InventorySelection.standing(1, orderKey));
 
-        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
-        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(null);
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            1,
+            100.0,
+            LocalDateTime.now().minusMinutes(20)
+    );
 
-        assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
-        );
-    }
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
 
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelection.standing(1))).thenAnswer(invocation -> {
+        InventorySelection sel = invocation.getArgument(1);
+        zone.release(sel);
+        return true;
+    });
+
+    assertThrows(RuntimeException.class, () ->
+            checkoutService.checkoutMember(
+                    VALID_TOKEN,
+                    IDEMPOTENCY_KEY,
+                    CURRENCY,
+                    PAYMENT_METHOD_TOKEN
+            )
+    );
+
+    assertEquals(0, activeOrder.countTickets(EVENT_ID_1, ZONE_ID_1));
+    assertEquals(5, zone.getAvailableAmount());
+    assertEquals(0, zone.getReservedAmount());
+}
+
+   @Test
+void GivenPaymentFails_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    String orderKey = activeOrder.getOrderKey();
+    InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+    zone.reserve(InventorySelection.standing(1, orderKey));
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            1,
+            100.0,
+            LocalDateTime.now()
+    );
+
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
+    when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone);
+
+    when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+            .thenReturn(100.0);
+
+    when(mockPaymentGateway.charge(any(PaymentRequestDTO.class)))
+            .thenReturn(null);
+
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelection.standing(1))).thenAnswer(invocation -> {
+        InventorySelection sel = invocation.getArgument(1);
+        zone.release(sel);
+        return true;
+    });
+
+    assertThrows(RuntimeException.class, () ->
+            checkoutService.checkoutMember(
+                    VALID_TOKEN,
+                    IDEMPOTENCY_KEY,
+                    CURRENCY,
+                    PAYMENT_METHOD_TOKEN
+            )
+    );
+
+    assertEquals(0, activeOrder.countTickets(EVENT_ID_1, ZONE_ID_1));
+    assertEquals(5, zone.getAvailableAmount());
+    assertEquals(0, zone.getReservedAmount());
+}
     @Test
-    void GivenTicketIssuanceFailsAfterPayment_WhenCheckout_ThenThrowException() {
-        PaymentResultDTO paymentResult = new PaymentResultDTO(
-                PAYMENT_TRANSACTION_ID,
-                "gateway",
-                100.0,
-                "ILS",
-                LocalDateTime.now()
-        );
+void GivenTicketIssuanceFailsAfterPayment_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    String orderKey = activeOrder.getOrderKey();
+    InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+    zone.reserve(InventorySelection.standing(1, orderKey));
 
-        when(mockOrder.validateCanCheckout()).thenReturn(true);
-        when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
-        when(mockOrder.ReturnToStock()).thenReturn(List.of(itemEvent1Zone1));
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            1,
+            100.0,
+            LocalDateTime.now()
+    );
 
-        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
-        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
-        when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(null);
+    PaymentResultDTO paymentResult = new PaymentResultDTO(
+            PAYMENT_TRANSACTION_ID,
+            "gateway",
+            100.0,
+            "ILS",
+            LocalDateTime.now()
+    );
 
-        assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
-        );
-    }
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
 
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
+    when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone);
+
+    when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+            .thenReturn(100.0);
+
+    when(mockPaymentGateway.charge(any(PaymentRequestDTO.class)))
+            .thenReturn(paymentResult);
+
+    when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
+            .thenReturn(null);
+
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelection.standing(1))).thenAnswer(invocation -> {
+        InventorySelection sel = invocation.getArgument(1);
+        zone.release(sel);
+        return true;
+    });
+
+    assertThrows(RuntimeException.class, () ->
+            checkoutService.checkoutMember(
+                    VALID_TOKEN,
+                    IDEMPOTENCY_KEY,
+                    CURRENCY,
+                    PAYMENT_METHOD_TOKEN
+            )
+    );
+
+    assertEquals(0, activeOrder.countTickets(EVENT_ID_1, ZONE_ID_1));
+    assertEquals(5, zone.getAvailableAmount());
+    assertEquals(0, zone.getReservedAmount());
+}
+
+   @Test
+void GivenTicketIssuanceReturnsNullBarcodes_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    String orderKey = activeOrder.getOrderKey();
+    InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+    zone.reserve(InventorySelection.standing(1, orderKey));
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            1,
+            100.0,
+            LocalDateTime.now()
+    );
+
+    PaymentResultDTO paymentResult = new PaymentResultDTO(
+            PAYMENT_TRANSACTION_ID,
+            "gateway",
+            100.0,
+            "ILS",
+            LocalDateTime.now()
+    );
+
+    IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
+            ISSUANCE_TRANSACTION_ID,
+            "issuer",
+            LocalDateTime.now(),
+            null
+    );
+
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
+    when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone);
+
+    when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+            .thenReturn(100.0);
+
+    when(mockPaymentGateway.charge(any(PaymentRequestDTO.class)))
+            .thenReturn(paymentResult);
+
+    when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
+            .thenReturn(issuanceResult);
+
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelection.standing(1))).thenAnswer(invocation -> {
+        InventorySelection sel = invocation.getArgument(1);
+        zone.release(sel);
+        return true;
+    });
+
+    assertThrows(RuntimeException.class, () ->
+            checkoutService.checkoutMember(
+                    VALID_TOKEN,
+                    IDEMPOTENCY_KEY,
+                    CURRENCY,
+                    PAYMENT_METHOD_TOKEN
+            )
+    );
+
+    assertEquals(0, activeOrder.countTickets(EVENT_ID_1, ZONE_ID_1));
+    assertEquals(5, zone.getAvailableAmount());
+    assertEquals(0, zone.getReservedAmount());
+}@Test
+void GivenTicketIssuanceReturnsEmptyBarcodes_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    String orderKey = activeOrder.getOrderKey();
+    InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+    zone.reserve(InventorySelection.standing(1, orderKey));
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            1,
+            100.0,
+            LocalDateTime.now()
+    );
+
+    PaymentResultDTO paymentResult = new PaymentResultDTO(
+            PAYMENT_TRANSACTION_ID,
+            "gateway",
+            100.0,
+            "ILS",
+            LocalDateTime.now()
+    );
+
+    IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
+            ISSUANCE_TRANSACTION_ID,
+            "issuer",
+            LocalDateTime.now(),
+            List.of()
+    );
+
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
+    when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone);
+
+    when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+            .thenReturn(100.0);
+
+    when(mockPaymentGateway.charge(any(PaymentRequestDTO.class)))
+            .thenReturn(paymentResult);
+
+    when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
+            .thenReturn(issuanceResult);
+
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelection.standing(1))).thenAnswer(invocation -> {
+        InventorySelection sel = invocation.getArgument(1);
+        zone.release(sel);
+        return true;
+    });
+
+    assertThrows(RuntimeException.class, () ->
+            checkoutService.checkoutMember(
+                    VALID_TOKEN,
+                    IDEMPOTENCY_KEY,
+                    CURRENCY,
+                    PAYMENT_METHOD_TOKEN
+            )
+    );
+
+    assertEquals(0, activeOrder.countTickets(EVENT_ID_1, ZONE_ID_1));
+    assertEquals(5, zone.getAvailableAmount());
+    assertEquals(0, zone.getReservedAmount());
+}
+
+   @Test
+void GivenMultipleTicketsButIssuerReturnsLessBarcodes_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    String orderKey = activeOrder.getOrderKey();
+    InventoryZone zone1 = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+    InventoryZone zone2 = new StandingZone(ZONE_ID_2, "REGULAR", 5, 150.0);
+    InventoryZone zone3 = new StandingZone(ZONE_ID_3, "BALCONY", 5, 200.0);
+
+    zone1.reserve(InventorySelection.standing(1, orderKey));
+    zone2.reserve(InventorySelection.standing(1, orderKey));
+    zone3.reserve(InventorySelection.standing(1, orderKey));
+
+    activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
+    activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_2, 1, 150.0, LocalDateTime.now());
+    activeOrder.addStandingReservation(EVENT_ID_2, ZONE_ID_3, 1, 200.0, LocalDateTime.now());
+
+    PaymentResultDTO paymentResult = new PaymentResultDTO(
+            PAYMENT_TRANSACTION_ID,
+            "gateway",
+            450.0,
+            "ILS",
+            LocalDateTime.now()
+    );
+
+    IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
+            ISSUANCE_TRANSACTION_ID,
+            "issuer",
+            LocalDateTime.now(),
+            List.of(new BarcodeDTO(TICKET_ID_1, "barcode-1", "QR"))
+    );
+
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
+    when(mockEventRepo.findById(EVENT_ID_2)).thenReturn(event2);
+
+    when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone1);
+    when(event1.getVenueMap().getZone(ZONE_ID_2)).thenReturn(zone2);
+    when(event2.getVenueMap().getZone(ZONE_ID_3)).thenReturn(zone3);
+
+    when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+            .thenReturn(250.0);
+    when(event2.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+            .thenReturn(200.0);
+
+    when(mockPaymentGateway.charge(any(PaymentRequestDTO.class)))
+            .thenReturn(paymentResult);
+
+    when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
+            .thenReturn(issuanceResult);
+
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelection.standing(1))).thenAnswer(invocation -> {
+        InventorySelection sel = invocation.getArgument(1);
+        zone1.release(sel);
+        return true;
+    });
+
+    when(event1.releaseInventory(ZONE_ID_2, InventorySelection.standing(1))).thenAnswer(invocation -> {
+        InventorySelection sel = invocation.getArgument(1);
+        zone2.release(sel);
+        return true;
+    });
+
+    when(event2.releaseInventory(ZONE_ID_3, InventorySelection.standing(1))).thenAnswer(invocation -> {
+        InventorySelection sel = invocation.getArgument(1);
+        zone3.release(sel);
+        return true;
+    });
+
+    assertThrows(RuntimeException.class, () ->
+            checkoutService.checkoutMember(
+                    VALID_TOKEN,
+                    IDEMPOTENCY_KEY,
+                    CURRENCY,
+                    PAYMENT_METHOD_TOKEN
+            )
+    );
+
+    assertEquals(0, activeOrder.countTickets(EVENT_ID_1, ZONE_ID_1));
+    assertEquals(0, activeOrder.countTickets(EVENT_ID_1, ZONE_ID_2));
+    assertEquals(0, activeOrder.countTickets(EVENT_ID_2, ZONE_ID_3));
+
+    assertEquals(5, zone1.getAvailableAmount());
+    assertEquals(5, zone2.getAvailableAmount());
+    assertEquals(5, zone3.getAvailableAmount());
+
+    assertEquals(0, zone1.getReservedAmount());
+    assertEquals(0, zone2.getReservedAmount());
+    assertEquals(0, zone3.getReservedAmount());
+}
+   @Test
+void GivenPaymentRefundFails_WhenCheckout_ThenClearCartReturnTicketsToStockAndThrowRefundException() {
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    String orderKey = activeOrder.getOrderKey();
+    InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+    zone.reserve(InventorySelection.standing(1, orderKey));
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            1,
+            100.0,
+            LocalDateTime.now()
+    );
+
+    PaymentResultDTO paymentResult = new PaymentResultDTO(
+            PAYMENT_TRANSACTION_ID,
+            "gateway",
+            100.0,
+            "ILS",
+            LocalDateTime.now()
+    );
+
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
+    when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone);
+
+    when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+            .thenReturn(100.0);
+
+    when(mockPaymentGateway.charge(any(PaymentRequestDTO.class)))
+            .thenReturn(paymentResult);
+
+    when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
+            .thenReturn(null);
+
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelection.standing(1))).thenAnswer(invocation -> {
+        InventorySelection sel = invocation.getArgument(1);
+        zone.release(sel);
+        return true;
+    });
+
+    doThrow(new RuntimeException("refund failed"))
+            .when(mockPaymentGateway)
+            .refund(PAYMENT_TRANSACTION_ID, 100.0);
+
+    assertThrows(RuntimeException.class, () ->
+            checkoutService.checkoutMember(
+                    VALID_TOKEN,
+                    IDEMPOTENCY_KEY,
+                    CURRENCY,
+                    PAYMENT_METHOD_TOKEN
+            )
+    );
+
+    assertEquals(0, activeOrder.countTickets(EVENT_ID_1, ZONE_ID_1));
+    assertEquals(5, zone.getAvailableAmount());
+    assertEquals(0, zone.getReservedAmount());
+}
     @Test
-    void GivenTicketIssuanceReturnsNullBarcodes_WhenCheckout_ThenThrowException() {
-        PaymentResultDTO paymentResult = new PaymentResultDTO(
-                PAYMENT_TRANSACTION_ID,
-                "gateway",
-                100.0,
-                "ILS",
-                LocalDateTime.now()
-        );
+void GivenTicketFromDifferentEventDoesNotExist_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    String orderKey = activeOrder.getOrderKey();
+    InventoryZone zone1 = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+    InventoryZone zone3 = new StandingZone(ZONE_ID_3, "BALCONY", 5, 200.0);
 
-        IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
-                ISSUANCE_TRANSACTION_ID,
-                "issuer",
-                LocalDateTime.now(),
-                null
-        );
+    zone1.reserve(InventorySelection.standing(1, orderKey));
+    zone3.reserve(InventorySelection.standing(1, orderKey));
 
-        when(mockOrder.validateCanCheckout()).thenReturn(true);
-        when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
-        when(mockOrder.ReturnToStock()).thenReturn(List.of(itemEvent1Zone1));
+    activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
+    activeOrder.addStandingReservation(EVENT_ID_2, ZONE_ID_3, 1, 200.0, LocalDateTime.now());
 
-        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
 
-        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
-        when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
+    when(mockEventRepo.findById(EVENT_ID_2)).thenReturn(null);
 
-        assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
-        );
-    }
+    when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone1);
 
-    @Test
-    void GivenTicketIssuanceReturnsEmptyBarcodes_WhenCheckout_ThenThrowException() {
-        PaymentResultDTO paymentResult = new PaymentResultDTO(
-                PAYMENT_TRANSACTION_ID,
-                "gateway",
-                100.0,
-                "ILS",
-                LocalDateTime.now()
-        );
+    when(event1.releaseInventory(ZONE_ID_1, InventorySelection.standing(1))).thenAnswer(invocation -> {
+        InventorySelection sel = invocation.getArgument(1);
+        zone1.release(sel);
+        return true;
+    });
 
-        IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
-                ISSUANCE_TRANSACTION_ID,
-                "issuer",
-                LocalDateTime.now(),
-                List.of()
-        );
+    assertThrows(RuntimeException.class, () ->
+            checkoutService.checkoutMember(
+                    VALID_TOKEN,
+                    IDEMPOTENCY_KEY,
+                    CURRENCY,
+                    PAYMENT_METHOD_TOKEN
+            )
+    );
 
-        when(mockOrder.validateCanCheckout()).thenReturn(true);
-        when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
-        when(mockOrder.ReturnToStock()).thenReturn(List.of(itemEvent1Zone1));
+    assertEquals(0, activeOrder.countTickets(EVENT_ID_1, ZONE_ID_1));
+    assertEquals(0, activeOrder.countTickets(EVENT_ID_2, ZONE_ID_3));
 
-        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
+    assertEquals(5, zone1.getAvailableAmount());
+    assertEquals(0, zone1.getReservedAmount());
+}
+   @Test
+void GivenValidCheckout_WhenCheckout_ThenReturnCheckoutResultAndSaveTicketAndReceipt() {
+    PaymentResultDTO paymentResult = new PaymentResultDTO(
+            PAYMENT_TRANSACTION_ID,
+            "gateway",
+            100.0,
+            "ILS",
+            LocalDateTime.now()
+    );
 
-        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
-        when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+    IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
+            ISSUANCE_TRANSACTION_ID,
+            "issuer",
+            LocalDateTime.now(),
+            List.of(new BarcodeDTO(TICKET_ID_1, "barcode-value-1", "QR"))
+    );
 
-        assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
-        );
-    }
+    when(mockOrder.validateCanCheckout()).thenReturn(true);
+    when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
+    when(mockOrder.buy()).thenReturn(List.of(itemEvent1Zone1));
 
-    @Test
-    void GivenMultipleTicketsButIssuerReturnsLessBarcodes_WhenCheckout_ThenThrowException() {
-        PaymentResultDTO paymentResult = new PaymentResultDTO(
-                PAYMENT_TRANSACTION_ID,
-                "gateway",
-                450.0,
-                "ILS",
-                LocalDateTime.now()
-        );
+    when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+            .thenReturn(100.0);
 
-        IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
-                ISSUANCE_TRANSACTION_ID,
-                "issuer",
-                LocalDateTime.now(),
-                List.of(new BarcodeDTO(TICKET_ID_1, "barcode-1", "QR"))
-        );
+    when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class)))
+            .thenReturn(100.0);
 
-        when(mockOrder.validateCanCheckout()).thenReturn(true);
-        when(mockOrder.getItems()).thenReturn(
-                List.of(itemEvent1Zone1, itemEvent1Zone2, itemEvent2Zone3)
-        );
-        when(mockOrder.ReturnToStock()).thenReturn(
-                List.of(itemEvent1Zone1, itemEvent1Zone2, itemEvent2Zone3)
-        );
+    when(mockPaymentGateway.charge(any(PaymentRequestDTO.class)))
+            .thenReturn(paymentResult);
 
-        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(250.0);
-        when(event2.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(200.0);
+    when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
+            .thenReturn(issuanceResult);
 
-        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
-        when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+    StandingZone zone1 = new StandingZone(ZONE_ID_1, "General", 100, 100.0);
+    zone1.reserve(InventorySelection.standing(1));
+    when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone1);
 
-        assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
-        );
-    }
+    CheckoutResultDTO result = checkoutService.checkoutMember(
+            VALID_TOKEN,
+            IDEMPOTENCY_KEY,
+            CURRENCY,
+            PAYMENT_METHOD_TOKEN
+    );
 
-    @Test
-    void GivenPaymentRefundFails_WhenCheckout_ThenThrowRefundException() {
-        PaymentResultDTO paymentResult = new PaymentResultDTO(
-                PAYMENT_TRANSACTION_ID,
-                "gateway",
-                100.0,
-                "ILS",
-                LocalDateTime.now()
-        );
-
-        when(mockOrder.validateCanCheckout()).thenReturn(true);
-        when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
-        when(mockOrder.ReturnToStock()).thenReturn(List.of(itemEvent1Zone1));
-
-        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
-
-        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
-        when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(null);
-
-        doThrow(new RuntimeException("refund failed"))
-                .when(mockPaymentGateway)
-                .refund(PAYMENT_TRANSACTION_ID, 100.0);
-
-        assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
-        );
-    }
-
-    @Test
-    void GivenTicketFromDifferentEventDoesNotExist_WhenCheckout_ThenThrowException() {
-        when(mockOrder.validateCanCheckout()).thenReturn(true);
-        when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1, itemEvent2Zone3));
-        when(mockOrder.ReturnToStock()).thenReturn(List.of(itemEvent1Zone1, itemEvent2Zone3));
-
-        when(mockEventRepo.findById(EVENT_ID_2)).thenReturn(null);
-
-        assertThrows(RuntimeException.class, () ->
-                checkoutService.checkout(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
-        );
-    }
-
-    @Test
-    void GivenValidCheckout_WhenCheckout_ThenReturnCheckoutResult() {
-        PaymentResultDTO paymentResult = new PaymentResultDTO(
-                PAYMENT_TRANSACTION_ID,
-                "gateway",
-                100.0,
-                "ILS",
-                LocalDateTime.now()
-        );
-
-        IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
-                ISSUANCE_TRANSACTION_ID,
-                "issuer",
-                LocalDateTime.now(),
-                List.of(new BarcodeDTO(TICKET_ID_1, "barcode-value-1", "QR"))
-        );
-
-        when(mockOrder.validateCanCheckout()).thenReturn(true);
-        when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
-
-        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
-        when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
-
-        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
-        when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
-
-        CheckoutResultDTO result = checkoutService.checkout(
-                VALID_TOKEN,
-                IDEMPOTENCY_KEY,
-                CURRENCY,
-                PAYMENT_METHOD_TOKEN
-        );
-
-        assertEquals(
-                new CheckoutResultDTO(
+    assertEquals(
+            new CheckoutResultDTO(
                         100.0,
+                        1,
+                    PAYMENT_TRANSACTION_ID,
+                    List.of(TICKET_ID_1)
+            ),
+            result
+    );
+
+    ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
+    verify(mockTicketRepo, times(1)).save(ticketCaptor.capture());
+
+    Ticket savedTicket = ticketCaptor.getValue();
+    assertEquals(TICKET_ID_1, savedTicket.getId());
+    assertEquals(EVENT_ID_1, savedTicket.getEventId());
+    assertEquals(ZONE_ID_1, savedTicket.getZoneId());
+   
+
+    ArgumentCaptor<OrderReceipt> receiptCaptor = ArgumentCaptor.forClass(OrderReceipt.class);
+    verify(mockOrderReceiptRepo, times(1)).save(receiptCaptor.capture());
+
+    OrderReceipt savedReceipt = receiptCaptor.getValue();
+    assertEquals(USER_ID, savedReceipt.getUserid());
+    assertEquals(100.0, savedReceipt.getTotalAmount());
+
+}
+
+   @Test
+void GivenValidCheckoutWithCalculatedPrice_WhenCheckout_ThenReturnCalculatedTotalAndSaveTicketAndReceipt() {
+    PaymentResultDTO paymentResult = new PaymentResultDTO(
+            PAYMENT_TRANSACTION_ID,
+            "gateway",
+            150.0,
+            "ILS",
+            LocalDateTime.now()
+    );
+
+    IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
+            ISSUANCE_TRANSACTION_ID,
+            "issuer",
+            LocalDateTime.now(),
+            List.of(new BarcodeDTO(TICKET_ID_2, "barcode-value-2", "QR"))
+    );
+
+    when(mockOrder.validateCanCheckout()).thenReturn(true);
+    when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone2));
+    when(mockOrder.buy()).thenReturn(List.of(itemEvent1Zone2));
+
+    when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+            .thenReturn(150.0);
+
+    when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class)))
+            .thenReturn(150.0);
+
+    when(mockPaymentGateway.charge(any(PaymentRequestDTO.class)))
+            .thenReturn(paymentResult);
+
+    when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
+            .thenReturn(issuanceResult);
+
+    StandingZone zone2 = new StandingZone(ZONE_ID_2, "General", 100, 150.0);
+    zone2.reserve(InventorySelection.standing(1));
+    when(event1.getVenueMap().getZone(ZONE_ID_2)).thenReturn(zone2);
+
+    CheckoutResultDTO result = checkoutService.checkoutMember(
+            VALID_TOKEN,
+            IDEMPOTENCY_KEY,
+            CURRENCY,
+            PAYMENT_METHOD_TOKEN
+    );
+
+    assertEquals(150.0, result.totalCharged());
+
+    ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
+    verify(mockTicketRepo, times(1)).save(ticketCaptor.capture());
+
+    Ticket savedTicket = ticketCaptor.getValue();
+
+    assertEquals(TICKET_ID_2, savedTicket.getId());
+    assertEquals(EVENT_ID_1, savedTicket.getEventId());
+    assertEquals(ZONE_ID_2, savedTicket.getZoneId());
+
+
+    ArgumentCaptor<OrderReceipt> receiptCaptor = ArgumentCaptor.forClass(OrderReceipt.class);
+    verify(mockOrderReceiptRepo, times(1)).save(receiptCaptor.capture());
+
+    OrderReceipt savedReceipt = receiptCaptor.getValue();
+
+    assertEquals(USER_ID, savedReceipt.getUserid());
+    assertEquals(150.0, savedReceipt.getTotalAmount());
+    
+}
+   @Test
+void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTicketsAndSaveTicketsAndReceipt() {
+    PaymentResultDTO paymentResult = new PaymentResultDTO(
+            PAYMENT_TRANSACTION_ID,
+            "gateway",
+            250.0,
+            "ILS",
+            LocalDateTime.now()
+    );
+
+    IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
+            ISSUANCE_TRANSACTION_ID,
+            "issuer",
+            LocalDateTime.now(),
+            List.of(
+                    new BarcodeDTO(TICKET_ID_1, "barcode-zone-1", "QR"),
+                    new BarcodeDTO(TICKET_ID_2, "barcode-zone-2", "QR")
+            )
+    );
+
+    when(mockOrder.validateCanCheckout()).thenReturn(true);
+    when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1, itemEvent1Zone2));
+    when(mockOrder.buy()).thenReturn(List.of(itemEvent1Zone1, itemEvent1Zone2));
+
+    when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+            .thenReturn(250.0);
+
+    when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class)))
+            .thenReturn(125.0);
+
+    when(mockPaymentGateway.charge(any(PaymentRequestDTO.class)))
+            .thenReturn(paymentResult);
+
+    when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
+            .thenReturn(issuanceResult);
+
+    StandingZone zone1 = new StandingZone(ZONE_ID_1, "General", 100, 100.0);
+    zone1.reserve(InventorySelection.standing(1));
+    when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone1);
+    StandingZone zone2 = new StandingZone(ZONE_ID_2, "General", 100, 150.0);
+    zone2.reserve(InventorySelection.standing(1));
+    when(event1.getVenueMap().getZone(ZONE_ID_2)).thenReturn(zone2);
+
+    CheckoutResultDTO result = checkoutService.checkoutMember(
+            VALID_TOKEN,
+            IDEMPOTENCY_KEY,
+            CURRENCY,
+            PAYMENT_METHOD_TOKEN
+    );
+
+    assertEquals(
+            new CheckoutResultDTO(
+                                    250.0,
+                                    1,
+                    PAYMENT_TRANSACTION_ID,
+                    List.of(TICKET_ID_1, TICKET_ID_2)
+            ),
+            result
+    );
+
+    ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
+    verify(mockTicketRepo, times(2)).save(ticketCaptor.capture());
+
+    List<Ticket> savedTickets = ticketCaptor.getAllValues();
+
+    assertEquals(2, savedTickets.size());
+
+    assertEquals(TICKET_ID_1, savedTickets.get(0).getId());
+    assertEquals(EVENT_ID_1, savedTickets.get(0).getEventId());
+    assertEquals(ZONE_ID_1, savedTickets.get(0).getZoneId());
+
+
+    assertEquals(TICKET_ID_2, savedTickets.get(1).getId());
+    assertEquals(EVENT_ID_1, savedTickets.get(1).getEventId());
+    assertEquals(ZONE_ID_2, savedTickets.get(1).getZoneId());
+    
+
+    ArgumentCaptor<OrderReceipt> receiptCaptor = ArgumentCaptor.forClass(OrderReceipt.class);
+    verify(mockOrderReceiptRepo, times(1)).save(receiptCaptor.capture());
+
+    OrderReceipt savedReceipt = receiptCaptor.getValue();
+
+    assertEquals(USER_ID, savedReceipt.getUserid());
+    assertEquals(250.0, savedReceipt.getTotalAmount());
+    
+}
+   @Test
+   void GivenTicketsFromDifferentEvents_WhenCheckout_ThenBuyAllTicketsAndSaveTicketsAndReceipt() {
+           PaymentResultDTO paymentResult = new PaymentResultDTO(
+                           PAYMENT_TRANSACTION_ID,
+                           "gateway",
+                           300.0,
+                           "ILS",
+                           LocalDateTime.now());
+
+           IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
+                           ISSUANCE_TRANSACTION_ID,
+                           "issuer",
+                           LocalDateTime.now(),
+                           List.of(
+                                           new BarcodeDTO(TICKET_ID_1, "barcode-event-1", "QR"),
+                                           new BarcodeDTO(TICKET_ID_3, "barcode-event-2", "QR")));
+
+           when(mockOrder.validateCanCheckout()).thenReturn(true);
+           when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1, itemEvent2Zone3));
+           when(mockOrder.buy()).thenReturn(List.of(itemEvent1Zone1, itemEvent2Zone3));
+
+           when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+                           .thenReturn(100.0);
+
+           when(event2.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+                           .thenReturn(200.0);
+
+           when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class)))
+                           .thenReturn(100.0);
+
+           when(event2.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class)))
+                           .thenReturn(200.0);
+
+           when(mockPaymentGateway.charge(any(PaymentRequestDTO.class)))
+                           .thenReturn(paymentResult);
+
+           when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class)))
+                           .thenReturn(issuanceResult);
+
+           StandingZone zone1 = new StandingZone(ZONE_ID_1, "General", 100, 100.0);
+           zone1.reserve(InventorySelection.standing(1));
+           when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone1);
+           StandingZone zone3 = new StandingZone(ZONE_ID_3, "General", 100, 200.0);
+           zone3.reserve(InventorySelection.standing(1));
+           when(event2.getVenueMap().getZone(ZONE_ID_3)).thenReturn(zone3);
+
+           CheckoutResultDTO result = checkoutService.checkoutMember(
+                           VALID_TOKEN,
+                           IDEMPOTENCY_KEY,
+                           CURRENCY,
+                           PAYMENT_METHOD_TOKEN);
+
+           assertEquals(
+                           new CheckoutResultDTO(
+                                           300.0,
+                                           1,
+                                           PAYMENT_TRANSACTION_ID,
+                                           List.of(TICKET_ID_1, TICKET_ID_3)),
+                           result);
+
+           ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
+           verify(mockTicketRepo, times(2)).save(ticketCaptor.capture());
+
+           List<Ticket> savedTickets = ticketCaptor.getAllValues();
+
+           assertEquals(2, savedTickets.size());
+
+           assertEquals(TICKET_ID_1, savedTickets.get(0).getId());
+           assertEquals(EVENT_ID_1, savedTickets.get(0).getEventId());
+           assertEquals(ZONE_ID_1, savedTickets.get(0).getZoneId());
+
+           assertEquals(TICKET_ID_3, savedTickets.get(1).getId());
+           assertEquals(EVENT_ID_2, savedTickets.get(1).getEventId());
+           assertEquals(ZONE_ID_3, savedTickets.get(1).getZoneId());
+
+           ArgumentCaptor<OrderReceipt> receiptCaptor = ArgumentCaptor.forClass(OrderReceipt.class);
+           verify(mockOrderReceiptRepo, times(1)).save(receiptCaptor.capture());
+
+           OrderReceipt savedReceipt = receiptCaptor.getValue();
+           assertEquals(USER_ID, savedReceipt.getUserid());
+           assertEquals(300.0, savedReceipt.getTotalAmount());
+
+   }
+
+
+
+
+
+
+
+
+
+
+
+        @Test
+        void GivenSeatedCartLine_WhenCheckout_ThenIssuerReceivesSeatNumberAndTicketSavedWithSeatNumber() {
+                CartLineItem seatedItem = mock(CartLineItem.class);
+
+                when(seatedItem.geteventId()).thenReturn(EVENT_ID_1);
+                when(seatedItem.getzoneId()).thenReturn(ZONE_ID_1);
+                when(seatedItem.getSeatNumber()).thenReturn("A1");
+                when(seatedItem.getPriceAtReservation()).thenReturn(120.0);
+
+                PaymentResultDTO paymentResult = new PaymentResultDTO(
+                                PAYMENT_TRANSACTION_ID,
+                                "gateway",
+                                120.0,
+                                "ILS",
+                                LocalDateTime.now());
+
+                IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
+                                ISSUANCE_TRANSACTION_ID,
+                                "issuer",
+                                LocalDateTime.now(),
+                                List.of(new BarcodeDTO(TICKET_ID_1, "barcode-A1", "QR")));
+
+                when(mockOrder.validateCanCheckout()).thenReturn(true);
+                when(mockOrder.getItems()).thenReturn(List.of(seatedItem));
+                when(mockOrder.buy()).thenReturn(List.of(seatedItem));
+
+                when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+                                .thenReturn(120.0);
+
+                when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class)))
+                                .thenReturn(120.0);
+
+                when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
+                when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+
+                SeatedZone seatedZoneA1 = new SeatedZone(ZONE_ID_1, "Orchestra", 120.0, List.of(new Seat("A1", 0, 0)));
+                seatedZoneA1.reserve(InventorySelection.seated(List.of("A1"), "mock-order-key"));
+                when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(seatedZoneA1);
+
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+
+                ArgumentCaptor<IssuanceRequestDTO> issuanceCaptor = ArgumentCaptor.forClass(IssuanceRequestDTO.class);
+                verify(mockTicketIssuer).issue(issuanceCaptor.capture());
+
+                IssuanceRequestDTO issuanceRequest = issuanceCaptor.getValue();
+
+                assertEquals(1, issuanceRequest.items().size());
+                assertEquals("A1", issuanceRequest.items().get(0).seatNumber());
+
+                ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
+                verify(mockTicketRepo).save(ticketCaptor.capture());
+
+                Ticket savedTicket = ticketCaptor.getValue();
+
+                assertEquals(EVENT_ID_1, savedTicket.getEventId());
+                assertEquals(ZONE_ID_1, savedTicket.getZoneId());
+                assertEquals("A1", savedTicket.getSeatNumber());
+                assertEquals(TICKET_ID_1, savedTicket.getId());
+        }
+
+        
+
+        @Test
+        void GivenStandingCartLine_WhenCheckout_ThenIssuerReceivesNullSeatNumber() {
+                PaymentResultDTO paymentResult = new PaymentResultDTO(
+                                PAYMENT_TRANSACTION_ID,
+                                "gateway",
+                                100.0,
+                                "ILS",
+                                LocalDateTime.now());
+
+                IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
+                                ISSUANCE_TRANSACTION_ID,
+                                "issuer",
+                                LocalDateTime.now(),
+                                List.of(new BarcodeDTO(TICKET_ID_1, "barcode-standing", "QR")));
+
+                when(itemEvent1Zone1.getSeatNumber()).thenReturn(null);
+
+                when(mockOrder.validateCanCheckout()).thenReturn(true);
+                when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
+                when(mockOrder.buy()).thenReturn(List.of(itemEvent1Zone1));
+
+                when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+                                .thenReturn(100.0);
+
+                when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class)))
+                                .thenReturn(100.0);
+
+                when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
+                when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+
+                StandingZone standingZone1 = new StandingZone(ZONE_ID_1, "General", 100, 100.0);
+                standingZone1.reserve(InventorySelection.standing(1));
+                when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(standingZone1);
+
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+
+                ArgumentCaptor<IssuanceRequestDTO> issuanceCaptor = ArgumentCaptor.forClass(IssuanceRequestDTO.class);
+                verify(mockTicketIssuer).issue(issuanceCaptor.capture());
+
+                assertNull(issuanceCaptor.getValue().items().get(0).seatNumber());
+        }
+
+        
+        @Test
+        void GivenSuccessfulSeatedCheckout_WhenCheckout_ThenReservedSeatBecomesSold() {
+                ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+                SeatedZone seatedZone = new SeatedZone(
+                                ZONE_ID_1,
+                                "Orchestra",
+                                120.0,
+                                List.of(new Seat("A1", 0, 0)));
+
+                seatedZone.reserve(InventorySelection.seated(List.of("A1"), activeOrder.getOrderKey()));
+
+                Event realEvent = createRealEventWithZone(EVENT_ID_1, seatedZone);
+
+                activeOrder.addSeatedReservation(
+                                EVENT_ID_1,
+                                ZONE_ID_1,
+                                List.of("A1"),
+                                120.0,
+                                LocalDateTime.now());
+
+                PaymentResultDTO paymentResult = new PaymentResultDTO(
+                                PAYMENT_TRANSACTION_ID,
+                                "gateway",
+                                120.0,
+                                "ILS",
+                                LocalDateTime.now());
+
+                IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
+                                ISSUANCE_TRANSACTION_ID,
+                                "issuer",
+                                LocalDateTime.now(),
+                                List.of(new BarcodeDTO(TICKET_ID_1, "barcode-A1", "QR")));
+
+                when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+                when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(realEvent);
+                when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
+                when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+
+                assertEquals(SeatStatus.SOLD, seatedZone.getSeatStatus("A1"));
+                assertTrue(activeOrder.isEmpty());
+        }
+
+        
+        @Test
+        void GivenTicketIssuanceFailsForSeatedOrder_WhenCheckout_ThenReservedSeatIsReleased() {
+                ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+                SeatedZone seatedZone = new SeatedZone(
+                                ZONE_ID_1,
+                                "Orchestra",
+                                120.0,
+                                List.of(new Seat("A1", 0, 0)));
+
+                seatedZone.reserve(InventorySelection.seated(List.of("A1"), activeOrder.getOrderKey()));
+
+                Event realEvent = createRealEventWithZone(EVENT_ID_1, seatedZone);
+
+                activeOrder.addSeatedReservation(
+                                EVENT_ID_1,
+                                ZONE_ID_1,
+                                List.of("A1"),
+                                120.0,
+                                LocalDateTime.now());
+
+                PaymentResultDTO paymentResult = new PaymentResultDTO(
+                                PAYMENT_TRANSACTION_ID,
+                                "gateway",
+                                120.0,
+                                "ILS",
+                                LocalDateTime.now());
+
+                when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+                when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(realEvent);
+                when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
+                when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(null);
+
+                assertThrows(RuntimeException.class, () -> checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY,
+                                CURRENCY, PAYMENT_METHOD_TOKEN));
+
+                assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
+                assertTrue(activeOrder.isEmpty());
+        }
+        
+        
+
+        @Test
+        void GivenMixedStandingAndSeatedOrder_WhenCheckout_ThenAllTicketsSavedWithCorrectSeatNumbers() {
+                CartLineItem standingItem = mock(CartLineItem.class);
+                CartLineItem seatedItem = mock(CartLineItem.class);
+
+                when(standingItem.geteventId()).thenReturn(EVENT_ID_1);
+                when(standingItem.getzoneId()).thenReturn(ZONE_ID_1);
+                when(standingItem.getSeatNumber()).thenReturn(null);
+                when(standingItem.getPriceAtReservation()).thenReturn(50.0);
+
+                when(seatedItem.geteventId()).thenReturn(EVENT_ID_1);
+                when(seatedItem.getzoneId()).thenReturn(ZONE_ID_2);
+                when(seatedItem.getSeatNumber()).thenReturn("B7");
+                when(seatedItem.getPriceAtReservation()).thenReturn(120.0);
+
+                PaymentResultDTO paymentResult = new PaymentResultDTO(
                         PAYMENT_TRANSACTION_ID,
-                        List.of(TICKET_ID_1)
-                ),
-                result
+                        "gateway",
+                        170.0,
+                        "ILS",
+                        LocalDateTime.now()
+                );
+
+                IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
+                        ISSUANCE_TRANSACTION_ID,
+                        "issuer",
+                        LocalDateTime.now(),
+                        List.of(
+                                new BarcodeDTO(TICKET_ID_1, "barcode-standing", "QR"),
+                                new BarcodeDTO(TICKET_ID_2, "barcode-B7", "QR")
+                        )
+                );
+
+                when(mockOrder.validateCanCheckout()).thenReturn(true);
+                when(mockOrder.getItems()).thenReturn(List.of(standingItem, seatedItem));
+                when(mockOrder.buy()).thenReturn(List.of(standingItem, seatedItem));
+
+                when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class)))
+                        .thenAnswer(invocation -> {
+                                int quantity = invocation.getArgument(0);
+                                double price = invocation.getArgument(1);
+                                return quantity * price;
+                        });
+
+                when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class)))
+                        .thenAnswer(invocation -> invocation.getArgument(1));
+
+                when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
+                when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+
+                StandingZone standingZone = new StandingZone(ZONE_ID_1, "Standing", 100, 50.0);
+                standingZone.reserve(InventorySelection.standing(1));
+
+                SeatedZone seatedZone = new SeatedZone(ZONE_ID_2, "Seated", 120.0, List.of(new Seat("B7", 0, 0)));
+                seatedZone.reserve(InventorySelection.seated(List.of("B7"), "mock-order-key"));
+
+                when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(standingZone);
+                when(event1.getVenueMap().getZone(ZONE_ID_2)).thenReturn(seatedZone);
+
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+
+                ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
+                verify(mockTicketRepo, times(2)).save(ticketCaptor.capture());
+
+                List<Ticket> savedTickets = ticketCaptor.getAllValues();
+
+                assertNull(savedTickets.get(0).getSeatNumber());
+                assertEquals("B7", savedTickets.get(1).getSeatNumber());
+        }
+
+
+
+        // new test
+        @Test
+        void GivenReceiptSaveFailsAfterSeatConfirmation_WhenCheckout_ThenSystemDoesNotLoseSeatOrCart() {
+                // Arrange seated seat A1 RESERVED in cart
+                // Make payment and issuance succeed
+                // Make orderReceiptRepository.save(...) throw
+                // Assert checkout throws
+                // Assert seat is not left in an impossible state
+                // Assert active order is not silently lost
+                ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+                SeatedZone seatedZone = new SeatedZone(
+                                ZONE_ID_1,
+                                "Orchestra",
+                                120.0,
+                                List.of(new Seat("A1", 0, 0)));
+                seatedZone.reserve(InventorySelection.seated(List.of("A1"), activeOrder.getOrderKey()));
+                Event realEvent = createRealEventWithZone(EVENT_ID_1, seatedZone);
+
+                activeOrder.addSeatedReservation(
+                                EVENT_ID_1,
+                                ZONE_ID_1,
+                                List.of("A1"),
+                                120.0,
+                                LocalDateTime.now());
+
+                PaymentResultDTO paymentResult = new PaymentResultDTO(
+                                PAYMENT_TRANSACTION_ID,
+                                "gateway",
+                                120.0,
+                                                "ILS",
+                                LocalDateTime.now());
+
+                IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
+                                ISSUANCE_TRANSACTION_ID,
+                                "issuer",
+                                LocalDateTime.now(),
+                                List.of(new BarcodeDTO(TICKET_ID_1, "barcode-A1", "QR")));
+                                
+                when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+                when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(realEvent);
+                when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
+                when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+
+                doThrow(new RuntimeException("DB error on receipt save"))
+                                .when(mockOrderReceiptRepo).save(any(OrderReceipt.class));
+
+                assertThrows(RuntimeException.class, () -> checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY,
+                                CURRENCY, PAYMENT_METHOD_TOKEN));
+                                
+                assertEquals(SeatStatus.SOLD, seatedZone.getSeatStatus("A1"));
+                assertFalse(activeOrder.isEmpty());
+                assertThrows(RuntimeException.class, () -> checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN));
+        }
+
+        //////////////////////////// tests for policies
+@Test
+void GivenUserMeetsAgePolicy_WhenCheckout_ThenCheckoutSucceeds() {
+    givenUserAge(20);
+
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    StandingZone zone = new StandingZone(ZONE_ID_1, "VIP", 10, 100.0);
+    zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
+
+    Event realEvent = createRealEventWithPolicyAndZone(
+            EVENT_ID_1,
+            zone,
+            new AgePurchasePolicy(18)
+    );
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            1,
+            100.0,
+            LocalDateTime.now()
+    );
+
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(realEvent);
+
+    AtomicBoolean paymentCharged = givenSuccessfulPaymentAndIssuanceWithFlag(1);
+
+    CheckoutResultDTO result = checkoutService.checkoutMember(
+            VALID_TOKEN,
+            IDEMPOTENCY_KEY,
+            CURRENCY,
+            PAYMENT_METHOD_TOKEN
+    );
+
+    assertEquals(100.0, result.totalCharged());
+    assertEquals(true, paymentCharged.get());
+    assertEquals(true, activeOrder.isEmpty());
+    assertEquals(1, result.issuedTicketIds().size());
+}
+@Test
+void GivenUserTooYoungForAgePolicy_WhenCheckout_ThenThrowExceptionAndPaymentNotCharged_NoReceiptNoTicket_AndTicketReturnedToStock() {
+    givenUserAge(17);
+
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    StandingZone zone = new StandingZone(ZONE_ID_1, "VIP", 10, 100.0);
+    zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
+
+    Event realEvent = createRealEventWithPolicyAndZone(
+            EVENT_ID_1,
+            zone,
+            new AgePurchasePolicy(18)
+    );
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            1,
+            100.0,
+            LocalDateTime.now()
+    );
+
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(realEvent);
+
+    AtomicBoolean paymentCharged = trackPaymentCharge();
+
+    Exception exception = assertThrows(Exception.class, () -> {
+        checkoutService.checkoutMember(
+                VALID_TOKEN,
+                IDEMPOTENCY_KEY,
+                CURRENCY,
+                PAYMENT_METHOD_TOKEN
         );
-    }
+    });
 
-    @Test
-    void GivenValidCheckoutWithCalculatedPrice_WhenCheckout_ThenReturnCalculatedTotal() {
-        PaymentResultDTO paymentResult = new PaymentResultDTO(
-                PAYMENT_TRANSACTION_ID,
-                "gateway",
-                150.0,
-                "ILS",
-                LocalDateTime.now()
-        );
+    assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
 
-        IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
-                ISSUANCE_TRANSACTION_ID,
-                "issuer",
-                LocalDateTime.now(),
-                List.of(new BarcodeDTO(TICKET_ID_2, "barcode-value-2", "QR"))
-        );
+    assertFalse(paymentCharged.get());
 
-        when(mockOrder.validateCanCheckout()).thenReturn(true);
-        when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone2));
+    verify(mockOrderReceiptRepo, never()).save(any());
 
-        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(150.0);
-        when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(150.0);
+    verify(mockTicketRepo, never()).save(any());
 
-        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
-        when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+    assertTrue(activeOrder.isEmpty());
 
-        CheckoutResultDTO result = checkoutService.checkout(
+    assertEquals(10, zone.getAvailableAmount());
+}
+
+@Test
+void GivenQuantityWithinMaxTicketsPolicy_WhenCheckout_ThenCheckoutSucceeds() {
+    givenUserAge(20);
+
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    StandingZone zone = new StandingZone(ZONE_ID_1, "VIP", 10, 100.0);
+    zone.reserve(InventorySelection.standing(2, activeOrder.getOrderKey()));
+
+    Event realEvent = createRealEventWithPolicyAndZone(
+            EVENT_ID_1,
+            zone,
+            new MaxTicketsPurchasePolicy(2)
+    );
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            2,
+            100.0,
+            LocalDateTime.now()
+    );
+
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(realEvent);
+
+    AtomicBoolean paymentCharged = givenSuccessfulPaymentAndIssuanceWithFlag(2);
+
+    CheckoutResultDTO result = checkoutService.checkoutMember(
+            VALID_TOKEN,
+            IDEMPOTENCY_KEY,
+            CURRENCY,
+            PAYMENT_METHOD_TOKEN
+    );
+
+    assertEquals(200.0, result.totalCharged());
+    assertEquals(true, paymentCharged.get());
+    assertEquals(true, activeOrder.isEmpty());
+    assertEquals(2, result.issuedTicketIds().size());
+}
+@Test
+void GivenQuantityExceedsMaxTicketsPolicy_WhenCheckout_ThenThrowExceptionAndPaymentNotCharged() {
+    givenUserAge(20);
+
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    StandingZone zone = new StandingZone(ZONE_ID_1, "VIP", 10, 100.0);
+    zone.reserve(InventorySelection.standing(3, activeOrder.getOrderKey()));
+
+    Event realEvent = createRealEventWithPolicyAndZone(
+            EVENT_ID_1,
+            zone,
+            new MaxTicketsPurchasePolicy(2)
+    );
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            3,
+            100.0,
+            LocalDateTime.now()
+    );
+
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(realEvent);
+
+    AtomicBoolean paymentCharged = trackPaymentCharge();
+
+    String result;
+
+    try {
+        checkoutService.checkoutMember(
                 VALID_TOKEN,
                 IDEMPOTENCY_KEY,
                 CURRENCY,
                 PAYMENT_METHOD_TOKEN
         );
 
-        assertEquals(150.0, result.totalCharged());
+        result = "NO_EXCEPTION";
+    } catch (Exception e) {
+        result = e.getMessage();
     }
 
-    @Test
-    void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTickets() {
-        PaymentResultDTO paymentResult = new PaymentResultDTO(
-                PAYMENT_TRANSACTION_ID,
-                "gateway",
-                250.0,
-                "ILS",
-                LocalDateTime.now()
-        );
+    assertEquals("Checkout failed, tickets returned to stock", result);
+    assertEquals(false, paymentCharged.get());
+    assertEquals(true, activeOrder.isEmpty());
+}
 
-        IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
-                ISSUANCE_TRANSACTION_ID,
-                "issuer",
-                LocalDateTime.now(),
-                List.of(
-                        new BarcodeDTO(TICKET_ID_1, "barcode-zone-1", "QR"),
-                        new BarcodeDTO(TICKET_ID_2, "barcode-zone-2", "QR")
-                )
-        );
+@Test
+void GivenQuantityBelowMinTicketsPolicy_WhenCheckout_ThenThrowExceptionAndPaymentNotCharged() {
+    givenUserAge(20);
 
-        when(mockOrder.validateCanCheckout()).thenReturn(true);
-        when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1, itemEvent1Zone2));
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    StandingZone zone = new StandingZone(ZONE_ID_1, "VIP", 10, 100.0);
+    zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 
-        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(250.0);
-        when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(125.0);
+    Event realEvent = createRealEventWithPolicyAndZone(
+            EVENT_ID_1,
+            zone,
+            new MinTicketsPurchasePolicy(2)
+    );
 
-        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
-        when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            1,
+            100.0,
+            LocalDateTime.now()
+    );
 
-        CheckoutResultDTO result = checkoutService.checkout(
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(realEvent);
+
+    AtomicBoolean paymentCharged = trackPaymentCharge();
+
+    String result;
+
+    try {
+        checkoutService.checkoutMember(
                 VALID_TOKEN,
                 IDEMPOTENCY_KEY,
                 CURRENCY,
                 PAYMENT_METHOD_TOKEN
         );
 
-        assertEquals(
-                new CheckoutResultDTO(
-                        250.0,
-                        PAYMENT_TRANSACTION_ID,
-                        List.of(TICKET_ID_1, TICKET_ID_2)
-                ),
-                result
-        );
+        result = "NO_EXCEPTION";
+    } catch (Exception e) {
+        result = e.getMessage();
     }
 
-    @Test
-    void GivenTicketsFromDifferentEvents_WhenCheckout_ThenBuyAllTickets() {
-        PaymentResultDTO paymentResult = new PaymentResultDTO(
-                PAYMENT_TRANSACTION_ID,
-                "gateway",
-                300.0,
-                "ILS",
-                LocalDateTime.now()
-        );
+    assertEquals("Checkout failed, tickets returned to stock", result);
+    assertEquals(false, paymentCharged.get());
+    assertEquals(true, activeOrder.isEmpty());
+}
 
-        IssuanceResultDTO issuanceResult = new IssuanceResultDTO(
-                ISSUANCE_TRANSACTION_ID,
-                "issuer",
-                LocalDateTime.now(),
-                List.of(
-                        new BarcodeDTO(TICKET_ID_1, "barcode-event-1", "QR"),
-                        new BarcodeDTO(TICKET_ID_3, "barcode-event-2", "QR")
-                )
-        );
+@Test
+void GivenOrPolicyAndOneConditionIsSatisfied_WhenCheckout_ThenCheckoutSucceeds() {
+    givenUserAge(16);
 
-        when(mockOrder.validateCanCheckout()).thenReturn(true);
-        when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1, itemEvent2Zone3));
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    StandingZone zone = new StandingZone(ZONE_ID_1, "VIP", 10, 100.0);
+    zone.reserve(InventorySelection.standing(3, activeOrder.getOrderKey()));
 
-        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
-        when(event2.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(200.0);
+    PurchasePolicy policy = new OrPurchasePolicy(
+            new AgePurchasePolicy(18),
+            new MinTicketsPurchasePolicy(3)
+    );
 
-        when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
-        when(event2.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(200.0);
+    Event realEvent = createRealEventWithPolicyAndZone(
+            EVENT_ID_1,
+            zone,
+            policy
+    );
 
-        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
-        when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            3,
+            100.0,
+            LocalDateTime.now()
+    );
 
-        CheckoutResultDTO result = checkoutService.checkout(
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(realEvent);
+
+    AtomicBoolean paymentCharged = givenSuccessfulPaymentAndIssuanceWithFlag(3);
+
+    CheckoutResultDTO result = checkoutService.checkoutMember(
+            VALID_TOKEN,
+            IDEMPOTENCY_KEY,
+            CURRENCY,
+            PAYMENT_METHOD_TOKEN
+    );
+
+    assertEquals(300.0, result.totalCharged());
+    assertEquals(true, paymentCharged.get());
+    assertEquals(true, activeOrder.isEmpty());
+    assertEquals(3, result.issuedTicketIds().size());
+}
+@Test
+void GivenAndPolicyAndOneConditionIsNotSatisfied_WhenCheckout_ThenThrowExceptionAndPaymentNotCharged() {
+    givenUserAge(20);
+
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    StandingZone zone = new StandingZone(ZONE_ID_1, "VIP", 10, 100.0);
+    zone.reserve(InventorySelection.standing(3, activeOrder.getOrderKey()));
+
+    PurchasePolicy policy = new AndPurchasePolicy(
+            new AgePurchasePolicy(18),
+            new MaxTicketsPurchasePolicy(2)
+    );
+
+    Event realEvent = createRealEventWithPolicyAndZone(
+            EVENT_ID_1,
+            zone,
+            policy
+    );
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            3,
+            100.0,
+            LocalDateTime.now()
+    );
+
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(realEvent);
+
+    AtomicBoolean paymentCharged = trackPaymentCharge();
+
+    String result;
+
+    try {
+        checkoutService.checkoutMember(
                 VALID_TOKEN,
                 IDEMPOTENCY_KEY,
                 CURRENCY,
                 PAYMENT_METHOD_TOKEN
         );
 
-        assertEquals(
-                new CheckoutResultDTO(
-                        300.0,
-                        PAYMENT_TRANSACTION_ID,
-                        List.of(TICKET_ID_1, TICKET_ID_3)
-                ),
-                result
-        );
+        result = "NO_EXCEPTION";
+    } catch (Exception e) {
+        result = e.getMessage();
     }
+
+    assertEquals("Checkout failed, tickets returned to stock", result);
+    assertEquals(false, paymentCharged.get());
+    assertEquals(true, activeOrder.isEmpty());
+}
+
+@Test
+void GivenTicketsFromDifferentEventsAndSecondEventExceedsMaxPolicy_WhenCheckout_ThenFailWithoutPaymentTicketsOrReceiptAndReturnAllTicketsToStock() {
+    givenUserAge(20);
+
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    StandingZone zoneEvent1 = new StandingZone(ZONE_ID_1, "Event1 Zone", 10, 100.0);
+    StandingZone zoneEvent2 = new StandingZone(ZONE_ID_3, "Event2 Zone", 10, 200.0);
+
+    zoneEvent1.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
+    zoneEvent2.reserve(InventorySelection.standing(2, activeOrder.getOrderKey()));
+
+    Event realEvent1 = createRealEventWithPolicyAndZone(
+            EVENT_ID_1,
+            zoneEvent1,
+            new NoPurchasePolicy()
+    );
+
+    Event realEvent2 = createRealEventWithPolicyAndZone(
+            EVENT_ID_2,
+            zoneEvent2,
+            new MaxTicketsPurchasePolicy(1)
+    );
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            1,
+            100.0,
+            LocalDateTime.now()
+    );
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_2,
+            ZONE_ID_3,
+            2,
+            200.0,
+            LocalDateTime.now()
+    );
+
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(realEvent1);
+    when(mockEventRepo.findById(EVENT_ID_2)).thenReturn(realEvent2);
+
+    AtomicBoolean paymentCharged = trackPaymentCharge();
+    AtomicBoolean ticketSaved = trackTicketSave();
+    AtomicBoolean receiptSaved = trackReceiptSave();
+
+    String result;
+
+    try {
+        checkoutService.checkoutMember(
+                VALID_TOKEN,
+                IDEMPOTENCY_KEY,
+                CURRENCY,
+                PAYMENT_METHOD_TOKEN
+        );
+
+        result = "NO_EXCEPTION";
+    } catch (Exception e) {
+        result = e.getMessage();
+    }
+
+    assertEquals("Checkout failed, tickets returned to stock", result);
+
+    assertEquals(false, paymentCharged.get());
+    assertEquals(false, ticketSaved.get());
+    assertEquals(false, receiptSaved.get());
+
+    assertEquals(true, activeOrder.isEmpty());
+
+    assertEquals(10, zoneEvent1.getAvailableAmount());
+    assertEquals(0, zoneEvent1.getReservedAmount());
+    assertEquals(0, zoneEvent1.getSoldAmount());
+
+    assertEquals(10, zoneEvent2.getAvailableAmount());
+    assertEquals(0, zoneEvent2.getReservedAmount());
+    assertEquals(0, zoneEvent2.getSoldAmount());
+}
+
+@Test
+void GivenTicketsFromDifferentEventsAndSecondEventAgePolicyFails_WhenCheckout_ThenFailWithoutPaymentTicketsOrReceiptAndReturnAllTicketsToStock() {
+    givenUserAge(20);
+
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    StandingZone zoneEvent1 = new StandingZone(ZONE_ID_1, "Event1 Zone", 10, 100.0);
+    StandingZone zoneEvent2 = new StandingZone(ZONE_ID_3, "Event2 Zone", 10, 200.0);
+
+    zoneEvent1.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
+    zoneEvent2.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
+
+    Event realEvent1 = createRealEventWithPolicyAndZone(
+            EVENT_ID_1,
+            zoneEvent1,
+            new AgePurchasePolicy(18)
+    );
+
+    Event realEvent2 = createRealEventWithPolicyAndZone(
+            EVENT_ID_2,
+            zoneEvent2,
+            new AgePurchasePolicy(21)
+    );
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            1,
+            100.0,
+            LocalDateTime.now()
+    );
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_2,
+            ZONE_ID_3,
+            1,
+            200.0,
+            LocalDateTime.now()
+    );
+
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(realEvent1);
+    when(mockEventRepo.findById(EVENT_ID_2)).thenReturn(realEvent2);
+
+    AtomicBoolean paymentCharged = trackPaymentCharge();
+    AtomicBoolean ticketSaved = trackTicketSave();
+    AtomicBoolean receiptSaved = trackReceiptSave();
+
+    String result;
+
+    try {
+        checkoutService.checkoutMember(
+                VALID_TOKEN,
+                IDEMPOTENCY_KEY,
+                CURRENCY,
+                PAYMENT_METHOD_TOKEN
+        );
+
+        result = "NO_EXCEPTION";
+    } catch (Exception e) {
+        result = e.getMessage();
+    }
+
+    assertEquals("Checkout failed, tickets returned to stock", result);
+
+    assertEquals(false, paymentCharged.get());
+    assertEquals(false, ticketSaved.get());
+    assertEquals(false, receiptSaved.get());
+
+    assertEquals(true, activeOrder.isEmpty());
+
+    assertEquals(10, zoneEvent1.getAvailableAmount());
+    assertEquals(0, zoneEvent1.getReservedAmount());
+    assertEquals(0, zoneEvent1.getSoldAmount());
+
+    assertEquals(10, zoneEvent2.getAvailableAmount());
+    assertEquals(0, zoneEvent2.getReservedAmount());
+    assertEquals(0, zoneEvent2.getSoldAmount());
+}
+
+
+@Test
+void GivenTicketsFromDifferentEventsAndSecondEventBelowMinPolicy_WhenCheckout_ThenFailWithoutPaymentTicketsOrReceiptAndReturnAllTicketsToStock() {
+    givenUserAge(20);
+
+    ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+    StandingZone zoneEvent1 = new StandingZone(ZONE_ID_1, "Event1 Zone", 10, 100.0);
+    StandingZone zoneEvent2 = new StandingZone(ZONE_ID_3, "Event2 Zone", 10, 200.0);
+
+    zoneEvent1.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
+    zoneEvent2.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
+
+    Event realEvent1 = createRealEventWithPolicyAndZone(
+            EVENT_ID_1,
+            zoneEvent1,
+            new NoPurchasePolicy()
+    );
+
+    Event realEvent2 = createRealEventWithPolicyAndZone(
+            EVENT_ID_2,
+            zoneEvent2,
+            new MinTicketsPurchasePolicy(2)
+    );
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_1,
+            ZONE_ID_1,
+            1,
+            100.0,
+            LocalDateTime.now()
+    );
+
+    activeOrder.addStandingReservation(
+            EVENT_ID_2,
+            ZONE_ID_3,
+            1,
+            200.0,
+            LocalDateTime.now()
+    );
+
+    when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+    when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(realEvent1);
+    when(mockEventRepo.findById(EVENT_ID_2)).thenReturn(realEvent2);
+
+    AtomicBoolean paymentCharged = trackPaymentCharge();
+    AtomicBoolean ticketSaved = trackTicketSave();
+    AtomicBoolean receiptSaved = trackReceiptSave();
+
+    String result;
+
+    try {
+        checkoutService.checkoutMember(
+                VALID_TOKEN,
+                IDEMPOTENCY_KEY,
+                CURRENCY,
+                PAYMENT_METHOD_TOKEN
+        );
+
+        result = "NO_EXCEPTION";
+    } catch (Exception e) {
+        result = e.getMessage();
+    }
+
+    assertEquals("Checkout failed, tickets returned to stock", result);
+
+    assertEquals(false, paymentCharged.get());
+    assertEquals(false, ticketSaved.get());
+    assertEquals(false, receiptSaved.get());
+
+    assertEquals(true, activeOrder.isEmpty());
+
+    assertEquals(10, zoneEvent1.getAvailableAmount());
+    assertEquals(0, zoneEvent1.getReservedAmount());
+    assertEquals(0, zoneEvent1.getSoldAmount());
+
+    assertEquals(10, zoneEvent2.getAvailableAmount());
+    assertEquals(0, zoneEvent2.getReservedAmount());
+    assertEquals(0, zoneEvent2.getSoldAmount());
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   // test helper functions:
+
+   private PurchasePolicy acceptingPurchasePolicy() {
+           return new NoPurchasePolicy();
+        }
+
+        private DiscountPolicy noDiscountPolicy() {
+        return new DiscountPolicy(0) {
+                @Override
+                public double calculate(int quantity, Double priceAtOneTicketReservation, LocalDateTime now) {
+                return quantity * priceAtOneTicketReservation;
+                }
+
+                @Override
+                public double calculatePriceforoneticket(int quantity, Double priceAtOneTicketReservation, LocalDateTime now) {
+                return priceAtOneTicketReservation;
+                }
+        };
+        }
+
+        private Event createRealEventWithZone(int eventId, InventoryZone zone) {
+        return new Event(
+                eventId,
+                "Concert",
+                4.5,
+                List.of("Artist"),
+                EventCategory.CONCERT,
+                100,
+                EventStatus.ON_SALE,
+                new VenueMap(1, new Location("Israel", "Tel Aviv"), List.of(zone)),
+                List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
+                acceptingPurchasePolicy(),
+                noDiscountPolicy()
+        );
+        }
+private void givenUserAge(int age) {
+    User mockUser = mock(User.class);
+    when(mockUser.getAge()).thenReturn(age);
+    when(mockUserRepository.getUserById(USER_ID)).thenReturn(mockUser);
+}
+
+private AtomicBoolean givenSuccessfulPaymentAndIssuanceWithFlag(int ticketCount) {
+    AtomicBoolean paymentCharged = new AtomicBoolean(false);
+
+    when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenAnswer(invocation -> {
+        paymentCharged.set(true);
+
+        PaymentRequestDTO request = invocation.getArgument(0);
+
+        return new PaymentResultDTO(
+                PAYMENT_TRANSACTION_ID,
+                "gateway",
+                request.amount(),
+                CURRENCY,
+                LocalDateTime.now()
+        );
+    });
+
+    List<BarcodeDTO> barcodes = new java.util.ArrayList<>();
+
+    for (int i = 1; i <= ticketCount; i = i + 1) {
+        barcodes.add(new BarcodeDTO(1000 + i, "barcode-policy-" + i, "QR"));
+    }
+
+    when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(
+            new IssuanceResultDTO(
+                    ISSUANCE_TRANSACTION_ID,
+                    "issuer",
+                    LocalDateTime.now(),
+                    barcodes
+            )
+    );
+
+    return paymentCharged;
+}
+
+private AtomicBoolean trackPaymentCharge() {
+    AtomicBoolean paymentCharged = new AtomicBoolean(false);
+
+    when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenAnswer(invocation -> {
+        paymentCharged.set(true);
+
+        PaymentRequestDTO request = invocation.getArgument(0);
+
+        return new PaymentResultDTO(
+                PAYMENT_TRANSACTION_ID,
+                "gateway",
+                request.amount(),
+                CURRENCY,
+                LocalDateTime.now()
+        );
+    });
+
+    return paymentCharged;
+}
+
+private Event createRealEventWithPolicyAndZone(int eventId, InventoryZone zone, PurchasePolicy purchasePolicy) {
+    return new Event(
+            eventId,
+            "Policy Test Event",
+            4.5,
+            List.of("Artist"),
+            EventCategory.CONCERT,
+            100,
+            EventStatus.ON_SALE,
+            new VenueMap(1, new Location("Israel", "Tel Aviv"), List.of(zone)),
+            List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
+            purchasePolicy,
+            noDiscountPolicy()
+    );
+}
+private AtomicBoolean trackTicketSave() {
+    AtomicBoolean ticketSaved = new AtomicBoolean(false);
+
+    doAnswer(invocation -> {
+        ticketSaved.set(true);
+        return null;
+    }).when(mockTicketRepo).save(any(Ticket.class));
+
+    return ticketSaved;
+}
+
+private AtomicBoolean trackReceiptSave() {
+    AtomicBoolean receiptSaved = new AtomicBoolean(false);
+
+    doAnswer(invocation -> {
+        receiptSaved.set(true);
+        return null;
+    }).when(mockOrderReceiptRepo).save(any(OrderReceipt.class));
+
+    return receiptSaved;
+}
+
+
 }
