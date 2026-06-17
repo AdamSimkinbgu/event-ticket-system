@@ -1,6 +1,7 @@
 package com.ticketing.system.Presentation.views.auth;
 
 import com.ticketing.system.Presentation.components.Toasts;
+import com.ticketing.system.Presentation.components.auth.PasswordStrengthMeter;
 import com.ticketing.system.Presentation.components.kit.LkAuthCard;
 import com.ticketing.system.Presentation.components.kit.LkCheckRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
@@ -70,6 +71,11 @@ public class RegisterView extends LkAuthCard {
         password.setPlaceholder("At least 8 characters");
         password.setRequired(true);
         password.setWidthFull();
+        // Live strength feedback. EAGER mode fires on every keystroke so the
+        // bar and rule chips track the user's input directly.
+        PasswordStrengthMeter strengthMeter = new PasswordStrengthMeter();
+        password.setValueChangeMode(ValueChangeMode.EAGER);
+        password.addValueChangeListener(e -> strengthMeter.update(e.getValue()));
 
         PasswordField confirm = new PasswordField("Confirm password");
         confirm.setPlaceholder("Re-enter your password");
@@ -85,7 +91,7 @@ public class RegisterView extends LkAuthCard {
         create.setWidthFull();
         create.addClickShortcut(Key.ENTER);
 
-        col(14, username, email, age, password, confirm, terms, create);
+        col(14, username, email, age, password, strengthMeter, confirm, terms, create);
         foot("Already have an account?", "Sign in →", LoginView.class);
     }
 
