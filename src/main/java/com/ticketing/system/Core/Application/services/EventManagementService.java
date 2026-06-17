@@ -688,6 +688,23 @@ public class EventManagementService {
         }
     }
 
+    private void notifyTicketHoldersOfCancellation(int eventId, String eventName, List<OrderReceipt> receipts) {
+        // Collect unique user IDs to avoid duplicate notifications per receipt
+        java.util.Set<Integer> memberUserIds = receipts.stream()
+                .filter(OrderReceipt::isMemberReceipt)
+                .map(r -> r.getUserId().orElse(-1))
+                .filter(id -> id > 0)
+                .collect(java.util.stream.Collectors.toSet());
+
+        for (Integer userId : memberUserIds) {
+            try {
+                notificationService.notifyEventCancelled(userId, eventId, eventName);
+            } catch (Exception e) {
+                log.warn("Failed to send cancellation notification to userId={} for eventId={}", userId, eventId);
+            }
+        }
+    }
+
     
     // helper function for cancelEventAndRefund to validate refund results from the
     // payment gateway and throw domain-specific exceptions if something looks
