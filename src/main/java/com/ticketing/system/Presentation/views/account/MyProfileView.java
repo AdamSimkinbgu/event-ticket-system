@@ -10,7 +10,7 @@ import com.ticketing.system.Presentation.components.kit.LkField;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Presentation.security.MockAuth;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
@@ -37,7 +37,7 @@ public class MyProfileView extends LkPage {
     }
 
     private Component buildProfileCard() {
-        String name = MockAuth.displayName();
+        String name = AuthSession.displayName();
         if (name == null || name.isBlank()) name = "Alex Morgan";
 
         LkCard card = new LkCard("Profile").pad(20);

@@ -17,15 +17,12 @@ import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
-import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.events.EventCategory;
-import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
-import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 
 // Contract tests every IEventRepository implementation must satisfy. Future JPA-backed
 // adapter will subclass this with its own newRepository() factory; tests are reused.
@@ -153,14 +150,14 @@ public abstract class IEventRepositoryContractTest {
         assertTrue(result.isEmpty());
     }
 
-    // === search — eventName ===
+    // === searchAll — eventName ===
 
     @Test
-    void givenMatchingEventName_whenSearch_thenReturnsMatchingEvent() {
+    void givenMatchingEventName_whensearchAll_thenReturnsMatchingEvent() {
         eventRepo.save(buildEvent(1, "Jazz Festival", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
         eventRepo.save(buildEvent(2, "Rock Night", 3.8, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
 
-        List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
                 "Jazz", null, null, null, null, null, null, null, null, null, null, null, null));
 
         assertEquals(1, result.size());
@@ -168,19 +165,19 @@ public abstract class IEventRepositoryContractTest {
     }
 
     @Test
-    void givenNonMatchingEventName_whenSearch_thenReturnsEmpty() {
+    void givenNonMatchingEventName_whensearchAll_thenReturnsEmpty() {
         eventRepo.save(buildEvent(1, "Jazz Festival", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
 
-        List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
                 "Opera", null, null, null, null, null, null, null, null, null, null, null, null));
 
         assertTrue(result.isEmpty());
     }
 
-    // === search — artistName ===
+    // === searchAll — artistName ===
 
     @Test
-    void givenMatchingArtistName_whenSearch_thenReturnsMatchingEvent() {
+    void givenMatchingArtistName_whensearchAll_thenReturnsMatchingEvent() {
         VenueMap vm = new VenueMap(1, LOCATION, List.of(new StandingZone(1, "Floor", 100, 50)));
         Event event = new Event(1, "Concert", 4.5, List.of("John Doe", "Jane Smith"),
                 EventCategory.CONCERT, 10, EventStatus.ON_SALE, vm,
@@ -188,17 +185,17 @@ public abstract class IEventRepositoryContractTest {
                  new NoPurchasePolicy(), new DiscountPolicy(0));
         eventRepo.save(event);
 
-        List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
                 null, "John", null, null, null, null, null, null, null, null, null, null, null));
 
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getId());
     }
 
-    // === search — category ===
+    // === searchAll — category ===
 
     @Test
-    void givenMatchingCategory_whenSearch_thenReturnsMatchingEvent() {
+    void givenMatchingCategory_whensearchAll_thenReturnsMatchingEvent() {
         eventRepo.save(buildEvent(1, "Hamlet", 4.5, 10, EventStatus.ON_SALE, EventCategory.MUSIC)); // MUSIC
         VenueMap vm = new VenueMap(2, LOCATION, List.of(new StandingZone(1, "Stalls", 100, 60)));
         Event theaterEvent = new Event(2, "Hamlet2", 4.5, List.of("Actor B"),
@@ -207,7 +204,7 @@ public abstract class IEventRepositoryContractTest {
                 new NoPurchasePolicy(), new DiscountPolicy(0));
         eventRepo.save(theaterEvent);
 
-        List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
                 null, null, "MUSIC", null, null, null, null, null, null, null, null, null, null));
 
         assertEquals(1, result.size());
@@ -215,23 +212,23 @@ public abstract class IEventRepositoryContractTest {
     }
 
     @Test
-    void givenUnknownCategory_whenSearch_thenReturnsEmpty() {
+    void givenUnknownCategory_whensearchAll_thenReturnsEmpty() {
         eventRepo.save(buildEvent(1, "Event A", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
 
-        List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
                 null, null, "NOT_A_CATEGORY", null, null, null, null, null, null, null, null, null, null));
 
         assertTrue(result.isEmpty());
     }
 
-    // === search — keywords ===
+    // === searchAll — keywords ===
 
     @Test
-    void givenMatchingKeywordInEventName_whenSearch_thenReturnsMatchingEvent() {
+    void givenMatchingKeywordInEventName_whensearchAll_thenReturnsMatchingEvent() {
         eventRepo.save(buildEvent(1, "Summer Festival", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
         eventRepo.save(buildEvent(2, "Rock Night", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
 
-        List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
                 null, null, null, "Summer", null, null, null, null, null, null, null, null, null));
 
         assertEquals(1, result.size());
@@ -239,7 +236,7 @@ public abstract class IEventRepositoryContractTest {
     }
 
     @Test
-    void givenMatchingKeywordInArtistName_whenSearch_thenReturnsMatchingEvent() {
+    void givenMatchingKeywordInArtistName_whensearchAll_thenReturnsMatchingEvent() {
         VenueMap vm = new VenueMap(1, LOCATION, List.of(new StandingZone(1, "Floor", 100, 50)));
         Event event = new Event(1, "Night Out", 4.5, List.of("Coldplay"),
                 EventCategory.CONCERT, 10, EventStatus.ON_SALE, vm,
@@ -247,20 +244,20 @@ public abstract class IEventRepositoryContractTest {
                 new NoPurchasePolicy(), new DiscountPolicy(0));
         eventRepo.save(event);
 
-        List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
                 null, null, null, "Coldplay", null, null, null, null, null, null, null, null, null));
 
         assertEquals(1, result.size());
     }
 
-    // === search — date range ===
+    // === searchAll — date range ===
 
     @Test
-    void givenEventWithShowDateInsideRange_whenSearch_thenReturnsMatchingEvent() {
+    void givenEventWithShowDateInsideRange_whensearchAll_thenReturnsMatchingEvent() {
         eventRepo.save(buildEvent(1, "Future Show", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT)); // show date:
                                                                                                            // 2099-06-01
 
-        List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
                 null, null, null, null, null, null,
                 LocalDate.of(2099, 5, 1), LocalDate.of(2099, 7, 1),
                 null, null, null, null, null));
@@ -269,11 +266,11 @@ public abstract class IEventRepositoryContractTest {
     }
 
     @Test
-    void givenEventWithShowDateOutsideRange_whenSearch_thenReturnsEmpty() {
+    void givenEventWithShowDateOutsideRange_whensearchAll_thenReturnsEmpty() {
         eventRepo.save(buildEvent(1, "Future Show", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT)); // show date:
                                                                                                            // 2099-06-01
 
-        List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
                 null, null, null, null, null, null,
                 LocalDate.of(2100, 1, 1), LocalDate.of(2100, 12, 31),
                 null, null, null, null, null));
@@ -281,39 +278,39 @@ public abstract class IEventRepositoryContractTest {
         assertTrue(result.isEmpty());
     }
 
-    // === search — price range ===
+    // === searchAll — price range ===
 
     @Test
-    void givenEventWithZoneInPriceRange_whenSearch_thenReturnsMatchingEvent() {
+    void givenEventWithZoneInPriceRange_whensearchAll_thenReturnsMatchingEvent() {
         eventRepo.save(buildEvent(1, "Affordable Show", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT)); // zone
                                                                                                                // price
                                                                                                                // = 50
 
-        List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
                 null, null, null, null, 10.0, 100.0, null, null, null, null, null, null, null));
 
         assertEquals(1, result.size());
     }
 
     @Test
-    void givenEventWithZonePriceBelowMinPrice_whenSearch_thenReturnsEmpty() {
+    void givenEventWithZonePriceBelowMinPrice_whensearchAll_thenReturnsEmpty() {
         eventRepo.save(buildEvent(1, "Cheap Show", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT)); // zone price
                                                                                                           // = 50
 
-        List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
                 null, null, null, null, 100.0, 500.0, null, null, null, null, null, null, null));
 
         assertTrue(result.isEmpty());
     }
 
-    // === search — all-null filters ===
+    // === searchAll — all-null filters ===
 
     @Test
-    void givenAllNullFilters_whenSearch_thenReturnsAllEvents() {
+    void givenAllNullFilters_whensearchAll_thenReturnsAllEvents() {
         eventRepo.save(buildEvent(1, "Event A", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
         eventRepo.save(buildEvent(2, "Event B", 3.8, 10, EventStatus.DRAFT, EventCategory.CONCERT));
 
-        List<Event> result = eventRepo.search(new CatalogSearchFiltersDTO(
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
                 null, null, null, null, null, null, null, null, null, null, null, null, null));
 
         assertEquals(2, result.size());

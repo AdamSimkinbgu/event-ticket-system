@@ -105,19 +105,21 @@ class CompanyAcceptanceTest {
                                 owner.token(),
                                 new CompanyRegistrationDTO("capacityCompany", "desc")).companyId();
 
-   EventCreationDTO eventRequest = new EventCreationDTO(
-        companyId,
-        "Capacity Test Event",
-        "Testing inventory zone capacity",
-        EventCategory.CONCERT,
-        new Location("Test Venue", "Test City"),
-        List.of(new ShowDate(
-                LocalDateTime.now().plusDays(1),
-                LocalDateTime.now().plusDays(30)
-        )),
-        null
-);
-    EventDetailDTO event = eventManagementService.addEvent(owner.token(), eventRequest);
+                EventCreationDTO eventRequest = new EventCreationDTO(
+                        companyId,
+                        "Capacity Test Event",
+                                "Testing inventory zone capacity",
+                                        List.of("Test Artist", "Another Artist"),
+                                EventCategory.CONCERT,
+                                        4.5,
+                        new Location("Test Venue", "Test City"),
+                        List.of(new ShowDate(
+                                LocalDateTime.now().plusDays(1),
+                                LocalDateTime.now().plusDays(30)
+                        )),
+                        null
+                );
+                EventDetailDTO event = eventManagementService.addEvent(owner.token(), eventRequest);
 
                 eventManagementService.configureVenueMap(owner.token(), companyId, new VenueMapConfigDTO(
                                 event.eventId(),
@@ -127,9 +129,9 @@ class CompanyAcceptanceTest {
 
                 Event storedEvent = eventRepository.findById(Integer.parseInt(event.eventId()));
 
-                eventManagementService.updateStandingZoneCapacity(owner.token(), companyId, storedEvent.getId(), 1,
-                                150);
-
+                //eventManagementService.updateStandingZoneCapacity(owner.token(), companyId, storedEvent.getId(), 1, 150);
+                //
+                eventManagementService.addPlacesToStandingZone(owner.token(), companyId, storedEvent.getId(), 1, 50);
                 InventoryZone zone = storedEvent.getVenueMap().getInventoryZones().stream()
                                 .filter(z -> z.getId() == 1)
                                 .findFirst()

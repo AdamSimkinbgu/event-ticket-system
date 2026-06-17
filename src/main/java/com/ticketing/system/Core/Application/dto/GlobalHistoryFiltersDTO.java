@@ -9,7 +9,7 @@ import java.util.List;
 public record GlobalHistoryFiltersDTO(
     Integer buyerUserId,
     Integer companyId,
-    List<String> eventIds,
+    List<Integer> eventIds,
     LocalDate fromDate,
     LocalDate toDate
 ) {}

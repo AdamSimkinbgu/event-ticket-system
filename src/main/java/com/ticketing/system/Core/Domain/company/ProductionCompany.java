@@ -46,7 +46,7 @@ public class ProductionCompany implements InvariantChecked {
 
     public void addManager(int targetId) {
         if (managers.contains(targetId)) {
-            throw new RuntimeException("No pending manager invitation for this user");
+            throw new RuntimeException("The target user is already a manager of this company");
         }
         managers.add(targetId);
     }
@@ -111,6 +111,9 @@ public class ProductionCompany implements InvariantChecked {
 
     // general appointment revoke for manager or owner, whatever is active for the target user right now.
     public void RevokeAppointment(int targetId) {
+        if (targetId == founderId) {
+            throw new IllegalStateException("The founder cannot be revoked");
+        }
         if (managers.contains(targetId)) {
             managers.remove(Integer.valueOf(targetId));
         } else if (ownerIds.contains(targetId)) {

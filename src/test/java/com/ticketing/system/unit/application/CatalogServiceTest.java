@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -97,10 +98,10 @@ class CatalogServiceTest {
     // UC-7: searchGlobal propagates SessionExpiredException from the session manager
     @Test
     void givenExpiredToken_whenSearchGlobal_thenThrowsSessionExpiredException() {
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenThrow(new SessionExpiredException());
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenThrow(new InvalidTokenException());
         CatalogSearchFiltersDTO filters = emptyFilters();
 
-        assertThrows(SessionExpiredException.class,
+        assertThrows(InvalidTokenException.class,
                 () -> catalogService.searchGlobal(VALID_TOKEN, filters));
     }
 
@@ -113,8 +114,8 @@ class CatalogServiceTest {
         ProductionCompany company1 = createMockCompany("Company A", 4.5);
         ProductionCompany company2 = createMockCompany("Company B", 3.0);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockEventRepository.search(filters)).thenReturn(List.of(event1, event2));
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of(event1, event2));
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(company1);
         when(mockCompanyRepository.getCompanyById(20)).thenReturn(company2);
 
@@ -133,8 +134,8 @@ class CatalogServiceTest {
         ProductionCompany highRated = createMockCompany("Company A", 4.5);
         ProductionCompany lowRated  = createMockCompany("Company B", 2.0);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockEventRepository.search(filters)).thenReturn(List.of(event1, event2));
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of(event1, event2));
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(highRated);
         when(mockCompanyRepository.getCompanyById(20)).thenReturn(lowRated);
 
@@ -154,8 +155,8 @@ class CatalogServiceTest {
         ProductionCompany highRated = createMockCompany("Company A", 4.5);
         ProductionCompany lowRated  = createMockCompany("Company B", 2.0);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockEventRepository.search(filters)).thenReturn(List.of(event1, event2));
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of(event1, event2));
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(highRated);
         when(mockCompanyRepository.getCompanyById(20)).thenReturn(lowRated);
 
@@ -169,8 +170,8 @@ class CatalogServiceTest {
     @Test
     void givenValidTokenAndEmptyRepository_whenSearchGlobal_thenReturnsEmptyList() {
         CatalogSearchFiltersDTO filters = emptyFilters();
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockEventRepository.search(filters)).thenReturn(List.of());
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of());
 
         List<EventSummaryDTO> results = catalogService.searchGlobal(VALID_TOKEN, filters);
 
@@ -185,7 +186,7 @@ class CatalogServiceTest {
     // UC-7: searchByCompany throws InvalidTokenException for an invalid token
     @Test
     void givenInvalidToken_whenSearchByCompany_thenThrowsInvalidTokenException() {
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(false);
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(false);
         CatalogSearchFiltersDTO filters = emptyFilters();
 
         assertThrows(InvalidTokenException.class,
@@ -195,10 +196,10 @@ class CatalogServiceTest {
     // UC-7: searchByCompany propagates SessionExpiredException from the session manager
     @Test
     void givenExpiredToken_whenSearchByCompany_thenThrowsSessionExpiredException() {
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenThrow(new SessionExpiredException());
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenThrow(new InvalidTokenException());
         CatalogSearchFiltersDTO filters = emptyFilters();
 
-        assertThrows(SessionExpiredException.class,
+        assertThrows(InvalidTokenException.class,
                 () -> catalogService.searchByCompany(VALID_TOKEN, 10, filters));
     }
 
@@ -210,8 +211,8 @@ class CatalogServiceTest {
         Event event2 = createMockEvent(2, 20);
         ProductionCompany company = createMockCompany("Company A", 4.5);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockEventRepository.search(filters)).thenReturn(List.of(event1, event2));
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of(event1, event2));
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
 
         List<EventSummaryDTO> results = catalogService.searchByCompany(VALID_TOKEN, 10, filters);
@@ -229,8 +230,8 @@ class CatalogServiceTest {
         Event event1 = createMockEvent(1, 10);
         ProductionCompany lowRated = createMockCompany("Company A", 1.5);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockEventRepository.search(filters)).thenReturn(List.of(event1));
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.searchONSALE(any())).thenReturn(List.of(event1));
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(lowRated);
 
         List<EventSummaryDTO> results = catalogService.searchByCompany(VALID_TOKEN, 10, filters);
@@ -243,9 +244,11 @@ class CatalogServiceTest {
     void givenValidTokenAndNoMatchingCompanyEvents_whenSearchByCompany_thenReturnsEmptyList() {
         CatalogSearchFiltersDTO filters = emptyFilters();
         Event event1 = createMockEvent(1, 20); // belongs to a different company
+        ProductionCompany company10 = createMockCompany("Company A", 4.5);
 
-        when(mockSessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(mockEventRepository.search(filters)).thenReturn(List.of(event1));
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company10);
+        when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of(event1));
 
         List<EventSummaryDTO> results = catalogService.searchByCompany(VALID_TOKEN, 10, filters);
 
@@ -409,9 +412,9 @@ class CatalogServiceTest {
                 )
         );
 
-        seatedZone.reserve(InventorySelection.seated(List.of("A1")));
-        seatedZone.reserve(InventorySelection.seated(List.of("A2")));
-        seatedZone.confirmSale(InventorySelection.seated(List.of("A2")));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1"), "test-order"));
+        seatedZone.reserve(InventorySelection.seated(List.of("A2"), "test-order"));
+        seatedZone.confirmSale(InventorySelection.seated(List.of("A2"), "test-order"));
 
         VenueMap venueMap = new VenueMap(
                 1,
@@ -531,6 +534,7 @@ class CatalogServiceTest {
         ProductionCompany mockCompany = mock(ProductionCompany.class);
         when(mockCompany.getName()).thenReturn(name);
         when(mockCompany.getRating()).thenReturn(rating);
+        when(mockCompany.getStatus()).thenReturn(CompanyStatus.ACTIVE);
         return mockCompany;
     }
 }

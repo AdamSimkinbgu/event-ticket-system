@@ -6,7 +6,8 @@ import com.ticketing.system.Presentation.components.kit.LkSideNav;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
-import com.ticketing.system.Presentation.security.MockAuth;
+import com.ticketing.system.Presentation.security.SignOutFlow;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
 import com.ticketing.system.Presentation.views.account.MyInvitationsView;
 import com.ticketing.system.Presentation.views.account.MyProfileView;
@@ -75,8 +76,10 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
     private LkTopBar topBar;
     private LkSideNav ownerNav;
     private final Div drawerWrap = new Div();
+    private final SignOutFlow signOutFlow;
 
-    public WorkspaceLayout() {
+    public WorkspaceLayout(SignOutFlow signOutFlow) {
+        this.signOutFlow = signOutFlow;
         rebuildTopBar();
         addToDrawer(drawerWrap);
         rebuildDrawer(null);
@@ -90,7 +93,7 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
 
     private void rebuildTopBar() {
         if (topBar != null) topBar.getElement().removeFromParent();
-        String name = MockAuth.isSignedIn() ? MockAuth.displayName() : "Owner";
+        String name = AuthSession.isSignedIn() ? AuthSession.displayName() : "Owner";
         topBar = new LkTopBar(LkTopBar.Variant.MAIN)
             .brand("TicketHub", " › Workspace", LandingView.class)
             .nav(List.of(
@@ -124,7 +127,7 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
             new LkMenu.Item("arrowLeft", "Back to buyer site").onClick(() -> UI.getCurrent().navigate(BrowseEventsView.class)),
             new LkMenu.Divider(),
             new LkMenu.Item("logout",    "Sign out").danger().onClick(() -> {
-                MockAuth.signOut();
+                signOutFlow.execute();
                 UI.getCurrent().navigate(LoginView.class);
             })
         );

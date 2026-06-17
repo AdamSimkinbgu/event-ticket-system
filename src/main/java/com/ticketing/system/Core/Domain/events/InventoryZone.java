@@ -1,6 +1,5 @@
 package com.ticketing.system.Core.Domain.events;
 
-import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 /**
@@ -83,11 +82,4 @@ public abstract class InventoryZone implements InvariantChecked {
         return getZoneType() == ZoneType.SEATED;
     }
     
-    // setCapacity is overriden only in standing zone, will throw here if called on seated zone; the seat-based methods must be used instead
-    public void setStandingCapacity(int newCapacity) {
-        if (!isStanding()) {
-            throw new UnsupportedOperationException("Cannot update capacity directly for a seated zone");
-        }
-        //Note: won't get here if it's a standing zone
-    }
 }

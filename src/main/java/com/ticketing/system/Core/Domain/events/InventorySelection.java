@@ -21,10 +21,12 @@ public final class InventorySelection {
 
     private final int quantity;                // tickets quantity, For standing zones, this is the only relevant field.
     private final List<String> seatNumbers;    // only non-empty For seated zones, must contain no duplicates.
+    private final String orderKey;             // identifies which ActiveOrder holds this reservation; null means "no ownership check".
 
-    private InventorySelection(int quantity, List<String> seatNumbers) {
+    private InventorySelection(int quantity, List<String> seatNumbers, String orderKey) {
         this.quantity = quantity;
         this.seatNumbers = seatNumbers == null ? List.of() : List.copyOf(seatNumbers);
+        this.orderKey = orderKey;
     }
 
     public static InventorySelection standing(int quantity) {
@@ -32,7 +34,15 @@ public final class InventorySelection {
             throw new IllegalArgumentException("Quantity must be positive");
         }
 
-        return new InventorySelection(quantity, List.of());
+        return new InventorySelection(quantity, List.of(), null);
+    }
+
+    public static InventorySelection standing(int quantity, String orderKey) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be positive");
+        }
+
+        return new InventorySelection(quantity, List.of(), orderKey);
     }
 
     public static InventorySelection seated(List<String> seatNumbers) {
@@ -51,7 +61,26 @@ public final class InventorySelection {
             }
         }
 
-        return new InventorySelection(seatNumbers.size(), new ArrayList<>(seatNumbers));
+        return new InventorySelection(seatNumbers.size(), new ArrayList<>(seatNumbers), null);
+    }
+
+    public static InventorySelection seated(List<String> seatNumbers, String orderKey) {
+        if (seatNumbers == null || seatNumbers.isEmpty()) {
+            throw new IllegalArgumentException("Seat numbers must be non-empty");
+        }
+
+        Set<String> unique = new HashSet<>(seatNumbers);
+        if (unique.size() != seatNumbers.size()) {
+            throw new IllegalArgumentException("Duplicate seat numbers are not allowed");
+        }
+
+        for (String seatNumber : seatNumbers) {
+            if (seatNumber == null || seatNumber.isBlank()) {
+                throw new IllegalArgumentException("Seat number must be non-blank");
+            }
+        }
+
+        return new InventorySelection(seatNumbers.size(), new ArrayList<>(seatNumbers), orderKey);
     }
 
     public int getQuantity() {
@@ -60,6 +89,11 @@ public final class InventorySelection {
 
     public List<String> getSeatNumbers() {
         return seatNumbers;
+    }
+
+    /** The order key that owns this reservation hold, or {@code null} if ownership is not tracked. */
+    public String getOrderKey() {
+        return orderKey;
     }
 
     public boolean isStandingSelection() {
