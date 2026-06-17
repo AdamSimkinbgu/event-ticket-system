@@ -5,16 +5,20 @@ import com.ticketing.system.Presentation.components.kit.LkAuthCard;
 import com.ticketing.system.Presentation.components.kit.LkCheckRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.auth.RegisterPresenter;
+import com.ticketing.system.Presentation.presenters.auth.UsernameAvailabilityPresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.GuestSession;
 import com.vaadin.flow.component.Key;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.icon.Icon;
+import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.textfield.EmailField;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
@@ -24,19 +28,31 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 @AnonymousAllowed
 public class RegisterView extends LkAuthCard {
 
-    private final RegisterPresenter presenter;
+    private static final String USERNAME_HELP_DEFAULT = "This is how you'll appear to organizers.";
 
-    public RegisterView(RegisterPresenter presenter) {
+    private final RegisterPresenter presenter;
+    private final UsernameAvailabilityPresenter usernameAvailability;
+
+    public RegisterView(RegisterPresenter presenter,
+                        UsernameAvailabilityPresenter usernameAvailability) {
         super("Create your account",
               "Join TicketHub to discover events and book in seconds.");
         this.presenter = presenter;
+        this.usernameAvailability = usernameAvailability;
 
         TextField username = new TextField("Username");
         username.setPlaceholder("3–32 characters, letters and digits");
-        username.setHelperText("This is how you'll appear to organizers.");
+        username.setHelperText(USERNAME_HELP_DEFAULT);
         username.setRequired(true);
         username.setWidthFull();
         username.setAutofocus(true);
+        // Debounced live availability check — 300 ms after the last keystroke
+        // the LAZY mode fires a value-change event; the presenter returns a
+        // typed Outcome that drives the suffix icon, helper text, and the
+        // invalid styling. See [V2-AUTH-FORM-VAL] in wire-up-plan.md.
+        username.setValueChangeMode(ValueChangeMode.LAZY);
+        username.setValueChangeTimeout(300);
+        username.addValueChangeListener(e -> applyUsernameFeedback(username, e.getValue()));
 
         EmailField email = new EmailField("Email");
         email.setPlaceholder("you@email.com");
@@ -71,6 +87,49 @@ public class RegisterView extends LkAuthCard {
 
         col(14, username, email, age, password, confirm, terms, create);
         foot("Already have an account?", "Sign in →", LoginView.class);
+    }
+
+    private void applyUsernameFeedback(TextField field, String value) {
+        UsernameAvailabilityPresenter.Outcome outcome = usernameAvailability.check(value);
+        switch (outcome) {
+            case UsernameAvailabilityPresenter.Outcome.Empty ignored -> {
+                field.setSuffixComponent(null);
+                field.setHelperText(USERNAME_HELP_DEFAULT);
+                field.setInvalid(false);
+            }
+            case UsernameAvailabilityPresenter.Outcome.InvalidFormat ignored -> {
+                field.setSuffixComponent(statusIcon(VaadinIcon.CLOSE_CIRCLE, "var(--lumo-error-color)"));
+                field.setHelperText("3–32 characters · letters, digits, . _ -");
+                field.setInvalid(true);
+            }
+            case UsernameAvailabilityPresenter.Outcome.AdminReserved ignored -> {
+                field.setSuffixComponent(statusIcon(VaadinIcon.CLOSE_CIRCLE, "var(--lumo-error-color)"));
+                field.setHelperText("Reserved for the platform-admin pool.");
+                field.setInvalid(true);
+            }
+            case UsernameAvailabilityPresenter.Outcome.Taken ignored -> {
+                field.setSuffixComponent(statusIcon(VaadinIcon.CLOSE_CIRCLE, "var(--lumo-error-color)"));
+                field.setHelperText("Username taken — please choose another.");
+                field.setInvalid(true);
+            }
+            case UsernameAvailabilityPresenter.Outcome.Available ignored -> {
+                field.setSuffixComponent(statusIcon(VaadinIcon.CHECK_CIRCLE, "var(--lumo-success-color)"));
+                field.setHelperText("Available");
+                field.setInvalid(false);
+            }
+            case UsernameAvailabilityPresenter.Outcome.Failure fail -> {
+                field.setSuffixComponent(statusIcon(VaadinIcon.WARNING, "var(--lumo-warning-color)"));
+                field.setHelperText("Couldn't verify availability right now.");
+                field.setInvalid(false);
+            }
+        }
+    }
+
+    private static Icon statusIcon(VaadinIcon glyph, String color) {
+        Icon icon = glyph.create();
+        icon.getStyle().set("color", color).set("width", "var(--lumo-icon-size-s)")
+            .set("height", "var(--lumo-icon-size-s)");
+        return icon;
     }
 
     private void attemptRegister(TextField username, EmailField email, IntegerField age,
