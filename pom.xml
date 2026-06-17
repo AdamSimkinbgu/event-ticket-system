@@ -224,6 +224,26 @@
 				</plugins>
 			</build>
 		</profile>
+		<!-- Skip the Vaadin prepare-frontend goal (Windows workaround for the
+		     reflections-library NPE in Vaadin 24.7.0). Activate with -Pno-vaadin. -->
+		<profile>
+			<id>no-vaadin</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>com.vaadin</groupId>
+						<artifactId>vaadin-maven-plugin</artifactId>
+						<version>${vaadin.version}</version>
+						<executions>
+							<execution>
+								<id>frontend</id>
+								<phase>none</phase>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
 	</profiles>
 
 </project>
