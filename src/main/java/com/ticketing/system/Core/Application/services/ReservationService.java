@@ -22,10 +22,10 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 
+
 @Service
 @Slf4j
 public class ReservationService {
-
     private final IEventRepository eventRepository;
     private final IActiveOrderRepository activeOrderRepository;
     private final ISessionManager iSessionManager;
@@ -43,6 +43,7 @@ public class ReservationService {
         this.activeOrderRepository = activeOrderRepository;
         this.iSessionManager = iSessionManager;
         this.notificationService = notificationService;
+
     }
 
 
@@ -715,6 +716,31 @@ public class ReservationService {
 
 
 
+    public ActiveOrderDTO restoreActiveOrderForGuest(String sessionId) {
+        return activeOrderRepository.getBySessionId(sessionId)
+                .map(order -> {
+                    log.info("Active order found for sessionId={}, restoring ActiveOrderDTO", sessionId);
+                    ActiveOrderDTO dto = order.toDTO();
+                    List<ActiveOrderDTO.CartLineDTO> enrichedLines = new ArrayList<>();
+                    for (ActiveOrderDTO.CartLineDTO line : dto.lines()) {
+                        Event event = eventRepository.findById(line.eventId());
+                        String eventName = (event != null) ? event.getName() : "Unknown Event";
+                        enrichedLines.add(new ActiveOrderDTO.CartLineDTO(
+                                line.eventId(), eventName, line.zoneId(),
+                                line.seatNumber(), line.pricePerTicket(), line.addedAt()));
+                    }
+                    return new ActiveOrderDTO(dto.userId(), dto.sessionId(), dto.createdAt(),
+                            dto.remainingSecondsBeforeExpiry(), dto.currentTotalPrice(), enrichedLines);
+                })
+                .orElseGet(() -> {
+                    log.info("No active order found for sessionId={}, returning null", sessionId);
+                    return null;
+                });
+    }
+
+
+
+
     // Helper method to abandon the active order for a user (member or guest) - this is used by the frontend when a user explicitly clicks "Abandon Cart" or when they log out, to clear their active order and release any reserved inventory back to the events. For members, we look up the active order by their user ID. For guests, we look up the active order by their session ID. If an active order is found, we release any reserved inventory back to the events and then delete the active order. If no active order is found, we simply return without doing anything. This ensures that we do not leave any reserved inventory hanging around for abandoned carts, which keeps our inventory accurate and allows other users to purchase those tickets if they are still available.
     public void abandonActiveOrder(BuyerContextDTO buyer) {
         if (buyer == null) {
@@ -813,32 +839,104 @@ public class ReservationService {
         }
     }
 
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    // Helper method to expire active orders that have passed their expiration time. This is used by a background job that runs periodically (e.g. every minute) to check for any active orders that have expired and release their reserved inventory back to the events, and then delete those active orders. This ensures that we do not have any active orders hanging around indefinitely that have expired and are no longer valid, which keeps our data clean and our inventory accurate.
-    public void expireActiveOrders() {
-        throw new UnsupportedOperationException("UC-2: not implemented");
+    /**
+ * Removes a line from the cart, automatically determining whether the user is a Member or Guest.
+ * The UI just calls this method, no need to handle InventorySelectionDTO or user type.
+ */
+public ReservationResultDTO removeLine(String userTokenOrSessionId, int eventId, int zoneId, InventorySelectionDTO selection) {
+   
+    boolean isMember = isMember(userTokenOrSessionId); 
+    if (isMember) {
+        return removeForMember(userTokenOrSessionId, eventId, zoneId, selection);
+    } else {
+        return removeForGuest(userTokenOrSessionId, eventId, zoneId, selection);
     }
+}
 
+/**
+ * Determines if the given credential is a member JWT (vs a guest session ID).
+ * JWTs have two dots; guest session IDs are UUIDs with none.
+ * Only silences exceptions for the guest path — a credential that looks like
+ * a JWT but fails validation throws so the caller sees the real failure.
+ */
+private boolean isMember(String userTokenOrSessionId) {
+    if (userTokenOrSessionId == null || userTokenOrSessionId.isBlank()) {
+        throw new IllegalArgumentException("User token or session ID cannot be null or empty");
+    }
+    if (!looksLikeJwt(userTokenOrSessionId)) {
+        return false;
+    }
+    int userId = validateTokenAndGetUserId(userTokenOrSessionId);
+    return userId > 0;
+}
+
+private static boolean looksLikeJwt(String s) {
+    int dot1 = s.indexOf('.');
+    if (dot1 <= 0) return false;
+    return s.indexOf('.', dot1 + 1) > dot1;
+}
+
+
+
+public void expireActiveOrders() {
+    List<ActiveOrder> expiredOrders = activeOrderRepository.findExpired();
+    if (expiredOrders == null || expiredOrders.isEmpty()) return;
+    for (ActiveOrder order : expiredOrders) {
+        safelyReleaseAndDelete(order);
+    }
+}
+private void safelyReleaseAndDelete(ActiveOrder order) {
+    String lockKey = order.getUserId() != 0
+        ? "user:" + order.getUserId()
+        : "sess:" + order.getSessionId();
+
+    activeOrderRepository.lockForUpdate(lockKey);
+    try {
+        for (ActiveOrderDTO.CartLineDTO line : order.toDTO().lines()) {
+            try {
+                Event event = eventRepository.findById(line.eventId());
+                if (event != null) {
+                    eventRepository.lockForUpdate(line.eventId());
+                    try {
+                        InventorySelection selection = (line.seatNumber() != null)
+                            ? InventorySelection.seated(List.of(line.seatNumber()))
+                            : InventorySelection.standing(1);
+                        event.releaseInventory(line.zoneId(), selection);
+                        eventRepository.save(event);
+                    } finally {
+                        eventRepository.unlock(line.eventId());
+                    }
+                }
+            } catch (RuntimeException e) {
+                log.warn("Failed to release inventory for expired order ...", e.getMessage());
+            }
+        }
+        activeOrderRepository.delete(order);
+    } catch (Exception e) {
+        log.error("Failed to expire order for userId={} sessionId={}",
+            order.getUserId(), order.getSessionId(), e);
+    } finally {
+        activeOrderRepository.unlock(lockKey);
+    }
+}
 
     // Helper method to view the current active order for a user (member or guest). For members, we look up the active order by their user ID. For guests, we look up the active order by their session ID. If an active order is found, we convert it to an ActiveOrderDTO and return it. If no active order is found, we return null. This allows the frontend to show the user their current reservations in the cart when they navigate to the cart page, etc.
     public ActiveOrderDTO viewMyActiveOrder(String userOrSessionId) {
-        throw new UnsupportedOperationException("UC-5/9: not implemented");
+    if (userOrSessionId == null || userOrSessionId.isBlank()) {
+        return null;
     }
+    try {
+    if (iSessionManager.validateToken(userOrSessionId)) {
+        int userId = iSessionManager.extractUserId(userOrSessionId);
+        return restoreActiveOrder(userId);
+    }
+} catch (Exception ignored) {
+    // not a JWT token — fall through to guest path
+}
+return restoreActiveOrderForGuest(userOrSessionId);
+}
+
+
 
 
 }

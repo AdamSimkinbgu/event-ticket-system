@@ -1,14 +1,16 @@
 package com.ticketing.system.Presentation.dev;
 
+import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
+import com.ticketing.system.Core.Application.dto.BuyerContextDTO;
 import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
+import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.GuestSession;
-import com.ticketing.system.Presentation.session.MockCart;
 import com.ticketing.system.Presentation.session.MockCompanies;
 import com.ticketing.system.Presentation.session.MockPermissions;
 import com.ticketing.system.Presentation.session.MockSession;
@@ -44,6 +46,8 @@ public final class DevPanel {
     private static final String SECTION_SUB_COLOR   = "#94a3b8";
     private static final String DIVIDER_COLOR       = "#e2e8f0";
 
+    private static volatile ReservationService reservationService;
+
     // Spring-managed beans bridged in by DevPanelInitializer at boot. The
     // panel is a static helper (no Vaadin lifecycle of its own) so the
     // beans live here as package-private statics. Never null in dev
@@ -55,9 +59,27 @@ public final class DevPanel {
     private DevPanel() { }
 
     /** Called once by {@code DevPanelInitializer} at boot. */
+    public static void init(ReservationService rs) {
+        reservationService = rs;
+    }
+
+    /** Called once by {@code DevPanelInitializer} at boot. */
     public static void bindBeans(AuthenticationService auth, SignOutFlow signOutFlow) {
         AUTH = auth;
         SIGN_OUT_FLOW = signOutFlow;
+    }
+
+    private static void abandonCurrentOrder() {
+        if (reservationService == null) return;
+        try {
+            String token = AuthSession.token();
+            if (token != null) {
+                ActiveOrderDTO order = reservationService.viewMyActiveOrder(token);
+                if (order != null && order.userId() != null) {
+                    reservationService.abandonActiveOrder(BuyerContextDTO.member(order.userId()));
+                }
+            }
+        } catch (Exception ignored) { }
     }
 
     /**
@@ -277,8 +299,8 @@ public final class DevPanel {
         switch (name) {
             case "Guest" -> {
                 if (AuthSession.isSignedIn() || AuthSession.isAdmin()) {
+                    abandonCurrentOrder();
                     SIGN_OUT_FLOW.execute();
-                    MockCart.clear();
                     MockCompanies.clear();
                     MockSession.clearCurrentCompany();
                 }
@@ -288,8 +310,8 @@ public final class DevPanel {
                     signInAs(DevUserSeeder.MEMBER_USERNAME, DevUserSeeder.SHARED_PASSWORD);
                 } else if (!hasAnyCompanyRole() && !AuthSession.isAdmin()) {
                     // Plain member with nothing else attached → sign out
+                    abandonCurrentOrder();
                     SIGN_OUT_FLOW.execute();
-                    MockCart.clear();
                 }
                 // else: signed in with companies/admin attached — can't unsign
                 // here; deselect those toggles first.

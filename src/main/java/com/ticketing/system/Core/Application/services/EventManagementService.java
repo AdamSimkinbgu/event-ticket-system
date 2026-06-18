@@ -934,6 +934,37 @@ public class EventManagementService {
         return sessionManager.extractUserId(token);
     }
 
-    
-
+    public PurchasePolicyDTO getEventPurchasePolicy(String token, int companyId, int eventId) {
+    if (!sessionManager.validateToken(token))
+        throw new RuntimeException("Invalid token");
+    int userId = sessionManager.extractUserId(token);
+    ProductionCompany company = companyRepository.getCompanyById(companyId);
+    if (company == null) throw new RuntimeException("Company not found");
+    company.checkowner(userId);
+    Event event = eventRepository.findById(eventId);
+    if (event == null) throw new RuntimeException("Event not found");
+    if (event.getCompanyId() != companyId) throw new RuntimeException("Event does not belong to this company");
+   PurchasePolicy stored = event.getPurchasePolicy();
+if (stored instanceof AndPurchasePolicy a) {
+    return policyToDTO(a.getRightPolicy());
+}
+return policyToDTO(stored);
+}
+private PurchasePolicyDTO policyToDTO(PurchasePolicy policy) {
+    if (policy == null || policy instanceof NoPurchasePolicy)
+        return new PurchasePolicyDTO("NONE", null, null, null, null);
+    if (policy instanceof AgePurchasePolicy a)
+        return new PurchasePolicyDTO("AGE", a.getMinimumAge(), null, null, null);
+    if (policy instanceof MinTicketsPurchasePolicy m)
+        return new PurchasePolicyDTO("MIN_TICKETS", null, m.getMinimumTickets(), null, null);
+    if (policy instanceof MaxTicketsPurchasePolicy m)
+        return new PurchasePolicyDTO("MAX_TICKETS", null, null, m.getMaximumTickets(), null);
+    if (policy instanceof AndPurchasePolicy a)
+        return new PurchasePolicyDTO("AND", null, null, null,
+            List.of(policyToDTO(a.getLeftPolicy()), policyToDTO(a.getRightPolicy())));
+    if (policy instanceof OrPurchasePolicy o)
+        return new PurchasePolicyDTO("OR", null, null, null,
+            List.of(policyToDTO(o.getLeftPolicy()), policyToDTO(o.getRightPolicy())));
+    return new PurchasePolicyDTO("NONE", null, null, null, null);
+}
 }

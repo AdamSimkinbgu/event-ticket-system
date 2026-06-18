@@ -1,5 +1,7 @@
 package com.ticketing.system.Presentation.layouts;
 
+import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
+import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
@@ -7,7 +9,6 @@ import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.ticketing.system.Presentation.session.AuthSession;
-import com.ticketing.system.Presentation.session.MockCart;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.company.CompanyRegistrationView;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
@@ -29,14 +30,11 @@ import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.router.AfterNavigationEvent;
 import com.vaadin.flow.router.AfterNavigationObserver;
+import com.vaadin.flow.server.VaadinSession;
 
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Stream;
 
 /**
  * Buyer-facing shell — composes {@link LkTopBar} with the tickethub
@@ -59,10 +57,12 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         OrderConfirmationView.class, "My Tickets"
     );
 
+    private final ReservationService reservationService;
     private LkTopBar topBar;
     private final SignOutFlow signOutFlow;
 
-    public MainLayout(SignOutFlow signOutFlow) {
+    public MainLayout(ReservationService reservationService, SignOutFlow signOutFlow) {
+        this.reservationService = reservationService;
         this.signOutFlow = signOutFlow;
         rebuildTopBar(null);
     }
@@ -78,6 +78,32 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         boolean signedIn = AuthSession.isSignedIn();
         String name = signedIn ? AuthSession.displayName() : "Guest";
 
+        // Read cart state from the real service
+        int cartSize = 0;
+        Long cartDeadlineMs = null;
+        try {
+            String token = AuthSession.token();
+            ActiveOrderDTO order = null;
+            if (token != null) {
+                order = reservationService.viewMyActiveOrder(token);
+            } else {
+                VaadinSession s = VaadinSession.getCurrent();
+                if (s != null) {
+                    String guestId = (String) s.getAttribute("guestSessionId");
+                    if (guestId != null) {
+                        order = reservationService.viewMyActiveOrder(guestId);
+                    }
+                }
+            }
+            if (order != null && !order.lines().isEmpty()) {
+                cartSize = order.lines().size();
+                long remSec = order.remainingSecondsBeforeExpiry();
+                if (remSec > 0) {
+                    cartDeadlineMs = System.currentTimeMillis() + remSec * 1000L;
+                }
+            }
+        } catch (Exception ignored) { }
+
         List<LkTopBar.NavItem> nav = new ArrayList<>();
         nav.add(new LkTopBar.NavItem("Browse",     BrowseEventsView.class));
         nav.add(new LkTopBar.NavItem("My Tickets", MyAccountView.class));
@@ -92,7 +118,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
             .brand("TicketHub", LandingView.class)
             .nav(nav, activeLabel)
             .searchDefault()
-            .cart(CartView.class, MockCart.size(), shortestCartDeadlineMs())
+            .cart(CartView.class, cartSize, cartDeadlineMs)
             .bellDefault(false);
 
         if (signedIn) {
@@ -136,25 +162,6 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
             })
         );
         return new LkAccountMenu(initials(name), name, "Signed in member · V2-AUTH-02 stub", menu, null, null);
-    }
-
-    /**
-     * Earliest still-future deadline across the cart, in epoch millis —
-     * the union of every line's {@code heldUntil} and the global checkout
-     * deadline (set on entry to {@code CheckoutView}). The minimum wins,
-     * so the navbar always reflects whichever timer expires first at this
-     * moment. {@code null} when the cart is empty / every timer expired.
-     */
-    private static Long shortestCartDeadlineMs() {
-        Instant now = Instant.now();
-        return Stream.concat(
-                MockCart.getItems().stream().map(MockCart.Item::heldUntil),
-                Stream.of(MockCart.getCheckoutDeadline()))
-            .filter(Objects::nonNull)
-            .filter(t -> t.isAfter(now))
-            .min(Comparator.naturalOrder())
-            .map(Instant::toEpochMilli)
-            .orElse(null);
     }
 
     private static String findActiveLabel(AfterNavigationEvent event) {
