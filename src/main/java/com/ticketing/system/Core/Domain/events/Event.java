@@ -15,10 +15,10 @@ import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
 @Slf4j
 public class Event implements InvariantChecked {
     private final int id;
-    private final String name;
+    private String name;
     private final Double rating;
     private final List<String> artistsNames;
-    private final EventCategory category;
+    private EventCategory category;
     private final int comapnyid;
     private EventStatus status;
     private VenueMap venueMap;
@@ -389,6 +389,24 @@ public class Event implements InvariantChecked {
 
 
 
+
+    // UC-19 — partial update of mutable metadata. Only allowed in DRAFT or SCHEDULED state.
+    // Caller must hold the event lock (IEventRepository.lockForUpdate) before calling this method —
+    // name and category are non-final, so concurrent reads depend on the service's lock discipline.
+    // location and showDates are intentionally excluded: EventUpdateDTO carries location as a
+    // plain String (not a Location record) and showDates as List<LocalDateTime> (not List<ShowDate>),
+    // so neither can be safely mapped without a DTO redesign.
+    public void editDetails(String newName, EventCategory newCategory) {
+        if (status != EventStatus.DRAFT && status != EventStatus.SCHEDULED) {
+            throw new IllegalStateException("Event details can only be edited while in DRAFT or SCHEDULED state");
+        }
+        if (newName != null && !newName.isBlank()) {
+            this.name = newName;
+        }
+        if (newCategory != null) {
+            this.category = newCategory;
+        }
+    }
 
     public String getName() {
         return name;

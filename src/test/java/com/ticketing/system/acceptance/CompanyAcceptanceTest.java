@@ -25,7 +25,9 @@ import com.ticketing.system.Core.Application.dto.ManagerAppointmentRequestDTO;
 import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
+import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
+import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
@@ -287,5 +289,163 @@ class CompanyAcceptanceTest {
         @Test
         @Disabled("UC-25 main: Owner views organizational tree (ACTIVE only)")
         void GivenOwner_WhenViewOrgTree_ThenNestedActiveOnly() {
+        }
+
+        // -------------------------------------------------------------------------
+        // getEventDetail — acceptance tests
+        // -------------------------------------------------------------------------
+
+        @Test
+        void GivenOwnerAddsEvent_WhenGetEventDetail_ThenReturnsExpectedFields() {
+                AuthTokenDTO owner = registerAndLoginMember("detailOwner1");
+                int companyId = companyService.registerCompany(
+                                owner.token(), new CompanyRegistrationDTO("DetailCo1", "desc")).companyId();
+
+                EventDetailDTO created = eventManagementService.addEvent(owner.token(), new EventCreationDTO(
+                                companyId, "Summer Festival", "desc", List.of("DJ Max"),
+                                EventCategory.FESTIVAL, 4.5,
+                                new Location("Germany", "Berlin"),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(4))),
+                                null));
+
+                EventDetailDTO result = eventManagementService.getEventDetail(owner.token(), created.eventId());
+
+                assertEquals(created.eventId(), result.eventId());
+                assertEquals("Summer Festival", result.name());
+                assertEquals(EventCategory.FESTIVAL, result.category());
+                assertEquals(EventStatus.DRAFT, result.status());
+                assertEquals("DetailCo1", result.companyName());
+        }
+
+        @Test
+        void GivenManagerWithConfigureVenuePermission_WhenGetEventDetail_ThenReturnsDTO() {
+                AuthTokenDTO owner = registerAndLoginMember("detailOwner2");
+                AuthTokenDTO manager = registerAndLoginMember("detailManager2");
+                int companyId = companyService.registerCompany(
+                                owner.token(), new CompanyRegistrationDTO("DetailCo2", "desc")).companyId();
+
+                companyService.appointManager(owner.token(),
+                                new ManagerAppointmentRequestDTO(companyId, manager.userId(),
+                                                List.of(Permission.CONFIGURE_VENUE)));
+                companyService.respondToAppointment(manager.token(), new AppointmentResponseDTO(companyId, true));
+
+                EventDetailDTO created = eventManagementService.addEvent(owner.token(), new EventCreationDTO(
+                                companyId, "Manager View Event", "desc", List.of("Artist"),
+                                EventCategory.MUSIC, 4.0,
+                                new Location("France", "Paris"),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                                null));
+
+                EventDetailDTO result = eventManagementService.getEventDetail(manager.token(), created.eventId());
+
+                assertEquals(created.eventId(), result.eventId());
+                assertEquals("Manager View Event", result.name());
+        }
+
+        @Test
+        void GivenUserNotInCompany_WhenGetEventDetail_ThenThrows() {
+                AuthTokenDTO owner = registerAndLoginMember("detailOwner3");
+                AuthTokenDTO outsider = registerAndLoginMember("outsider3");
+                int companyId = companyService.registerCompany(
+                                owner.token(), new CompanyRegistrationDTO("DetailCo3", "desc")).companyId();
+
+                EventDetailDTO created = eventManagementService.addEvent(owner.token(), new EventCreationDTO(
+                                companyId, "Private Event", "desc", List.of("Artist"),
+                                EventCategory.MUSIC, 4.0,
+                                new Location("Spain", "Madrid"),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                                null));
+
+                assertThrows(RuntimeException.class,
+                                () -> eventManagementService.getEventDetail(outsider.token(), created.eventId()));
+        }
+
+        // -------------------------------------------------------------------------
+        // editEventDetails — acceptance tests
+        // -------------------------------------------------------------------------
+
+        @Test
+        void GivenOwner_WhenEditEventName_ThenNameIsUpdatedInRepository() {
+                AuthTokenDTO owner = registerAndLoginMember("editOwner1");
+                int companyId = companyService.registerCompany(
+                                owner.token(), new CompanyRegistrationDTO("EditCo1", "desc")).companyId();
+
+                EventDetailDTO created = eventManagementService.addEvent(owner.token(), new EventCreationDTO(
+                                companyId, "Original Name", "desc", List.of("Artist"),
+                                EventCategory.MUSIC, 4.0,
+                                new Location("Italy", "Rome"),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                                null));
+
+                eventManagementService.editEventDetails(owner.token(),
+                                new EventUpdateDTO(created.eventId(), "Updated Name", null, null, null, null));
+
+                Event stored = eventRepository.findById(Integer.parseInt(created.eventId()));
+                assertEquals("Updated Name", stored.getName());
+        }
+
+        @Test
+        void GivenOwner_WhenEditEventCategory_ThenCategoryIsUpdatedInRepository() {
+                AuthTokenDTO owner = registerAndLoginMember("editOwner2");
+                int companyId = companyService.registerCompany(
+                                owner.token(), new CompanyRegistrationDTO("EditCo2", "desc")).companyId();
+
+                EventDetailDTO created = eventManagementService.addEvent(owner.token(), new EventCreationDTO(
+                                companyId, "Category Event", "desc", List.of("Artist"),
+                                EventCategory.MUSIC, 4.0,
+                                new Location("Japan", "Tokyo"),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                                null));
+
+                eventManagementService.editEventDetails(owner.token(),
+                                new EventUpdateDTO(created.eventId(), null, null, "SPORTS", null, null));
+
+                Event stored = eventRepository.findById(Integer.parseInt(created.eventId()));
+                assertEquals(EventCategory.SPORTS, stored.getCategory());
+        }
+
+        @Test
+        void GivenOwner_WhenEditNameAndCategoryTogether_ThenBothUpdated() {
+                AuthTokenDTO owner = registerAndLoginMember("editOwner3");
+                int companyId = companyService.registerCompany(
+                                owner.token(), new CompanyRegistrationDTO("EditCo3", "desc")).companyId();
+
+                EventDetailDTO created = eventManagementService.addEvent(owner.token(), new EventCreationDTO(
+                                companyId, "Old Name", "desc", List.of("Artist"),
+                                EventCategory.MUSIC, 4.0,
+                                new Location("Brazil", "Rio"),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                                null));
+
+                eventManagementService.editEventDetails(owner.token(),
+                                new EventUpdateDTO(created.eventId(), "New Name", null, "THEATER", null, null));
+
+                Event stored = eventRepository.findById(Integer.parseInt(created.eventId()));
+                assertEquals("New Name", stored.getName());
+                assertEquals(EventCategory.THEATER, stored.getCategory());
+        }
+
+        @Test
+        void GivenManagerWithoutConfigureVenuePermission_WhenEditEventDetails_ThenThrows() {
+                AuthTokenDTO owner = registerAndLoginMember("editOwner4");
+                AuthTokenDTO manager = registerAndLoginMember("editManager4");
+                int companyId = companyService.registerCompany(
+                                owner.token(), new CompanyRegistrationDTO("EditCo4", "desc")).companyId();
+
+                companyService.appointManager(owner.token(),
+                                new ManagerAppointmentRequestDTO(companyId, manager.userId(),
+                                                List.of(Permission.VIEW_SALES)));
+                companyService.respondToAppointment(manager.token(), new AppointmentResponseDTO(companyId, true));
+
+                EventDetailDTO created = eventManagementService.addEvent(owner.token(), new EventCreationDTO(
+                                companyId, "Restricted Event", "desc", List.of("Artist"),
+                                EventCategory.MUSIC, 4.0,
+                                new Location("UK", "London"),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                                null));
+
+                assertThrows(RuntimeException.class,
+                                () -> eventManagementService.editEventDetails(manager.token(),
+                                                new EventUpdateDTO(created.eventId(), "Blocked Edit", null, null, null, null)));
         }
 }

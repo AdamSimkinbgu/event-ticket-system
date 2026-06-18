@@ -20,6 +20,7 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
@@ -53,15 +54,17 @@ class SessionAndOrderSweeperTest {
     private IActiveOrderRepository orderRepo;
     private IEventRepository eventRepo;
     private Clock fixedClock;
+    private ApplicationEventPublisher eventPublisher;
     private SessionAndOrderSweeper sweeper;
 
     @BeforeEach
     void setUp() {
-        sessionRepo = mock(ISessionRepository.class);
-        orderRepo = mock(IActiveOrderRepository.class);
-        eventRepo = mock(IEventRepository.class);
-        fixedClock = Clock.fixed(T0, ZoneOffset.UTC);
-        sweeper = new SessionAndOrderSweeper(sessionRepo, orderRepo, eventRepo, fixedClock);
+        sessionRepo    = mock(ISessionRepository.class);
+        orderRepo      = mock(IActiveOrderRepository.class);
+        eventRepo      = mock(IEventRepository.class);
+        fixedClock     = Clock.fixed(T0, ZoneOffset.UTC);
+        eventPublisher = mock(ApplicationEventPublisher.class);
+        sweeper = new SessionAndOrderSweeper(sessionRepo, orderRepo, eventRepo, fixedClock, eventPublisher);
 
         // Defaults: nothing expired.
         when(sessionRepo.findExpiredBefore(any())).thenReturn(List.of());

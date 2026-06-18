@@ -1,6 +1,7 @@
 package com.ticketing.system.Presentation.dev;
 
 import com.ticketing.system.Core.Application.services.AuthenticationService;
+import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.vaadin.flow.server.ServiceInitEvent;
 import com.vaadin.flow.server.VaadinServiceInitListener;
@@ -24,7 +25,10 @@ import org.springframework.stereotype.Component;
 @org.springframework.context.annotation.Profile("dev")
 public class DevPanelInitializer implements VaadinServiceInitListener {
 
-    public DevPanelInitializer(AuthenticationService authenticationService, SignOutFlow signOutFlow) {
+    public DevPanelInitializer(ReservationService reservationService,
+                               AuthenticationService authenticationService,
+                               SignOutFlow signOutFlow) {
+        DevPanel.init(reservationService);
         DevPanel.bindBeans(authenticationService, signOutFlow);
     }
 
