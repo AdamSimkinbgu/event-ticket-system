@@ -2,12 +2,15 @@ package com.ticketing.system.Presentation.dev;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.dto.BuyerContextDTO;
+import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
+import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
-import com.ticketing.system.Presentation.security.MockAuth;
+import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.session.GuestSession;
 import com.ticketing.system.Presentation.session.MockCompanies;
 import com.ticketing.system.Presentation.session.MockPermissions;
 import com.ticketing.system.Presentation.session.MockSession;
@@ -45,10 +48,25 @@ public final class DevPanel {
 
     private static volatile ReservationService reservationService;
 
+    // Spring-managed beans bridged in by DevPanelInitializer at boot. The
+    // panel is a static helper (no Vaadin lifecycle of its own) so the
+    // beans live here as package-private statics. Never null in dev
+    // profile because the initializer constructor runs before any UI is
+    // created.
+    static AuthenticationService AUTH;
+    static SignOutFlow SIGN_OUT_FLOW;
+
     private DevPanel() { }
 
+    /** Called once by {@code DevPanelInitializer} at boot. */
     public static void init(ReservationService rs) {
         reservationService = rs;
+    }
+
+    /** Called once by {@code DevPanelInitializer} at boot. */
+    public static void bindBeans(AuthenticationService auth, SignOutFlow signOutFlow) {
+        AUTH = auth;
+        SIGN_OUT_FLOW = signOutFlow;
     }
 
     private static void abandonCurrentOrder() {
@@ -62,6 +80,32 @@ public final class DevPanel {
                 }
             }
         } catch (Exception ignored) { }
+    }
+
+    /**
+     * Real-login persona switch — used by every dev-panel control that
+     * needs to flip the currently signed-in user. If a session is already
+     * active we route through {@link SignOutFlow} first so the
+     * server-side {@code Session} row is killed and a fresh guest
+     * sessionId is minted (required by {@code AuthenticationService.login()}
+     * per spec D10a). Best-effort: dev-panel state mutations should
+     * never crash the panel.
+     */
+    private static void signInAs(String username, String password) {
+        try {
+            if (AuthSession.isSignedIn()) {
+                SIGN_OUT_FLOW.execute();
+            }
+            String guestSid = GuestSession.sessionId();
+            if (guestSid == null) {
+                guestSid = AUTH.startGuestSession().sessionId();
+                GuestSession.setSessionId(guestSid);
+            }
+            var dto = AUTH.login(new LoginRequestDTO(username, password, guestSid));
+            AuthSession.storeAuth(dto.authToken());
+        } catch (RuntimeException ignored) {
+            // Dev-panel best effort — surface the previous state on refresh.
+        }
     }
 
     /** Floating trigger pill in the bottom-right corner. */
@@ -105,8 +149,8 @@ public final class DevPanel {
         content.add(
             section("Persona shortcuts",  "Click to toggle. Member auto-engages with role buttons; Admin stacks with the rest.",
                 buildPersonaRow(dialog)),
-            section("Identity",           null,
-                buildIdentityRow()),
+            section("Identity",           "Switches log in via the real AuthenticationService against the dev-seeded users.",
+                buildIdentityRow(dialog)),
             section("Companies",          "Drives OWNER_WORKSPACE + the manager-vs-owner branch.",
                 buildCompaniesBlock(dialog)),
             section("Manager permissions", currentManagerSubtitle(),
@@ -208,7 +252,7 @@ public final class DevPanel {
             personaToggle("Manager",  hasRole("Manager"),   () -> togglePersona("Manager",  dialog)),
             personaToggle("Co-owner", hasRole("Co-owner"),  () -> togglePersona("Co-owner", dialog)),
             personaToggle("Founder",  hasRole("Founder"),   () -> togglePersona("Founder",  dialog)),
-            personaToggle("Admin",    MockAuth.isAdmin(),   () -> togglePersona("Admin",    dialog))
+            personaToggle("Admin",    AuthSession.isAdmin(),   () -> togglePersona("Admin",    dialog))
         );
     }
 
@@ -235,11 +279,11 @@ public final class DevPanel {
     }
 
     private static boolean isGuestSelected() {
-        return !MockAuth.isSignedIn() && !MockAuth.isAdmin();
+        return !AuthSession.isSignedIn() && !AuthSession.isAdmin();
     }
 
     private static boolean isMemberSelected() {
-        return MockAuth.isSignedIn();
+        return AuthSession.isSignedIn();
     }
 
     private static boolean hasRole(String role) {
@@ -254,20 +298,20 @@ public final class DevPanel {
     private static void togglePersona(String name, Dialog dialog) {
         switch (name) {
             case "Guest" -> {
-                if (MockAuth.isSignedIn() || MockAuth.isAdmin()) {
+                if (AuthSession.isSignedIn() || AuthSession.isAdmin()) {
                     abandonCurrentOrder();
-                    MockAuth.signOut();
+                    SIGN_OUT_FLOW.execute();
                     MockCompanies.clear();
                     MockSession.clearCurrentCompany();
                 }
             }
             case "Member" -> {
-                if (!MockAuth.isSignedIn()) {
-                    MockAuth.signIn("adam");
-                } else if (!hasAnyCompanyRole() && !MockAuth.isAdmin()) {
+                if (!AuthSession.isSignedIn()) {
+                    signInAs(DevUserSeeder.MEMBER_USERNAME, DevUserSeeder.SHARED_PASSWORD);
+                } else if (!hasAnyCompanyRole() && !AuthSession.isAdmin()) {
                     // Plain member with nothing else attached → sign out
                     abandonCurrentOrder();
-                    MockAuth.signOut();
+                    SIGN_OUT_FLOW.execute();
                 }
                 // else: signed in with companies/admin attached — can't unsign
                 // here; deselect those toggles first.
@@ -281,7 +325,9 @@ public final class DevPanel {
                         MockSession.clearCurrentCompany();
                     }
                 } else {
-                    if (!MockAuth.isSignedIn()) MockAuth.signIn("adam");
+                    if (!AuthSession.isSignedIn()) {
+                        signInAs(DevUserSeeder.MEMBER_USERNAME, DevUserSeeder.SHARED_PASSWORD);
+                    }
                     String id = "demo-" + name.toLowerCase().replace("-", "");
                     MockCompanies.add(new MockCompanies.Company(
                         id, seededCompanyName(name),
@@ -298,7 +344,18 @@ public final class DevPanel {
                     }
                 }
             }
-            case "Admin" -> MockAuth.setAdmin(!MockAuth.isAdmin());
+            case "Admin" -> {
+                // Real-auth swap: one token at a time. Toggling admin on
+                // (re)logs in as dev.admin; toggling off demotes back to
+                // dev.member so the user stays in a signed-in state.
+                if (AuthSession.isAdmin()) {
+                    signInAs(DevUserSeeder.MEMBER_USERNAME, DevUserSeeder.SHARED_PASSWORD);
+                } else {
+                    signInAs(DevUserSeeder.ADMIN_USERNAME, DevUserSeeder.SHARED_PASSWORD);
+                    MockCompanies.clear();
+                    MockSession.clearCurrentCompany();
+                }
+            }
         }
         refresh(dialog);
     }
@@ -316,32 +373,23 @@ public final class DevPanel {
     // Identity — name + signed-in + admin
     // ---------------------------------------------------------------------
 
-    private static Component buildIdentityRow() {
+    private static Component buildIdentityRow(Dialog dialog) {
         TextField name = new TextField();
         name.setLabel("Display name");
-        name.setValue(MockAuth.displayName() == null ? "" : MockAuth.displayName());
+        name.setValue(AuthSession.displayName() == null ? "" : AuthSession.displayName());
         name.setWidth("220px");
+        // Username is now the JWT subject — editing has no effect at this
+        // layer. Read-only keeps the field useful for "what am I signed
+        // in as?" at a glance without offering misleading affordance.
+        name.setReadOnly(true);
 
-        Checkbox signedIn = new Checkbox("Signed in", MockAuth.isSignedIn());
-        Checkbox isAdmin  = new Checkbox("Admin pool", MockAuth.isAdmin());
+        Checkbox signedIn = new Checkbox("Signed in", AuthSession.isSignedIn());
+        Checkbox isAdmin  = new Checkbox("Admin pool", AuthSession.isAdmin());
 
-        signedIn.addValueChangeListener(e -> {
-            if (e.getValue()) MockAuth.signIn(name.isEmpty() ? "adam" : name.getValue());
-            else              MockAuth.signOut();
-        });
-        isAdmin.addValueChangeListener(e -> {
-            if (e.getValue()) {
-                MockAuth.signInAsAdmin(name.isEmpty() ? "admin" : name.getValue());
-                MockCompanies.clear();
-                MockSession.clearCurrentCompany();
-            } else if (MockAuth.isAdmin()) {
-                MockAuth.signIn(name.isEmpty() ? "adam" : name.getValue());
-            }
-        });
-        name.addValueChangeListener(e -> {
-            if (MockAuth.isAdmin())            MockAuth.signInAsAdmin(e.getValue());
-            else if (MockAuth.isSignedIn())    MockAuth.signIn(e.getValue());
-        });
+        // Route both checkboxes through togglePersona so the real-login
+        // flow runs exactly once and the dialog refreshes consistently.
+        signedIn.addValueChangeListener(e -> togglePersona("Member", dialog));
+        isAdmin.addValueChangeListener(e -> togglePersona("Admin", dialog));
 
         return hrow(16, name, signedIn, isAdmin);
     }
@@ -398,7 +446,9 @@ public final class DevPanel {
 
     private static Button addCompanyBtn(String label, String role, Dialog dialog) {
         return ghostBtn(label, () -> {
-            if (!MockAuth.isSignedIn()) MockAuth.signIn("adam");
+            if (!AuthSession.isSignedIn()) {
+                signInAs(DevUserSeeder.MEMBER_USERNAME, DevUserSeeder.SHARED_PASSWORD);
+            }
             String id = "dev-" + UUID.randomUUID().toString().substring(0, 8);
             MockCompanies.add(new MockCompanies.Company(
                 id, role + " company",

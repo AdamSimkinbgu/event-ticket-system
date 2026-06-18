@@ -13,7 +13,7 @@ package com.ticketing.system.Presentation.security;
  * branching on enum strings.
  *
  * <p>Resolution: {@link Capabilities#forCurrentUser()} maps the
- * combined {@code MockAuth + MockCompanies + MockSession + MockPermissions}
+ * combined {@code AuthSession + MockCompanies + MockSession + MockPermissions}
  * state to a {@code Set<Capability>}. {@link Capabilities#has(Capability)}
  * is the lookup callers use.
  */

@@ -69,7 +69,9 @@ class PurchasePolicyAcceptanceTest {
                         companyId,
                         "Policy Test Event",
                         "Event for policy acceptance tests",
+                        List.of("Test Artist"),
                         EventCategory.CONCERT,
+                        0.0,
                         new Location("Israel", "Tel Aviv"),
                         List.of(new ShowDate(
                                 LocalDateTime.now().plusDays(30),

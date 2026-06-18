@@ -11,7 +11,7 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStatusDot;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Presentation.security.MockAuth;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -39,7 +39,7 @@ public class MyAccountView extends LkPage {
     }
 
     private Component buildHero() {
-        String name = MockAuth.displayName();
+        String name = AuthSession.displayName();
         if (name == null || name.isBlank()) name = "Alex";
         String first = name.split("\\s+")[0];
 

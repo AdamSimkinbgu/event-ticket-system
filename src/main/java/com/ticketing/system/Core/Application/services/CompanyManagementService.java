@@ -2,7 +2,6 @@ package com.ticketing.system.Core.Application.services;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -59,8 +58,6 @@ public class CompanyManagementService {
     private final ISessionManager sessionManager;
     private final ITicketRepository ticketRepository;
     private final IEventRepository eventRepository;
-    private static final String EMAIL_PATTERN = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
-    private static final String PHONE_PATTERN = "^\\+?[0-9\\-\\s]{9,15}$";
 
     public CompanyManagementService(IProductionCompanyRepository companyRepository, IUserRepository userRepository,
             IOrderReceiptRepository orderReceiptRepository, ISessionManager sessionManager,
@@ -144,7 +141,7 @@ public class CompanyManagementService {
         CompanyAppointment appointment;
 
         if (response.accept()) {
-            appointment = user.acceptInvitation(response.companyId());
+            appointment = user.acceptInvitation(response.companyId());  // transitions the pending appointment to accepted state
             if (appointment.getRole() == CompanyRole.Owner) {
                 company.addOwner(appointment.getInviterId(), userId);
             } else if (appointment.getRole() == CompanyRole.Manager) {
@@ -152,7 +149,7 @@ public class CompanyManagementService {
             }
             log.info("Appointment accepted: userId={}, companyId={}", userId, response.companyId());
         } else {
-            user.rejectInvitation(response.companyId());   // this will remove the pending appointment from the user's list, so no need to check role here.
+            user.rejectInvitation(response.companyId()); // transitions the pending appointment to rejected state, status-based lookups will no longer return it.
             log.info("Appointment rejected: userId={}, companyId={}", userId, response.companyId());
         }
         userRepository.updateUser(user);
@@ -298,6 +295,10 @@ public class CompanyManagementService {
 }
 
     // UC-22 — Owner-side flat list of company sales.
+    // this function returns a list of PurchaseHistoryDTO, each containing a single PurchaseRecordDTO, which represents a single OrderReceipt that has 
+    // at least one ticket for an event of this company. The PurchaseRecordDTO contains a list of TicketRecordDTOs, but only those that are 
+    // for events of this company (the rest are filtered out). This way we return the full receipt details for each relevant purchase, but only 
+    // include the tickets that are relevant to this company's sales history.
     public List<PurchaseHistoryDTO> viewSalesHistory(String token, int companyId) {
         log.info("Attempting to view sales history for company {}", companyId);
 
@@ -327,24 +328,16 @@ public class CompanyManagementService {
         Set<Integer> companyEventIdSet = Set.copyOf(companyEventIds);
         OrderReceiptMapper mapper = new OrderReceiptMapper();
 
+        // The repository method finds all receipts that have at least one ticket for the company's events.
         List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByEventIds(companyEventIds).stream()
                 .map(receipt -> {
                     List<Ticket> companyTickets = ticketRepository.findByOrderReceiptId(receipt.getId()).stream()
                             .filter(ticket -> companyEventIdSet.contains(ticket.getEventId()))
                             .toList();
 
-                    return new PurchaseHistoryDTO(
-                            List.of(mapper.toPurchaseRecordDTO(receipt, companyTickets)) // use overloaded
-                                                                                                                                   // mapper to pass
-                                                                                                                                   // the filtered
-                                                                                                                                   // list of tickets
-                                                                                                                                   // for richer DTO
-                                                                                                                                   // construction
-                                                                                                                                   // without bloating
-                                                                                                                                   // service logic
-                    );
-                })
-                .toList();
+                    return new PurchaseHistoryDTO(List.of(mapper.toPurchaseRecordDTO(receipt, companyTickets)));
+                    // use overloaded mapper to pass the filtered list of tickets for richer DTO construction without bloating service logic
+                }).toList();
 
         // This is the correct responsibility split.
         // The repository finds receipts related to company events.

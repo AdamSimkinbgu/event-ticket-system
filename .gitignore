@@ -47,3 +47,6 @@ src/main/frontend/generated/
 
 scripts/*
 docs/*
+
+# Claude Code per-project skills + agent tooling (run skill, drivers, screenshots).
+.claude/

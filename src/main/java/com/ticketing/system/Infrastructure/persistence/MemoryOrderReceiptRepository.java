@@ -71,91 +71,8 @@ public class MemoryOrderReceiptRepository implements IOrderReceiptRepository {
     @Override
     public List<OrderReceipt> findByHolderUserId(int holderUserId) {
         return receiptsById.values().stream()
-                .filter(OrderReceipt::isMemberReceipt)   // Only consider member receipts since only they have holderUserId
+                .filter(OrderReceipt::isMemberReceipt) // Only consider member receipts since only they have holderUserId
                 .filter(receipt -> receipt.getHolderUserId().equals(holderUserId))
-                .collect(Collectors.toList());
-    }
-
-
-
-    @Override
-    public List<OrderReceipt> findByEventIds(List<Integer> eventIds) {
-        if (eventIds == null || eventIds.isEmpty()) {
-            return List.of();
-        }
-
-        return receiptsById.values().stream()
-                .filter(receipt -> receipt.getReceiptLines().stream()
-                        .anyMatch(line -> eventIds.contains(line.getEventId())))
-                .collect(Collectors.toList());
-    }
-
-
-
-
-    // UC-22 — company-scoped sales (filtered down to the company's events).
-    /**
-     * A receipt repository cannot correctly know company ownership by itself.
-     * Use EventRepository.findIdsByCompany(companyId), then call findByEventIds(...).
-     */
-    // @Override
-    // @Deprecated
-    // public List<OrderReceipt> findByCompanyId(int companyId) {
-    //     //TODO: LOOK INTO THIS AND LATER DELETE THIS FUNCTION */
-    //     throw new UnsupportedOperationException("Use eventRepository.findIdsByCompany(companyId) and then findByEventIds(eventIds)");
-    // }
-    
-
-
-    // UC-31 — global view with filters
-    // A System Admin can query the full cross-company purchase history, with filters by buyer, production company, event, or date range.
-
-    //TODO: We only implement buyer and event filters here. Date range and company filters require more complex querying that would be inefficient to do in-memory without indexes.
-    @Override
-    public List<OrderReceipt> findGlobal(GlobalHistoryFiltersDTO filters) {
-        if (filters == null) {
-            return List.copyOf(receiptsById.values());
-        }
-
-        List<Integer> requestedEventIds = filters.eventIds() == null
-                ? null
-                : filters.eventIds().stream()
-                        .map(id -> {
-                             try {
-                                 return Integer.parseInt(id);
-                             } catch (NumberFormatException e) {
-                                 return null;
-                             }
-                         })
-                         .filter(id -> id != null)
-                        .toList();
-
-        return receiptsById.values().stream()
-                .filter(receipt -> {
-                    boolean matches = true;
-
-                    if (filters.buyerUserId() != null) {
-                        matches &= receipt.isMemberReceipt()
-                                && receipt.getHolderUserId().equals(filters.buyerUserId());
-                    }
-
-                    if (requestedEventIds != null && !requestedEventIds.isEmpty()) {
-                        matches &= receipt.getReceiptLines().stream()
-                                .anyMatch(line -> requestedEventIds.contains(line.getEventId()));
-                    }
-
-                    if (filters.fromDate() != null) {
-                        matches &= !receipt.getPurchaseTime()
-                                .isBefore(filters.fromDate().atStartOfDay());
-                    }
-
-                    if (filters.toDate() != null) {
-                        matches &= !receipt.getPurchaseTime()
-                                .isAfter(filters.toDate().atTime(23, 59, 59));
-                    }
-
-                    return matches;
-                })
                 .collect(Collectors.toList());
     }
     
@@ -169,11 +86,87 @@ public class MemoryOrderReceiptRepository implements IOrderReceiptRepository {
     }
 
 
+
+    @Override
+    public List<OrderReceipt> findByEventIds(List<Integer> eventIds) {
+        if (eventIds == null || eventIds.isEmpty()) {
+            return List.of();
+        }
+
+        return receiptsById.values().stream()
+                .filter(receipt -> receipt.getReceiptLines().stream()
+                .anyMatch(line -> eventIds.contains(line.getEventId())))
+                .collect(Collectors.toList());
+    }
+
+    
+
     public Map<Integer, OrderReceipt> getReceiptsById() {
         return receiptsById;
     }
 
-}
-    
+
+
+
+
+
+
 
     
+
+
+
+
+
+
+    
+
+
+
+    // UC-31 — global view with filters
+    // A System Admin can query the full cross-company purchase history, with filters by buyer, production company, event, or date range.
+    @Override
+    public List<OrderReceipt> findGlobal(GlobalHistoryFiltersDTO filters) {
+        if (filters == null) {
+            // If no filters are provided, return all receipts.
+            return List.copyOf(receiptsById.values());
+        }
+
+        return receiptsById.values().stream()
+                .filter(receipt -> {
+                    boolean matches = true;
+                    
+                    // Filter by buyerUserId if provided
+                    if (filters.buyerUserId() != null) {
+                        matches &= receipt.isMemberReceipt()
+                                && receipt.getHolderUserId().equals(filters.buyerUserId());
+                    }
+
+                    // Filter by eventIds if provided
+                    if (filters.eventIds() != null) {
+                        matches &= receipt.getReceiptLines().stream()
+                                .anyMatch(line -> filters.eventIds().contains(line.getEventId()));
+                    }
+                    
+                    // Filter by date range if provided
+                    if (filters.fromDate() != null) {
+                        matches &= !receipt.getPurchaseTime()
+                                .isBefore(filters.fromDate().atStartOfDay());
+                    }
+
+                    // Filter by date range if provided
+                    if (filters.toDate() != null) {
+                        matches &= !receipt.getPurchaseTime()
+                                .isAfter(filters.toDate().atTime(23, 59, 59));
+                    }
+
+                    return matches;
+                })
+                .collect(Collectors.toList());
+    }
+
+
+    
+
+
+}

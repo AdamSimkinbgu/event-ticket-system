@@ -42,6 +42,7 @@ import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.Seat;
 import com.ticketing.system.Core.Domain.events.SeatStatus;
 import com.ticketing.system.Core.Domain.events.SeatedZone;
+import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
@@ -545,10 +546,10 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         int numberOfThreads = 20;
         int quantityPerRemove = 1;
 
-        InventoryZone realZone = new StandingZone(ZONE_ID, "VIP", capacity, 100.0);
-        realZone.reserve(InventorySelection.standing(initialReservedTickets));
-
         ActiveOrder realActiveOrder = new ActiveOrder(USER_ID);
+        InventoryZone realZone = new StandingZone(ZONE_ID, "VIP", capacity, 100.0);
+        realZone.reserve(InventorySelection.standing(initialReservedTickets, realActiveOrder.getOrderKey()));
+
         realActiveOrder.addStandingReservation(
                 EVENT_ID,
                 ZONE_ID,
@@ -633,6 +634,7 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         when(eventRepository.findById(EVENT_ID)).thenReturn(realEvent);
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(null);
 
+        realEvent.transitionToOnSale();
         ReservationResultDTO result =
                 reservationService.reserveForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, InventorySelectionDTO.seated(List.of("A1", "A2")));
 
@@ -671,7 +673,8 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
 
         when(eventRepository.findById(EVENT_ID)).thenReturn(realEvent);
         when(activeOrderRepository.getBySessionId(sessionId)).thenReturn(Optional.empty());
-
+        
+        realEvent.transitionToOnSale();
         ReservationResultDTO result =
                 reservationService.reserveForGuest(sessionId, EVENT_ID, ZONE_ID, InventorySelectionDTO.seated(List.of("B1", "B2")));
 
@@ -703,6 +706,7 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         when(eventRepository.findById(EVENT_ID)).thenReturn(realEvent);
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(null);
 
+        realEvent.transitionToOnSale();
         assertThrows(IllegalArgumentException.class, () ->
                 reservationService.reserveForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, InventorySelectionDTO.seated(List.of("A1")))
         );
@@ -726,6 +730,7 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         when(eventRepository.findById(EVENT_ID)).thenReturn(realEvent);
         when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(null);
 
+        realEvent.transitionToOnSale();
         assertThrows(IllegalArgumentException.class, () ->
                 reservationService.reserveForMember(VALID_TOKEN, EVENT_ID, ZONE_ID, InventorySelectionDTO.standing(1))
         );
@@ -774,9 +779,9 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
                 )
         );
         Event realEvent = createEventWithZone(seatedZone);
-        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2", "A3")));
-
         ActiveOrder realOrder = new ActiveOrder(USER_ID);
+        seatedZone.reserve(InventorySelection.seated(List.of("A1", "A2", "A3"), realOrder.getOrderKey()));
+
         realOrder.addSeatedReservation(EVENT_ID, ZONE_ID, List.of("A1", "A2", "A3"), 120.0, LocalDateTime.now());
 
         when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
@@ -800,6 +805,36 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         verify(activeOrderRepository).save(realOrder);
         verify(eventRepository).save(realEvent);
     }
+
+
+
+
+    @Test
+    void GivenSuccessfulMemberReservation_WhenReserve_ThenNotifyAfterUnlocking() {
+        when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+
+        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(event.getVenueMap().getZone(ZONE_ID)).thenReturn(zone);
+        when(zone.getprice()).thenReturn(50.0);
+
+        when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(activeOrder);
+        when(activeOrder.getOrderKey()).thenReturn("order-1");
+
+        reservationService.reserveForMember(
+                VALID_TOKEN,
+                EVENT_ID,
+                ZONE_ID,
+                InventorySelectionDTO.standing(QUANTITY));
+
+        org.mockito.InOrder inOrder = inOrder(eventRepository, activeOrderRepository, notificationService);
+
+        inOrder.verify(eventRepository).unlockBuyerOperation(EVENT_ID);
+        inOrder.verify(activeOrderRepository).unlock("user:" + USER_ID);
+        inOrder.verify(notificationService)
+                .notifyTicketReservationSuccess(USER_ID, EVENT_ID, ZONE_ID, QUANTITY);
+    }
+
 
 
 
@@ -840,7 +875,7 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
                 100,
                 EventStatus.SCHEDULED,
                 new VenueMap(1, new Location("Israel", "Tel Aviv"), List.of(inventoryZone)),
-                List.of(),
+                List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
                 acceptingPurchasePolicy(),
                 noDiscountPolicy()
         );

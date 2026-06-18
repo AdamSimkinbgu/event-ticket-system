@@ -10,8 +10,10 @@ public record EventCreationDTO(
         int companyId,
         String name,
         String description,
+        List<String> artistsNames,
         EventCategory category,
-        Location location,
-        List<ShowDate> showDates,
+        Double rating,                
+        Location location,             // might need to be LocationDTO
+        List<ShowDate> showDates,      // might need to be List<ShowDateDTO>
         PurchasePolicyDTO purchasePolicy
 ) {}
