@@ -1,10 +1,13 @@
 package com.ticketing.system.Presentation.dev;
 
+import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
+import com.ticketing.system.Core.Application.dto.BuyerContextDTO;
+import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.MockAuth;
-import com.ticketing.system.Presentation.session.MockCart;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.MockCompanies;
 import com.ticketing.system.Presentation.session.MockPermissions;
 import com.ticketing.system.Presentation.session.MockSession;
@@ -40,7 +43,26 @@ public final class DevPanel {
     private static final String SECTION_SUB_COLOR   = "#94a3b8";
     private static final String DIVIDER_COLOR       = "#e2e8f0";
 
+    private static volatile ReservationService reservationService;
+
     private DevPanel() { }
+
+    public static void init(ReservationService rs) {
+        reservationService = rs;
+    }
+
+    private static void abandonCurrentOrder() {
+        if (reservationService == null) return;
+        try {
+            String token = AuthSession.token();
+            if (token != null) {
+                ActiveOrderDTO order = reservationService.viewMyActiveOrder(token);
+                if (order != null && order.userId() != null) {
+                    reservationService.abandonActiveOrder(BuyerContextDTO.member(order.userId()));
+                }
+            }
+        } catch (Exception ignored) { }
+    }
 
     /** Floating trigger pill in the bottom-right corner. */
     public static Button trigger() {
@@ -233,8 +255,8 @@ public final class DevPanel {
         switch (name) {
             case "Guest" -> {
                 if (MockAuth.isSignedIn() || MockAuth.isAdmin()) {
+                    abandonCurrentOrder();
                     MockAuth.signOut();
-                    MockCart.clear();
                     MockCompanies.clear();
                     MockSession.clearCurrentCompany();
                 }
@@ -244,8 +266,8 @@ public final class DevPanel {
                     MockAuth.signIn("adam");
                 } else if (!hasAnyCompanyRole() && !MockAuth.isAdmin()) {
                     // Plain member with nothing else attached → sign out
+                    abandonCurrentOrder();
                     MockAuth.signOut();
-                    MockCart.clear();
                 }
                 // else: signed in with companies/admin attached — can't unsign
                 // here; deselect those toggles first.

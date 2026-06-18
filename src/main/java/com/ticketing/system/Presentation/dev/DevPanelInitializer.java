@@ -1,5 +1,6 @@
 package com.ticketing.system.Presentation.dev;
 
+import com.ticketing.system.Core.Application.services.ReservationService;
 import com.vaadin.flow.server.ServiceInitEvent;
 import com.vaadin.flow.server.VaadinServiceInitListener;
 import org.springframework.stereotype.Component;
@@ -16,6 +17,10 @@ import org.springframework.stereotype.Component;
 @Component
 @org.springframework.context.annotation.Profile("dev")
 public class DevPanelInitializer implements VaadinServiceInitListener {
+
+    public DevPanelInitializer(ReservationService reservationService) {
+        DevPanel.init(reservationService);
+    }
 
     @Override
     public void serviceInit(ServiceInitEvent event) {
