@@ -1,8 +1,9 @@
 package com.ticketing.system.Presentation.views.catalog;
 
+import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
+import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
-import com.ticketing.system.Presentation.session.MockCart;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
@@ -16,20 +17,23 @@ import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
 import com.ticketing.system.Presentation.components.venue.VkStandingZone;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.order.CartView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Centerpiece seat picker (V2-CAT-03). Interactive seat grid with the
@@ -40,7 +44,7 @@ import java.util.List;
 @Route(value = "events/:eventId/seats/:zoneId", layout = MainLayout.class)
 @PageTitle("Pick seats · TicketHub")
 @AnonymousAllowed
-public class SeatPickerView extends LkPage {
+public class SeatPickerView extends LkPage implements BeforeEnterObserver {
 
     /** {@code . = free, m = mine, h = held by another buyer, x = sold} */
     private static final String[] LOWER_L_INITIAL = {
@@ -54,16 +58,30 @@ public class SeatPickerView extends LkPage {
 
     private static final int SEAT_PRICE_CENTS = 16000;
 
+    private final ReservationService reservationService;
+
+    private int eventId;
+    private int zoneId;
+
     private char[][] seatStates;
     private Div seatGridContainer;
     private LkCol selectionListCol;
 
-    public SeatPickerView() {
+    public SeatPickerView(ReservationService reservationService) {
+        this.reservationService = reservationService;
         initSeatStates();
         add(buildBreadcrumb());
         add(buildSeatedSplit());
         add(Lk.h2("Standing zone — quantity selection"));
         add(buildStandingSplit());
+    }
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        String eidStr = event.getRouteParameters().get("eventId").orElse("0");
+        String zidStr = event.getRouteParameters().get("zoneId").orElse("0");
+        try { this.eventId = Integer.parseInt(eidStr); } catch (NumberFormatException e) { this.eventId = 0; }
+        try { this.zoneId  = Integer.parseInt(zidStr); } catch (NumberFormatException e) { this.zoneId  = 0; }
     }
 
     private void initSeatStates() {
@@ -287,19 +305,23 @@ public class SeatPickerView extends LkPage {
     }
 
     private void addSelectionToCart(List<int[]> mineSeats) {
-        Instant heldUntil = Instant.now().plus(Duration.ofMinutes(10));
-        String gradient = "linear-gradient(135deg, #8b5cf6, #ec4899)";
+        List<String> seatIds = new ArrayList<>();
         for (int[] seat : mineSeats) {
             String rowLabel = String.valueOf((char) ('A' + seat[0]));
             int seatNum = seat[1] + 1;
-            String seatLabel = "Lower L · Row " + rowLabel + " · Seat " + seatNum;
-            MockCart.add(new MockCart.Item("Coldplay · MOTS", seatLabel, SEAT_PRICE_CENTS, heldUntil, gradient));
-            seatStates[seat[0]][seat[1]] = '.'; // released from pending → committed to cart
+            seatIds.add("Row " + rowLabel + " Seat " + seatNum);
+            seatStates[seat[0]][seat[1]] = '.';
         }
-        renderSeatGrid();
-        updateSelectionRail();
-        Toasts.success(mineSeats.size() + " seat" + (mineSeats.size() == 1 ? "" : "s") + " held for 10 min — continue to cart.");
-        UI.getCurrent().navigate(CartView.class);
+        try {
+            InventorySelectionDTO selection = InventorySelectionDTO.seated(seatIds);
+            callReserveService(selection);
+            renderSeatGrid();
+            updateSelectionRail();
+            Toasts.success(mineSeats.size() + " seat" + (mineSeats.size() == 1 ? "" : "s") + " reserved — continue to cart.");
+            UI.getCurrent().navigate(CartView.class);
+        } catch (Exception ex) {
+            Toasts.failure("Could not reserve seats: " + ex.getMessage());
+        }
     }
 
     private List<int[]> collectMine() {
@@ -374,12 +396,14 @@ public class SeatPickerView extends LkPage {
             .variant(LkBtn.Variant.primary)
             .full()
             .onClick(e -> {
-                Instant heldUntil = Instant.now().plus(Duration.ofMinutes(10));
-                MockCart.add(new MockCart.Item(
-                    "Coldplay · MOTS", "2 × General Admission", 18000, heldUntil,
-                    "linear-gradient(135deg, #8b5cf6, #ec4899)"));
-                Toasts.success("2 GA tickets held for 10 min — continue to cart.");
-                UI.getCurrent().navigate(CartView.class);
+                try {
+                    InventorySelectionDTO selection = InventorySelectionDTO.standing(2);
+                    callReserveService(selection);
+                    Toasts.success("2 GA tickets reserved — continue to cart.");
+                    UI.getCurrent().navigate(CartView.class);
+                } catch (Exception ex) {
+                    Toasts.failure("Could not reserve tickets: " + ex.getMessage());
+                }
             });
         col.add(hold);
 
@@ -422,6 +446,26 @@ public class SeatPickerView extends LkPage {
         meta.add(t, s);
         cell.add(seat, meta);
         return cell;
+    }
+
+    private void callReserveService(InventorySelectionDTO selection) {
+        String token = AuthSession.token();
+        if (token != null) {
+            reservationService.reserveForMember(token, eventId, zoneId, selection);
+        } else {
+            reservationService.reserveForGuest(resolveGuestSessionId(), eventId, zoneId, selection);
+        }
+    }
+
+    private String resolveGuestSessionId() {
+        VaadinSession session = VaadinSession.getCurrent();
+        if (session == null) return UUID.randomUUID().toString();
+        String guestId = (String) session.getAttribute("guestSessionId");
+        if (guestId == null) {
+            guestId = UUID.randomUUID().toString();
+            session.setAttribute("guestSessionId", guestId);
+        }
+        return guestId;
     }
 
     private static String formatPrice(int cents) {
