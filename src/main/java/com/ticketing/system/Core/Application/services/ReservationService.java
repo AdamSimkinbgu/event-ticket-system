@@ -25,8 +25,7 @@ import com.ticketing.system.Core.Domain.events.InventoryZone;
 
 @Service
 @Slf4j
-public class 
-ReservationService {
+public class ReservationService {
     private final IEventRepository eventRepository;
     private final IActiveOrderRepository activeOrderRepository;
     private final ISessionManager iSessionManager;
@@ -605,21 +604,26 @@ public ReservationResultDTO removeLine(String userTokenOrSessionId, int eventId,
 }
 
 /**
- * Determines if the given token/session ID corresponds to a registered member.
+ * Determines if the given credential is a member JWT (vs a guest session ID).
+ * JWTs have two dots; guest session IDs are UUIDs with none.
+ * Only silences exceptions for the guest path — a credential that looks like
+ * a JWT but fails validation throws so the caller sees the real failure.
  */
 private boolean isMember(String userTokenOrSessionId) {
     if (userTokenOrSessionId == null || userTokenOrSessionId.isBlank()) {
         throw new IllegalArgumentException("User token or session ID cannot be null or empty");
     }
-
-  
-    try {
-        int userId = validateTokenAndGetUserId(userTokenOrSessionId);
-        return userId > 0; // valid member
-    } catch (Exception e) {
-       
+    if (!looksLikeJwt(userTokenOrSessionId)) {
         return false;
     }
+    int userId = validateTokenAndGetUserId(userTokenOrSessionId);
+    return userId > 0;
+}
+
+private static boolean looksLikeJwt(String s) {
+    int dot1 = s.indexOf('.');
+    if (dot1 <= 0) return false;
+    return s.indexOf('.', dot1 + 1) > dot1;
 }
 
 

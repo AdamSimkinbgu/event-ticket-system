@@ -34,5 +34,5 @@ public class OrPurchasePolicy implements PurchasePolicy {
         return left + " OR " + right;
     }
     public PurchasePolicy getLeftPolicy()  { return leftPolicy; }
-public PurchasePolicy getRightPolicy() { return rightPolicy; }
+    public PurchasePolicy getRightPolicy() { return rightPolicy; }
 }

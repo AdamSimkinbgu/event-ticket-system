@@ -21,6 +21,7 @@ import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
+import com.ticketing.system.Core.Domain.exceptions.CompanyNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
@@ -287,7 +288,7 @@ public class CompanyManagementService {
     int userId = authenticate(token);
     ProductionCompany company = companyRepository.getCompanyById(config.companyId());
     if (company == null) {
-        throw new RuntimeException("Company not found");
+        throw new CompanyNotFoundException(config.companyId());
     }
     company.checkowner(userId);
     PurchasePolicy policy = buildPurchasePolicyFromDTO(config.defaultPurchasePolicy());
