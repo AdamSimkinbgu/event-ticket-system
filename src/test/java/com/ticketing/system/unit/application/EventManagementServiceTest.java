@@ -1,6 +1,7 @@
 package com.ticketing.system.unit.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -41,6 +42,9 @@ import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
+import com.ticketing.system.Core.Application.dto.EventDetailDTO;
+import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
+import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
@@ -292,5 +296,241 @@ class EventManagementServiceTest {
     @Test
     @Disabled("UC-21: setEventPolicies stores PurchasePolicy + DiscountPolicy")
     void givenOwner_whenSetEventPolicies_thenStored() {
+    }
+
+    // -------------------------------------------------------------------------
+    // getEventDetail
+    // -------------------------------------------------------------------------
+
+    @Test
+    void GivenOwnerToken_WhenGetEventDetail_ThenReturnsDTOWithCorrectFields() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        EventDetailDTO result = eventService.getEventDetail(OWNER_TOKEN, String.valueOf(EVENT_ID));
+
+        assertEquals(String.valueOf(EVENT_ID), result.eventId());
+        assertEquals("Concert", result.name());
+        assertEquals(EventCategory.CONCERT, result.category());
+        assertEquals(String.valueOf(COMPANY_ID), result.companyId());
+        assertEquals(COMPANY_1_NAME, result.companyName());
+        assertEquals(EventStatus.SCHEDULED, result.status());
+        assertEquals(LOCATION, result.location());
+    }
+
+    @Test
+    void GivenManagerWithPermission_WhenGetEventDetail_ThenReturnsDTOSuccessfully() {
+        when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
+
+        EventDetailDTO result = eventService.getEventDetail(MANAGER_TOKEN, String.valueOf(EVENT_ID));
+
+        assertEquals(String.valueOf(EVENT_ID), result.eventId());
+        assertEquals("Concert", result.name());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenGetEventDetail_ThenThrows() {
+        when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
+
+        assertThrows(RuntimeException.class,
+                () -> eventService.getEventDetail(INVALID_TOKEN, String.valueOf(EVENT_ID)));
+    }
+
+    @Test
+    void GivenEventNotFound_WhenGetEventDetail_ThenThrows() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenThrow(new RuntimeException("Event not found"));
+
+        assertThrows(RuntimeException.class,
+                () -> eventService.getEventDetail(OWNER_TOKEN, String.valueOf(EVENT_ID)));
+    }
+
+    @Test
+    void GivenNonNumericEventId_WhenGetEventDetail_ThenThrowsIllegalArgumentException() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> eventService.getEventDetail(OWNER_TOKEN, "not-a-number"));
+    }
+
+    @Test
+    void GivenUserNotInCompany_WhenGetEventDetail_ThenThrows() {
+        User stranger = new User(99, "Stranger", "stranger@test.com", "hashedpw", 25);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(99);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(userRepository.getUserById(99)).thenReturn(stranger);
+
+        assertThrows(RuntimeException.class,
+                () -> eventService.getEventDetail(OWNER_TOKEN, String.valueOf(EVENT_ID)));
+    }
+
+    @Test
+    void GivenEventWithNullVenueMap_WhenGetEventDetail_ThenLocationIsNull() {
+        Event draftNoVenue = new Event(
+                EVENT_ID, "Draft Concert", 4.5, List.of("Artist1"),
+                EventCategory.MUSIC, COMPANY_ID, EventStatus.DRAFT, null,
+                List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
+                null, null);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(draftNoVenue);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        EventDetailDTO result = eventService.getEventDetail(OWNER_TOKEN, String.valueOf(EVENT_ID));
+
+        assertNull(result.location());
+    }
+
+    // -------------------------------------------------------------------------
+    // editEventDetails
+    // -------------------------------------------------------------------------
+
+    @Test
+    void GivenOwnerAndNewName_WhenEditEventDetails_ThenNameIsUpdated() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), "New Concert Name", null, null, null, null));
+
+        assertEquals("New Concert Name", event.getName());
+    }
+
+    @Test
+    void GivenOwnerAndNewCategory_WhenEditEventDetails_ThenCategoryIsUpdated() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), null, null, "MUSIC", null, null));
+
+        assertEquals(EventCategory.MUSIC, event.getCategory());
+    }
+
+    @Test
+    void GivenBothFieldsNull_WhenEditEventDetails_ThenNothingChanges() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), null, null, null, null, null));
+
+        assertEquals("Concert", event.getName());
+        assertEquals(EventCategory.CONCERT, event.getCategory());
+    }
+
+    @Test
+    void GivenManagerWithPermission_WhenEditEventDetails_ThenSucceeds() {
+        when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
+
+        eventService.editEventDetails(MANAGER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), "Manager Edited", null, null, null, null));
+
+        assertEquals("Manager Edited", event.getName());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenEditEventDetails_ThenThrows() {
+        when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
+
+        assertThrows(RuntimeException.class, () -> eventService.editEventDetails(INVALID_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), "New Name", null, null, null, null)));
+    }
+
+    @Test
+    void GivenEventNotFound_WhenEditEventDetails_ThenThrows() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenThrow(new RuntimeException("Event not found"));
+
+        assertThrows(RuntimeException.class, () -> eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), "New Name", null, null, null, null)));
+    }
+
+    @Test
+    void GivenNonNumericEventId_WhenEditEventDetails_ThenThrowsIllegalArgumentException() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+
+        assertThrows(IllegalArgumentException.class, () -> eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO("not-a-number", "New Name", null, null, null, null)));
+    }
+
+    @Test
+    void GivenUserNotInCompany_WhenEditEventDetails_ThenThrows() {
+        User stranger = new User(99, "Stranger", "stranger@test.com", "hashedpw", 25);
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(99);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(userRepository.getUserById(99)).thenReturn(stranger);
+
+        assertThrows(RuntimeException.class, () -> eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), "New Name", null, null, null, null)));
+    }
+
+    @Test
+    void GivenEventOnSale_WhenEditEventDetails_ThenThrows() {
+        Event onSaleEvent = new Event(
+                EVENT_ID, "Concert", 4.5, List.of("Artist1"),
+                EventCategory.CONCERT, COMPANY_ID, EventStatus.ON_SALE, venueMap,
+                List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
+                null, new DiscountPolicy(0));
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(onSaleEvent);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        assertThrows(RuntimeException.class, () -> eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), "New Name", null, null, null, null)));
+    }
+
+    @Test
+    void GivenUnknownCategory_WhenEditEventDetails_ThenThrowsIllegalArgumentException() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        assertThrows(IllegalArgumentException.class, () -> eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), null, null, "INVALID_CATEGORY", null, null)));
+    }
+
+    @Test
+    void GivenEventInDraftState_WhenEditEventDetails_ThenSucceeds() {
+        Event draftEvent = new Event(
+                EVENT_ID, "Draft Concert", 4.5, List.of("Artist1"),
+                EventCategory.CONCERT, COMPANY_ID, EventStatus.DRAFT, venueMap,
+                List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
+                null, new DiscountPolicy(0));
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(draftEvent);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), "Updated Draft Name", null, null, null, null));
+
+        assertEquals("Updated Draft Name", draftEvent.getName());
     }
 }
