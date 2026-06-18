@@ -604,7 +604,7 @@ public class EventManagementService {
                 String.valueOf(event.getId()),
                 event.getName(),
                 event.getRating(),
-                null,
+                null, // Event domain doesn't persist description
                 event.getCategory(),
                 location,
                 String.valueOf(event.getCompanyId()),

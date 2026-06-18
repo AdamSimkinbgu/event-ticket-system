@@ -223,7 +223,7 @@ public final class DemoEvents {
         ShowDate show = new ShowDate(start, start.plusHours(durationHours));
 
         EventDetailDTO created = eventService.addEvent(token, new EventCreationDTO(
-            company.companyId(), name, description, List.of(name), category,
+            company.companyId(), name, description, List.of("TBA"), category,
             null, new Location("Israel", city), List.of(show), policy));
 
         eventService.configureVenueMap(token, company.companyId(),

@@ -391,6 +391,8 @@ public class Event implements InvariantChecked {
 
 
     // UC-19 — partial update of mutable metadata. Only allowed in DRAFT or SCHEDULED state.
+    // Caller must hold the event lock (IEventRepository.lockForUpdate) before calling this method —
+    // name and category are non-final, so concurrent reads depend on the service's lock discipline.
     // location and showDates are intentionally excluded: EventUpdateDTO carries location as a
     // plain String (not a Location record) and showDates as List<LocalDateTime> (not List<ShowDate>),
     // so neither can be safely mapped without a DTO redesign.

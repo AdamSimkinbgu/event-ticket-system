@@ -225,7 +225,9 @@
 			</build>
 		</profile>
 		<!-- Skip the Vaadin prepare-frontend goal (Windows workaround for the
-		     reflections-library NPE in Vaadin 24.7.0). Activate with -Pno-vaadin. -->
+		     reflections-library NPE in Vaadin 24.7.0). Activate with -Pno-vaadin.
+		     Compile-only shortcut: frontend assets are NOT prepared when this profile
+		     is active, so the app won't serve Vaadin views. Use for test runs only. -->
 		<profile>
 			<id>no-vaadin</id>
 			<build>
