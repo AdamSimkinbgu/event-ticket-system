@@ -131,20 +131,24 @@ class NotificationDispatchServiceTest {
         pendingNotifications.add(notif1);
         pendingNotifications.add(notif2);
 
+        // Mock repository to return pending notifications
         when(mockRepo.findByRecipientAndStatus(userId, NotificationStatus.PENDING))
                 .thenReturn(pendingNotifications);
 
         when(mockPushService.send(userId, notif1)).thenReturn(true);
         when(mockPushService.send(userId, notif2)).thenReturn(true);
 
+        // Call the service method
         List<NotificationDTO> result = service.deliverPending(userId);
 
+        // Verify repository query for pending notifications
         verify(mockRepo, times(1)).findByRecipientAndStatus(userId, NotificationStatus.PENDING);
         verify(mockPushService, times(1)).send(userId, notif1);
         verify(mockPushService, times(1)).send(userId, notif2);
         verify(mockRepo, times(1)).save(notif1);
         verify(mockRepo, times(1)).save(notif2);
 
+        // Verify all returned DTOs have DELIVERED status
         assert result.size() == 2;
         assert result.get(0).status().equals("DELIVERED");
         assert result.get(1).status().equals("DELIVERED");
