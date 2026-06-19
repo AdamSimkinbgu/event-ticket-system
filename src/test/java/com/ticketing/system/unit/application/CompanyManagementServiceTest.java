@@ -16,19 +16,24 @@ import java.time.LocalDateTime;
 
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
+import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
+import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
 import com.ticketing.system.Core.Application.dto.AppointmentRevokeDTO;
 import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
 import com.ticketing.system.Core.Application.dto.ManagerAppointmentRequestDTO;
-import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
+import com.ticketing.system.Core.Domain.company.CompanyRole;
+import com.ticketing.system.Core.Domain.company.CompanyAppointment;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
@@ -37,6 +42,7 @@ import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
+import com.ticketing.system.Core.Domain.users.exceptions.UserNotFoundException;
 
 
 public class CompanyManagementServiceTest {
@@ -48,6 +54,7 @@ public class CompanyManagementServiceTest {
         private CompanyManagementService companyService;
         private ITicketRepository ticketRepository;
         private IEventRepository eventRepository;
+        private INotificationService notificationService;
 
         private final String OWNER_TOKEN = "owner-token";
         private final String TARGET_TOKEN = "target-token";
@@ -70,6 +77,7 @@ public class CompanyManagementServiceTest {
                 sessionManager = mock(ISessionManager.class);
                 ticketRepository = mock(ITicketRepository.class);
                 eventRepository = mock(IEventRepository.class);
+                notificationService = mock(INotificationService.class);
 
                 companyService = new CompanyManagementService(
                                 mockCompanyRepo,
@@ -77,7 +85,8 @@ public class CompanyManagementServiceTest {
                                 mockOrderReceiptRepo,
                                 sessionManager,
                                 ticketRepository,
-                                eventRepository);
+                                eventRepository,
+                                notificationService);
 
                 defaultPermissions = new ArrayList<>();
                 defaultPermissions.add(Permission.CONFIGURE_VENUE);

@@ -20,6 +20,7 @@ import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.Tickets.TicketStatus;
@@ -60,6 +61,7 @@ public class EventManagementService {
     private final IOrderReceiptRepository orderReceiptRepository;
     private final IPaymentGateway paymentGateway;
     private final IUserRepository userRepository;
+    private final INotificationService notificationService;
     private int currentVenueMapIdCounter;
 
     public EventManagementService(
@@ -69,7 +71,8 @@ public class EventManagementService {
             ISessionManager sessionManager,
             IOrderReceiptRepository orderReceiptRepository,
             IPaymentGateway paymentGateway,
-            IUserRepository userRepository) {
+            IUserRepository userRepository,
+            INotificationService notificationService) {
         this.eventRepository = eventRepository;
         this.companyRepository = companyRepository;
         this.ticketRepository = ticketRepository;
@@ -77,6 +80,7 @@ public class EventManagementService {
         this.orderReceiptRepository = orderReceiptRepository;
         this.paymentGateway = paymentGateway;
         this.userRepository = userRepository;
+        this.notificationService = notificationService;
         this.currentVenueMapIdCounter = 0;  // Initialize the venue map ID counter, change the counter to be internal but here for now.
     }
 
@@ -671,6 +675,9 @@ public class EventManagementService {
             event.transitionToCanceled("Event canceled by owner");
             eventRepository.save(event);
 
+            // Notify all ticket holders
+            notifyTicketHoldersOfCancellation(eventId, event.getName(), orderReceipts);
+
             log.info("Event {} canceled and refund flow completed", eventId);
 
         } catch (EventNotFoundException e) { //TODO: check if these Catches are good
@@ -692,8 +699,8 @@ public class EventManagementService {
         // Collect unique user IDs to avoid duplicate notifications per receipt
         java.util.Set<Integer> memberUserIds = receipts.stream()
                 .filter(OrderReceipt::isMemberReceipt)
-                .map(r -> r.getUserId().orElse(-1))
-                .filter(id -> id > 0)
+                .map(OrderReceipt::getHolderUserId)
+                .filter(id -> id != null && id > 0)
                 .collect(java.util.stream.Collectors.toSet());
 
         for (Integer userId : memberUserIds) {
