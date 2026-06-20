@@ -20,6 +20,7 @@ import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.exceptions.ExternalServiceUnavailableException;
+import com.ticketing.system.Core.Domain.exceptions.InitializationIntegrityException;
 import com.ticketing.system.Core.Domain.exceptions.MissingDefaultAdminException;
 import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
@@ -27,6 +28,7 @@ import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import lombok.extern.slf4j.Slf4j;
 // Owns platform-bootstrap, market-lifecycle, and global admin queries.
 // UC-1 (Initialize), UC-31 (Global History), UC-32 (Open/Close Market).
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -41,13 +43,13 @@ public class SystemAdminService {
     private final List<IPaymentGateway> paymentGateways;
     private final List<ITicketIssuer> ticketIssuers;
     private final IPasswordHasher passwordHasher;
+    private final SystemIntegrityVerifier integrityVerifier;
 
-    // UC-1 / I.1.4 — default System Admin auto-created when none exists. "admin" is a
-    // recognized admin username (AuthSession.ADMIN_USERNAMES); its password should be
-    // rotated after first login.
-    private static final int    DEFAULT_ADMIN_ID       = 1;
-    private static final String DEFAULT_ADMIN_USERNAME = "admin";
-    private static final String DEFAULT_ADMIN_PASSWORD = "admin";
+    // UC-1 / I.1.4 — default System Admin credentials. Bound from platform.admin.* in
+    // application.yml (env-overridable); never hardcoded here.
+    private final String defaultAdminUsername;
+    private final String defaultAdminPassword;
+    private static final int DEFAULT_ADMIN_ID = 1;
 
     // Platform lifecycle state (in-memory for V1). openMarket()/closeMarket() (UC-32, #307)
     // build on top of this status.
@@ -63,7 +65,10 @@ public class SystemAdminService {
             IEventRepository eventRepository,
             List<IPaymentGateway> paymentGateways,
             List<ITicketIssuer> ticketIssuers,
-            IPasswordHasher passwordHasher
+            IPasswordHasher passwordHasher,
+            SystemIntegrityVerifier integrityVerifier,
+            @Value("${platform.admin.username}") String defaultAdminUsername,
+            @Value("${platform.admin.password}") String defaultAdminPassword
     ) {
         this.sessionManager = sessionManager;
         this.adminRepository = adminRepository;
@@ -73,6 +78,9 @@ public class SystemAdminService {
         this.paymentGateways = paymentGateways;
         this.ticketIssuers = ticketIssuers;
         this.passwordHasher = passwordHasher;
+        this.integrityVerifier = integrityVerifier;
+        this.defaultAdminUsername = defaultAdminUsername;
+        this.defaultAdminPassword = defaultAdminPassword;
     }
 
     // UC-1 — I.1.1 invariants + I.1.2 payment-gateway check + I.1.3 issuer check + I.1.4 default-admin.
@@ -100,6 +108,11 @@ public class SystemAdminService {
         // I.1.4 — guarantee at least one System Admin (auto-create a default if none).
         createDefaultAdminIfMissing();
 
+        // Step 4 / I.1.1 — re-assert the platform post-conditions, then the system-wide
+        // structural correctness constraints, as explicit gates before going live.
+        verifyInitializationInvariants();
+        integrityVerifier.verify();
+
         this.lastInitializedAt = LocalDateTime.now();
         this.status = PlatformStatus.READY;
         log.info("Platform initialized — status READY.");
@@ -112,13 +125,13 @@ public class SystemAdminService {
             return;
         }
 
-        log.warn("No System Admin found — creating default admin '{}'. Rotate its password after first login.",
-                DEFAULT_ADMIN_USERNAME);
+        log.warn("No System Admin found — creating default admin '{}'. Override its password via "
+                + "PLATFORM_ADMIN_PASSWORD and rotate after first login.", defaultAdminUsername);
         try {
             Admin defaultAdmin = new Admin(
                     DEFAULT_ADMIN_ID,
-                    DEFAULT_ADMIN_USERNAME,
-                    passwordHasher.hash(DEFAULT_ADMIN_PASSWORD),
+                    defaultAdminUsername,
+                    passwordHasher.hash(defaultAdminPassword),
                     true);
             defaultAdmin.checkInvariants();
             adminRepository.save(defaultAdmin);
@@ -149,6 +162,20 @@ public class SystemAdminService {
 
 
 
+
+    // *HELPER* — UC-1 step 4 / I.1.1: re-assert the platform post-conditions as a single gate.
+    // Defensive against an external service dropping between the initial check and this point.
+    private void verifyInitializationInvariants() {
+        if (paymentGateways.stream().noneMatch(this::isReachable)) {
+            throw new InitializationIntegrityException("no reachable payment service");
+        }
+        if (ticketIssuers.stream().noneMatch(this::isReachable)) {
+            throw new InitializationIntegrityException("no reachable ticket issuance service");
+        }
+        if (!adminRepository.existsAny()) {
+            throw new InitializationIntegrityException("no System Admin present");
+        }
+    }
 
     // *HELPER METHODS* — UC-1 I.1.2/I.1.3 reachability probe (maps to the WSEP `handshake`).
     // A thrown verification (e.g. a real HTTP adapter timing out) is treated as "unreachable"
