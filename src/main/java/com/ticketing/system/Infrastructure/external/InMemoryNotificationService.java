@@ -21,14 +21,23 @@ import org.springframework.stereotype.Component;
 @Component
 public class InMemoryNotificationService implements INotificationService {
 
+    // V1 stub behaviour (as the class doc states): collect notifications in memory instead of
+    // throwing, so reservation/checkout flows complete. UC-35 replaces this with a real push channel.
+    private final java.util.List<Notification> sentNotifications = new java.util.concurrent.CopyOnWriteArrayList<>();
+
     @Override
     public boolean send(int recipientUserId, Notification notification) {
-        throw new UnsupportedOperationException("UC-35: in-memory send not implemented");
+        sentNotifications.add(notification);
+        return true;
     }
 
     @Override
     public boolean isReachable(int recipientUserId) {
-        throw new UnsupportedOperationException("UC-35: not implemented");
+        return true;
+    }
+
+    public java.util.List<Notification> getSentNotifications() {
+        return java.util.List.copyOf(sentNotifications);
     }
     @Override
 public void notifyPurchaseCompleted(int userId, double totalPrice, List<Integer> ticketIds) {
