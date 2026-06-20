@@ -50,3 +50,13 @@ docs/*
 
 # Claude Code per-project skills + agent tooling (run skill, drivers, screenshots).
 .claude/
+
+# Local configuration files (e.g. for IDEs, build tools, etc.)
+.idea/
+.vscode/
+
+# binaries
+.classpath
+.project
+.factorypath
+

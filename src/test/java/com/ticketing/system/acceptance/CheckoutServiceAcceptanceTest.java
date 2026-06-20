@@ -624,6 +624,8 @@ public class CheckoutServiceAcceptanceTest {
                 checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
+        // Ticket save fails BEFORE confirmInventorySale (the sale is committed last), so the inventory
+        // is still RESERVED and is cleanly returned to stock, and the payment is refunded.
         assertEquals(true, refundRequested.get());
         assertEquals(1, returnedTickets.get());
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -644,6 +646,8 @@ public class CheckoutServiceAcceptanceTest {
                 checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
+        // Receipt save fails BEFORE confirmInventorySale (the sale is committed last), so the inventory
+        // is still RESERVED and is cleanly returned to stock, and the payment is refunded.
         assertEquals(true, refundRequested.get());
         assertEquals(1, returnedTickets.get());
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
