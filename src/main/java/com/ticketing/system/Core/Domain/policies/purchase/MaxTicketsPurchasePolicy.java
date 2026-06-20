@@ -1,15 +1,21 @@
 package com.ticketing.system.Core.Domain.policies.purchase;
 
-public class MaxTicketsPurchasePolicy implements PurchasePolicy {
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
+public class MaxTicketsPurchasePolicy implements PurchasePolicy, InvariantChecked {
 
     private final int maximumTickets;
 
     public MaxTicketsPurchasePolicy(int maximumTickets) {
-        if (maximumTickets < 0) {
-            throw new IllegalArgumentException("Maximum tickets cannot be negative");
-        }
-
         this.maximumTickets = maximumTickets;
+        checkInvariants();
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (maximumTickets < 0) {
+            throw new IllegalStateException("MaxTicketsPurchasePolicy invariant violated: maximumTickets cannot be negative (was " + maximumTickets + ")");
+        }
     }
 
     @Override

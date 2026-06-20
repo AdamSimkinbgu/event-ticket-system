@@ -65,6 +65,37 @@ class EventTest extends BaseDomainTest {
 
 
 
+    // Construction-time invariant enforcement (issue #303): a freshly-constructed Event
+    // must satisfy its invariants, so invalid args fail at construction with IllegalStateException.
+    @Test
+    void GivenRatingOutOfRange_WhenConstructed_ThenThrowsIllegalState() {
+        VenueMap venueMap = new VenueMap(1, LOCATION, List.of(new StandingZone(ZONE_ID, "VIP", 10, 100)));
+        assertThrows(IllegalStateException.class, () -> new Event(
+                EVENT_ID, "Concert", 9.0, ARTISTS, EventCategory.CONCERT, COMPANY_ID,
+                EventStatus.SCHEDULED, venueMap,
+                List.of(new ShowDate(LocalDateTime.now().plusDays(30), LocalDateTime.now().plusDays(30).plusHours(2))),
+                null, new DiscountPolicy(0)));
+    }
+
+    @Test
+    void GivenEmptyArtists_WhenConstructed_ThenThrowsIllegalState() {
+        VenueMap venueMap = new VenueMap(1, LOCATION, List.of(new StandingZone(ZONE_ID, "VIP", 10, 100)));
+        assertThrows(IllegalStateException.class, () -> new Event(
+                EVENT_ID, "Concert", 4.5, List.of(), EventCategory.CONCERT, COMPANY_ID,
+                EventStatus.SCHEDULED, venueMap,
+                List.of(new ShowDate(LocalDateTime.now().plusDays(30), LocalDateTime.now().plusDays(30).plusHours(2))),
+                null, new DiscountPolicy(0)));
+    }
+
+    @Test
+    void GivenEmptyShowDates_WhenConstructed_ThenThrowsIllegalState() {
+        VenueMap venueMap = new VenueMap(1, LOCATION, List.of(new StandingZone(ZONE_ID, "VIP", 10, 100)));
+        assertThrows(IllegalStateException.class, () -> new Event(
+                EVENT_ID, "Concert", 4.5, ARTISTS, EventCategory.CONCERT, COMPANY_ID,
+                EventStatus.SCHEDULED, venueMap, List.of(),
+                null, new DiscountPolicy(0)));
+    }
+
     @Test
     void GivenStandingZone_WhenReserveInventoryStandingSelection_ThenQuantityReserved() {
         StandingZone standingZone = track(new StandingZone(1, "General Admission", 10, 50.0));

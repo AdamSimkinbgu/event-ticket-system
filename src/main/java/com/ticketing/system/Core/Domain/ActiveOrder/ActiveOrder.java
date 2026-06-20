@@ -48,14 +48,12 @@ public class ActiveOrder implements InvariantChecked {
     private final String orderKey = UUID.randomUUID().toString();
 
     public ActiveOrder(Integer userId, String sessionId) {
-        if (userId == null && sessionId == null) {
-            throw new IllegalArgumentException("ActiveOrder must have at least a userId or a sessionId");
-        }
         this.userId = userId;
         this.sessionId = sessionId;
         this.status = ActiveOrderStatus.PRE_CHECKOUT;
         this.items = new ArrayList<>();
         this.createdAt = LocalDateTime.now();
+        checkInvariants();
     }
 
 

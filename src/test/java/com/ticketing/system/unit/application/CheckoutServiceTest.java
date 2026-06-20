@@ -2246,7 +2246,7 @@ private AtomicBoolean trackReceiptSave() {
 
         StandingZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
 
-        ActiveOrder activeOrder = new ActiveOrder(-1);
+        ActiveOrder activeOrder = ActiveOrder.forGuest(VALID_GUEST_SID);
         activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now().minusMinutes(20));
         zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 
@@ -2273,7 +2273,7 @@ private AtomicBoolean trackReceiptSave() {
 
         Event event = createRealEventWithPolicyAndZone(EVENT_ID_1, zone, new AgePurchasePolicy(18));
 
-        ActiveOrder activeOrder = new ActiveOrder(-1);
+        ActiveOrder activeOrder = ActiveOrder.forGuest(VALID_GUEST_SID);
         activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
         zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 
@@ -2299,7 +2299,7 @@ private AtomicBoolean trackReceiptSave() {
 
         Event event = createRealEventWithPolicyAndZone(EVENT_ID_1, zone, new AgePurchasePolicy(18));
 
-        ActiveOrder activeOrder = new ActiveOrder(-1);
+        ActiveOrder activeOrder = ActiveOrder.forGuest(VALID_GUEST_SID);
         activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
         zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 
@@ -2327,7 +2327,7 @@ private AtomicBoolean trackReceiptSave() {
 
         Event event = createRealEventWithPolicyAndZone(EVENT_ID_1, zone, new NoPurchasePolicy());
 
-        ActiveOrder activeOrder = new ActiveOrder(-1);
+        ActiveOrder activeOrder = ActiveOrder.forGuest(VALID_GUEST_SID);
         activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
         zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 
@@ -2352,7 +2352,7 @@ private AtomicBoolean trackReceiptSave() {
 
         Event event = createRealEventWithPolicyAndZone(EVENT_ID_1, zone, new NoPurchasePolicy());
 
-        ActiveOrder activeOrder = new ActiveOrder(-1);
+        ActiveOrder activeOrder = ActiveOrder.forGuest(VALID_GUEST_SID);
         activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
         zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 
@@ -2389,7 +2389,7 @@ private AtomicBoolean trackReceiptSave() {
 
         Event event = createRealEventWithPolicyAndZone(EVENT_ID_1, zone, new NoPurchasePolicy());
 
-        ActiveOrder activeOrder = new ActiveOrder(-1);
+        ActiveOrder activeOrder = ActiveOrder.forGuest(VALID_GUEST_SID);
         activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
         zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 
@@ -2417,7 +2417,7 @@ private AtomicBoolean trackReceiptSave() {
 
         Event event = createRealEventWithPolicyAndZone(EVENT_ID_1, zone, new NoPurchasePolicy());
 
-        ActiveOrder activeOrder = new ActiveOrder(-1);
+        ActiveOrder activeOrder = ActiveOrder.forGuest(VALID_GUEST_SID);
         activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
         zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 

@@ -115,7 +115,7 @@ class EventManagementServiceTest {
                 venueMap,
                 List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
                 null,
-                null);
+                new DiscountPolicy(0));
         ownerUser = new User(OWNER_ID, "Owner Name", "owner@example.com", "hashedpassword",50);
         ownerUser.addFounderAppointment(COMPANY_ID);
         managerUser = new User(MANAGER_ID, "Manager Name", "manager@example.com", "hashedpassword",40);
@@ -381,7 +381,7 @@ class EventManagementServiceTest {
                 EVENT_ID, "Draft Concert", 4.5, List.of("Artist1"),
                 EventCategory.MUSIC, COMPANY_ID, EventStatus.DRAFT, null,
                 List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
-                null, null);
+                null, new DiscountPolicy(0));
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(draftNoVenue);

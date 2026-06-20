@@ -46,6 +46,7 @@ public class SeatedZone extends InventoryZone {
             this.seats.put(seat.getLabel(), seat);
             this.seatLocks.put(seat.getLabel(), new ReentrantLock());
         }
+        checkInvariants();
     }
 
     /** Snapshot of the seats — modifications to the returned list don't affect the zone. */

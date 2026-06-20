@@ -30,56 +30,25 @@ public class Event implements InvariantChecked {
     public Event(int id, String name, Double rating, List<String> artistsNames, EventCategory category, int comapnyid,
             EventStatus status, VenueMap venueMap, List<ShowDate> showDates, PurchasePolicy PurchasePolicy,
          DiscountPolicy discountPolicy) {
+        // Invariants are enforced by checkInvariants() at the end of construction
+        // (single source of truth). Collection copies are null-safe so a null input
+        // reaches checkInvariants() as a clean IllegalStateException instead of an NPE here.
         this.id = id;
-
-        if (name == null || name.isBlank()) {
-            log.error("Attempted to create Event with invalid name: '{}'", name);
-            throw new IllegalArgumentException("Event name is required");
-        }
         this.name = name;
-
-        if(rating != null && (rating < 0 || rating > 5)) {
-            log.error("Attempted to create Event with invalid rating: '{}'", rating);
-            throw new IllegalArgumentException("Event rating must be between 0 and 5");
-        }
         this.rating = rating;
-
-        if(artistsNames == null || artistsNames.isEmpty()) {
-            log.error("Attempted to create Event with null/empty artistsNames list");
-            throw new IllegalArgumentException("Artists names list is required");
-        }
-        this.artistsNames = List.copyOf(artistsNames);
-
-        if (category == null) {
-            log.error("Attempted to create Event with null category");
-            throw new IllegalArgumentException("Event category is required");
-        }
+        this.artistsNames = artistsNames == null ? null : List.copyOf(artistsNames);
         this.category = category;
-
-        if (comapnyid <= 0) {
-            log.error("Attempted to create Event with invalid companyId: '{}'", comapnyid);
-            throw new IllegalArgumentException("Company ID must be positive");
-        }
-        
         this.comapnyid = comapnyid;
         this.status = status;
         this.venueMap = venueMap;
-
-        if(showDates == null || showDates.isEmpty()) {
-            log.error("Attempted to create Event with null/empty showDates list");
-            throw new IllegalArgumentException("Show dates list is required");
-         }
-         this.showDates = List.copyOf(showDates);
-        
-         if (PurchasePolicy == null) {
-            this.purchasePolicy = new NoPurchasePolicy();
-        } else {
-            this.purchasePolicy = PurchasePolicy;
-        }
-        // Discount Policies are not currently in the implementation plan so in the creation of the event we manually, 
+        this.showDates = showDates == null ? null : List.copyOf(showDates);
+        // purchasePolicy defaults to NoPurchasePolicy when not supplied.
+        this.purchasePolicy = PurchasePolicy == null ? new NoPurchasePolicy() : PurchasePolicy;
+        // Discount Policies are not currently in the implementation plan so in the creation of the event we manually,
         // without outside intervention, set the discount to 0, not doing any discount automatically without the ability to
         // change this from the outside right now.
         this.discountPolicy = discountPolicy;
+        checkInvariants();
     }
 
 
@@ -526,6 +495,10 @@ public class Event implements InvariantChecked {
         if (name == null || name.isBlank()) {
             throw new IllegalStateException("Event invariant violated: name must be non-blank");
         }
+        if (rating != null && (rating < 0 || rating > 5)) {
+            throw new IllegalStateException(
+                    "Event invariant violated: rating must be between 0 and 5 (was " + rating + ")");
+        }
         if (comapnyid <= 0) {
             throw new IllegalStateException(
                     "Event invariant violated: companyId must be positive (was " + comapnyid + ")");
@@ -536,11 +509,11 @@ public class Event implements InvariantChecked {
         if (category == null) {
             throw new IllegalStateException("Event invariant violated: category must not be null");
         }
-        if (artistsNames == null) {
-            throw new IllegalStateException("Event invariant violated: artistsNames list must not be null");
+        if (artistsNames == null || artistsNames.isEmpty()) {
+            throw new IllegalStateException("Event invariant violated: artistsNames list must be non-empty");
         }
-        if (showDates == null) {
-            throw new IllegalStateException("Event invariant violated: showDates list must not be null");
+        if (showDates == null || showDates.isEmpty()) {
+            throw new IllegalStateException("Event invariant violated: showDates list must be non-empty");
         }
         if (purchasePolicy == null) {
             throw new IllegalStateException("Event invariant violated: purchasePolicy must not be null");

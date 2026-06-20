@@ -30,20 +30,12 @@ public class Session implements InvariantChecked {
     private Instant expiresAt;
 
     public Session(String sessionId, Integer userId, Instant createdAt, Instant expiresAt) {
-        if (sessionId == null || sessionId.isBlank()) {
-            throw new IllegalArgumentException("sessionId must be non-blank");
-        }
-        if (createdAt == null) {
-            throw new IllegalArgumentException("createdAt must not be null");
-        }
-        if (expiresAt == null) {
-            throw new IllegalArgumentException("expiresAt must not be null");
-        }
         this.sessionId = sessionId;
         this.userId = userId;
         this.createdAt = createdAt;
         this.lastSeenAt = createdAt;
         this.expiresAt = expiresAt;
+        checkInvariants();
     }
 
     public String getSessionId() {

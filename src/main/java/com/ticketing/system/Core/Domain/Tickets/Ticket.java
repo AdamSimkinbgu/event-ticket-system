@@ -32,13 +32,11 @@ public class Ticket implements InvariantChecked {
         this.seatNumber = seatLabel;    // nullable for standing zones, non-null for seated zones
         this.price = price;
         this.ticketId = ticketId;
-        if (orderReceiptId <= 0) {
-            throw new IllegalArgumentException("orderReceiptId must be positive");
-        }
         this.orderReceiptId = orderReceiptId;
         this.barcodeValue = barcodeValue;
         this.status = TicketStatus.PAID; // Default initial status, because tickets are created at payment time in the current design. Adjust as needed if creation timing changes.
         this.holderUserId = null;
+        checkInvariants();
     }
 
 
