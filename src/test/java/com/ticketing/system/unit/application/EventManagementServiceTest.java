@@ -46,6 +46,8 @@ import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
+import com.ticketing.system.Core.Application.dto.LocationDTO;
+import com.ticketing.system.Core.Application.dto.ShowDateDTO;
 import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.users.Permission;
@@ -599,5 +601,68 @@ class EventManagementServiceTest {
                 new EventUpdateDTO(String.valueOf(EVENT_ID), "Updated Draft Name", null, null, null, null));
 
         assertEquals("Updated Draft Name", draftEvent.getName());
+    }
+
+    @Test
+    void GivenOwnerAndNewDescription_WhenEditEventDetails_ThenDescriptionIsUpdated() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), null, "A brand new description", null, null, null));
+
+        assertEquals("A brand new description", event.getDescription());
+    }
+
+    @Test
+    void GivenOwnerAndNewLocation_WhenEditEventDetails_ThenVenueMapLocationIsUpdated() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), null, null, null,
+                        new LocationDTO("France", "Paris"), null));
+
+        assertEquals(new Location("France", "Paris"), event.getVenueMap().getLocation());
+    }
+
+    @Test
+    void GivenOwnerAndNewShowDates_WhenEditEventDetails_ThenShowDatesAreReplaced() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        LocalDateTime newStart = LocalDateTime.now().plusDays(30);
+        LocalDateTime newEnd = newStart.plusHours(3);
+        eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), null, null, null, null,
+                        List.of(new ShowDateDTO(newStart, newEnd))));
+
+        assertEquals(1, event.getShowDates().size());
+        assertEquals(newStart, event.getShowDates().get(0).getStartTime());
+        assertEquals(newEnd, event.getShowDates().get(0).getEndTime());
+    }
+
+    @Test
+    void GivenDescribedEvent_WhenGetEventDetail_ThenReturnsDescription() {
+        Event describedEvent = new Event(
+                EVENT_ID, "Concert", "The headline show of the year", 4.5, List.of("Artist1"),
+                EventCategory.CONCERT, COMPANY_ID, EventStatus.SCHEDULED, venueMap,
+                List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
+                null, new DiscountPolicy(0));
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(describedEvent);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        EventDetailDTO result = eventService.getEventDetail(OWNER_TOKEN, String.valueOf(EVENT_ID));
+
+        assertEquals("The headline show of the year", result.description());
     }
 }

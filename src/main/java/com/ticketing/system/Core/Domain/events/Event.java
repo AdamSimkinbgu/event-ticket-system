@@ -17,24 +17,35 @@ import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
 public class Event implements InvariantChecked {
     private final int id;
     private String name;
+    private String description;
     private final Double rating;
     private final List<String> artistsNames;
     private EventCategory category;
     private final int comapnyid;
     private EventStatus status;
     private VenueMap venueMap;
-    private final List<ShowDate> showDates;
+    private List<ShowDate> showDates;
     private PurchasePolicy purchasePolicy;
     private final DiscountPolicy discountPolicy;
 
+    // Description-less constructor — kept for existing callers/tests. Delegates with a null
+    // description (description is optional and carries no invariant).
     public Event(int id, String name, Double rating, List<String> artistsNames, EventCategory category, int comapnyid,
             EventStatus status, VenueMap venueMap, List<ShowDate> showDates, PurchasePolicy PurchasePolicy,
          DiscountPolicy discountPolicy) {
+        this(id, name, null, rating, artistsNames, category, comapnyid, status, venueMap, showDates,
+                PurchasePolicy, discountPolicy);
+    }
+
+    public Event(int id, String name, String description, Double rating, List<String> artistsNames,
+            EventCategory category, int comapnyid, EventStatus status, VenueMap venueMap, List<ShowDate> showDates,
+            PurchasePolicy PurchasePolicy, DiscountPolicy discountPolicy) {
         // Invariants are enforced by checkInvariants() at the end of construction
         // (single source of truth). Collection copies are null-safe so a null input
         // reaches checkInvariants() as a clean IllegalStateException instead of an NPE here.
         this.id = id;
         this.name = name;
+        this.description = description;
         this.rating = rating;
         this.artistsNames = artistsNames == null ? null : List.copyOf(artistsNames);
         this.category = category;
@@ -413,24 +424,38 @@ public class Event implements InvariantChecked {
 
     // UC-19 — partial update of mutable metadata. Only allowed in DRAFT or SCHEDULED state.
     // Caller must hold the event lock (IEventRepository.lockForUpdate) before calling this method —
-    // name and category are non-final, so concurrent reads depend on the service's lock discipline.
-    // location and showDates are intentionally excluded: EventUpdateDTO carries location as a
-    // plain String (not a Location record) and showDates as List<LocalDateTime> (not List<ShowDate>),
-    // so neither can be safely mapped without a DTO redesign.
-    public void editDetails(String newName, EventCategory newCategory) {
+    // the mutated fields are non-final, so concurrent reads depend on the service's lock discipline.
+    // Each argument is null-coalesced: null means "leave this field alone". The service is
+    // responsible for converting LocationDTO/ShowDateDTO into the domain Location/ShowDate passed here.
+    public void editDetails(String newName, String newDescription, EventCategory newCategory,
+            Location newLocation, List<ShowDate> newShowDates) {
         if (status != EventStatus.DRAFT && status != EventStatus.SCHEDULED) {
             throw new IllegalStateException("Event details can only be edited while in DRAFT or SCHEDULED state");
         }
         if (newName != null && !newName.isBlank()) {
             this.name = newName;
         }
+        if (newDescription != null) {
+            this.description = newDescription;
+        }
         if (newCategory != null) {
             this.category = newCategory;
         }
+        if (newLocation != null && this.venueMap != null) {
+            this.venueMap.setLocation(newLocation);
+        }
+        if (newShowDates != null && !newShowDates.isEmpty()) {
+            this.showDates = List.copyOf(newShowDates);
+        }
+        checkInvariants();
     }
 
     public String getName() {
         return name;
+    }
+
+    public String getDescription() {
+        return description;
     }
 
     public Double getRating() {

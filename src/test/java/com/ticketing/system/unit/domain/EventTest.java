@@ -96,6 +96,41 @@ class EventTest extends BaseDomainTest {
                 null, new DiscountPolicy(0)));
     }
 
+    // UC-19 — editDetails applies all five updatable fields while DRAFT or SCHEDULED.
+    @Test
+    void GivenScheduledEvent_WhenEditDetailsAllFields_ThenAllApplied() {
+        ShowDate newShow = new ShowDate(LocalDateTime.now().plusDays(40), LocalDateTime.now().plusDays(40).plusHours(2));
+
+        event.editDetails("New Name", "New Description", EventCategory.THEATER,
+                new Location("France", "Paris"), List.of(newShow));
+
+        assertEquals("New Name", event.getName());
+        assertEquals("New Description", event.getDescription());
+        assertEquals(EventCategory.THEATER, event.getCategory());
+        assertEquals(new Location("France", "Paris"), event.getVenueMap().getLocation());
+        assertEquals(1, event.getShowDates().size());
+        assertEquals(newShow.getStartTime(), event.getShowDates().get(0).getStartTime());
+    }
+
+    // Null arguments mean "leave this field alone".
+    @Test
+    void GivenNullArguments_WhenEditDetails_ThenNothingChanges() {
+        event.editDetails(null, null, null, null, null);
+
+        assertEquals("Concert", event.getName());
+        assertEquals(EventCategory.CONCERT, event.getCategory());
+        assertEquals(LOCATION, event.getVenueMap().getLocation());
+        assertEquals(1, event.getShowDates().size());
+    }
+
+    @Test
+    void GivenOnSaleEvent_WhenEditDetails_ThenThrowsIllegalState() {
+        event.transitionToOnSale();
+
+        assertThrows(IllegalStateException.class, () -> event.editDetails(
+                "New Name", null, null, null, null));
+    }
+
     @Test
     void GivenStandingZone_WhenReserveInventoryStandingSelection_ThenQuantityReserved() {
         StandingZone standingZone = track(new StandingZone(1, "General Admission", 10, 50.0));
