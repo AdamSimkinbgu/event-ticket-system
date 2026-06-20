@@ -805,7 +805,7 @@ public class EventManagementService {
             try {
                 notificationService.notifyEventCancelled(userId, eventId, eventName);
             } catch (Exception e) {
-                log.warn("Failed to send cancellation notification to userId={} for eventId={}", userId, eventId);
+                log.warn("Failed to send cancellation notification to userId={} for eventId={}", userId, eventId, e);
             }
         }
     }

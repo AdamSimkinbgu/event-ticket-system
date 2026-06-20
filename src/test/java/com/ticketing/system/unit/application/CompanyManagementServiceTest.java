@@ -26,14 +26,11 @@ import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
 import com.ticketing.system.Core.Application.dto.AppointmentRevokeDTO;
 import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
 import com.ticketing.system.Core.Application.dto.ManagerAppointmentRequestDTO;
-import com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
-import com.ticketing.system.Core.Domain.users.CompanyRole;
-import com.ticketing.system.Core.Domain.users.CompanyAppointment;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
@@ -42,7 +39,6 @@ import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
-//import com.ticketing.system.Core.Domain.users.exceptions.UserNotFoundException;
 
 public class CompanyManagementServiceTest {
 

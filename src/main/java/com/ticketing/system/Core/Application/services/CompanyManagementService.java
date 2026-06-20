@@ -108,7 +108,7 @@ public class CompanyManagementService {
             ProductionCompany company = companyRepository.getCompanyById(request.companyId());
             notificationService.notifyOwnerAppointmentPending(request.targetUserId(), request.companyId(), company.getName());
         } catch (Exception e) {
-            log.warn("Owner appointment created but notification failed for userId={}", request.targetUserId());
+            log.warn("Owner appointment created but notification failed for userId={}", request.targetUserId(), e);
         }
 
         log.info("Owner appointment created successfully: appointerId={}, targetUserId={}, companyId={}",
@@ -138,7 +138,7 @@ public class CompanyManagementService {
             ProductionCompany company = companyRepository.getCompanyById(request.companyId());
             notificationService.notifyRoleChanged(request.targetUserId(), request.companyId(), company.getName(), "MANAGER");
         } catch (Exception e) {
-            log.warn("Manager appointment created but notification failed for userId={}", request.targetUserId());
+            log.warn("Manager appointment created but notification failed for userId={}", request.targetUserId(), e);
         }
 
         log.info("Manager appointment created successfully: ownerId={}, targetUserId={}, companyId={}, permissions={}",
@@ -175,7 +175,7 @@ public class CompanyManagementService {
             try {
                 notificationService.notifyRoleChanged(userId, response.companyId(), company.getName(), appointment.getRole().name());
             } catch (Exception e) {
-                log.warn("Appointment accepted but notification failed for userId={}", userId);
+                log.warn("Appointment accepted but notification failed for userId={}", userId, e);
             }
         } else {
             user.rejectInvitation(response.companyId()); // transitions the pending appointment to rejected state, status-based lookups will no longer return it.
@@ -217,7 +217,7 @@ public class CompanyManagementService {
             ProductionCompany company = companyRepository.getCompanyById(edit.companyId());
             notificationService.notifyRoleChanged(edit.targetUserId(), edit.companyId(), company.getName(), "MANAGER (permissions updated)");
         } catch (Exception e) {
-            log.warn("Manager permissions updated but notification failed for userId={}", edit.targetUserId());
+            log.warn("Manager permissions updated but notification failed for userId={}", edit.targetUserId(), e);
         }
 
         log.info("Manager permissions updated successfully for user {} in company {}", edit.targetUserId(),
@@ -249,7 +249,7 @@ public class CompanyManagementService {
         try {
             notificationService.notifyManagerRevoked(revokeRequest.targetUserId(), revokeRequest.companyId(), company.getName());
         } catch (Exception e) {
-            log.warn("Role revoked but notification failed for userId={}", revokeRequest.targetUserId());
+            log.warn("Role revoked but notification failed for userId={}", revokeRequest.targetUserId(), e);
         }
 
         log.info("Manager revoked successfully");

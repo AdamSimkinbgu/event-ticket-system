@@ -2,11 +2,11 @@ package com.ticketing.system.Core.Application.interfaces;
 
 import java.util.List;
 
-import com.ticketing.system.Core.Domain.notifications.Notification;
-
-// Port for the live push channel (WebSocket / SSE / email — V2/V3 decision).
-// V1 implementation is InMemoryNotificationService for test assertions.
-// Used by NotificationDispatchService for online-recipient delivery (UC-35).
+// High-level, application-facing notification facade. Each notifyXxx method translates a
+// business event into a Notification domain object and delegates to NotificationDispatchService,
+// which persists it and routes delivery. The low-level push channel (WebSocket / SSE / email)
+// is a separate port, IPushNotificationService.
+// V1 implementation is NotificationService.
 public interface INotificationService {
 
     void notifyPurchaseCompleted(int userId, double totalPrice, List<Integer> list);
