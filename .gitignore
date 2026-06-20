@@ -60,3 +60,5 @@ docs/*
 .project
 .factorypath
 
+# settings
+.settings/
