@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
@@ -29,6 +30,7 @@ import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
+import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventorySelection;
@@ -262,6 +264,71 @@ class EventManagementServiceTest {
         eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
 
         assertEquals(TicketStatus.VOIDED, availableTicket.getStatus());
+    }
+
+    // -- UC-19: owner publishes event (SCHEDULED -> ON_SALE) -------------
+
+    @Test
+    public void GivenScheduledEvent_WhenPublishEvent_ThenStatusOnSaleAndSaved() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+
+        eventService.publishEvent(OWNER_TOKEN, COMPANY_ID, EVENT_ID);
+
+        assertEquals(EventStatus.ON_SALE, event.getStatus());
+        verify(mockEventRepo).save(event);
+    }
+
+    @Test
+    public void GivenInvalidToken_WhenPublishEvent_ThenThrows() {
+        when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
+
+        assertThrows(RuntimeException.class,
+                () -> eventService.publishEvent(INVALID_TOKEN, COMPANY_ID, EVENT_ID));
+    }
+
+    @Test
+    public void GivenEventNotOwnedByCompany_WhenPublishEvent_ThenThrows() {
+        int otherCompanyId = 999;
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event); // event.companyId == COMPANY_ID
+
+        assertThrows(RuntimeException.class,
+                () -> eventService.publishEvent(OWNER_TOKEN, otherCompanyId, EVENT_ID));
+        assertEquals(EventStatus.SCHEDULED, event.getStatus());
+    }
+
+    @Test
+    public void GivenUserWithoutPermission_WhenPublishEvent_ThenThrows() {
+        User noPermissionUser = new User(MANAGER_ID, "No Perm", "noperm@example.com", "hashedpassword", 30);
+        when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(noPermissionUser);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+
+        assertThrows(RuntimeException.class,
+                () -> eventService.publishEvent(MANAGER_TOKEN, COMPANY_ID, EVENT_ID));
+        assertEquals(EventStatus.SCHEDULED, event.getStatus());
+    }
+
+    @Test
+    public void GivenDraftEvent_WhenPublishEvent_ThenThrowsInvalidStateTransition() {
+        Event draftEvent = new Event(
+                EVENT_ID, "Concert", 4.5, List.of("Artist1"), EventCategory.CONCERT, COMPANY_ID,
+                EventStatus.DRAFT, venueMap,
+                List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
+                null, new DiscountPolicy(0));
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(draftEvent);
+
+        assertThrows(InvalidStateTransitionException.class,
+                () -> eventService.publishEvent(OWNER_TOKEN, COMPANY_ID, EVENT_ID));
+        assertEquals(EventStatus.DRAFT, draftEvent.getStatus());
     }
 
     // new test

@@ -630,6 +630,35 @@ public class EventManagementService {
 
 
 
+    // UC-19 — owner opens an event's sales: SCHEDULED -> ON_SALE.
+    // The actual transition (and its venue-map/show-date/invariant guards) lives in
+    // Event.transitionToOnSale(); this method enforces auth, ownership, and locking.
+    public void publishEvent(String token, int companyId, int eventId) {
+        int userId = validateTokenAndGetUserId(token);
+
+        eventRepository.lockForUpdate(eventId);
+        try {
+            Event event = eventRepository.findById(eventId);
+
+            if (event.getCompanyId() != companyId) {
+                throw new RuntimeException("Event does not belong to this company");
+            }
+
+            User user = userRepository.getUserById(userId);
+            user.requirePermissionInCompany(companyId, Permission.CONFIGURE_VENUE);
+
+            event.transitionToOnSale(); // SCHEDULED -> ON_SALE (idempotent if already ON_SALE)
+            eventRepository.save(event);
+
+            log.info("Event {} published (ON_SALE) by user {}", eventId, userId);
+        } finally {
+            eventRepository.unlock(eventId);
+        }
+    }
+
+
+
+
     // UC-19 — soft cancel; fires EventCancelled domain event for UC-4 refund
     // pipeline.
     public void cancelEventAndRefund(String token, int eventId) {
