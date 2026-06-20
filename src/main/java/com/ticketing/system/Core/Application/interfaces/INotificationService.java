@@ -9,14 +9,6 @@ import com.ticketing.system.Core.Domain.notifications.Notification;
 // Used by NotificationDispatchService for online-recipient delivery (UC-35).
 public interface INotificationService {
 
-    // UC-35 — push a notification to an online recipient.
-    // Returns true if the push was acknowledged (or queued successfully).
-    boolean send(int recipientUserId, Notification notification);
-
-    // Used by the dispatcher when the recipient's reachability isn't already known
-    // from ISessionManager (e.g. multi-device scenarios where session-online != channel-reachable).
-    boolean isReachable(int recipientUserId);
-
     void notifyPurchaseCompleted(int userId, double totalPrice, List<Integer> list);
 
     void notifyPurchaseFailed(int userId, String string);
@@ -28,4 +20,12 @@ public interface INotificationService {
     void notifyRemoveTicketReservationFailure(int userId, int eventId, int zoneId, String string);
 
     void notifyRemoveTicketReservationSuccess(int userId, int eventId, int zoneId, int i);
+
+    void notifyEventCancelled(int userId, int eventId, String eventName);
+
+    void notifyManagerRevoked(int userId, int companyId, String companyName);
+
+    void notifyOwnerAppointmentPending(int userId, int companyId, String companyName);
+
+    void notifyRoleChanged(int userId, int companyId, String companyName, String newRole);
 }
