@@ -1,5 +1,6 @@
 package com.ticketing.system.Core.Application.services;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -10,12 +11,16 @@ import com.ticketing.system.Core.Application.dto.MarketControlRequestDTO;
 import com.ticketing.system.Core.Application.dto.MarketStateDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dtoMappers.OrderReceiptMapper;
+import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
+import com.ticketing.system.Core.Domain.Admin.Admin;
 import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.exceptions.ExternalServiceUnavailableException;
+import com.ticketing.system.Core.Domain.exceptions.MissingDefaultAdminException;
 import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 
@@ -35,6 +40,20 @@ public class SystemAdminService {
     private final IEventRepository eventRepository;
     private final List<IPaymentGateway> paymentGateways;
     private final List<ITicketIssuer> ticketIssuers;
+    private final IPasswordHasher passwordHasher;
+
+    // UC-1 / I.1.4 — default System Admin auto-created when none exists. "admin" is a
+    // recognized admin username (AuthSession.ADMIN_USERNAMES); its password should be
+    // rotated after first login.
+    private static final int    DEFAULT_ADMIN_ID       = 1;
+    private static final String DEFAULT_ADMIN_USERNAME = "admin";
+    private static final String DEFAULT_ADMIN_PASSWORD = "admin";
+
+    // Platform lifecycle state (in-memory for V1). openMarket()/closeMarket() (UC-32, #307)
+    // build on top of this status.
+    private enum PlatformStatus { UNINITIALIZED, READY, OPEN, CLOSED }
+    private volatile PlatformStatus status = PlatformStatus.UNINITIALIZED;
+    private volatile LocalDateTime lastInitializedAt;
 
     public SystemAdminService(
             ISessionManager sessionManager,
@@ -43,7 +62,8 @@ public class SystemAdminService {
             ITicketRepository ticketRepository,
             IEventRepository eventRepository,
             List<IPaymentGateway> paymentGateways,
-            List<ITicketIssuer> ticketIssuers
+            List<ITicketIssuer> ticketIssuers,
+            IPasswordHasher passwordHasher
     ) {
         this.sessionManager = sessionManager;
         this.adminRepository = adminRepository;
@@ -52,16 +72,64 @@ public class SystemAdminService {
         this.eventRepository = eventRepository;
         this.paymentGateways = paymentGateways;
         this.ticketIssuers = ticketIssuers;
+        this.passwordHasher = passwordHasher;
     }
 
-    // UC-1 — invariants + I.1.2 gateway check + I.1.3 issuer check + I.1.4 default-admin.
-    public void initializePlatform() {
-        throw new UnsupportedOperationException("UC-1: not implemented");
+    // UC-1 — I.1.1 invariants + I.1.2 payment-gateway check + I.1.3 issuer check + I.1.4 default-admin.
+    // Brings the platform to a healthy, market-openable state. Idempotent: a second call on an
+    // already-initialized platform is a graceful no-op.
+    public synchronized void initializePlatform() {
+        log.info("Platform initialization requested.");
+
+        // Re-initializing an already-initialized platform is handled gracefully.
+        if (status != PlatformStatus.UNINITIALIZED) {
+            log.info("Platform already initialized (status={}); ignoring re-initialization.", status);
+            return;
+        }
+
+        // I.1.2 — at least one payment service must be reachable.
+        if (paymentGateways.stream().noneMatch(this::isReachable)) {
+            throw new ExternalServiceUnavailableException("no reachable payment service");
+        }
+
+        // I.1.3 — at least one ticket-issuance service must be reachable.
+        if (ticketIssuers.stream().noneMatch(this::isReachable)) {
+            throw new ExternalServiceUnavailableException("no reachable ticket issuance service");
+        }
+
+        // I.1.4 — guarantee at least one System Admin (auto-create a default if none).
+        createDefaultAdminIfMissing();
+
+        this.lastInitializedAt = LocalDateTime.now();
+        this.status = PlatformStatus.READY;
+        log.info("Platform initialized — status READY.");
     }
 
     // UC-1 / I.1.4 — auto-create the default admin if none exists.
     public void createDefaultAdminIfMissing() {
-        throw new UnsupportedOperationException("UC-1 / I.1.4: not implemented");
+        if (adminRepository.existsAny()) {
+            log.info("A System Admin already exists; no default needed.");
+            return;
+        }
+
+        log.warn("No System Admin found — creating default admin '{}'. Rotate its password after first login.",
+                DEFAULT_ADMIN_USERNAME);
+        try {
+            Admin defaultAdmin = new Admin(
+                    DEFAULT_ADMIN_ID,
+                    DEFAULT_ADMIN_USERNAME,
+                    passwordHasher.hash(DEFAULT_ADMIN_PASSWORD),
+                    true);
+            defaultAdmin.checkInvariants();
+            adminRepository.save(defaultAdmin);
+        } catch (RuntimeException e) {
+            throw new MissingDefaultAdminException(e.getMessage());
+        }
+
+        // Confirm the write actually took — a silent persistence failure must fail init.
+        if (!adminRepository.existsAny()) {
+            throw new MissingDefaultAdminException("default admin was not persisted");
+        }
     }
 
     // UC-32 — open the trading market after re-verifying gateways/issuers/admin.
@@ -81,6 +149,35 @@ public class SystemAdminService {
 
 
 
+
+    // *HELPER METHODS* — UC-1 I.1.2/I.1.3 reachability probe (maps to the WSEP `handshake`).
+    // A thrown verification (e.g. a real HTTP adapter timing out) is treated as "unreachable"
+    // so a flaky provider can never crash bootstrap — it just doesn't count toward the quorum.
+    private boolean isReachable(IPaymentGateway gateway) {
+        try {
+            boolean ok = gateway.verifyConnection();
+            if (!ok) {
+                log.warn("Payment gateway '{}' reported unreachable.", gateway.getId());
+            }
+            return ok;
+        } catch (RuntimeException e) {
+            log.warn("Payment gateway '{}' verification failed: {}", gateway.getId(), e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean isReachable(ITicketIssuer issuer) {
+        try {
+            boolean ok = issuer.verifyConnection();
+            if (!ok) {
+                log.warn("Ticket issuer '{}' reported unreachable.", issuer.getId());
+            }
+            return ok;
+        } catch (RuntimeException e) {
+            log.warn("Ticket issuer '{}' verification failed: {}", issuer.getId(), e.getMessage());
+            return false;
+        }
+    }
 
 
 
@@ -116,8 +213,8 @@ public class SystemAdminService {
 
 
 
-    // *HELPER METHODS* for viewGlobalHistory() that normalize and validate the filters, and enforce admin RBAC. 
-    // this method enforces that the event filter is consistent with the company filter (if provided), and that the date range is valid. 
+    // *HELPER METHODS* for viewGlobalHistory() that normalize and validate the filters, and enforce admin RBAC.
+    // this method enforces that the event filter is consistent with the company filter (if provided), and that the date range is valid.
     // It also logs the filters being applied for audit purposes.
     private GlobalHistoryFiltersDTO normalizeGlobalHistoryFilters(GlobalHistoryFiltersDTO filters) {
         // If no filters are provided, return a default filter that matches all receipts.
@@ -139,7 +236,7 @@ public class SystemAdminService {
                     f.toDate());
         }
 
-        // If companyId is provided, we need to ensure that the eventIds filter (if provided) is a subset of the events for that company. 
+        // If companyId is provided, we need to ensure that the eventIds filter (if provided) is a subset of the events for that company.
         // If eventIds is null, we will use all events for that company.
         List<Integer> companyEventIds = eventRepository.findIdsByCompany(f.companyId());
 
@@ -166,7 +263,7 @@ public class SystemAdminService {
                 f.toDate());
     }
 
-   
+
     // *HELPER METHOD* to convert the list of event IDs in the filters to a set for efficient lookup later. Returns null if no event filter is applied.
     private Set<Integer> selectedEventIdsOrNull(GlobalHistoryFiltersDTO filters) {
         if (filters.eventIds() == null) {
@@ -175,10 +272,6 @@ public class SystemAdminService {
         // Convert to set for efficient lookup later.
         return filters.eventIds().stream().collect(Collectors.toSet());
     }
-    
-
-
-
 
 
 

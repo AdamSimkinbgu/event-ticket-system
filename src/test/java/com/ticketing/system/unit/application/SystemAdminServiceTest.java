@@ -1,8 +1,12 @@
 package com.ticketing.system.unit.application;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -17,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Application.dto.GlobalHistoryFiltersDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
+import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
@@ -27,6 +32,8 @@ import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.exceptions.ExternalServiceUnavailableException;
+import com.ticketing.system.Core.Domain.exceptions.MissingDefaultAdminException;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
@@ -41,6 +48,7 @@ class SystemAdminServiceTest {
     private IOrderReceiptRepository orderReceiptRepository;
     private ITicketRepository ticketRepository;
     private IEventRepository eventRepository;
+    private IPasswordHasher passwordHasher;
     private SystemAdminService service;
 
 
@@ -51,6 +59,8 @@ class SystemAdminServiceTest {
         orderReceiptRepository = mock(IOrderReceiptRepository.class);
         ticketRepository = mock(ITicketRepository.class);
         eventRepository = mock(IEventRepository.class);
+        passwordHasher = mock(IPasswordHasher.class);
+        when(passwordHasher.hash(anyString())).thenReturn("hashed-password");
         service = new SystemAdminService(
                 sessionManager,
                 adminRepository,
@@ -58,24 +68,58 @@ class SystemAdminServiceTest {
                 ticketRepository,
                 eventRepository,
                 List.of(),
-                List.of()
+                List.of(),
+                passwordHasher
         );
         when(sessionManager.validateToken(ADMIN_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(ADMIN_TOKEN)).thenReturn(ADMIN_USER_ID);
         when(adminRepository.findById(ADMIN_USER_ID)).thenReturn(new Admin(ADMIN_USER_ID, "admin", "hash", true));
     }
 
-    @Test @Disabled("UC-1: I.1.1 verify invariants on startup")
-    void givenValidState_whenInitializePlatform_thenSucceeds() {}
+    // --- UC-1: initializePlatform ---
 
-    @Test @Disabled("UC-1: I.1.2 missing payment gateway → market does not open")
-    void givenNoPaymentGateway_whenInitializePlatform_thenFails() {}
+    @Test
+    void givenAllServicesReachableAndAdminExists_whenInitializePlatform_thenSucceeds() {
+        when(adminRepository.existsAny()).thenReturn(true);
+        SystemAdminService svc = serviceWith(List.of(reachablePayment()), List.of(reachableIssuer()));
+        assertDoesNotThrow(svc::initializePlatform);
+    }
 
-    @Test @Disabled("UC-1: I.1.3 missing ticket issuer → market does not open")
-    void givenNoTicketIssuer_whenInitializePlatform_thenFails() {}
+    @Test
+    void givenNoReachablePaymentGateway_whenInitializePlatform_thenThrows() {
+        SystemAdminService svc = serviceWith(List.of(), List.of(reachableIssuer()));
+        assertThrows(ExternalServiceUnavailableException.class, svc::initializePlatform);
+    }
 
-    @Test @Disabled("UC-1: I.1.4 no admin → auto-generates default")
-    void givenNoAdmin_whenInitializePlatform_thenDefaultAdminCreated() {}
+    @Test
+    void givenNoReachableTicketIssuer_whenInitializePlatform_thenThrows() {
+        SystemAdminService svc = serviceWith(List.of(reachablePayment()), List.of());
+        assertThrows(ExternalServiceUnavailableException.class, svc::initializePlatform);
+    }
+
+    @Test
+    void givenNoAdmin_whenInitializePlatform_thenDefaultAdminCreated() {
+        when(adminRepository.existsAny()).thenReturn(false, true);
+        SystemAdminService svc = serviceWith(List.of(reachablePayment()), List.of(reachableIssuer()));
+        svc.initializePlatform();
+        verify(adminRepository).save(any(Admin.class));
+    }
+
+    @Test
+    void givenNoAdminAndCreationDoesNotPersist_whenInitializePlatform_thenThrows() {
+        // existsAny() stays false even after save() → auto-creation failed.
+        when(adminRepository.existsAny()).thenReturn(false);
+        SystemAdminService svc = serviceWith(List.of(reachablePayment()), List.of(reachableIssuer()));
+        assertThrows(MissingDefaultAdminException.class, svc::initializePlatform);
+    }
+
+    @Test
+    void givenAlreadyInitialized_whenInitializePlatformAgain_thenSecondCallIsNoOp() {
+        when(adminRepository.existsAny()).thenReturn(true);
+        SystemAdminService svc = serviceWith(List.of(reachablePayment()), List.of(reachableIssuer()));
+        svc.initializePlatform();
+        assertDoesNotThrow(svc::initializePlatform);
+    }
 
     @Test @Disabled("UC-32: openMarket re-runs all verifications + flips state")
     void givenInitializedPlatform_whenOpenMarket_thenStateOpen() {}
@@ -184,5 +228,26 @@ class SystemAdminServiceTest {
         PurchaseHistoryDTO.PurchaseRecordDTO record = result.get(0).records().get(0);
         assertEquals(75.0, record.totalPaid());
         assertEquals(2, record.tickets().size());
+    }
+
+
+    // --- helpers ---
+
+    private SystemAdminService serviceWith(List<IPaymentGateway> gateways, List<ITicketIssuer> issuers) {
+        return new SystemAdminService(
+                sessionManager, adminRepository, orderReceiptRepository,
+                ticketRepository, eventRepository, gateways, issuers, passwordHasher);
+    }
+
+    private IPaymentGateway reachablePayment() {
+        IPaymentGateway gateway = mock(IPaymentGateway.class);
+        when(gateway.verifyConnection()).thenReturn(true);
+        return gateway;
+    }
+
+    private ITicketIssuer reachableIssuer() {
+        ITicketIssuer issuer = mock(ITicketIssuer.class);
+        when(issuer.verifyConnection()).thenReturn(true);
+        return issuer;
     }
 }

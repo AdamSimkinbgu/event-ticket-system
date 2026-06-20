@@ -26,9 +26,17 @@ public class StubTicketIssuer implements ITicketIssuer {
         return ISSUER_ID;
     }
 
+    // Toggleable for UC-1/UC-32 tests: lets a test simulate an unreachable provider so the
+    // initialize / open-market failure paths can be exercised. Production default: reachable.
+    private volatile boolean reachable = true;
+
+    public void setReachable(boolean reachable) {
+        this.reachable = reachable;
+    }
+
     @Override
     public boolean verifyConnection() {
-        return true;
+        return reachable;
     }
 
     @Override
