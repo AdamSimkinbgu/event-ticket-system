@@ -128,7 +128,7 @@ public class ReservationService {
             // Reserve inventory first before modifying the active order, so that if we fail to reserve inventory (e.g. not enough tickets available), we do not end up with an active order that has reservations that were not successfully made. This also ensures that we only modify the active order if we are able to successfully reserve the requested tickets, which keeps our data consistent and avoids having active orders that reflect reservations that do not actually exist.
             event.reserveInventory(zoneId, selectionWithKey);
             inventoryReserved = true;
-            //* */
+            
             // Now that we have successfully reserved the inventory, we can safely modify the active order to reflect the new reservation. If any of the validations for modifying the active order fail (e.g. trying to reserve more tickets than allowed by purchase policy, etc.), we will throw an exception and roll back the inventory reservation in the catch block, ensuring that we do not end up with an active order that has reservations that were not successfully made.
             activeOrder.addReservation(eventId, zoneId, selection, pricePerTicket, LocalDateTime.now());
             orderModified = true;
@@ -657,6 +657,47 @@ public class ReservationService {
                     log.info("No active order found for sessionId={}, returning null", sessionId);
                     return null;
                 });
+    }
+
+    // When a buyer enters the checkout page, reset the hold timer of every reserved ticket
+    // in their active order to a fresh full window (CartLineItem.EXPIRATION_LIMIT, 10 min),
+    // so the buyer gets the maximum time to complete payment. We only renew when the cart is
+    // still fully valid: if it is empty, already in checkout, or has any expired item, we
+    // leave it untouched so the existing expiry/sweeper path can reject the stale cart. The
+    // reset runs under the per-order lock (the same lock the expiry sweeper acquires first),
+    // so it cannot race the sweeper. The enriched DTO is built by reusing restoreActiveOrder.
+    public ActiveOrderDTO renewReservationsForMemberCheckout(int userId) {
+        String orderLockKey = "user:" + userId;
+        activeOrderRepository.lockForUpdate(orderLockKey);
+        try {
+            ActiveOrder order = activeOrderRepository.getByUserId(userId);
+            if (order != null && !order.isEmpty()
+                    && !order.isCheckoutInProgress() && !order.hasExpiredItem()) {
+                order.renewReservationTimers(LocalDateTime.now());
+                activeOrderRepository.save(order);
+                log.info("Renewed reservation timers on checkout entry for userId={}", userId);
+            }
+        } finally {
+            activeOrderRepository.unlock(orderLockKey);
+        }
+        return restoreActiveOrder(userId);
+    }
+
+    public ActiveOrderDTO renewReservationsForGuestCheckout(String sessionId) {
+        String orderLockKey = "sess:" + sessionId;
+        activeOrderRepository.lockForUpdate(orderLockKey);
+        try {
+            ActiveOrder order = activeOrderRepository.getBySessionId(sessionId).orElse(null);
+            if (order != null && !order.isEmpty()
+                    && !order.isCheckoutInProgress() && !order.hasExpiredItem()) {
+                order.renewReservationTimers(LocalDateTime.now());
+                activeOrderRepository.save(order);
+                log.info("Renewed reservation timers on checkout entry for sessionId={}", sessionId);
+            }
+        } finally {
+            activeOrderRepository.unlock(orderLockKey);
+        }
+        return restoreActiveOrderForGuest(sessionId);
     }
 
     // Helper method to abandon the active order for a user (member or guest) - this is used by the frontend when a user explicitly clicks "Abandon Cart" or when they log out, to clear their active order and release any reserved inventory back to the events. For members, we look up the active order by their user ID. For guests, we look up the active order by their session ID. If an active order is found, we release any reserved inventory back to the events and then delete the active order. If no active order is found, we simply return without doing anything. This ensures that we do not leave any reserved inventory hanging around for abandoned carts, which keeps our inventory accurate and allows other users to purchase those tickets if they are still available.

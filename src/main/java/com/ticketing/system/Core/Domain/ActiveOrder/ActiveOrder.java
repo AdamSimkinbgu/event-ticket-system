@@ -485,6 +485,16 @@ public class ActiveOrder implements InvariantChecked {
         return createdAt;
     }
 
+    /** Resets every line item's hold timer to a fresh full window starting at {@code now}. */
+    public void renewReservationTimers(LocalDateTime now) {
+        synchronized (itemsLock) {
+            ensureModifiable();              // refuses while CHECKOUT_IN_PROGRESS (existing guard)
+            for (CartLineItem item : items) {
+                item.renew(now);
+            }
+        }
+    }
+
     // returns the minimum remaining time among the items in the active order, which represents the time until the next item expires. If there are no items, returns Duration.ZERO.
     public Duration getRemainingTime() {
         synchronized (itemsLock) {

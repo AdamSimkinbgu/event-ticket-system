@@ -60,6 +60,12 @@ public class CartLineItem implements InvariantChecked {
         return addedAt;
     }
 
+    /** Resets the reservation hold timer to a fresh window starting at {@code newAddedAt}. */
+    public void renew(LocalDateTime newAddedAt) {
+        this.addedAt = newAddedAt;
+        checkInvariants();   // re-runs the existing invariant guard (addedAt != null, etc.)
+    }
+
     public String getSeatNumber() {
         return seatNumber;
     }
