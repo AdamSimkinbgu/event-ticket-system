@@ -26,6 +26,7 @@ import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
 import com.ticketing.system.Core.Application.services.SystemAdminService;
+import com.ticketing.system.Core.Application.services.SystemIntegrityVerifier;
 import com.ticketing.system.Core.Domain.Admin.Admin;
 import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
@@ -49,6 +50,7 @@ class SystemAdminServiceTest {
     private ITicketRepository ticketRepository;
     private IEventRepository eventRepository;
     private IPasswordHasher passwordHasher;
+    private SystemIntegrityVerifier integrityVerifier;
     private SystemAdminService service;
 
 
@@ -60,6 +62,7 @@ class SystemAdminServiceTest {
         ticketRepository = mock(ITicketRepository.class);
         eventRepository = mock(IEventRepository.class);
         passwordHasher = mock(IPasswordHasher.class);
+        integrityVerifier = mock(SystemIntegrityVerifier.class);
         when(passwordHasher.hash(anyString())).thenReturn("hashed-password");
         service = new SystemAdminService(
                 sessionManager,
@@ -69,7 +72,10 @@ class SystemAdminServiceTest {
                 eventRepository,
                 List.of(),
                 List.of(),
-                passwordHasher
+                passwordHasher,
+                integrityVerifier,
+                "admin",
+                "admin"
         );
         when(sessionManager.validateToken(ADMIN_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(ADMIN_TOKEN)).thenReturn(ADMIN_USER_ID);
@@ -236,7 +242,8 @@ class SystemAdminServiceTest {
     private SystemAdminService serviceWith(List<IPaymentGateway> gateways, List<ITicketIssuer> issuers) {
         return new SystemAdminService(
                 sessionManager, adminRepository, orderReceiptRepository,
-                ticketRepository, eventRepository, gateways, issuers, passwordHasher);
+                ticketRepository, eventRepository, gateways, issuers, passwordHasher,
+                integrityVerifier, "admin", "admin");
     }
 
     private IPaymentGateway reachablePayment() {
