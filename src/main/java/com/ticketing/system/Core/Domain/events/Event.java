@@ -444,7 +444,12 @@ public class Event implements InvariantChecked {
         if (newLocation != null && this.venueMap != null) {
             this.venueMap.setLocation(newLocation);
         }
-        if (newShowDates != null && !newShowDates.isEmpty()) {
+        if (newShowDates != null) {
+            // null means "leave the schedule alone"; an explicitly empty list is rejected
+            // rather than silently ignored, since an event must always have >=1 show date.
+            if (newShowDates.isEmpty()) {
+                throw new IllegalArgumentException("showDates cannot be empty; an event must have at least one show date");
+            }
             this.showDates = List.copyOf(newShowDates);
         }
         checkInvariants();

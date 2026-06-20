@@ -123,6 +123,13 @@ class EventTest extends BaseDomainTest {
         assertEquals(1, event.getShowDates().size());
     }
 
+    // An explicitly empty showDates list is rejected (vs null, which leaves the schedule alone).
+    @Test
+    void GivenEmptyShowDates_WhenEditDetails_ThenThrowsIllegalArgument() {
+        assertThrows(IllegalArgumentException.class, () -> event.editDetails(
+                null, null, null, null, List.of()));
+    }
+
     @Test
     void GivenOnSaleEvent_WhenEditDetails_ThenThrowsIllegalState() {
         event.transitionToOnSale();

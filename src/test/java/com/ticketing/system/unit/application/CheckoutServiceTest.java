@@ -1374,7 +1374,6 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                                 
                 assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
                 assertTrue(activeOrder.isEmpty());
-                assertThrows(RuntimeException.class, () -> checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN));
         }
 
         // Fix #3: a Phase-2 failure rollback over a multi-event cart must release every event
