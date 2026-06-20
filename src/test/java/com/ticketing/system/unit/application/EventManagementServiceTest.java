@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
@@ -63,6 +65,7 @@ class EventManagementServiceTest {
     private IOrderReceiptRepository orderReceiptRepository;
     private IPaymentGateway paymentGateway;
     private IUserRepository userRepository;
+    private INotificationService notificationService;
 
     private final String OWNER_TOKEN = "owner-token";
     private final String MANAGER_TOKEN = "manager-token";
@@ -94,6 +97,7 @@ class EventManagementServiceTest {
         orderReceiptRepository = mock(IOrderReceiptRepository.class);
         paymentGateway = mock(IPaymentGateway.class);
         userRepository = mock(IUserRepository.class);
+        notificationService = mock(INotificationService.class);
 
         eventService = new EventManagementService(
                 mockEventRepo,
@@ -102,7 +106,8 @@ class EventManagementServiceTest {
                 sessionManager,
                 orderReceiptRepository,
                 paymentGateway,
-                userRepository);
+                userRepository,
+                notificationService);
 
         company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE,
                 COMPANY_1_DESCRIPTION, 4.5);
@@ -205,6 +210,15 @@ class EventManagementServiceTest {
         eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
 
         assertTrue(realReceipt.wasRefunded());
+    }
+
+    @Test
+    public void GivenMemberReceipts_WhenCancelEventAndRefund_ThenTicketHoldersAreNotified() {
+        setupStateBasedHappyPath();
+
+        eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
+
+        verify(notificationService).notifyEventCancelled(eq(OWNER_ID), eq(EVENT_ID), eq("Concert"));
     }
 
     @Test
