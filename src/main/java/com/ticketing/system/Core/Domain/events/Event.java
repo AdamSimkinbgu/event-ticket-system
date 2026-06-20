@@ -63,12 +63,21 @@ public class Event implements InvariantChecked {
     public boolean reserveInventory(int zoneId, InventorySelection selection) {
         validateCanReserve(selection);
         this.venueMap.reserveInventory(zoneId, selection);
+        // When the last available place/seat is taken, the event sells out automatically.
+        if (status == EventStatus.ON_SALE && !venueMap.hasAvailableInventory()) {
+            markSoldOut();
+        }
         return true;
     }
 
     public boolean releaseInventory(int zoneId, InventorySelection selection) {
         validateInventoryAction(selection);
         this.venueMap.releaseInventory(zoneId, selection);
+        // Releasing inventory (manual removal, checkout rollback, or expiry sweep) re-opens
+        // a sold-out event for sale again.
+        if (status == EventStatus.SOLD_OUT && venueMap.hasAvailableInventory()) {
+            revertToOnSale();
+        }
         return true;
     }
 
@@ -99,7 +108,9 @@ public class Event implements InvariantChecked {
     private void validateCanConfirmSale(InventorySelection selection) {
         validateInventoryAction(selection);
 
-        if (status != EventStatus.ON_SALE) {
+        // SOLD_OUT is allowed: an event that sold out while tickets were reserved must still let
+        // the holders of those reservations complete their purchase (reserved -> sold).
+        if (status != EventStatus.ON_SALE && status != EventStatus.SOLD_OUT) {
             throw new IllegalStateException("Cannot confirm ticket sale for an event that is not on sale");
         }
     }
@@ -364,16 +375,32 @@ public class Event implements InvariantChecked {
 
 
     // ON_SALE -> SOLD_OUT when no AVAILABLE tickets remain.
+    // Auto-fired from reserveInventory; safe to call directly (idempotent when already SOLD_OUT).
     public void markSoldOut() {
         if (status == EventStatus.SOLD_OUT) {
             return;
         }
 
         if (status != EventStatus.ON_SALE) {
-            throw new IllegalStateException("Only on-sale events can be marked as sold out");
+            throw new InvalidStateTransitionException("Event", status.name(), EventStatus.SOLD_OUT.name());
         }
 
         this.status = EventStatus.SOLD_OUT;
+    }
+
+
+    // SOLD_OUT -> ON_SALE when availability reappears (a reservation is released).
+    // Auto-fired from releaseInventory; safe to call directly (idempotent when already ON_SALE).
+    public void revertToOnSale() {
+        if (status == EventStatus.ON_SALE) {
+            return;
+        }
+
+        if (status != EventStatus.SOLD_OUT) {
+            throw new InvalidStateTransitionException("Event", status.name(), EventStatus.ON_SALE.name());
+        }
+
+        this.status = EventStatus.ON_SALE;
     }
 
     

@@ -77,6 +77,11 @@ public class VenueMap implements InvariantChecked {
         return zone.checkAvailability(quantity);
     }
 
+    // True if any zone still has at least one AVAILABLE place/seat across the venue.
+    public boolean hasAvailableInventory() {
+        return inventoryZones.stream().anyMatch(zone -> zone.getAvailableAmount() > 0);
+    }
+
 
 
 

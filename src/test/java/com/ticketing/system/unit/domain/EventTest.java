@@ -529,6 +529,76 @@ class EventTest extends BaseDomainTest {
         assertEquals(EventStatus.ON_SALE, event.getStatus());
     }
 
+    // -- ON_SALE <-> SOLD_OUT transition --------------------------------
+
+    @Test
+    void GivenOnSaleEvent_WhenAllInventoryReserved_ThenSoldOut() {
+        StandingZone zone = track(new StandingZone(1, "General", 5, 50.0));
+        Event event = createEventWithZones(List.of(zone));
+        event.transitionToOnSale();
+
+        event.reserveInventory(1, InventorySelection.standing(5));
+
+        assertEquals(EventStatus.SOLD_OUT, event.getStatus());
+    }
+
+    @Test
+    void GivenOnSaleEvent_WhenPartiallyReserved_ThenStaysOnSale() {
+        StandingZone zone = track(new StandingZone(1, "General", 5, 50.0));
+        Event event = createEventWithZones(List.of(zone));
+        event.transitionToOnSale();
+
+        event.reserveInventory(1, InventorySelection.standing(3));
+
+        assertEquals(EventStatus.ON_SALE, event.getStatus());
+    }
+
+    @Test
+    void GivenSoldOutEvent_WhenReservationReleased_ThenBackOnSale() {
+        StandingZone zone = track(new StandingZone(1, "General", 5, 50.0));
+        Event event = createEventWithZones(List.of(zone));
+        event.transitionToOnSale();
+        event.reserveInventory(1, InventorySelection.standing(5, "order-1"));
+        assertEquals(EventStatus.SOLD_OUT, event.getStatus());
+
+        event.releaseInventory(1, InventorySelection.standing(1, "order-1"));
+
+        assertEquals(EventStatus.ON_SALE, event.getStatus());
+    }
+
+    @Test
+    void GivenMultiZone_WhenOneZoneFullButAnotherHasAvailability_ThenStaysOnSale() {
+        StandingZone full = track(new StandingZone(1, "General", 5, 50.0));
+        StandingZone other = track(new StandingZone(2, "VIP", 5, 120.0));
+        Event event = createEventWithZones(List.of(full, other));
+        event.transitionToOnSale();
+
+        event.reserveInventory(1, InventorySelection.standing(5));
+
+        assertEquals(EventStatus.ON_SALE, event.getStatus());
+    }
+
+    @Test
+    void GivenSoldOutEvent_WhenSaleConfirmed_ThenStaysSoldOut() {
+        StandingZone zone = track(new StandingZone(1, "General", 5, 50.0));
+        Event event = createEventWithZones(List.of(zone));
+        event.transitionToOnSale();
+        event.reserveInventory(1, InventorySelection.standing(5, "order-1"));
+        assertEquals(EventStatus.SOLD_OUT, event.getStatus());
+
+        event.confirmInventorySale(1, InventorySelection.standing(5, "order-1"));
+
+        assertEquals(EventStatus.SOLD_OUT, event.getStatus());
+    }
+
+    @Test
+    void GivenScheduledEvent_WhenRevertToOnSaleCalledDirectly_ThenThrows() {
+        StandingZone zone = track(new StandingZone(1, "General", 5, 50.0));
+        Event event = createEventWithZones(List.of(zone));
+
+        assertThrows(InvalidStateTransitionException.class, event::revertToOnSale);
+    }
+
     private Event createDraftEvent() {
         return track(new Event(
                 EVENT_ID,
