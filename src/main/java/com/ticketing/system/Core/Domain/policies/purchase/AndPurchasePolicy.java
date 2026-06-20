@@ -33,5 +33,6 @@ public class AndPurchasePolicy implements PurchasePolicy {
 
         return left + " AND " + right;
     }
-    
+    public PurchasePolicy getLeftPolicy()  { return leftPolicy; }
+    public PurchasePolicy getRightPolicy() { return rightPolicy; }
 }
