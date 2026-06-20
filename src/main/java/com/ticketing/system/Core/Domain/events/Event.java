@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -187,6 +188,12 @@ public class Event implements InvariantChecked {
         }
 
         this.venueMap = venueMap;
+
+        // UC-20: binding a venue map with inventory advances a draft event to SCHEDULED.
+        // Reconfiguring an already-scheduled (or later) event leaves its status untouched.
+        if (status == EventStatus.DRAFT && !venueMap.getInventoryZones().isEmpty()) {
+            transitionToScheduled();
+        }
     }
 
 
@@ -309,26 +316,44 @@ public class Event implements InvariantChecked {
 
 
 
-    // UC-19 / UC-32 — DRAFT/SCHEDULED -> ON_SALE when admin opens or owner publishes.
+    // UC-20 — DRAFT -> SCHEDULED once a venue map with inventory is bound (tickets pre-generated).
+    // Auto-fired from configureVenueMap; safe to call directly (idempotent when already SCHEDULED).
+    public void transitionToScheduled() {
+        if (status == EventStatus.SCHEDULED) {
+            return;
+        }
+
+        if (venueMap == null || venueMap.getInventoryZones().isEmpty()) {
+            throw new InvalidStateTransitionException(
+                    "Event cannot be scheduled without a venue map and at least one inventory zone");
+        }
+
+        if (status != EventStatus.DRAFT) {
+            throw new InvalidStateTransitionException("Event", status.name(), EventStatus.SCHEDULED.name());
+        }
+
+        this.status = EventStatus.SCHEDULED;
+    }
+
+
+    // UC-19 / UC-32 — SCHEDULED -> ON_SALE when admin opens or owner publishes.
     public void transitionToOnSale() {
         if (status == EventStatus.ON_SALE) {
             return;
         }
 
         if (venueMap == null || venueMap.getInventoryZones().isEmpty()) {
-            throw new IllegalStateException("Cannot publish event without venue map and inventory");
+            throw new InvalidStateTransitionException("Cannot publish event without venue map and inventory");
         }
 
         if (showDates.isEmpty()) {
-            throw new IllegalStateException("All show dates must be present before going on sale");
+            throw new InvalidStateTransitionException("All show dates must be present before going on sale");
         }
 
         checkInvariants(); // enforce all invariants before allowing sales to start
 
-        //TODO:   <<------------------  see what more checks are needed to be added here   <----------------
-
         if (status != EventStatus.SCHEDULED) {
-            throw new IllegalStateException("Only scheduled events can go on sale");
+            throw new InvalidStateTransitionException("Event", status.name(), EventStatus.ON_SALE.name());
         }
 
         this.status = EventStatus.ON_SALE;

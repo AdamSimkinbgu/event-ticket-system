@@ -18,6 +18,7 @@ import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 import com.ticketing.system.Core.Domain.events.EventCategory;
+import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.support.BaseDomainTest;
 
 import java.time.LocalDateTime;
@@ -443,6 +444,73 @@ class EventTest extends BaseDomainTest {
                 return priceAtOneTicketReservation;
             }
         };
+    }
+
+    // -- DRAFT -> SCHEDULED transition (issue #305) -----------------------
+
+    @Test
+    void GivenDraftEventWithInventory_WhenConfigureVenueMap_ThenStatusScheduled() {
+        Event event = createDraftEvent();
+        StandingZone zone = track(new StandingZone(1, "General", 50, 80.0));
+
+        event.configureVenueMap(new VenueMap(1, LOCATION, List.of(zone)), COMPANY_ID);
+
+        assertEquals(EventStatus.SCHEDULED, event.getStatus());
+    }
+
+    @Test
+    void GivenDraftEventNoInventory_WhenConfigureVenueMap_ThenStaysDraft() {
+        Event event = createDraftEvent();
+
+        event.configureVenueMap(new VenueMap(1, LOCATION, List.of()), COMPANY_ID);
+
+        assertEquals(EventStatus.DRAFT, event.getStatus());
+    }
+
+    @Test
+    void GivenScheduledEvent_WhenTransitionToScheduledAgain_ThenIdempotent() {
+        StandingZone zone = track(new StandingZone(1, "General", 50, 80.0));
+        Event event = createEventWithZones(List.of(zone));
+
+        event.transitionToScheduled();
+
+        assertEquals(EventStatus.SCHEDULED, event.getStatus());
+    }
+
+    @Test
+    void GivenDraftEvent_WhenTransitionToOnSale_ThenThrowsInvalidStateTransition() {
+        Event event = createDraftEvent();
+        // addStandingZone gives inventory without triggering the auto-transition, so the
+        // event still has DRAFT status when transitionToOnSale is called directly.
+        event.addStandingZone("General", 50, 80.0, COMPANY_ID);
+
+        assertThrows(InvalidStateTransitionException.class, event::transitionToOnSale);
+    }
+
+    @Test
+    void GivenDraftEventWithInventory_WhenScheduledThenOnSale_ThenOnSale() {
+        Event event = createDraftEvent();
+        StandingZone zone = track(new StandingZone(1, "General", 50, 80.0));
+
+        event.configureVenueMap(new VenueMap(1, LOCATION, List.of(zone)), COMPANY_ID); // -> SCHEDULED
+        event.transitionToOnSale(); // -> ON_SALE
+
+        assertEquals(EventStatus.ON_SALE, event.getStatus());
+    }
+
+    private Event createDraftEvent() {
+        return track(new Event(
+                EVENT_ID,
+                "Concert",
+                4.5,
+                ARTISTS,
+                EventCategory.CONCERT,
+                COMPANY_ID,
+                EventStatus.DRAFT,
+                new VenueMap(1, LOCATION, List.of()),
+                List.of(new ShowDate(LocalDateTime.now().plusDays(30), LocalDateTime.now().plusDays(30).plusHours(2))),
+                acceptingPurchasePolicy(),
+                noDiscountPolicy()));
     }
 
     private Event createEventWithZones(List<InventoryZone> zones) {
