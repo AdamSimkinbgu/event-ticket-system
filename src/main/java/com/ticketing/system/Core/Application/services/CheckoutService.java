@@ -202,7 +202,10 @@ public class CheckoutService {
             inventorySaleConfirmed = true;
 
             order.buy();
-            activeOrderRepository.save(order);
+            // The sale is committed and the receipt is the durable record; the cart has done its job.
+            // Delete the consumed order (don't save it) — buy() leaves it CHECKOUT_IN_PROGRESS, so a
+            // save would strand an empty, unmodifiable cart that wedges the buyer's next reservation.
+            activeOrderRepository.delete(order);
 
             CheckoutResultDTO result = buildCheckoutResult(totalPrice, orderReceiptId, paymentResult, issuanceResult);
             cacheCheckoutResult(idempotencyKey, buyerKey, result);
@@ -337,7 +340,10 @@ public class CheckoutService {
             inventorySaleConfirmed = true;
 
             order.buy();
-            activeOrderRepository.save(order);
+            // The sale is committed and the receipt is the durable record; the cart has done its job.
+            // Delete the consumed order (don't save it) — buy() leaves it CHECKOUT_IN_PROGRESS, so a
+            // save would strand an empty, unmodifiable cart that wedges the buyer's next reservation.
+            activeOrderRepository.delete(order);
 
             CheckoutResultDTO result = buildCheckoutResult(totalPrice, orderReceiptId, paymentResult, issuanceResult);
             cacheCheckoutResult(idempotencyKey, buyerKey, result);

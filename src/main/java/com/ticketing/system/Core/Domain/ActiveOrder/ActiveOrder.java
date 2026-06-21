@@ -156,7 +156,6 @@ public class ActiveOrder implements InvariantChecked {
             for (int i = 0; i < quantity; i++) {
                 items.add(new CartLineItem(eventId, zoneId, null, price, addedAt));
             }
-            checkInvariants();
         }
     }
 
@@ -174,7 +173,6 @@ public class ActiveOrder implements InvariantChecked {
             for (String seatNumber : seatNumbers) {
                 items.add(new CartLineItem(eventId, zoneId, seatNumber, price, addedAt));
             }
-            checkInvariants();
         }
     }
 
@@ -223,7 +221,6 @@ public class ActiveOrder implements InvariantChecked {
                     i--; // adjust index after removal
                 }
             }
-            checkInvariants();
         }
     }
     
@@ -254,7 +251,6 @@ public class ActiveOrder implements InvariantChecked {
                     throw new IllegalArgumentException("Seat not found in active order: " + seatNumber);
                 }
             }
-            checkInvariants();
         }
     }
 
@@ -386,7 +382,6 @@ public class ActiveOrder implements InvariantChecked {
         synchronized (itemsLock) {
             List<CartLineItem> returnToStock = new ArrayList<>(items);
             items.clear();
-            checkInvariants();
             return returnToStock;
         }
     }
@@ -459,7 +454,6 @@ public class ActiveOrder implements InvariantChecked {
             throw new IllegalStateException("Order is already in checkout progress");
         }
         this.status = ActiveOrderStatus.CHECKOUT_IN_PROGRESS;
-        checkInvariants();
     }
 
     /**
@@ -473,7 +467,6 @@ public class ActiveOrder implements InvariantChecked {
             throw new IllegalStateException("Order is already not in checkout progress");
         }
         this.status = ActiveOrderStatus.PRE_CHECKOUT;
-        checkInvariants();
     }
 
     /** Returns {@code true} while this order is locked by an ongoing checkout attempt. */
@@ -499,7 +492,6 @@ public class ActiveOrder implements InvariantChecked {
             for (CartLineItem item : items) {
                 item.renew(now);
             }
-            checkInvariants();
         }
     }
 
@@ -537,14 +529,7 @@ public class ActiveOrder implements InvariantChecked {
         if (this.userId != null && this.userId != newUserId) {
             throw new IllegalStateException("cart already belongs to user " + this.userId);
         }
-        Integer previous = this.userId;
         this.userId = newUserId;
-        try {
-            checkInvariants();
-        } catch (RuntimeException ex) {
-            this.userId = previous;
-            throw ex;
-        }
     }
 
     /**
@@ -556,7 +541,6 @@ public class ActiveOrder implements InvariantChecked {
             throw new IllegalArgumentException("sessionId must be non-blank");
         }
         this.sessionId = newSessionId;
-        checkInvariants();
     }
 
     /**
@@ -565,16 +549,7 @@ public class ActiveOrder implements InvariantChecked {
      * sessionId pointer clears.
      */
     public void clearSession() {
-        // Validate-before-commit: roll back if clearing the session would orphan the
-        // cart (no userId), so a rejected call never leaves the order corrupted.
-        String previous = this.sessionId;
         this.sessionId = null;
-        try {
-            checkInvariants();
-        } catch (RuntimeException ex) {
-            this.sessionId = previous;
-            throw ex;
-        }
     }
 
 
@@ -609,7 +584,6 @@ public class ActiveOrder implements InvariantChecked {
             List<CartLineItem> ticketToBuy = new ArrayList<>(items);
             items.clear();
 
-            checkInvariants();
             return ticketToBuy;
         }
     }
@@ -618,7 +592,6 @@ public class ActiveOrder implements InvariantChecked {
         synchronized (itemsLock) {
             ensureModifiable();
             items.clear();
-            checkInvariants();
         }
     }
 

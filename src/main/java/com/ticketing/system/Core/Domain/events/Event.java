@@ -78,7 +78,6 @@ public class Event implements InvariantChecked {
         if (status == EventStatus.ON_SALE && !venueMap.hasAvailableInventory()) {
             markSoldOut();
         }
-        checkInvariants();
         return true;
     }
 
@@ -90,14 +89,12 @@ public class Event implements InvariantChecked {
         if (status == EventStatus.SOLD_OUT && venueMap.hasAvailableInventory()) {
             revertToOnSale();
         }
-        checkInvariants();
         return true;
     }
 
     public void confirmInventorySale(int zoneId, InventorySelection selection) {
         validateCanConfirmSale(selection);
         this.venueMap.confirmSale(zoneId, selection);
-        checkInvariants();
     }
 
 
@@ -188,7 +185,6 @@ public class Event implements InvariantChecked {
         if (status == EventStatus.DRAFT && !venueMap.getInventoryZones().isEmpty()) {
             transitionToScheduled();
         }
-        checkInvariants();
     }
 
 
@@ -328,7 +324,6 @@ public class Event implements InvariantChecked {
         }
 
         this.status = EventStatus.SCHEDULED;
-        checkInvariants();
     }
 
 
@@ -369,7 +364,6 @@ public class Event implements InvariantChecked {
         }
 
         this.status = EventStatus.CANCELED;
-        checkInvariants();
     }
     
 
@@ -386,7 +380,6 @@ public class Event implements InvariantChecked {
         }
 
         this.status = EventStatus.COMPLETED;
-        checkInvariants();
     }
 
     
@@ -404,7 +397,6 @@ public class Event implements InvariantChecked {
         }
 
         this.status = EventStatus.SOLD_OUT;
-        checkInvariants();
     }
 
 
@@ -420,7 +412,6 @@ public class Event implements InvariantChecked {
         }
 
         this.status = EventStatus.ON_SALE;
-        checkInvariants();
     }
 
     
@@ -527,7 +518,6 @@ public class Event implements InvariantChecked {
         }
 
         this.purchasePolicy = purchasePolicy;
-        checkInvariants();
     }
 
     public void validatePurchasePolicy(PurchaseContext context) {

@@ -639,8 +639,6 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
 
 
 
-
-
     @Test
     void GivenValidMemberSeatSelection_WhenReserveSeatsForMember_ThenSeatsReservedAndCartContainsSeatNumbers() {
         SeatedZone seatedZone = new SeatedZone(

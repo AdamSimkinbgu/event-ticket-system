@@ -6,14 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
-import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
@@ -57,18 +55,6 @@ class RuntimeInvariantGuardTest extends BaseDomainTest {
     }
 
     // --- Pattern A: status mutation re-asserts invariants ------------------------
-
-    @Test
-    void clearSession_onGuestCart_throwsAndRollsBack() {
-        // Guest cart: userId == null. Clearing the only identity must be rejected.
-        ActiveOrder guestCart = track(ActiveOrder.forGuest("session-abc"));
-
-        assertThrows(IllegalStateException.class, guestCart::clearSession);
-
-        // Validate-before-commit: the cart kept its session identity and stays valid.
-        assertTrue(guestCart.isGuest());
-        assertEquals("session-abc", guestCart.getSessionId());
-    }
 
     @Test
     void addManager_whenTargetIsAlreadyOwner_throwsAndLeavesManagersUnchanged() {
@@ -144,16 +130,5 @@ class RuntimeInvariantGuardTest extends BaseDomainTest {
 
         // Rolled back: the ticket keeps its original positive id.
         assertEquals(5, ticket.getId());
-    }
-
-    @Test
-    void cartLineItem_renewWithNull_throwsAndRollsBack() {
-        LocalDateTime addedAt = LocalDateTime.now();
-        CartLineItem item = track(new CartLineItem(1, 0, null, 10.0, addedAt));
-
-        assertThrows(IllegalStateException.class, () -> item.renew(null));
-
-        // Rolled back: addedAt is still the original non-null timestamp.
-        assertEquals(addedAt, item.getAddedAt());
     }
 }

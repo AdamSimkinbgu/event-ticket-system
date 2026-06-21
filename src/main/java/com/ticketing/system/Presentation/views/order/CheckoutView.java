@@ -15,7 +15,14 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Core.Domain.exceptions.ActiveOrderExpiredException;
+import com.ticketing.system.Core.Domain.exceptions.ConcurrentReservationException;
+import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryException;
+import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
+import com.ticketing.system.Core.Domain.exceptions.PolicyViolationException;
+import com.ticketing.system.Core.Domain.exceptions.SessionExpiredException;
 import com.ticketing.system.Presentation.session.AuthSession;
+import java.util.UUID;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
@@ -37,7 +44,6 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 
-import java.util.UUID;
 
 /**
  * Checkout view — wired to real CheckoutService and ReservationService.
@@ -298,9 +304,10 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                     "function tick(){" +
                     "  const s=Math.max(0,Math.floor((end-Date.now())/1000));" +
                     "  t.textContent=pad(Math.floor(s/60))+':'+pad(s%60);" +
-                    "  if(s>0) setTimeout(tick,1000);" +
-                    "}" +
-                    "tick();",
+                               "  if (s > 0) { setTimeout(tick, 1000); }" +
+            "  else { document.querySelectorAll('vaadin-button.bz-pay-btn').forEach(b => b.setAttribute('disabled', '')); }" +
+            "}" +
+            "tick();",
                     endMs);
         }
     }
@@ -450,6 +457,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         col.add(Lk.divider());
 
         payButton = new Button("Pay " + formatCents(totalCents), e -> attemptPay());
+        payButton.addClassName("bz-pay-btn");
         payButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_LARGE);
         payButton.setWidthFull();
         payButton.addClickShortcut(Key.ENTER);
@@ -502,6 +510,9 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             return;
         }
 
+        payButton.setEnabled(false);
+        payButton.setText("Processing…");
+
         String idempotencyKey = UUID.randomUUID().toString();
         String paymentMethodToken = "tok_" + cardNumber.getValue().replaceAll("\\s+", "");
         String currency = "USD";
@@ -532,8 +543,42 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
 
         } catch (RuntimeException e) {
             log.error("Checkout failed for {} user", isMember ? "member" : "guest", e);
-            Toasts.failure("Payment could not be completed. Please try again or contact support.");
+            handlePaymentError(e);
         }
+    }
+
+    // Maps a checkout failure to a clear, actionable message + recovery navigation (SLR.3.2).
+    // CheckoutService re-wraps failures as RuntimeException(cause), so we unwrap one level.
+    // Today only PaymentGatewayException is surfaced as a distinct type; the PolicyViolation /
+    // InsufficientInventory / ConcurrentReservation / Session- & ActiveOrderExpired branches are
+    // forward-looking — they activate once checkout/domain throw those typed exceptions (until
+    // then those failures arrive as IllegalStateException and hit the generic branch below).
+    private void handlePaymentError(RuntimeException ex) {
+        Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+
+        if (cause instanceof PolicyViolationException pve) {
+            Toasts.failure("Purchase not allowed: " + pve.getMessage());
+        } else if (cause instanceof PaymentGatewayException) {
+            Toasts.failure("Payment declined. Please check your card details and try again.");
+        } else if (cause instanceof InsufficientInventoryException) {
+            Toasts.failure("Some tickets are no longer available. Please review your cart.");
+            UI.getCurrent().navigate("cart");
+            return;
+        } else if (cause instanceof ConcurrentReservationException) {
+            Toasts.warn("Your cart was modified by another session. Please review and try again.");
+        } else if (cause instanceof SessionExpiredException || cause instanceof ActiveOrderExpiredException) {
+            Toasts.failure("Your session expired. Please start a new order.");
+            UI.getCurrent().navigate("browse");
+            return;
+        } else {
+            Toasts.failure("Checkout couldn't be completed — no charge remains on your card. Please try again.");
+        }
+        resetPayButton();
+    }
+
+    private void resetPayButton() {
+        payButton.setEnabled(totalCents > 0);
+        payButton.setText("Pay " + formatCents(totalCents));
     }
 
     private static String formatCents(long cents) {
