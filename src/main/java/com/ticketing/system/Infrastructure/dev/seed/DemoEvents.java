@@ -231,10 +231,8 @@ public final class DemoEvents {
         // so the event can now go ON_SALE through the legitimate domain transition.
         Event event = eventRepository.findById(Integer.parseInt(created.eventId()));
         event.transitionToOnSale();
-        eventRepository.save(event);
-        // forceStatusOnSale(event);
-        // Existing events must be locked before save (MemoryEventRepository contract); the
-        // reflection-forced status write is a direct repo save, so lock/unlock around it.
+        // Existing events must be locked before save (MemoryEventRepository contract):
+        // an unlocked save of an already-stored event throws IllegalStateException.
         int eventId = event.getId();
         eventRepository.lockForUpdate(eventId);
         try {
