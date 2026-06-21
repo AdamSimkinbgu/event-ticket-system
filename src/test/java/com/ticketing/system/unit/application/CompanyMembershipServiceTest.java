@@ -11,6 +11,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
@@ -44,7 +45,8 @@ class CompanyMembershipServiceTest {
                 mock(IOrderReceiptRepository.class),
                 mock(ISessionManager.class),
                 mock(ITicketRepository.class),
-                eventRepository);
+                eventRepository,
+                mock(INotificationService.class));
     }
 
     @Test
