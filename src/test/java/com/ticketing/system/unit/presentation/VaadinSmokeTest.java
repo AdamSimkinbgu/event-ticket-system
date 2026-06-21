@@ -1,8 +1,10 @@
 package com.ticketing.system.unit.presentation;
 
+import com.ticketing.system.Presentation.components.company.EditPermissionsDialog;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
+import com.ticketing.system.Presentation.components.kit.LkConfirm;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
@@ -131,6 +133,19 @@ class VaadinSmokeTest {
             new ManagerListPresenter.Outcome.Success("Acme", List.of(), List.of()));
         assertDoesNotThrow(() -> new ManagerListView(presenter),
             "ManagerListView failed to construct");
+    }
+
+    @Test
+    void managerActionDialogsConstruct() {
+        // V2-CADMIN-03 dialogs — build path only (open() needs a UI context).
+        assertDoesNotThrow(() -> new LkConfirm("Revoke manager", "Remove Carol?")
+                .severity(LkConfirm.Severity.danger)
+                .confirmText("Revoke")
+                .onConfirm(() -> { }),
+            "LkConfirm failed to construct");
+        assertDoesNotThrow(() -> new EditPermissionsDialog(
+                "carol", "Manager", List.of("VIEW_SALES"), names -> { }),
+            "EditPermissionsDialog failed to construct");
     }
 
     @Test

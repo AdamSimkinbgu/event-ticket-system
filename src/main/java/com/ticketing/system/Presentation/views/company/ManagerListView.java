@@ -2,11 +2,14 @@ package com.ticketing.system.Presentation.views.company;
 
 import com.ticketing.system.Core.Application.dto.AppointmentInfoDTO;
 import com.ticketing.system.Presentation.components.Toasts;
+import com.ticketing.system.Presentation.components.company.EditPermissionsDialog;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
+import com.ticketing.system.Presentation.components.kit.LkCol;
+import com.ticketing.system.Presentation.components.kit.LkConfirm;
 import com.ticketing.system.Presentation.components.kit.LkGrid;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkIconBtn;
@@ -42,6 +45,10 @@ public class ManagerListView extends LkPage {
 
     private final ManagerListPresenter presenter;
 
+    /** Roster content lives in its own container so an action can rebuild it
+     *  in place ({@link #reload()}) without disturbing the page header/actions. */
+    private final LkCol content = new LkCol().gap(0);
+
     public ManagerListView(ManagerListPresenter presenter) {
         this.presenter = presenter;
 
@@ -52,22 +59,29 @@ public class ManagerListView extends LkPage {
             .icon(new LkIcon("plus", 15))
             .onClick(e -> UI.getCurrent().navigate(ManagerInvitationView.class)));
 
+        add(content);
+        reload();
+    }
+
+    /** (Re)loads the roster into {@link #content}; called on open and after each mutation. */
+    private void reload() {
+        content.removeAll();
         switch (presenter.loadRoster(AuthSession.token())) {
             case ManagerListPresenter.Outcome.Success ok -> renderRosters(ok);
-            case ManagerListPresenter.Outcome.NoCompany ignored -> add(banner(
+            case ManagerListPresenter.Outcome.NoCompany ignored -> content.add(banner(
                 "You don't own a production company yet. Register one to manage its team."));
-            case ManagerListPresenter.Outcome.NotAuthenticated ignored -> add(banner(
+            case ManagerListPresenter.Outcome.NotAuthenticated ignored -> content.add(banner(
                 "Your session has expired — please sign in again."));
-            case ManagerListPresenter.Outcome.Failure fail -> add(banner(
+            case ManagerListPresenter.Outcome.Failure fail -> content.add(banner(
                 "Could not load managers: " + fail.reason()));
         }
     }
 
     private void renderRosters(ManagerListPresenter.Outcome.Success ok) {
-        add(Lk.h2("Active managers"));
-        add(buildActiveCard(ok.activeManagers()));
-        add(Lk.h2("Pending invitations"));
-        add(buildPendingCard(ok.pendingInvitations()));
+        content.add(Lk.h2("Active managers"));
+        content.add(buildActiveCard(ok.activeManagers()));
+        content.add(Lk.h2("Pending invitations"));
+        content.add(buildPendingCard(ok.pendingInvitations()));
     }
 
     private Component banner(String message) {
@@ -84,36 +98,71 @@ public class ManagerListView extends LkPage {
             .col("",            "act", LkGrid.Align.RIGHT);
 
         for (AppointmentInfoDTO m : managers) {
-            activeRow(grid, m.targetUsername(), m.role(), permissionLabels(m.grantedPermissions()));
+            activeRow(grid, m);
         }
         grid.build();
         card.add(grid);
         return card;
     }
 
-    private void activeRow(LkGrid grid, String name, String role, String perms) {
+    private void activeRow(LkGrid grid, AppointmentInfoDTO m) {
         Map<String, Object> row = new LinkedHashMap<>();
         Span n = new Span();
-        n.getElement().setProperty("innerHTML", "<b>" + name + "</b>");
+        n.getElement().setProperty("innerHTML", "<b>" + m.targetUsername() + "</b>");
         row.put("name", n);
-        row.put("role", new LkBadge(role, LkBadge.Tone.success).small());
-        Span p = Lk.muted(perms);
+        row.put("role", new LkBadge(m.role(), LkBadge.Tone.success).small());
+        Span p = Lk.muted(permissionLabels(m.grantedPermissions()));
         p.getStyle().set("font-size", "13px");
         row.put("perms", p);
         row.put("status", new LkStatusDot(LkStatusDot.Tone.ok, "Active"));
         LkRow actions = new LkRow().gap(4).noWrap();
         if (Capabilities.has(Capability.EDIT_MANAGER_PERMISSIONS)) {
             LkIconBtn edit = new LkIconBtn(new LkIcon("edit", 15), "Edit permissions");
-            edit.addClickListener(e -> Toasts.warn("Edit-permissions dialog (V2-CADMIN-03)."));
+            edit.addClickListener(e -> new EditPermissionsDialog(
+                m.targetUsername(), m.role(), m.grantedPermissions(),
+                names -> handleEdit(m, names)).open());
             actions.add(edit);
         }
         if (Capabilities.has(Capability.REVOKE_MANAGER)) {
             LkIconBtn revoke = new LkIconBtn(new LkIcon("trash", 15), "Revoke");
-            revoke.addClickListener(e -> Toasts.warn("Confirm-revoke dialog (V2-CADMIN-03)."));
+            revoke.addClickListener(e -> new LkConfirm("Revoke manager",
+                "Remove " + m.targetUsername() + " from the team? They'll lose all "
+                    + "access to this company.")
+                .severity(LkConfirm.Severity.danger)
+                .confirmText("Revoke")
+                .onConfirm(() -> handleRevoke(m))
+                .open());
             actions.add(revoke);
         }
         row.put("act", actions);
         grid.row(row);
+    }
+
+    private void handleEdit(AppointmentInfoDTO m, List<String> permissionNames) {
+        switch (presenter.editPermissions(
+                AuthSession.token(), m.companyId(), m.targetUserId(), permissionNames)) {
+            case ManagerListPresenter.ActionOutcome.Success ignored -> {
+                Toasts.success("Permissions updated for " + m.targetUsername() + ".");
+                reload();
+            }
+            case ManagerListPresenter.ActionOutcome.NotAuthenticated ignored ->
+                Toasts.failure("Your session has expired — please sign in again.");
+            case ManagerListPresenter.ActionOutcome.Failure fail ->
+                Toasts.failure("Could not update permissions: " + fail.reason());
+        }
+    }
+
+    private void handleRevoke(AppointmentInfoDTO m) {
+        switch (presenter.revoke(AuthSession.token(), m.companyId(), m.targetUserId())) {
+            case ManagerListPresenter.ActionOutcome.Success ignored -> {
+                Toasts.success(m.targetUsername() + " was revoked.");
+                reload();
+            }
+            case ManagerListPresenter.ActionOutcome.NotAuthenticated ignored ->
+                Toasts.failure("Your session has expired — please sign in again.");
+            case ManagerListPresenter.ActionOutcome.Failure fail ->
+                Toasts.failure("Could not revoke manager: " + fail.reason());
+        }
     }
 
     private Component buildPendingCard(List<AppointmentInfoDTO> pending) {

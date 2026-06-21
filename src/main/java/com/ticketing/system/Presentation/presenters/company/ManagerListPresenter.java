@@ -6,9 +6,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.system.Core.Application.dto.AppointmentInfoDTO;
+import com.ticketing.system.Core.Application.dto.AppointmentRevokeDTO;
+import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.users.Permission;
 
 /**
  * MVP presenter for {@code ManagerListView}. Holds no Vaadin imports so the
@@ -58,6 +61,49 @@ public class ManagerListPresenter {
         }
     }
 
+    /**
+     * Updates a manager's permission set (V2-CADMIN-03). Permission names are the
+     * {@link Permission} enum constants the dialog collected; the backend rejects an
+     * empty set and restricts the edit to the manager's original appointer — both
+     * surface here as {@link ActionOutcome.Failure}.
+     */
+    public ActionOutcome editPermissions(String token, int companyId, int targetUserId,
+                                         List<String> permissionNames) {
+        if (token == null) {
+            return new ActionOutcome.NotAuthenticated();
+        }
+        try {
+            List<Permission> permissions = permissionNames.stream().map(Permission::valueOf).toList();
+            companyManagementService.editManagerPermissions(
+                token, new PermissionEditDTO(companyId, targetUserId, permissions));
+            return new ActionOutcome.Success();
+        } catch (InvalidTokenException e) {
+            return new ActionOutcome.NotAuthenticated();
+        } catch (RuntimeException e) {
+            return new ActionOutcome.Failure(e.getMessage());
+        }
+    }
+
+    /**
+     * Revokes a manager appointment (V2-CADMIN-03). The backend forbids revoking the
+     * founder and restricts the action to the original appointer — surfaced here as
+     * {@link ActionOutcome.Failure}.
+     */
+    public ActionOutcome revoke(String token, int companyId, int targetUserId) {
+        if (token == null) {
+            return new ActionOutcome.NotAuthenticated();
+        }
+        try {
+            companyManagementService.RevokeAppointment(
+                token, new AppointmentRevokeDTO(companyId, targetUserId));
+            return new ActionOutcome.Success();
+        } catch (InvalidTokenException e) {
+            return new ActionOutcome.NotAuthenticated();
+        } catch (RuntimeException e) {
+            return new ActionOutcome.Failure(e.getMessage());
+        }
+    }
+
     /** Sealed outcome the view switches on to render the grids or an empty state. */
     public sealed interface Outcome {
         record Success(String companyName,
@@ -66,5 +112,12 @@ public class ManagerListPresenter {
         record NotAuthenticated() implements Outcome { }
         record NoCompany() implements Outcome { }
         record Failure(String reason) implements Outcome { }
+    }
+
+    /** Result of a manager mutation (edit permissions / revoke) the view reacts to. */
+    public sealed interface ActionOutcome {
+        record Success() implements ActionOutcome { }
+        record NotAuthenticated() implements ActionOutcome { }
+        record Failure(String reason) implements ActionOutcome { }
     }
 }
