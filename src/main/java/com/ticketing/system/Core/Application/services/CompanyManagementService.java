@@ -9,6 +9,7 @@ import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 
 import com.ticketing.system.Core.Application.dto.AppointmentInfoDTO;
+import com.ticketing.system.Core.Application.dto.InvitationDTO;
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO;
 import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
@@ -334,6 +335,35 @@ public class CompanyManagementService {
         }
         log.info("User {} owns {} active company appointment(s)", userId, owned.size());
         return owned;
+    }
+
+    // II.4.7.3 / II.4.8.2 — the signed-in member's own invitation records (every status),
+    // keyed on the inviter. The presenter splits PENDING (the pending list) from the
+    // resolved ACTIVE/REJECTED/REVOKED rows (history). Names are resolved per row, mirroring
+    // listPendingInvitations.
+    public List<InvitationDTO> listMyInvitations(String token) {
+        int userId = authenticate(token);
+        User user = userRepository.getUserById(userId);
+
+        List<InvitationDTO> invitations = new ArrayList<>();
+        for (CompanyAppointment appt : user.getAllCompanyAppointments()) {
+            ProductionCompany company = companyRepository.getCompanyById(appt.getCompanyId());
+            String companyName = company != null ? company.getName() : "(unknown company)";
+            User inviter = userRepository.getUserById(appt.getInviterId());
+            String fromUsername = inviter != null ? inviter.getUsername() : "(unknown)";
+
+            invitations.add(new InvitationDTO(
+                    String.valueOf(appt.getAppointmentId()),
+                    appt.getCompanyId(),
+                    companyName,
+                    appt.getRole().name(),
+                    fromUsername,
+                    appt.getPermissions().stream().map(Permission::name).toList(),
+                    appt.getStatus().name(),
+                    appt.getCreatedAt()));
+        }
+        log.info("Listed {} invitation record(s) for user {}", invitations.size(), userId);
+        return invitations;
     }
 
     // ---------------------------------------------------------------------------

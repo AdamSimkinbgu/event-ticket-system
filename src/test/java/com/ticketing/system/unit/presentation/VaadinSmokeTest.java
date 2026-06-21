@@ -18,7 +18,9 @@ import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.ticketing.system.Presentation.views.company.ManagerListView;
+import com.ticketing.system.Presentation.views.account.MyInvitationsView;
 import com.ticketing.system.Presentation.presenters.company.ManagerListPresenter;
+import com.ticketing.system.Presentation.presenters.account.MyInvitationsPresenter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -133,6 +135,18 @@ class VaadinSmokeTest {
             new ManagerListPresenter.Outcome.Success("Acme", List.of(), List.of()));
         assertDoesNotThrow(() -> new ManagerListView(presenter),
             "ManagerListView failed to construct");
+    }
+
+    @Test
+    void myInvitationsViewInstantiates() {
+        // Member account view wired to a presenter (#275). A mock presenter
+        // returning an empty success outcome exercises the grid-building path
+        // without a UI context — a canary for kit-API breakage.
+        MyInvitationsPresenter presenter = mock(MyInvitationsPresenter.class);
+        when(presenter.load(any())).thenReturn(
+            new MyInvitationsPresenter.Outcome.Success(List.of(), List.of()));
+        assertDoesNotThrow(() -> new MyInvitationsView(presenter),
+            "MyInvitationsView failed to construct");
     }
 
     @Test

@@ -15,6 +15,7 @@ import org.mockito.ArgumentCaptor;
 import java.time.LocalDateTime;
 
 import com.ticketing.system.Core.Application.dto.AppointmentInfoDTO;
+import com.ticketing.system.Core.Application.dto.InvitationDTO;
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
@@ -109,6 +110,37 @@ public class CompanyManagementServiceTest {
                                 COMPANY_ID, TARGET_USER_ID, defaultPermissions));
 
                 assertNotEquals(null, targetUser.getPendingCompanyAppointment(COMPANY_ID));
+        }
+
+        @Test
+        public void GivenPendingManagerInvitation_WhenTargetListsMyInvitations_ThenInvitationIsReturned() {
+                ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME,
+                                CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
+                User ownerUser = new User(OWNER_ID, "ownerUser", "user@test.com", "password", 22);
+                ownerUser.addFounderAppointment(COMPANY_ID);
+                User targetUser = new User(TARGET_USER_ID, "targetUser", "user@test.com", "password", 19);
+
+                when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+                when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(ownerUser);
+                when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
+
+                companyService.appointManager(OWNER_TOKEN, new ManagerAppointmentRequestDTO(
+                                COMPANY_ID, TARGET_USER_ID, defaultPermissions));
+
+                when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+
+                List<InvitationDTO> invitations = companyService.listMyInvitations(TARGET_TOKEN);
+
+                assertEquals(1, invitations.size());
+                InvitationDTO inv = invitations.get(0);
+                assertEquals(COMPANY_ID, inv.companyId());
+                assertEquals(COMPANY_1_NAME, inv.companyName());
+                assertEquals("Manager", inv.role());
+                assertEquals("ownerUser", inv.fromUsername());
+                assertEquals("PENDING", inv.status());
         }
 
         @Test
