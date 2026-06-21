@@ -22,6 +22,7 @@ public class LkFilterChip extends Div {
     private final Span chip = new Span();
     private final LkMenu menu = new LkMenu();
     private LkMenu.Label headerLabel;
+    private Runnable onApply = () -> { };
 
     public LkFilterChip(String label, List<String> options) {
         this(label, options, false, List.of());
@@ -98,8 +99,15 @@ public class LkFilterChip extends Div {
 
         NativeButton apply = new NativeButton("Apply");
         apply.addClassName("lk-menu-apply");
+        apply.addClickListener(e -> onApply.run());
         menu.add(apply);
     }
 
     public Set<String> getSelected() { return selected; }
+
+    /** Run a callback when the chip's Apply button is pressed (e.g. re-query). */
+    public LkFilterChip onApply(Runnable callback) {
+        this.onApply = callback == null ? () -> { } : callback;
+        return this;
+    }
 }
