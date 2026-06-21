@@ -33,9 +33,9 @@ public class CompanyRegistrationView extends LkPage {
 
     private final CompanyRegistrationPresenter presenter;
 
-    private final TextField name        = new TextField("Company name");
-    private final TextArea  description = new TextArea("Description");
-    private final EmailField email      = new EmailField("Contact email");
+    private final TextField name = new TextField("Company name");
+    private final TextArea description = new TextArea("Description");
+    private final EmailField email = new EmailField("Contact email");
 
     public CompanyRegistrationView(CompanyRegistrationPresenter presenter) {
         this.presenter = presenter;
@@ -68,22 +68,21 @@ public class CompanyRegistrationView extends LkPage {
 
         narrow.add(card);
         narrow.add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 17),
-            "The new company starts Active and you are recorded as the founder. You can invite owners and managers afterwards."));
+                "The new company starts Active and you are recorded as the founder. You can invite owners and managers afterwards."));
 
         LkRow actions = new LkRow().gap(8).justify("flex-end");
         actions.add(
-            new LkBtn("Cancel").variant(LkBtn.Variant.tertiary)
-                .onClick(e -> UI.getCurrent().navigate(MyCompaniesView.class)),
-            new LkBtn("Register company").variant(LkBtn.Variant.primary)
-                .icon(new LkIcon("plus", 15))
-                .onClick(e -> attemptRegister())
-        );
+                new LkBtn("Cancel").variant(LkBtn.Variant.tertiary)
+                        .onClick(e -> UI.getCurrent().navigate(MyCompaniesView.class)),
+                new LkBtn("Register company").variant(LkBtn.Variant.primary)
+                        .icon(new LkIcon("plus", 15))
+                        .onClick(e -> attemptRegister()));
         narrow.add(actions);
         return narrow;
     }
 
     private void attemptRegister() {
-        if (name.isEmpty() || email.isEmpty()) {
+        if (name.isEmpty()) {// mabey add email check
             Toasts.failure("Please fill in company name and contact email.");
             return;
         }
