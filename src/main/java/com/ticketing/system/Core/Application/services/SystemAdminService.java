@@ -19,6 +19,8 @@ import com.ticketing.system.Core.Domain.Admin.Admin;
 import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.exceptions.ExternalServiceUnavailableException;
 import com.ticketing.system.Core.Domain.exceptions.InitializationIntegrityException;
 import com.ticketing.system.Core.Domain.exceptions.MissingDefaultAdminException;
@@ -40,6 +42,8 @@ public class SystemAdminService {
     private final IOrderReceiptRepository orderReceiptRepository;
     private final ITicketRepository ticketRepository;
     private final IEventRepository eventRepository;
+    private final IProductionCompanyRepository companyRepository;
+    private final IUserRepository userRepository;
     private final List<IPaymentGateway> paymentGateways;
     private final List<ITicketIssuer> ticketIssuers;
     private final IPasswordHasher passwordHasher;
@@ -63,6 +67,8 @@ public class SystemAdminService {
             IOrderReceiptRepository orderReceiptRepository,
             ITicketRepository ticketRepository,
             IEventRepository eventRepository,
+            IProductionCompanyRepository companyRepository,
+            IUserRepository userRepository,
             List<IPaymentGateway> paymentGateways,
             List<ITicketIssuer> ticketIssuers,
             IPasswordHasher passwordHasher,
@@ -75,6 +81,8 @@ public class SystemAdminService {
         this.orderReceiptRepository = orderReceiptRepository;
         this.ticketRepository = ticketRepository;
         this.eventRepository = eventRepository;
+        this.companyRepository = companyRepository;
+        this.userRepository = userRepository;
         this.paymentGateways = paymentGateways;
         this.ticketIssuers = ticketIssuers;
         this.passwordHasher = passwordHasher;
@@ -225,10 +233,12 @@ public class SystemAdminService {
                 .stream()
                 .map(receipt -> {
                     if (selectedEventIds == null) {
-                        return mapper.toPurchaseRecordDTO(receipt, ticketRepository);
+                        return mapper.toPurchaseRecordDTO(
+                                receipt, ticketRepository, eventRepository, companyRepository, userRepository);
                     }
 
-                    return mapper.toFilteredPurchaseRecordDTO(receipt, selectedEventIds, ticketRepository);
+                    return mapper.toFilteredPurchaseRecordDTO(
+                            receipt, selectedEventIds, ticketRepository, eventRepository, companyRepository, userRepository);
                 })
                 .filter(record -> !record.tickets().isEmpty())
                 .toList();
