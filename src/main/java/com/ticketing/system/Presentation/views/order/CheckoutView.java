@@ -73,6 +73,7 @@ import org.springframework.context.event.EventListener;
 public class CheckoutView extends LkPage implements BeforeEnterObserver {
 
     private static final long SERVICE_FEE_CENTS = 2400L;
+    private static final String IDEMPOTENCY_ATTR = "checkout.idempotencyKey";
 
     private final ReservationService reservationService;
     private final CheckoutService    checkoutService;
@@ -484,7 +485,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         payButton.setEnabled(false);
         payButton.setText("Processing…");
 
-        String idempotencyKey = UUID.randomUUID().toString();
+        String idempotencyKey = currentIdempotencyKey();
         String paymentMethodToken = "tok_" + cardNumber.getValue().replaceAll("\\s+", "");
         String currency = "USD";
 
@@ -510,6 +511,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             Toasts.success("Payment successful — "
                     + formatCents(Math.round(result.totalCharged() * 100))
                     + " charged.");
+            clearIdempotencyKey();
             UI.getCurrent().navigate("order/" + result.orderReceiptId());
 
         } catch (RuntimeException e) {
@@ -550,6 +552,33 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     private void resetPayButton() {
         payButton.setEnabled(totalCents > 0);
         payButton.setText("Pay " + formatCents(totalCents));
+    }
+
+    /**
+     * Stable idempotency key for this checkout, persisted in the {@link VaadinSession} so a
+     * retry after a network timeout / page refresh reuses it and {@code CheckoutService}'s
+     * idempotency cache de-dupes the charge instead of billing the buyer twice. Generated once
+     * (lazily) per checkout and dropped on success by {@link #clearIdempotencyKey()}.
+     */
+    private String currentIdempotencyKey() {
+        VaadinSession session = VaadinSession.getCurrent();
+        if (session == null) {
+            return UUID.randomUUID().toString();
+        }
+        String key = (String) session.getAttribute(IDEMPOTENCY_ATTR);
+        if (key == null) {
+            key = UUID.randomUUID().toString();
+            session.setAttribute(IDEMPOTENCY_ATTR, key);
+        }
+        return key;
+    }
+
+    /** Drop the key after a successful purchase so the buyer's next order gets a fresh one. */
+    private void clearIdempotencyKey() {
+        VaadinSession session = VaadinSession.getCurrent();
+        if (session != null) {
+            session.setAttribute(IDEMPOTENCY_ATTR, null);
+        }
     }
 
     private static String formatCents(long cents) {
