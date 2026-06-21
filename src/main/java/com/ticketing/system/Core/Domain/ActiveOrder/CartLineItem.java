@@ -62,8 +62,16 @@ public class CartLineItem implements InvariantChecked {
 
     /** Resets the reservation hold timer to a fresh window starting at {@code newAddedAt}. */
     public void renew(LocalDateTime newAddedAt) {
+        // Validate-before-commit: roll back if newAddedAt is null, so a rejected call
+        // never leaves addedAt corrupted. checkInvariants stays the sole validator.
+        LocalDateTime previous = this.addedAt;
         this.addedAt = newAddedAt;
-        checkInvariants();   // re-runs the existing invariant guard (addedAt != null, etc.)
+        try {
+            checkInvariants();   // re-runs the existing invariant guard (addedAt != null, etc.)
+        } catch (RuntimeException ex) {
+            this.addedAt = previous;
+            throw ex;
+        }
     }
 
     public String getSeatNumber() {

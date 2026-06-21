@@ -47,6 +47,7 @@ public class VenueMap implements InvariantChecked {
 
     public void setId(int id) {
         this.id = id;
+        checkInvariants();
     }
 
       public List<InventoryZone> getInventoryZones() {
@@ -61,6 +62,7 @@ public class VenueMap implements InvariantChecked {
 
     public void setLocation(Location location) {
         this.location = location;
+        checkInvariants();
     }
 
     public InventoryZone getZone(int zoneId) {
@@ -127,6 +129,7 @@ public class VenueMap implements InvariantChecked {
         if (zone.getId() >= nextZoneId) {
             nextZoneId = zone.getId() + 1;
         }
+        checkInvariants();
     }
 
 
@@ -138,6 +141,7 @@ public class VenueMap implements InvariantChecked {
         }
 
         inventoryZones.remove(zone);
+        checkInvariants();
         return zone;
     }
 

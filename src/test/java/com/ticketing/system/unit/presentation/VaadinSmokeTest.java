@@ -15,6 +15,8 @@ import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
+import com.ticketing.system.Presentation.views.company.ManagerListView;
+import com.ticketing.system.Presentation.presenters.company.ManagerListPresenter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,6 +26,11 @@ import org.springframework.test.context.ActiveProfiles;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.util.List;
 
 /**
  * Smoke tests for the V2 Presentation layer.
@@ -112,6 +119,18 @@ class VaadinSmokeTest {
         assertDoesNotThrow(AdminAnnouncementsView::new,  "AdminAnnouncementsView failed to construct");
         assertDoesNotThrow(AdminComplaintQueueView::new, "AdminComplaintQueueView failed to construct");
         assertDoesNotThrow(OrganizationalTreeView::new,  "OrganizationalTreeView failed to construct");
+    }
+
+    @Test
+    void managerListViewInstantiates() {
+        // Owner-workspace view wired to a presenter (#264). A mock presenter
+        // returning an empty success roster exercises the grid-building path
+        // without a UI context — a canary for kit-API breakage.
+        ManagerListPresenter presenter = mock(ManagerListPresenter.class);
+        when(presenter.loadRoster(any())).thenReturn(
+            new ManagerListPresenter.Outcome.Success("Acme", List.of(), List.of()));
+        assertDoesNotThrow(() -> new ManagerListView(presenter),
+            "ManagerListView failed to construct");
     }
 
     @Test

@@ -161,7 +161,7 @@ public class OrderReceipt implements InvariantChecked {
     }
 
     public List<ReceiptLine> getReceiptLines() {
-        return receiptLines;
+        return List.copyOf(receiptLines);
     }
 
     public boolean wasRefunded() {
@@ -170,6 +170,7 @@ public class OrderReceipt implements InvariantChecked {
 
     public void markRefunded() {
         this.isRefunded = true;
+        checkInvariants();
     }
 
     public List<TransactionRecord> getTransactionRecords() {
@@ -203,6 +204,7 @@ public class OrderReceipt implements InvariantChecked {
     public void markRefunded(TransactionRecord refundRecord) {
         addTransaction(refundRecord);
         this.isRefunded = true;
+        checkInvariants();
     }
 
 
@@ -213,6 +215,7 @@ public class OrderReceipt implements InvariantChecked {
         Objects.requireNonNull(record, "transaction record must not be null");
         record.checkInvariants();
         transactionRecords.add(record);
+        checkInvariants();
     }
 
     @Override

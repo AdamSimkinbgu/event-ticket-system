@@ -1,5 +1,6 @@
 package com.ticketing.system.Core.Domain.users;
 
+import java.util.List;
 import java.util.Optional;
 
 import com.ticketing.system.Core.Domain.shared.IRepository;
@@ -9,6 +10,13 @@ public interface IUserRepository extends IRepository<User, Integer> {
 
     /** @throws com.ticketing.system.Core.Domain.exceptions.UserNotFoundException if no user with that id exists */
     User getUserById(int targetId);
+
+    /**
+     * Users holding a PENDING appointment (manager invitation or owner offer) in the
+     * given company. Pending appointments live on the User aggregate rather than the
+     * company, so this query backs the owner-side "pending invitations" roster (#264).
+     */
+    List<User> findUsersWithPendingAppointmentForCompany(int companyId);
 
     boolean sendInvitation(int targetId, int companyId);
 

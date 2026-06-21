@@ -14,6 +14,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDateTime;
 
+import com.ticketing.system.Core.Application.dto.AppointmentInfoDTO;
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
@@ -1001,6 +1002,95 @@ public class CompanyManagementServiceTest {
                 assertFalse(manager2Node.isFounder());
                 assertTrue(manager2Node.appointedByThisUser().isEmpty());
                 assertEquals(List.of(Permission.MANAGE_INVENTORY), manager2Node.grantedPermissions());
+        }
+
+        // -- #264: roster read queries ---------------------------------------
+
+        @Test
+        public void GivenActiveManager_WhenListManagers_ThenManagerAppearsInRoster() {
+                ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME,
+                                CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
+                User ownerUser = new User(OWNER_ID, "ownerUser", "owner@test.com", "password", 22);
+                ownerUser.addFounderAppointment(COMPANY_ID);
+                User targetUser = new User(TARGET_USER_ID, "targetUser", "target@test.com", "password", 20);
+
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+                when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(ownerUser);
+                when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
+                when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+
+                companyService.appointManager(OWNER_TOKEN,
+                                new ManagerAppointmentRequestDTO(COMPANY_ID, TARGET_USER_ID, defaultPermissions));
+                when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+                companyService.respondToAppointment(TARGET_TOKEN, new AppointmentResponseDTO(COMPANY_ID, true));
+
+                List<AppointmentInfoDTO> managers = companyService.listManagers(OWNER_TOKEN, COMPANY_ID);
+
+                assertEquals(1, managers.size());
+                assertEquals(TARGET_USER_ID, managers.get(0).targetUserId());
+                assertEquals("targetUser", managers.get(0).targetUsername());
+                assertEquals("Manager", managers.get(0).role());
+                assertEquals("ACTIVE", managers.get(0).status());
+                assertEquals(COMPANY_1_NAME, managers.get(0).companyName());
+        }
+
+        @Test
+        public void GivenNonOwner_WhenListManagers_ThenThrows() {
+                ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME,
+                                CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
+                User nonOwner = new User(TARGET_USER_ID, "nonOwner", "no@test.com", "password", 30);
+
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+                when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(nonOwner);
+                when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+
+                assertThrows(RuntimeException.class, () -> companyService.listManagers(TARGET_TOKEN, COMPANY_ID));
+        }
+
+        @Test
+        public void GivenPendingInvitation_WhenListPendingInvitations_ThenInvitationAppears() {
+                ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME,
+                                CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
+                User ownerUser = new User(OWNER_ID, "ownerUser", "owner@test.com", "password", 22);
+                ownerUser.addFounderAppointment(COMPANY_ID);
+                User invitee = new User(TARGET_USER_ID, "invitee", "invitee@test.com", "password", 25);
+                invitee.receiveManagerAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
+
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+                when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(ownerUser);
+                when(mockUserRepo.findUsersWithPendingAppointmentForCompany(COMPANY_ID))
+                                .thenReturn(List.of(invitee));
+                when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+
+                List<AppointmentInfoDTO> pending = companyService.listPendingInvitations(OWNER_TOKEN, COMPANY_ID);
+
+                assertEquals(1, pending.size());
+                assertEquals("invitee", pending.get(0).targetUsername());
+                assertEquals("Manager", pending.get(0).role());
+                assertEquals("PENDING", pending.get(0).status());
+        }
+
+        @Test
+        public void GivenUserOwnsCompany_WhenFindOwnedCompanies_ThenCompanyReturned() {
+                ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME,
+                                CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
+                User ownerUser = new User(OWNER_ID, "ownerUser", "owner@test.com", "password", 22);
+                ownerUser.addFounderAppointment(COMPANY_ID);
+
+                when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(ownerUser);
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+                when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+
+                List<ProductionCompanyDTO> owned = companyService.findOwnedCompanies(OWNER_TOKEN);
+
+                assertEquals(1, owned.size());
+                assertEquals(COMPANY_ID, owned.get(0).companyId());
+                assertEquals(COMPANY_1_NAME, owned.get(0).name());
         }
 
 }
