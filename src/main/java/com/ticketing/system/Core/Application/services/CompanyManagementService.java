@@ -33,6 +33,7 @@ import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.interfaces.INotificationService;
 
 import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
 import com.ticketing.system.Core.Application.dto.ManagerAppointmentRequestDTO;
@@ -58,16 +59,19 @@ public class CompanyManagementService {
     private final ISessionManager sessionManager;
     private final ITicketRepository ticketRepository;
     private final IEventRepository eventRepository;
+    private final INotificationService notificationService;
 
     public CompanyManagementService(IProductionCompanyRepository companyRepository, IUserRepository userRepository,
             IOrderReceiptRepository orderReceiptRepository, ISessionManager sessionManager,
-            ITicketRepository ticketRepository, IEventRepository eventRepository) {
+            ITicketRepository ticketRepository, IEventRepository eventRepository,
+            INotificationService notificationService) {
         this.companyRepository = companyRepository;
         this.userRepository = userRepository;
         this.orderReceiptRepository = orderReceiptRepository;
         this.sessionManager = sessionManager;
         this.ticketRepository = ticketRepository;
         this.eventRepository = eventRepository;
+        this.notificationService = notificationService;
     }
 
 
@@ -98,6 +102,15 @@ public class CompanyManagementService {
                                                                               // appointment, here we'll do logic checks.
 
         userRepository.updateUser(targetUser); // update target user with new appointment
+        
+        // Notify target user
+        try {
+            ProductionCompany company = companyRepository.getCompanyById(request.companyId());
+            notificationService.notifyOwnerAppointmentPending(request.targetUserId(), request.companyId(), company.getName());
+        } catch (Exception e) {
+            log.warn("Owner appointment created but notification failed for userId={}", request.targetUserId());
+        }
+
         log.info("Owner appointment created successfully: appointerId={}, targetUserId={}, companyId={}",
                 appointerId, request.targetUserId(), request.companyId());
     }
@@ -119,6 +132,15 @@ public class CompanyManagementService {
 
         targetUser.receiveManagerAppointment(request.companyId(), ownerId, request.permissions());
         userRepository.updateUser(targetUser);
+
+        // Notify target user
+        try {
+            ProductionCompany company = companyRepository.getCompanyById(request.companyId());
+            notificationService.notifyRoleChanged(request.targetUserId(), request.companyId(), company.getName(), "MANAGER");
+        } catch (Exception e) {
+            log.warn("Manager appointment created but notification failed for userId={}", request.targetUserId());
+        }
+
         log.info("Manager appointment created successfully: ownerId={}, targetUserId={}, companyId={}, permissions={}",
                 ownerId, request.targetUserId(), request.companyId(), request.permissions());
     }
@@ -148,6 +170,13 @@ public class CompanyManagementService {
                 company.addManager(userId);
             }
             log.info("Appointment accepted: userId={}, companyId={}", userId, response.companyId());
+
+            // Notify of role change to final role
+            try {
+                notificationService.notifyRoleChanged(userId, response.companyId(), company.getName(), appointment.getRole().name());
+            } catch (Exception e) {
+                log.warn("Appointment accepted but notification failed for userId={}", userId);
+            }
         } else {
             user.rejectInvitation(response.companyId()); // transitions the pending appointment to rejected state, status-based lookups will no longer return it.
             log.info("Appointment rejected: userId={}, companyId={}", userId, response.companyId());
@@ -182,6 +211,15 @@ public class CompanyManagementService {
         manager.ModifyManagerPermissions(edit.companyId(), ownerId, edit.newPermissions());  // checks done in here.
 
         userRepository.updateUser(manager);
+
+        // Notify manager of permission change
+        try {
+            ProductionCompany company = companyRepository.getCompanyById(edit.companyId());
+            notificationService.notifyRoleChanged(edit.targetUserId(), edit.companyId(), company.getName(), "MANAGER (permissions updated)");
+        } catch (Exception e) {
+            log.warn("Manager permissions updated but notification failed for userId={}", edit.targetUserId());
+        }
+
         log.info("Manager permissions updated successfully for user {} in company {}", edit.targetUserId(),
                 edit.companyId());
     }
@@ -206,6 +244,14 @@ public class CompanyManagementService {
 
         userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
+
+        // Notify user of revocation
+        try {
+            notificationService.notifyManagerRevoked(revokeRequest.targetUserId(), revokeRequest.companyId(), company.getName());
+        } catch (Exception e) {
+            log.warn("Role revoked but notification failed for userId={}", revokeRequest.targetUserId());
+        }
+
         log.info("Manager revoked successfully");
     }
 
