@@ -15,6 +15,8 @@ import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
+import com.ticketing.system.Presentation.presenters.admin.GlobalHistoryPresenter;
+import com.ticketing.system.Presentation.presenters.catalog.BrowseEventsPresenter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -99,9 +101,14 @@ class VaadinSmokeTest {
     @Test
     void coreViewsInstantiate() {
         // Spot-check one MainLayout view and one WorkspaceLayout view as a
-        // cheap canary for kit-API breakage.
-        assertDoesNotThrow(BrowseEventsView::new, "BrowseEventsView (root route) failed to construct");
-        assertDoesNotThrow(GlobalHistoryView::new, "GlobalHistoryView (admin route) failed to construct");
+        // cheap canary for kit-API breakage. Both now take an injected
+        // presenter, so resolve it from the Spring context.
+        assertDoesNotThrow(
+            () -> new BrowseEventsView(context.getBean(BrowseEventsPresenter.class)),
+            "BrowseEventsView (root route) failed to construct");
+        assertDoesNotThrow(
+            () -> new GlobalHistoryView(context.getBean(GlobalHistoryPresenter.class)),
+            "GlobalHistoryView (admin route) failed to construct");
     }
 
     @Test
