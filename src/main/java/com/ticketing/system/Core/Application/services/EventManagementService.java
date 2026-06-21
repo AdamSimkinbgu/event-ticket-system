@@ -176,7 +176,7 @@ public class EventManagementService {
     public List<EventDetailDTO> listEventsForCompany(String token, int companyId) {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
-        user.requirePermissionInCompany(companyId, Permission.CONFIGURE_VENUE);
+        user.requirePermissionInCompany(companyId, Permission.MANAGE_INVENTORY);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
 
         return eventRepository.findByCompanyId(companyId).stream()
@@ -200,7 +200,7 @@ public class EventManagementService {
         int userId = validateTokenAndGetUserId(token);
         Event event = eventRepository.findById(eventId);
         User user = userRepository.getUserById(userId);
-        user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+        user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
         ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
 
         return new EventDetailDTO(
@@ -245,7 +245,7 @@ public class EventManagementService {
                 result.add(new ZoneDetailDTO(zone.getName(), true, rows, seatsPerRow, 0, zone.getprice()));
             } else {
                 result.add(new ZoneDetailDTO(
-                    zone.getName(), false, 0, 0, zone.getAvailableAmount(), zone.getprice()));
+                    zone.getName(), false, 0, 0, zone.getCapacity(), zone.getprice()));
             }
         }
         return result;

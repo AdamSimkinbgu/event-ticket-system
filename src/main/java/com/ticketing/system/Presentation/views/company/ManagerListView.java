@@ -162,12 +162,22 @@ public class ManagerListView extends LkPage {
         Map<Checkbox, Permission> boxMap = new LinkedHashMap<>();
         labels.forEach((perm, label) -> {
             Checkbox cb = new Checkbox(label);
-            cb.setValue(true);
+            cb.setValue(false);
             boxMap.put(cb, perm);
             checks.add(cb);
         });
+        // Prefill checkboxes with the manager's actual current permissions
+        try {
+            String tkn = MockAuth.token();
+            if (tkn != null) {
+                int cid = Integer.parseInt(MockSession.currentCompanyId());
+                List<Permission> current = companyService.getManagerPermissions(tkn, cid, userId);
+                boxMap.forEach((cb, perm) -> cb.setValue(current.contains(perm)));
+            }
+        } catch (Exception ignored) {
+            // load failed — all stay unchecked (safe: user must explicitly select)
+        }
         d.add(checks);
-
         Button cancel = new Button("Cancel", e -> d.close());
         cancel.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 

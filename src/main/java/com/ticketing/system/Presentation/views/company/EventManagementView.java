@@ -1,6 +1,7 @@
 package com.ticketing.system.Presentation.views.company;
 
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
+import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
@@ -87,18 +88,28 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
         if (token == null) { Toasts.failure("Session token missing."); return; }
 
         if ("new".equals(eventId) || eventId == null) {
-            // Create flow — editEventDetails() is not yet implemented,
-            // so creation via addEvent() requires a full DTO (show dates, location, etc.).
-            // For now, show a toast to signal the integration point.
             Toasts.warn("Create-event flow (addEvent) — pending full form wiring.");
             return;
         }
 
-        // Edit flow — editEventDetails() currently throws UnsupportedOperationException.
-        // Once implemented it will be called here.
-        Toasts.warn("Save-event not yet implemented in EventManagementService.editEventDetails().");
+        try {
+            eventService.editEventDetails(
+                token,
+                new EventUpdateDTO(
+                    eventId,
+                    title.getValue().isBlank()    ? null : title.getValue().trim(),
+                    null,
+                    category.getValue().isBlank() ? null : category.getValue().trim(),
+                    null,
+                    null
+                )
+            );
+            Toasts.success("Event details saved.");
+        } catch (Exception ex) {
+            Toasts.failure("Could not save event: " + ex.getMessage());
+        }
     }
-
+    
     private Component buildSplit() {
         Div split = new Div();
         split.addClassName("ow-edit-split");

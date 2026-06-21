@@ -111,14 +111,18 @@ public class ManagerInvitationView extends LkPage {
 
         try {
             int targetUserId = companyService.resolveUserId(invitee.getValue());
-            int companyId    = Integer.parseInt(MockSession.currentCompanyId());
-            companyService.appointManager(
-                token,
-                new ManagerAppointmentRequestDTO(companyId, targetUserId, selected)
-            );
+            
+            String companyIdStr = MockSession.currentCompanyId();
+             if (companyIdStr == null) {
+                 Toasts.failure("No company selected.");
+                 return;
+             }  
+
+             int companyId = Integer.parseInt(companyIdStr);
+            companyService.appointManager(token, new ManagerAppointmentRequestDTO(companyId, targetUserId, selected));
             Toasts.success("Invitation sent to " + invitee.getValue() + ".");
             UI.getCurrent().navigate(ManagerListView.class);
-        } catch (Exception ex) {
+        } catch (Exception ex) { 
             Toasts.failure("Could not send invitation: " + ex.getMessage());
         }
     }

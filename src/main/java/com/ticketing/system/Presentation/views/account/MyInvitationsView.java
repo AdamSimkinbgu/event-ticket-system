@@ -123,13 +123,15 @@ public class MyInvitationsView extends LkPage {
                 // Seed the UI session with exactly the permissions the owner granted.
                 // Without this, Capabilities.forCurrentUser() falls back to DEFAULT_GRANTS.
                 String cid = String.valueOf(inv.companyId());
+                String uiRole = inv.role().equalsIgnoreCase("Owner") ? "Co-owner" : "Manager";
                 MockCompanies.add(new MockCompanies.Company(
-                    cid, inv.companyName(), "", "", "Manager", "Active", 0, 0));
+                     cid, inv.companyName(), "", "", uiRole, "Active", 0, 0));
                 MockSession.setCurrentCompany(cid);
-                MockPermissions.setAll(
-                    cid, MockPermissions.fromDomainPermissions(inv.permissions()));
-                Toasts.success("Accepted — you are now a " +
-                    inv.role().toLowerCase() + " at " + inv.companyName() + ".");
+                if ("Manager".equals(uiRole)) {
+                    MockPermissions.setAll(
+                        cid, MockPermissions.fromDomainPermissions(inv.permissions()));
+                }
+                Toasts.success("Accepted — you are now a " + uiRole.toLowerCase() + " at " + inv.companyName() + ".");          
             } else {
                 Toasts.warn("Invitation from " + inv.companyName() + " rejected.");
             }

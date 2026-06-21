@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -27,6 +28,7 @@ import com.ticketing.system.Core.Application.dto.AppointmentRevokeDTO;
 import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
 import com.ticketing.system.Core.Application.dto.ManagerAppointmentRequestDTO;
 import com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO;
+import com.ticketing.system.Core.Application.dto.PendingInvitationDTO;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
@@ -1010,4 +1012,293 @@ public class CompanyManagementServiceTest {
                 assertEquals(List.of(Permission.MANAGE_INVENTORY), manager2Node.grantedPermissions());
         }
 
+
+        /////////////////////////////////////Tests for listPendingInvitations
+        
+
+        @Test
+        public void GivenUserWithPendingInvitation_WhenListPendingInvitations_ThenReturnsInvitationDTO() {
+                String TARGET_TOKEN = "target-token";
+
+                ProductionCompany company = new ProductionCompany(
+                                COMPANY_ID,
+                                OWNER_ID,
+                                COMPANY_1_NAME,
+                                CompanyStatus.ACTIVE,
+                                COMPANY_1_DESCRIPTION,
+                                4.5);
+
+                User ownerUser = new User(OWNER_ID, "ownerUser", "owner@test.com", "password", 22);
+
+                User targetUser = new User(TARGET_USER_ID, "targetUser", "target@test.com", "password", 19);
+                targetUser.receiveManagerAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
+
+                when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+
+                when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
+                when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(ownerUser);
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+
+                List<PendingInvitationDTO> result =
+                                companyService.listPendingInvitations(TARGET_TOKEN);
+
+                assertNotNull(result);
+                assertEquals(1, result.size());
+
+                PendingInvitationDTO dto = result.get(0);
+
+                assertEquals(COMPANY_ID, dto.companyId());
+                assertEquals(COMPANY_1_NAME, dto.companyName());
+                assertEquals("Manager", dto.role());
+                assertEquals(defaultPermissions.size(), dto.permissions().size());
+                assertTrue(dto.permissions().contains(Permission.CONFIGURE_VENUE));
+                assertTrue(dto.permissions().contains(Permission.MANAGE_INVENTORY));
+                assertEquals("ownerUser", dto.inviterName());
+        }
+
+        @Test
+        public void GivenUserWithNoPendingInvitations_WhenListPendingInvitations_ThenReturnsEmptyList() {
+                String TARGET_TOKEN = "target-token";
+
+                User targetUser = new User(TARGET_USER_ID, "targetUser", "target@test.com", "password", 19);
+
+                when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+                when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
+
+                List<PendingInvitationDTO> result =
+                                companyService.listPendingInvitations(TARGET_TOKEN);
+
+                assertNotNull(result);
+                assertTrue(result.isEmpty());
+        }
+
+        @Test
+        public void GivenUserWithAcceptedInvitation_WhenListPendingInvitations_ThenAcceptedInvitationIsNotReturned() {
+                String TARGET_TOKEN = "target-token";
+
+                User targetUser = new User(TARGET_USER_ID, "targetUser", "target@test.com", "password", 19);
+                targetUser.receiveManagerAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
+                targetUser.acceptInvitation(COMPANY_ID);
+
+                when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+                when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
+
+                List<PendingInvitationDTO> result =
+                                companyService.listPendingInvitations(TARGET_TOKEN);
+
+                assertNotNull(result);
+                assertTrue(result.isEmpty());
+        }
+
+        @Test
+        public void GivenUserWithPendingInvitationAndMissingCompany_WhenListPendingInvitations_ThenCompanyNameIsUnknownCompany() {
+                String TARGET_TOKEN = "target-token";
+
+                User ownerUser = new User(OWNER_ID, "ownerUser", "owner@test.com", "password", 22);
+
+                User targetUser = new User(TARGET_USER_ID, "targetUser", "target@test.com", "password", 19);
+                targetUser.receiveManagerAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
+
+                when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+
+                when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
+                when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(ownerUser);
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
+
+                List<PendingInvitationDTO> result =
+                                companyService.listPendingInvitations(TARGET_TOKEN);
+
+                assertNotNull(result);
+                assertEquals(1, result.size());
+
+                PendingInvitationDTO dto = result.get(0);
+
+                assertEquals(COMPANY_ID, dto.companyId());
+                assertEquals("Unknown company", dto.companyName());
+                assertEquals("ownerUser", dto.inviterName());
+        }
+
+        @Test
+        public void GivenUserWithPendingInvitationAndMissingInviter_WhenListPendingInvitations_ThenInviterNameIsUnknown() {
+                String TARGET_TOKEN = "target-token";
+
+                ProductionCompany company = new ProductionCompany(
+                                COMPANY_ID,
+                                OWNER_ID,
+                                COMPANY_1_NAME,
+                                CompanyStatus.ACTIVE,
+                                COMPANY_1_DESCRIPTION,
+                                4.5);
+
+                User targetUser = new User(TARGET_USER_ID, "targetUser", "target@test.com", "password", 19);
+                targetUser.receiveManagerAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
+
+                when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+
+                when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
+                when(mockUserRepo.getUserById(OWNER_ID)).thenThrow(new RuntimeException("User not found"));
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+
+                List<PendingInvitationDTO> result =
+                                companyService.listPendingInvitations(TARGET_TOKEN);
+
+                assertNotNull(result);
+                assertEquals(1, result.size());
+
+                PendingInvitationDTO dto = result.get(0);
+
+                assertEquals(COMPANY_ID, dto.companyId());
+                assertEquals(COMPANY_1_NAME, dto.companyName());
+                assertEquals("Unknown", dto.inviterName());
+        }
+
+        @Test
+        public void GivenUserWithMultiplePendingInvitations_WhenListPendingInvitations_ThenReturnsAllPendingInvitations() {
+                String TARGET_TOKEN = "target-token";
+
+                int COMPANY_2_ID = 200;
+                int OWNER_2_ID = 300;
+
+                ProductionCompany company1 = new ProductionCompany(
+                                COMPANY_ID,
+                                OWNER_ID,
+                                COMPANY_1_NAME,
+                                CompanyStatus.ACTIVE,
+                                COMPANY_1_DESCRIPTION,
+                                4.5);
+
+                ProductionCompany company2 = new ProductionCompany(
+                                COMPANY_2_ID,
+                                OWNER_2_ID,
+                                "Company2",
+                                CompanyStatus.ACTIVE,
+                                "Second company",
+                                4.0);
+
+                User owner1 = new User(OWNER_ID, "ownerUser", "owner@test.com", "password", 22);
+                User owner2 = new User(OWNER_2_ID, "ownerUser2", "owner2@test.com", "password", 25);
+
+                User targetUser = new User(TARGET_USER_ID, "targetUser", "target@test.com", "password", 19);
+                targetUser.receiveManagerAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
+                targetUser.receiveManagerAppointment(COMPANY_2_ID, OWNER_2_ID, List.of(Permission.VIEW_SALES));
+
+                when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+
+                when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
+                when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(owner1);
+                when(mockUserRepo.getUserById(OWNER_2_ID)).thenReturn(owner2);
+
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company1);
+                when(mockCompanyRepo.getCompanyById(COMPANY_2_ID)).thenReturn(company2);
+
+                List<PendingInvitationDTO> result =
+                                companyService.listPendingInvitations(TARGET_TOKEN);
+
+                assertNotNull(result);
+                assertEquals(2, result.size());
+
+                List<Integer> companyIds = result.stream()
+                                .map(PendingInvitationDTO::companyId)
+                                .toList();
+
+                assertTrue(companyIds.contains(COMPANY_ID));
+                assertTrue(companyIds.contains(COMPANY_2_ID));
+        }
+
+        @Test
+        public void GivenInvalidToken_WhenListPendingInvitations_ThenThrowsException() {
+                when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
+
+                assertThrows(RuntimeException.class,
+                                () -> companyService.listPendingInvitations(INVALID_TOKEN));
+        }
+
+        @Test
+        public void GivenValidTokenButUserDoesNotExist_WhenListPendingInvitations_ThenThrowsException() {
+                String TARGET_TOKEN = "target-token";
+
+                when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+                when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(null);
+
+                assertThrows(RuntimeException.class,
+                                () -> companyService.listPendingInvitations(TARGET_TOKEN));
+        }
+
+        //////////////////////////////Tests for resolveUserId
+        
+        @Test
+        public void GivenUsername_WhenResolveUserId_ThenReturnsUserId() {
+                User user = new User(TARGET_USER_ID, "targetUser", "target@test.com", "password", 19);
+
+                when(mockUserRepo.findByUsername("targetUser")).thenReturn(Optional.of(user));
+
+                int result = companyService.resolveUserId("targetUser");
+
+                assertEquals(TARGET_USER_ID, result);
+        }
+
+        @Test
+        public void GivenEmail_WhenResolveUserId_ThenReturnsUserId() {
+                User user = new User(TARGET_USER_ID, "targetUser", "target@test.com", "password", 19);
+
+                when(mockUserRepo.findByUsername("target@test.com")).thenReturn(Optional.empty());
+                when(mockUserRepo.findByEmail("target@test.com")).thenReturn(Optional.of(user));
+
+                int result = companyService.resolveUserId("target@test.com");
+
+                assertEquals(TARGET_USER_ID, result);
+        }
+
+        @Test
+        public void GivenIdentifierWithSpaces_WhenResolveUserId_ThenTrimsIdentifierAndReturnsUserId() {
+                User user = new User(TARGET_USER_ID, "targetUser", "target@test.com", "password", 19);
+
+                when(mockUserRepo.findByUsername("targetUser")).thenReturn(Optional.of(user));
+
+                int result = companyService.resolveUserId("   targetUser   ");
+
+                assertEquals(TARGET_USER_ID, result);
+        }
+
+        @Test
+        public void GivenIdentifierMatchesUsernameAndEmail_WhenResolveUserId_ThenUsernameHasPriority() {
+                User usernameUser = new User(10, "sameIdentifier", "first@test.com", "password", 20);
+                User emailUser = new User(20, "otherUser", "sameIdentifier", "password", 21);
+
+                when(mockUserRepo.findByUsername("sameIdentifier")).thenReturn(Optional.of(usernameUser));
+                when(mockUserRepo.findByEmail("sameIdentifier")).thenReturn(Optional.of(emailUser));
+
+                int result = companyService.resolveUserId("sameIdentifier");
+
+                assertEquals(10, result);
+        }
+
+        @Test
+        public void GivenUnknownIdentifier_WhenResolveUserId_ThenThrowsException() {
+                when(mockUserRepo.findByUsername("missingUser")).thenReturn(Optional.empty());
+                when(mockUserRepo.findByEmail("missingUser")).thenReturn(Optional.empty());
+
+                assertThrows(RuntimeException.class,
+                                () -> companyService.resolveUserId("missingUser"));
+        }
+
+        @Test
+        public void GivenNullIdentifier_WhenResolveUserId_ThenThrowsIllegalArgumentException() {
+                assertThrows(IllegalArgumentException.class,
+                                () -> companyService.resolveUserId(null));
+        }
+
+        @Test
+        public void GivenBlankIdentifier_WhenResolveUserId_ThenThrowsIllegalArgumentException() {
+                assertThrows(IllegalArgumentException.class,
+                                () -> companyService.resolveUserId("   "));
+        }
 }
+

@@ -195,9 +195,9 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
 
     private void selectZone(String zoneId) {
         Integer idx = ZONE_ID_TO_IDX.get(zoneId);
-        if (idx == null) return;
+        if (idx == null || idx < 0 || idx >= zoneStates.size()) return;
         selectedZoneIdx = idx;
-        selectedZoneId  = zoneId;
+        selectedZoneId = zoneId;
         loadZoneIntoEditor(idx);
         refreshMapHolder();   // re-render map with new highlighted zone
     }
