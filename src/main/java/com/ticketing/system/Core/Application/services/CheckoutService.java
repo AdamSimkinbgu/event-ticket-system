@@ -196,7 +196,10 @@ public class CheckoutService {
             saveMemberReceipt(userId, orderReceiptId, totalPrice, receiptLines, paymentResult, issuanceResult);
 
             order.buy();
-            activeOrderRepository.save(order);
+            // Purchase complete — receipt + tickets are already persisted (separate aggregates);
+            // delete the consumed cart so the buyer can start a fresh order. ActiveOrder has no
+            // terminal status, so saving it would leave it stuck in CHECKOUT_IN_PROGRESS forever.
+            activeOrderRepository.delete(order);
 
             CheckoutResultDTO result = buildCheckoutResult(totalPrice, orderReceiptId, paymentResult, issuanceResult);
             cacheCheckoutResult(idempotencyKey, buyerKey, result);
@@ -325,7 +328,10 @@ public class CheckoutService {
             saveGuestReceipt(guestEmail, guestSessionId, orderReceiptId, totalPrice, receiptLines, paymentResult, issuanceResult);
 
             order.buy();
-            activeOrderRepository.save(order);
+            // Purchase complete — receipt + tickets are already persisted (separate aggregates);
+            // delete the consumed cart so the buyer can start a fresh order. ActiveOrder has no
+            // terminal status, so saving it would leave it stuck in CHECKOUT_IN_PROGRESS forever.
+            activeOrderRepository.delete(order);
 
             CheckoutResultDTO result = buildCheckoutResult(totalPrice, orderReceiptId, paymentResult, issuanceResult);
             cacheCheckoutResult(idempotencyKey, buyerKey, result);
