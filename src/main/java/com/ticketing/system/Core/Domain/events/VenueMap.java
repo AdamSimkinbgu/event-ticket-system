@@ -4,13 +4,17 @@ import java.util.List;
 
 import java.util.ArrayList;
 
-public class VenueMap {
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
+public class VenueMap implements InvariantChecked {
     private int id;
     private Location location;
     private final List<InventoryZone> inventoryZones;
     private int nextZoneId;
 
     public VenueMap(int id, Location location, List<InventoryZone> inventoryZones) {
+        // Null-guarded here because the list is copied before checkInvariants() runs;
+        // a null input would otherwise NPE in the copy rather than fail cleanly.
         if (inventoryZones == null) {
             throw new IllegalArgumentException("Inventory zones cannot be null");
         }
@@ -24,6 +28,17 @@ public class VenueMap {
                 .mapToInt(InventoryZone::getId)
                 .max()
                 .orElse(0) + 1;
+        checkInvariants();
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (inventoryZones == null) {
+            throw new IllegalStateException("VenueMap invariant violated: inventoryZones must not be null");
+        }
+        if (nextZoneId < 1) {
+            throw new IllegalStateException("VenueMap invariant violated: nextZoneId must be >= 1 (was " + nextZoneId + ")");
+        }
     }
 
     public int getId() {
@@ -60,6 +75,11 @@ public class VenueMap {
     public boolean checkAvailability(int zoneId, int quantity) {
         InventoryZone zone = getZone(zoneId);
         return zone.checkAvailability(quantity);
+    }
+
+    // True if any zone still has at least one AVAILABLE place/seat across the venue.
+    public boolean hasAvailableInventory() {
+        return inventoryZones.stream().anyMatch(zone -> zone.getAvailableAmount() > 0);
     }
 
 

@@ -29,13 +29,11 @@ public class Seat implements InvariantChecked {
     private LocalDateTime reservedUntil; //TODO: when going to checkout, this should be set to {time now} + {reservation timeout period}.
 
     public Seat(String label, double x, double y) {
-        if (label == null || label.isBlank()) {
-            throw new IllegalArgumentException("Seat label must be non-blank");
-        }
         this.label = label;
         this.x = x;
         this.y = y;
         this.status = SeatStatus.AVAILABLE;
+        checkInvariants();
     }
 
     public String getLabel() {

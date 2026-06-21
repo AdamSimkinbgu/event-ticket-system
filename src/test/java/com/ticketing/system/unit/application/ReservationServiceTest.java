@@ -33,6 +33,7 @@ import java.util.List;
 
 import org.mockito.ArgumentCaptor;
 
+import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.events.DiscountPolicy;
@@ -613,8 +614,6 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
 
 
 
-
-
     @Test
     void GivenValidMemberSeatSelection_WhenReserveSeatsForMember_ThenSeatsReservedAndCartContainsSeatNumbers() {
         SeatedZone seatedZone = new SeatedZone(
@@ -844,6 +843,83 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
 
 
 
+
+    // ---------------------------------------------------------------------
+    // Checkout-entry timer renewal (reset every reserved ticket to the full window)
+    // ---------------------------------------------------------------------
+
+    @Test
+    void GivenValidCartNearExpiry_WhenRenewReservationsForMemberCheckout_ThenTimersResetToFullWindow() {
+        ActiveOrder realOrder = new ActiveOrder(USER_ID);
+        realOrder.addStandingReservation(EVENT_ID, ZONE_ID, 2, 50.0, LocalDateTime.now().minusMinutes(9));
+        when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(realOrder);
+        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+
+        ActiveOrderDTO dto = reservationService.renewReservationsForMemberCheckout(USER_ID);
+
+        assertNotNull(dto);
+        assertTrue(dto.remainingSecondsBeforeExpiry() > 590,
+                "timers should be reset close to the full 10-minute window");
+        verify(activeOrderRepository).lockForUpdate("user:" + USER_ID);
+        verify(activeOrderRepository).unlock("user:" + USER_ID);
+        verify(activeOrderRepository).save(realOrder);
+    }
+
+    @Test
+    void GivenExpiredItem_WhenRenewReservationsForMemberCheckout_ThenTimersNotResetAndNotSaved() {
+        ActiveOrder realOrder = new ActiveOrder(USER_ID);
+        realOrder.addStandingReservation(EVENT_ID, ZONE_ID, 1, 50.0, LocalDateTime.now().minusMinutes(20));
+        when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(realOrder);
+        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+
+        ActiveOrderDTO dto = reservationService.renewReservationsForMemberCheckout(USER_ID);
+
+        assertEquals(0, dto.remainingSecondsBeforeExpiry(), "already-expired cart must not be revived");
+        verify(activeOrderRepository, never()).save(any());
+        verify(activeOrderRepository).unlock("user:" + USER_ID);
+    }
+
+    @Test
+    void GivenCheckoutInProgress_WhenRenewReservationsForMemberCheckout_ThenTimersNotResetAndNotSaved() {
+        ActiveOrder realOrder = new ActiveOrder(USER_ID);
+        realOrder.addStandingReservation(EVENT_ID, ZONE_ID, 1, 50.0, LocalDateTime.now().minusMinutes(9));
+        realOrder.markCheckoutInProgress();
+        when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(realOrder);
+        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+
+        ActiveOrderDTO dto = reservationService.renewReservationsForMemberCheckout(USER_ID);
+
+        assertTrue(dto.remainingSecondsBeforeExpiry() < 120, "in-checkout cart timers must be left untouched");
+        verify(activeOrderRepository, never()).save(any());
+    }
+
+    @Test
+    void GivenNoOrder_WhenRenewReservationsForMemberCheckout_ThenReturnsNullAndDoesNotSave() {
+        when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(null);
+
+        ActiveOrderDTO dto = reservationService.renewReservationsForMemberCheckout(USER_ID);
+
+        assertNull(dto);
+        verify(activeOrderRepository, never()).save(any());
+        verify(activeOrderRepository).unlock("user:" + USER_ID);
+    }
+
+    @Test
+    void GivenValidGuestCartNearExpiry_WhenRenewReservationsForGuestCheckout_ThenTimersResetToFullWindow() {
+        String sessionId = "guest-session";
+        ActiveOrder realOrder = ActiveOrder.forGuest(sessionId);
+        realOrder.addStandingReservation(EVENT_ID, ZONE_ID, 1, 50.0, LocalDateTime.now().minusMinutes(9));
+        when(activeOrderRepository.getBySessionId(sessionId)).thenReturn(Optional.of(realOrder));
+        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+
+        ActiveOrderDTO dto = reservationService.renewReservationsForGuestCheckout(sessionId);
+
+        assertNotNull(dto);
+        assertTrue(dto.remainingSecondsBeforeExpiry() > 590);
+        verify(activeOrderRepository).lockForUpdate("sess:" + sessionId);
+        verify(activeOrderRepository).unlock("sess:" + sessionId);
+        verify(activeOrderRepository).save(realOrder);
+    }
 
     // helper test methods:
 

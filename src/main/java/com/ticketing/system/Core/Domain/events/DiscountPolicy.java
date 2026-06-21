@@ -2,18 +2,23 @@ package com.ticketing.system.Core.Domain.events;
 
 import java.time.LocalDateTime;
 
-public class DiscountPolicy { //? Note: but not in implementation plan  <------------   <-----------    <---------------
-    
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
+public class DiscountPolicy implements InvariantChecked { //? Note: but not in implementation plan  <------------   <-----------    <---------------
+
     private final double discountPercentage;  // Discount percentage (0-100)
 
     public DiscountPolicy(double discountPercentage) {
-        if (discountPercentage < 0 || discountPercentage > 100) {
-            throw new IllegalArgumentException("Invalid discount percentage");
-        }
-        // if(discountPercentage == null) {
-        //     throw new IllegalArgumentException("Discount percentage cannot be null");
-        // }
         this.discountPercentage = discountPercentage;
+        checkInvariants();
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (discountPercentage < 0 || discountPercentage > 100) {
+            throw new IllegalStateException(
+                    "DiscountPolicy invariant violated: discountPercentage must be between 0 and 100 (was " + discountPercentage + ")");
+        }
     }
 
     public double apply(double price) {

@@ -1327,13 +1327,11 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
 
         // new test
         @Test
-        void GivenReceiptSaveFailsAfterSeatConfirmation_WhenCheckout_ThenSystemDoesNotLoseSeatOrCart() {
-                // Arrange seated seat A1 RESERVED in cart
-                // Make payment and issuance succeed
-                // Make orderReceiptRepository.save(...) throw
-                // Assert checkout throws
-                // Assert seat is not left in an impossible state
-                // Assert active order is not silently lost
+        void GivenReceiptSaveFails_WhenCheckout_ThenSeatReturnedToStockAndCartCleared() {
+                // Receipt save fails. Because the sale is committed (confirmInventorySale) LAST — after
+                // ticket + receipt persistence — the seat is still RESERVED when the save fails, so the
+                // rollback returns it to stock (AVAILABLE) and clears the cart, rather than stranding a
+                // SOLD seat. (Payment is refunded too; not asserted here.)
                 ActiveOrder activeOrder = new ActiveOrder(USER_ID);
                 SeatedZone seatedZone = new SeatedZone(
                                 ZONE_ID_1,
@@ -1374,9 +1372,48 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                 assertThrows(RuntimeException.class, () -> checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY,
                                 CURRENCY, PAYMENT_METHOD_TOKEN));
                                 
-                assertEquals(SeatStatus.SOLD, seatedZone.getSeatStatus("A1"));
-                assertFalse(activeOrder.isEmpty());
-                assertThrows(RuntimeException.class, () -> checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN));
+                assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
+                assertTrue(activeOrder.isEmpty());
+        }
+
+        // Fix #3: a Phase-2 failure rollback over a multi-event cart must release every event
+        // independently. If one event's release throws, the remaining events must still be released
+        // and the cart must still be cleared — the rollback loop no longer aborts on the first throw.
+        @Test
+        void GivenMultiEventRollbackWhereOneReleaseFails_WhenCheckout_ThenOtherEventsStillReleasedAndCartCleared() {
+                ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+                String orderKey = activeOrder.getOrderKey();
+
+                // Event B is a real standing zone holding a live reservation under this order.
+                StandingZone zoneB = new StandingZone(ZONE_ID_3, "GA", 5, 200.0);
+                zoneB.reserve(InventorySelection.standing(1, orderKey));
+
+                activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
+                activeOrder.addStandingReservation(EVENT_ID_2, ZONE_ID_3, 1, 200.0, LocalDateTime.now());
+
+                when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+                when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
+                when(mockEventRepo.findById(EVENT_ID_2)).thenReturn(event2);
+
+                // Event A's release fails; event B's release delegates to the real zone.
+                when(event1.releaseInventory(anyInt(), any(InventorySelection.class)))
+                        .thenThrow(new IllegalStateException("event A release failed"));
+                when(event2.releaseInventory(anyInt(), any(InventorySelection.class))).thenAnswer(invocation -> {
+                        zoneB.release(invocation.getArgument(1));
+                        return true;
+                });
+
+                // Force a Phase-2 failure (before any inventory is confirmed) so the rollback runs.
+                when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(null);
+
+                assertThrows(RuntimeException.class, () ->
+                        checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN));
+
+                // Event A throwing did not strand event B...
+                assertEquals(0, zoneB.getReservedAmount());
+                assertEquals(5, zoneB.getAvailableAmount());
+                // ...and the cart was still cleared.
+                assertTrue(activeOrder.isEmpty());
         }
 
         //////////////////////////// tests for policies
@@ -2208,7 +2245,7 @@ private AtomicBoolean trackReceiptSave() {
 
         StandingZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
 
-        ActiveOrder activeOrder = new ActiveOrder(-1);
+        ActiveOrder activeOrder = ActiveOrder.forGuest(VALID_GUEST_SID);
         activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now().minusMinutes(20));
         zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 
@@ -2235,7 +2272,7 @@ private AtomicBoolean trackReceiptSave() {
 
         Event event = createRealEventWithPolicyAndZone(EVENT_ID_1, zone, new AgePurchasePolicy(18));
 
-        ActiveOrder activeOrder = new ActiveOrder(-1);
+        ActiveOrder activeOrder = ActiveOrder.forGuest(VALID_GUEST_SID);
         activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
         zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 
@@ -2261,7 +2298,7 @@ private AtomicBoolean trackReceiptSave() {
 
         Event event = createRealEventWithPolicyAndZone(EVENT_ID_1, zone, new AgePurchasePolicy(18));
 
-        ActiveOrder activeOrder = new ActiveOrder(-1);
+        ActiveOrder activeOrder = ActiveOrder.forGuest(VALID_GUEST_SID);
         activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
         zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 
@@ -2289,7 +2326,7 @@ private AtomicBoolean trackReceiptSave() {
 
         Event event = createRealEventWithPolicyAndZone(EVENT_ID_1, zone, new NoPurchasePolicy());
 
-        ActiveOrder activeOrder = new ActiveOrder(-1);
+        ActiveOrder activeOrder = ActiveOrder.forGuest(VALID_GUEST_SID);
         activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
         zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 
@@ -2314,7 +2351,7 @@ private AtomicBoolean trackReceiptSave() {
 
         Event event = createRealEventWithPolicyAndZone(EVENT_ID_1, zone, new NoPurchasePolicy());
 
-        ActiveOrder activeOrder = new ActiveOrder(-1);
+        ActiveOrder activeOrder = ActiveOrder.forGuest(VALID_GUEST_SID);
         activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
         zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 
@@ -2351,7 +2388,7 @@ private AtomicBoolean trackReceiptSave() {
 
         Event event = createRealEventWithPolicyAndZone(EVENT_ID_1, zone, new NoPurchasePolicy());
 
-        ActiveOrder activeOrder = new ActiveOrder(-1);
+        ActiveOrder activeOrder = ActiveOrder.forGuest(VALID_GUEST_SID);
         activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
         zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 
@@ -2379,7 +2416,7 @@ private AtomicBoolean trackReceiptSave() {
 
         Event event = createRealEventWithPolicyAndZone(EVENT_ID_1, zone, new NoPurchasePolicy());
 
-        ActiveOrder activeOrder = new ActiveOrder(-1);
+        ActiveOrder activeOrder = ActiveOrder.forGuest(VALID_GUEST_SID);
         activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
         zone.reserve(InventorySelection.standing(1, activeOrder.getOrderKey()));
 

@@ -5,10 +5,11 @@ import java.util.EnumSet;
 import java.util.Set;
 
 import com.ticketing.system.Core.Domain.exceptions.InvalidPermissionException;
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 import java.util.List;
 
-public class CompanyAppointment {
+public class CompanyAppointment implements InvariantChecked {
     private final int appointmentId; // Unique identifier for the appointment (could be UUID or int)
     private final int companyId; // ID of the company this appointment belongs to
     private final int targetId; // ID of the user being appointed
@@ -26,23 +27,41 @@ public class CompanyAppointment {
             CompanyRole role,
             AppointmentStatus status,
             List<Permission> permissions) {
-        if (role == CompanyRole.Manager && (permissions == null || permissions.isEmpty())) {
-            throw new IllegalArgumentException("Manager role must have at least one permission.");
-        }
-        if (role == CompanyRole.Owner && permissions != null && !permissions.isEmpty()) {
-            throw new IllegalArgumentException("Owner role should not have explicit permissions.");
-        }
-
         this.appointmentId = appointmentId;
         this.companyId = companyId;
         this.targetId = targetId;
         this.inviterId = inviterId;
         this.role = role;
         this.status = status;
-        this.permissions = permissions != null
-                ? EnumSet.copyOf(permissions)
-                : EnumSet.noneOf(Permission.class);
+        // Empty/null-safe: EnumSet.copyOf throws on an empty non-EnumSet collection, and would
+        // run before checkInvariants(). The Manager/Owner permission rules are enforced below.
+        this.permissions = (permissions == null || permissions.isEmpty())
+                ? EnumSet.noneOf(Permission.class)
+                : EnumSet.copyOf(permissions);
         this.createdAt = LocalDateTime.now();
+        checkInvariants();
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (role == null) {
+            throw new IllegalStateException("CompanyAppointment invariant violated: role must not be null");
+        }
+        if (status == null) {
+            throw new IllegalStateException("CompanyAppointment invariant violated: status must not be null");
+        }
+        if (permissions == null) {
+            throw new IllegalStateException("CompanyAppointment invariant violated: permissions must not be null");
+        }
+        if (role == CompanyRole.Manager && permissions.isEmpty()) {
+            throw new IllegalStateException("CompanyAppointment invariant violated: Manager role must have at least one permission");
+        }
+        if (role == CompanyRole.Owner && !permissions.isEmpty()) {
+            throw new IllegalStateException("CompanyAppointment invariant violated: Owner role must not have explicit permissions");
+        }
+        if (createdAt == null) {
+            throw new IllegalStateException("CompanyAppointment invariant violated: createdAt must not be null");
+        }
     }
 
     // this constructor is specifically for the creation of the company founder

@@ -56,6 +56,7 @@ public class Notification implements InvariantChecked {
         this.message = message;
         this.createdAt = createdAt;
         this.data = data == null ? new HashMap<>() : new HashMap<>(data);
+        checkInvariants();
     }
 
     public String getId() {

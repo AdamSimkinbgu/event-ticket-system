@@ -26,6 +26,8 @@ import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
+import com.ticketing.system.Core.Application.dto.LocationDTO;
+import com.ticketing.system.Core.Application.dto.ShowDateDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
@@ -315,6 +317,7 @@ class CompanyAcceptanceTest {
                 assertEquals(EventCategory.FESTIVAL, result.category());
                 assertEquals(EventStatus.DRAFT, result.status());
                 assertEquals("DetailCo1", result.companyName());
+                assertEquals("desc", result.description());
         }
 
         @Test
@@ -447,5 +450,35 @@ class CompanyAcceptanceTest {
                 assertThrows(RuntimeException.class,
                                 () -> eventManagementService.editEventDetails(manager.token(),
                                                 new EventUpdateDTO(created.eventId(), "Blocked Edit", null, null, null, null)));
+        }
+
+        @Test
+        void GivenOwner_WhenEditAllFields_ThenDescriptionLocationAndShowDatesPersist() {
+                AuthTokenDTO owner = registerAndLoginMember("editOwner5");
+                int companyId = companyService.registerCompany(
+                                owner.token(), new CompanyRegistrationDTO("EditCo5", "desc")).companyId();
+
+                EventDetailDTO created = eventManagementService.addEvent(owner.token(), new EventCreationDTO(
+                                companyId, "Full Edit Event", "original desc", List.of("Artist"),
+                                EventCategory.MUSIC, 4.0,
+                                new Location("Italy", "Rome"),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                                null));
+
+                LocalDateTime newStart = LocalDateTime.now().plusDays(20);
+                eventManagementService.editEventDetails(owner.token(), new EventUpdateDTO(
+                                created.eventId(), "Full Edit Renamed", "updated desc", "THEATER",
+                                new LocationDTO("France", "Paris"),
+                                List.of(new ShowDateDTO(newStart, newStart.plusHours(2)))));
+
+                EventDetailDTO result = eventManagementService.getEventDetail(owner.token(), created.eventId());
+                assertEquals("Full Edit Renamed", result.name());
+                assertEquals("updated desc", result.description());
+                assertEquals(EventCategory.THEATER, result.category());
+                assertEquals(new Location("France", "Paris"), result.location());
+
+                Event stored = eventRepository.findById(Integer.parseInt(created.eventId()));
+                assertEquals(1, stored.getShowDates().size());
+                assertEquals(newStart, stored.getShowDates().get(0).getStartTime());
         }
 }

@@ -47,6 +47,7 @@ public class Conversation implements InvariantChecked {
         this.createdAt = createdAt;
         this.lastMessageAt = createdAt;
         this.messages = messages;
+        checkInvariants();
     }
 
     public String getConversationId() { return conversationId; }

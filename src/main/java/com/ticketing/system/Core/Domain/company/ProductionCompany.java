@@ -42,6 +42,7 @@ public class ProductionCompany implements InvariantChecked {
         this.discountPolicies = new ArrayList<>();
         this.purchasePolicy = new NoPurchasePolicy();
         this.managers = new ArrayList<>();
+        checkInvariants();
     }
 
     public void addManager(int targetId) {

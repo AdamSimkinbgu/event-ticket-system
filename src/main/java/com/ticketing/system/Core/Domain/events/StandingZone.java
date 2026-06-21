@@ -28,11 +28,9 @@ public class StandingZone extends InventoryZone {
 
     public StandingZone(int id, String name, int capacity, double price) {
         super(id, name, price);
-        if (capacity < 0) {
-            throw new IllegalArgumentException("Capacity cannot be negative");
-        }
         this.capacity = capacity;
         this.soldAmount = 0;
+        checkInvariants();
     }
 
     @Override

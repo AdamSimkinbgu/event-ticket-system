@@ -32,6 +32,7 @@ import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
+import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventorySelection;
@@ -47,6 +48,8 @@ import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
+import com.ticketing.system.Core.Application.dto.LocationDTO;
+import com.ticketing.system.Core.Application.dto.ShowDateDTO;
 import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.users.Permission;
@@ -121,7 +124,7 @@ class EventManagementServiceTest {
                 venueMap,
                 List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
                 null,
-                null);
+                new DiscountPolicy(0));
         ownerUser = new User(OWNER_ID, "Owner Name", "owner@example.com", "hashedpassword",50);
         ownerUser.addFounderAppointment(COMPANY_ID);
         managerUser = new User(MANAGER_ID, "Manager Name", "manager@example.com", "hashedpassword",40);
@@ -279,6 +282,71 @@ class EventManagementServiceTest {
         assertEquals(TicketStatus.VOIDED, availableTicket.getStatus());
     }
 
+    // -- UC-19: owner publishes event (SCHEDULED -> ON_SALE) -------------
+
+    @Test
+    public void GivenScheduledEvent_WhenPublishEvent_ThenStatusOnSaleAndSaved() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+
+        eventService.publishEvent(OWNER_TOKEN, COMPANY_ID, EVENT_ID);
+
+        assertEquals(EventStatus.ON_SALE, event.getStatus());
+        verify(mockEventRepo).save(event);
+    }
+
+    @Test
+    public void GivenInvalidToken_WhenPublishEvent_ThenThrows() {
+        when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
+
+        assertThrows(RuntimeException.class,
+                () -> eventService.publishEvent(INVALID_TOKEN, COMPANY_ID, EVENT_ID));
+    }
+
+    @Test
+    public void GivenEventNotOwnedByCompany_WhenPublishEvent_ThenThrows() {
+        int otherCompanyId = 999;
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event); // event.companyId == COMPANY_ID
+
+        assertThrows(RuntimeException.class,
+                () -> eventService.publishEvent(OWNER_TOKEN, otherCompanyId, EVENT_ID));
+        assertEquals(EventStatus.SCHEDULED, event.getStatus());
+    }
+
+    @Test
+    public void GivenUserWithoutPermission_WhenPublishEvent_ThenThrows() {
+        User noPermissionUser = new User(MANAGER_ID, "No Perm", "noperm@example.com", "hashedpassword", 30);
+        when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(noPermissionUser);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+
+        assertThrows(RuntimeException.class,
+                () -> eventService.publishEvent(MANAGER_TOKEN, COMPANY_ID, EVENT_ID));
+        assertEquals(EventStatus.SCHEDULED, event.getStatus());
+    }
+
+    @Test
+    public void GivenDraftEvent_WhenPublishEvent_ThenThrowsInvalidStateTransition() {
+        Event draftEvent = new Event(
+                EVENT_ID, "Concert", 4.5, List.of("Artist1"), EventCategory.CONCERT, COMPANY_ID,
+                EventStatus.DRAFT, venueMap,
+                List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
+                null, new DiscountPolicy(0));
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(draftEvent);
+
+        assertThrows(InvalidStateTransitionException.class,
+                () -> eventService.publishEvent(OWNER_TOKEN, COMPANY_ID, EVENT_ID));
+        assertEquals(EventStatus.DRAFT, draftEvent.getStatus());
+    }
+
     // new test
     @Test
     void GivenSeatedVenueConfig_WhenConfigureVenueMap_ThenSeatCoordinatesArePreserved() {
@@ -396,7 +464,7 @@ class EventManagementServiceTest {
                 EVENT_ID, "Draft Concert", 4.5, List.of("Artist1"),
                 EventCategory.MUSIC, COMPANY_ID, EventStatus.DRAFT, null,
                 List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
-                null, null);
+                null, new DiscountPolicy(0));
         when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
         when(mockEventRepo.findById(EVENT_ID)).thenReturn(draftNoVenue);
@@ -547,5 +615,68 @@ class EventManagementServiceTest {
                 new EventUpdateDTO(String.valueOf(EVENT_ID), "Updated Draft Name", null, null, null, null));
 
         assertEquals("Updated Draft Name", draftEvent.getName());
+    }
+
+    @Test
+    void GivenOwnerAndNewDescription_WhenEditEventDetails_ThenDescriptionIsUpdated() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), null, "A brand new description", null, null, null));
+
+        assertEquals("A brand new description", event.getDescription());
+    }
+
+    @Test
+    void GivenOwnerAndNewLocation_WhenEditEventDetails_ThenVenueMapLocationIsUpdated() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), null, null, null,
+                        new LocationDTO("France", "Paris"), null));
+
+        assertEquals(new Location("France", "Paris"), event.getVenueMap().getLocation());
+    }
+
+    @Test
+    void GivenOwnerAndNewShowDates_WhenEditEventDetails_ThenShowDatesAreReplaced() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        LocalDateTime newStart = LocalDateTime.now().plusDays(30);
+        LocalDateTime newEnd = newStart.plusHours(3);
+        eventService.editEventDetails(OWNER_TOKEN,
+                new EventUpdateDTO(String.valueOf(EVENT_ID), null, null, null, null,
+                        List.of(new ShowDateDTO(newStart, newEnd))));
+
+        assertEquals(1, event.getShowDates().size());
+        assertEquals(newStart, event.getShowDates().get(0).getStartTime());
+        assertEquals(newEnd, event.getShowDates().get(0).getEndTime());
+    }
+
+    @Test
+    void GivenDescribedEvent_WhenGetEventDetail_ThenReturnsDescription() {
+        Event describedEvent = new Event(
+                EVENT_ID, "Concert", "The headline show of the year", 4.5, List.of("Artist1"),
+                EventCategory.CONCERT, COMPANY_ID, EventStatus.SCHEDULED, venueMap,
+                List.of(new ShowDate(LocalDateTime.now().plusDays(10), LocalDateTime.now().plusDays(10).plusHours(2))),
+                null, new DiscountPolicy(0));
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(describedEvent);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+
+        EventDetailDTO result = eventService.getEventDetail(OWNER_TOKEN, String.valueOf(EVENT_ID));
+
+        assertEquals("The headline show of the year", result.description());
     }
 }

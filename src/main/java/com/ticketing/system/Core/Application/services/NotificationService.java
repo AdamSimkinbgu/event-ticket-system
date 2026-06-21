@@ -2,6 +2,7 @@ package com.ticketing.system.Core.Application.services;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -122,7 +123,8 @@ public class NotificationService implements INotificationService {
                 NotificationType.EVENT_CANCELLED,
                 NotificationStatus.PENDING,
                 message,
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                Map.<String, Object>of("eventId", eventId, "eventName", eventName)
         );
         dispatcher.dispatch(notification);
     }
@@ -136,7 +138,8 @@ public class NotificationService implements INotificationService {
                 NotificationType.MANAGER_REVOKED,
                 NotificationStatus.PENDING,
                 message,
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                Map.<String, Object>of("companyId", companyId, "companyName", companyName)
         );
         dispatcher.dispatch(notification);
     }
@@ -150,7 +153,8 @@ public class NotificationService implements INotificationService {
                 NotificationType.OWNER_APPOINTMENT_PENDING,
                 NotificationStatus.PENDING,
                 message,
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                Map.<String, Object>of("companyId", companyId, "companyName", companyName)
         );
         dispatcher.dispatch(notification);
     }
@@ -164,7 +168,8 @@ public class NotificationService implements INotificationService {
                 NotificationType.ROLE_CHANGED,
                 NotificationStatus.PENDING,
                 message,
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                Map.<String, Object>of("companyId", companyId, "companyName", companyName, "newRole", newRole)
         );
         dispatcher.dispatch(notification);
     }

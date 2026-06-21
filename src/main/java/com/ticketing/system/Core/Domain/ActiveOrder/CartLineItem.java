@@ -1,11 +1,12 @@
 package com.ticketing.system.Core.Domain.ActiveOrder;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO.CartLineDTO;
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 import java.time.LocalDateTime;
 import java.time.Duration;
 
-public class CartLineItem {
+public class CartLineItem implements InvariantChecked {
 
     private int eventId;
     private int zoneId;
@@ -20,6 +21,26 @@ public class CartLineItem {
         this.seatNumber = seatNumber;
         this.priceAtoneticketReservation = priceAtReservation;
         this.addedAt = addedAt;
+        checkInvariants();
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (eventId <= 0) {
+            throw new IllegalStateException("CartLineItem invariant violated: eventId must be positive (was " + eventId + ")");
+        }
+        if (zoneId < 0) {
+            throw new IllegalStateException("CartLineItem invariant violated: zoneId must be non-negative (was " + zoneId + ")");
+        }
+        if (priceAtoneticketReservation < 0) {
+            throw new IllegalStateException("CartLineItem invariant violated: price must be >= 0 (was " + priceAtoneticketReservation + ")");
+        }
+        if (addedAt == null) {
+            throw new IllegalStateException("CartLineItem invariant violated: addedAt must not be null");
+        }
+        if (seatNumber != null && seatNumber.isBlank()) {
+            throw new IllegalStateException("CartLineItem invariant violated: seatNumber must not be blank if provided");
+        }
     }
 
     // Getters
@@ -37,6 +58,12 @@ public class CartLineItem {
 
     public LocalDateTime getAddedAt() {
         return addedAt;
+    }
+
+    /** Resets the reservation hold timer to a fresh window starting at {@code newAddedAt}. */
+    public void renew(LocalDateTime newAddedAt) {
+        this.addedAt = newAddedAt;
+        checkInvariants();   // re-runs the existing invariant guard (addedAt != null, etc.)
     }
 
     public String getSeatNumber() {
