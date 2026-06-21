@@ -23,6 +23,7 @@ import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.dto.ZoneDetailDTO;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.Tickets.TicketStatus;
@@ -30,7 +31,9 @@ import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
+import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.VenueMap;
@@ -63,6 +66,7 @@ public class EventManagementService {
     private final IOrderReceiptRepository orderReceiptRepository;
     private final IPaymentGateway paymentGateway;
     private final IUserRepository userRepository;
+    private final INotificationService notificationService;
     private int currentVenueMapIdCounter;
 
     public EventManagementService(
@@ -72,7 +76,8 @@ public class EventManagementService {
             ISessionManager sessionManager,
             IOrderReceiptRepository orderReceiptRepository,
             IPaymentGateway paymentGateway,
-            IUserRepository userRepository) {
+            IUserRepository userRepository,
+            INotificationService notificationService) {
         this.eventRepository = eventRepository;
         this.companyRepository = companyRepository;
         this.ticketRepository = ticketRepository;
@@ -80,6 +85,7 @@ public class EventManagementService {
         this.orderReceiptRepository = orderReceiptRepository;
         this.paymentGateway = paymentGateway;
         this.userRepository = userRepository;
+        this.notificationService = notificationService;
         this.currentVenueMapIdCounter = 0;  // Initialize the venue map ID counter, change the counter to be internal but here for now.
     }
 
@@ -317,15 +323,40 @@ public class EventManagementService {
 
     
 
-    // UC-19 — partial update; immutability rules per II.3.5.2 enforced inside
-    // Event.
+    // UC-19 — partial update; immutability rules enforced inside Event.editDetails().
     public void editEventDetails(String token, EventUpdateDTO update) {
-        //TODO    <--------------   <----------------
-        // I think that this should be implemented in the Event aggregate, not here. This service should just call a method on the Event aggregate 
-        // that takes the DTO and applies the changes according to the immutability rules. The Event aggregate should handle the logic 
-        // of which fields can be updated and how to apply the changes.
-        // AND that we can change this only if that event is a DRAFT or SCHEDULED.
-        throw new UnsupportedOperationException("UC-19: not implemented");
+        int userId = validateTokenAndGetUserId(token);
+
+        int eventId;
+        try {
+            eventId = Integer.parseInt(update.eventId());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid event ID: " + update.eventId());
+        }
+
+        eventRepository.lockForUpdate(eventId);
+        try {
+            Event event = eventRepository.findById(eventId);
+
+            User user = userRepository.getUserById(userId);
+            user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+
+            EventCategory newCategory = null;
+            if (update.category() != null && !update.category().isBlank()) {
+                try {
+                    newCategory = EventCategory.valueOf(update.category().trim().toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    throw new IllegalArgumentException("Unknown event category: " + update.category());
+                }
+            }
+
+            event.editDetails(update.name(), newCategory);
+            eventRepository.save(event);
+
+            log.info("Event {} details updated by user {}", eventId, userId);
+        } finally {
+            eventRepository.unlock(eventId);
+        }
     }
 
 
@@ -638,7 +669,36 @@ public class EventManagementService {
 
     // Detail view for owner-side editing pages.
     public EventDetailDTO getEventDetail(String token, String eventId) {
-        throw new UnsupportedOperationException("UC-19: not implemented");
+        int userId = validateTokenAndGetUserId(token);
+
+        int id;
+        try {
+            id = Integer.parseInt(eventId);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid event ID: " + eventId);
+        }
+
+        Event event = eventRepository.findById(id);
+
+        ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
+
+        User user = userRepository.getUserById(userId);
+        user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+
+        Location location = event.getVenueMap() != null ? event.getVenueMap().getLocation() : null;
+
+        return new EventDetailDTO(
+                String.valueOf(event.getId()),
+                event.getName(),
+                event.getRating(),
+                null, // Event domain doesn't persist description
+                event.getCategory(),
+                location,
+                String.valueOf(event.getCompanyId()),
+                company.getName(),
+                event.getStatus(),
+                event.getShowDates()
+        );
     }
 
 
@@ -754,6 +814,9 @@ public class EventManagementService {
             event.transitionToCanceled("Event canceled by owner");
             eventRepository.save(event);
 
+            // Notify all ticket holders
+            notifyTicketHoldersOfCancellation(eventId, event.getName(), orderReceipts);
+
             log.info("Event {} canceled and refund flow completed", eventId);
 
         } catch (EventNotFoundException e) { //TODO: check if these Catches are good
@@ -768,6 +831,23 @@ public class EventManagementService {
 
         } finally {
             eventRepository.unlock(eventId);
+        }
+    }
+
+    private void notifyTicketHoldersOfCancellation(int eventId, String eventName, List<OrderReceipt> receipts) {
+        // Collect unique user IDs to avoid duplicate notifications per receipt
+        java.util.Set<Integer> memberUserIds = receipts.stream()
+                .filter(OrderReceipt::isMemberReceipt)
+                .map(OrderReceipt::getHolderUserId)
+                .filter(id -> id != null && id > 0)
+                .collect(java.util.stream.Collectors.toSet());
+
+        for (Integer userId : memberUserIds) {
+            try {
+                notificationService.notifyEventCancelled(userId, eventId, eventName);
+            } catch (Exception e) {
+                log.warn("Failed to send cancellation notification to userId={} for eventId={}", userId, eventId);
+            }
         }
     }
 
@@ -961,6 +1041,37 @@ public class EventManagementService {
         return sessionManager.extractUserId(token);
     }
 
-    
-
+    public PurchasePolicyDTO getEventPurchasePolicy(String token, int companyId, int eventId) {
+    if (!sessionManager.validateToken(token))
+        throw new RuntimeException("Invalid token");
+    int userId = sessionManager.extractUserId(token);
+    ProductionCompany company = companyRepository.getCompanyById(companyId);
+    if (company == null) throw new RuntimeException("Company not found");
+    company.checkowner(userId);
+    Event event = eventRepository.findById(eventId);
+    if (event == null) throw new RuntimeException("Event not found");
+    if (event.getCompanyId() != companyId) throw new RuntimeException("Event does not belong to this company");
+   PurchasePolicy stored = event.getPurchasePolicy();
+if (stored instanceof AndPurchasePolicy a) {
+    return policyToDTO(a.getRightPolicy());
+}
+return policyToDTO(stored);
+}
+private PurchasePolicyDTO policyToDTO(PurchasePolicy policy) {
+    if (policy == null || policy instanceof NoPurchasePolicy)
+        return new PurchasePolicyDTO("NONE", null, null, null, null);
+    if (policy instanceof AgePurchasePolicy a)
+        return new PurchasePolicyDTO("AGE", a.getMinimumAge(), null, null, null);
+    if (policy instanceof MinTicketsPurchasePolicy m)
+        return new PurchasePolicyDTO("MIN_TICKETS", null, m.getMinimumTickets(), null, null);
+    if (policy instanceof MaxTicketsPurchasePolicy m)
+        return new PurchasePolicyDTO("MAX_TICKETS", null, null, m.getMaximumTickets(), null);
+    if (policy instanceof AndPurchasePolicy a)
+        return new PurchasePolicyDTO("AND", null, null, null,
+            List.of(policyToDTO(a.getLeftPolicy()), policyToDTO(a.getRightPolicy())));
+    if (policy instanceof OrPurchasePolicy o)
+        return new PurchasePolicyDTO("OR", null, null, null,
+            List.of(policyToDTO(o.getLeftPolicy()), policyToDTO(o.getRightPolicy())));
+    return new PurchasePolicyDTO("NONE", null, null, null, null);
+}
 }

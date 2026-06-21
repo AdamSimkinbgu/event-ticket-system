@@ -14,14 +14,15 @@ import com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO;
 import com.ticketing.system.Core.Application.dto.PendingInvitationDTO;
 import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
 import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
-import com.ticketing.system.Core.Application.dto.AppointmentRevokeDTO;
 import com.ticketing.system.Core.Application.dto.CompanyPolicyConfigDTO;
+import com.ticketing.system.Core.Application.dto.AppointmentRevokeDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dtoMappers.OrderReceiptMapper;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
+import com.ticketing.system.Core.Domain.exceptions.CompanyNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
@@ -35,10 +36,20 @@ import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.interfaces.INotificationService;
 
 import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
 import com.ticketing.system.Core.Application.dto.ManagerAppointmentRequestDTO;
 
+import java.util.regex.Pattern;
+import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
+import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.AgePurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.AndPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.OrPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.MinTicketsPurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.MaxTicketsPurchasePolicy;
 
 import org.springframework.stereotype.Service;
 
@@ -51,16 +62,19 @@ public class CompanyManagementService {
     private final ISessionManager sessionManager;
     private final ITicketRepository ticketRepository;
     private final IEventRepository eventRepository;
+    private final INotificationService notificationService;
 
     public CompanyManagementService(IProductionCompanyRepository companyRepository, IUserRepository userRepository,
             IOrderReceiptRepository orderReceiptRepository, ISessionManager sessionManager,
-            ITicketRepository ticketRepository, IEventRepository eventRepository) {
+            ITicketRepository ticketRepository, IEventRepository eventRepository,
+            INotificationService notificationService) {
         this.companyRepository = companyRepository;
         this.userRepository = userRepository;
         this.orderReceiptRepository = orderReceiptRepository;
         this.sessionManager = sessionManager;
         this.ticketRepository = ticketRepository;
         this.eventRepository = eventRepository;
+        this.notificationService = notificationService;
     }
 
 
@@ -91,6 +105,15 @@ public class CompanyManagementService {
                                                                               // appointment, here we'll do logic checks.
 
         userRepository.updateUser(targetUser); // update target user with new appointment
+        
+        // Notify target user
+        try {
+            ProductionCompany company = companyRepository.getCompanyById(request.companyId());
+            notificationService.notifyOwnerAppointmentPending(request.targetUserId(), request.companyId(), company.getName());
+        } catch (Exception e) {
+            log.warn("Owner appointment created but notification failed for userId={}", request.targetUserId());
+        }
+
         log.info("Owner appointment created successfully: appointerId={}, targetUserId={}, companyId={}",
                 appointerId, request.targetUserId(), request.companyId());
     }
@@ -112,6 +135,15 @@ public class CompanyManagementService {
 
         targetUser.receiveManagerAppointment(request.companyId(), ownerId, request.permissions());
         userRepository.updateUser(targetUser);
+
+        // Notify target user
+        try {
+            ProductionCompany company = companyRepository.getCompanyById(request.companyId());
+            notificationService.notifyRoleChanged(request.targetUserId(), request.companyId(), company.getName(), "MANAGER");
+        } catch (Exception e) {
+            log.warn("Manager appointment created but notification failed for userId={}", request.targetUserId());
+        }
+
         log.info("Manager appointment created successfully: ownerId={}, targetUserId={}, companyId={}, permissions={}",
                 ownerId, request.targetUserId(), request.companyId(), request.permissions());
     }
@@ -141,6 +173,13 @@ public class CompanyManagementService {
                 company.addManager(userId);
             }
             log.info("Appointment accepted: userId={}, companyId={}", userId, response.companyId());
+
+            // Notify of role change to final role
+            try {
+                notificationService.notifyRoleChanged(userId, response.companyId(), company.getName(), appointment.getRole().name());
+            } catch (Exception e) {
+                log.warn("Appointment accepted but notification failed for userId={}", userId);
+            }
         } else {
             user.rejectInvitation(response.companyId()); // transitions the pending appointment to rejected state, status-based lookups will no longer return it.
             log.info("Appointment rejected: userId={}, companyId={}", userId, response.companyId());
@@ -203,6 +242,15 @@ public class CompanyManagementService {
         manager.ModifyManagerPermissions(edit.companyId(), ownerId, edit.newPermissions());  // checks done in here.
 
         userRepository.updateUser(manager);
+
+        // Notify manager of permission change
+        try {
+            ProductionCompany company = companyRepository.getCompanyById(edit.companyId());
+            notificationService.notifyRoleChanged(edit.targetUserId(), edit.companyId(), company.getName(), "MANAGER (permissions updated)");
+        } catch (Exception e) {
+            log.warn("Manager permissions updated but notification failed for userId={}", edit.targetUserId());
+        }
+
         log.info("Manager permissions updated successfully for user {} in company {}", edit.targetUserId(),
                 edit.companyId());
     }
@@ -227,6 +275,14 @@ public class CompanyManagementService {
 
         userRepository.updateUser(targetUser);
         companyRepository.updateCompany(company);
+
+        // Notify user of revocation
+        try {
+            notificationService.notifyManagerRevoked(revokeRequest.targetUserId(), revokeRequest.companyId(), company.getName());
+        } catch (Exception e) {
+            log.warn("Role revoked but notification failed for userId={}", revokeRequest.targetUserId());
+        }
+
         log.info("Manager revoked successfully");
     }
 
@@ -311,13 +367,21 @@ public class CompanyManagementService {
 
 
 
-    public void setCompanyPolicies(String token, CompanyPolicyConfigDTO config) {
-        throw new UnsupportedOperationException("UC-21: not implemented");
+    public void setCompanyPolicies( String token, CompanyPolicyConfigDTO config) {
+    if (config == null) {
+        throw new IllegalArgumentException("Company policy config cannot be null");
     }
-
-
-
-
+    int userId = authenticate(token);
+    ProductionCompany company = companyRepository.getCompanyById(config.companyId());
+    if (company == null) {
+        throw new CompanyNotFoundException(config.companyId());
+    }
+    company.checkowner(userId);
+    PurchasePolicy policy = buildPurchasePolicyFromDTO(config.defaultPurchasePolicy());
+    company.setPurchasePolicy(policy);
+    companyRepository.save(company);
+    log.info("Purchase policy updated for company {} by user {}", config.companyId(), userId);
+}
 
     // UC-22 — Owner-side flat list of company sales.
     // this function returns a list of PurchaseHistoryDTO, each containing a single PurchaseRecordDTO, which represents a single OrderReceipt that has 
@@ -473,5 +537,64 @@ public class CompanyManagementService {
         }
         return sessionManager.extractUserId(token);
     }
+private PurchasePolicy buildPurchasePolicyFromDTO(PurchasePolicyDTO dto) {
+    if (dto == null) return new NoPurchasePolicy();
+    if (dto.type() == null || dto.type().isBlank())
+        throw new IllegalArgumentException("Purchase policy type is required");
+    switch (dto.type().trim().toUpperCase()) {
+        case "AGE":
+            if (dto.minimumAge() == null) throw new IllegalArgumentException("minimumAge is required");
+            return new AgePurchasePolicy(dto.minimumAge());
+        case "MIN_TICKETS":
+            if (dto.minimumTickets() == null) throw new IllegalArgumentException("minimumTickets is required");
+            return new MinTicketsPurchasePolicy(dto.minimumTickets());
+        case "MAX_TICKETS":
+            if (dto.maximumTickets() == null) throw new IllegalArgumentException("maximumTickets is required");
+            return new MaxTicketsPurchasePolicy(dto.maximumTickets());
+        case "AND":
+            if (dto.children() == null || dto.children().size() < 2)
+                throw new IllegalArgumentException("AND policy must have at least two children");
+            PurchasePolicy andResult = buildPurchasePolicyFromDTO(dto.children().get(0));
+            for (int i = 1; i < dto.children().size(); i++)
+                andResult = new AndPurchasePolicy(andResult, buildPurchasePolicyFromDTO(dto.children().get(i)));
+            return andResult;
+        case "OR":
+            if (dto.children() == null || dto.children().size() < 2)
+                throw new IllegalArgumentException("OR policy must have at least two children");
+            PurchasePolicy orResult = buildPurchasePolicyFromDTO(dto.children().get(0));
+            for (int i = 1; i < dto.children().size(); i++)
+                orResult = new OrPurchasePolicy(orResult, buildPurchasePolicyFromDTO(dto.children().get(i)));
+            return orResult;
+        case "NONE":
+            return new NoPurchasePolicy();
+        default:
+            throw new IllegalArgumentException("Unknown purchase policy type: " + dto.type());
+    }
+}
+public PurchasePolicyDTO getCompanyPurchasePolicy(String token, int companyId) {
+    int userId = authenticate(token);
+    ProductionCompany company = companyRepository.getCompanyById(companyId);
+    if (company == null) throw new RuntimeException("Company not found");
+    company.checkowner(userId);
+    return policyToDTO(company.getPurchasePolicy());
+}
 
+
+private PurchasePolicyDTO policyToDTO(PurchasePolicy policy) {
+    if (policy == null || policy instanceof NoPurchasePolicy)
+        return new PurchasePolicyDTO("NONE", null, null, null, null);
+    if (policy instanceof AgePurchasePolicy a)
+        return new PurchasePolicyDTO("AGE", a.getMinimumAge(), null, null, null);
+    if (policy instanceof MinTicketsPurchasePolicy m)
+        return new PurchasePolicyDTO("MIN_TICKETS", null, m.getMinimumTickets(), null, null);
+    if (policy instanceof MaxTicketsPurchasePolicy m)
+        return new PurchasePolicyDTO("MAX_TICKETS", null, null, m.getMaximumTickets(), null);
+    if (policy instanceof AndPurchasePolicy a)
+        return new PurchasePolicyDTO("AND", null, null, null,
+            List.of(policyToDTO(a.getLeftPolicy()), policyToDTO(a.getRightPolicy())));
+    if (policy instanceof OrPurchasePolicy o)
+        return new PurchasePolicyDTO("OR", null, null, null,
+            List.of(policyToDTO(o.getLeftPolicy()), policyToDTO(o.getRightPolicy())));
+    return new PurchasePolicyDTO("NONE", null, null, null, null);
+}
 }

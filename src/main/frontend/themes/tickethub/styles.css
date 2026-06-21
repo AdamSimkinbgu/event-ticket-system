@@ -180,6 +180,7 @@
   .lk-banner-icon{font-size:1.15rem;flex:none}
   .lk-banner-warn{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}
   .lk-banner-info{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af}
+  .lk-banner-error{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
 
   /* ============ GRID ============ */
   .lk-grid-wrap{width:100%;overflow-x:auto}

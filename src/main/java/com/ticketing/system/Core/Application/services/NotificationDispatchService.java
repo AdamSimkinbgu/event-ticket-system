@@ -4,7 +4,7 @@ import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 
 import com.ticketing.system.Core.Application.dto.NotificationDTO;
-import com.ticketing.system.Core.Application.interfaces.INotificationService;
+import com.ticketing.system.Core.Application.interfaces.IPushNotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.notifications.INotificationRepository;
 import com.ticketing.system.Core.Domain.notifications.Notification;
@@ -24,48 +24,68 @@ import org.springframework.stereotype.Service;
 public class NotificationDispatchService {
 
     private final INotificationRepository notificationRepository;
-    private final INotificationService notificationService; // push channel port
+    private final IPushNotificationService pushService; // low-level push channel
     private final ISessionManager sessionManager;
 
     public NotificationDispatchService(
             INotificationRepository notificationRepository,
-            INotificationService notificationService,
+            IPushNotificationService pushService,
             ISessionManager sessionManager) {
         this.notificationRepository = notificationRepository;
-        this.notificationService = notificationService;
+        this.pushService = pushService;
         this.sessionManager = sessionManager;
     }
 
-    // UC-35: triggered from a domain event. Resolves recipient, checks online
-    // state,
-    // routes to live push (UC-35 online branch) or persists for later (UC-36
-    // offline branch).
-    // Parameter type stays Object until the team defines the domain-event base
-    // interface in code
-    // (events are off-diagram per the design walkthrough).
+    /**
+     * Central dispatch point for all notifications.
+     * 1. Stores the notification as PENDING.
+     * 2. Checks if the recipient is online.
+     * 3. If online, attempts a live push via IPushNotificationService.
+     * 4. Updates status to DELIVERED if push succeeds.
+     */
+    public void dispatch(Notification notification) {
+        log.info("Dispatching notification for userId={}, type={}", 
+                notification.getRecipientUserId(), notification.getType());
+
+        // Step 1: Persist (UC-36 logic integrated)
+        notificationRepository.save(notification);
+
+        // Step 2: Online check (UC-35)
+        int userId = notification.getRecipientUserId();
+        if (sessionManager.isOnline(userId)) {
+            log.debug("User {} is online, attempting live push", userId);
+            
+            // Step 3: Attempt delivery
+            boolean pushSuccess = pushService.send(userId, notification);
+            if (pushSuccess) {
+                notification.markDelivered();
+                notificationRepository.save(notification); // Update status to DELIVERED
+                log.info("Notification id={} delivered live to userId={}", notification.getId(), userId);
+            } else {
+                log.warn("Failed to push notification id={} live to userId={}. Remaining PENDING.", 
+                        notification.getId(), userId);
+            }
+        } else {
+            log.info("User {} is offline. Notification id={} saved as PENDING for next login.", 
+                    userId, notification.getId());
+        }
+    }
+
+    // UC-35: triggered from a domain event.
     public void dispatchFromEvent(Object domainEvent) {
+        // This will eventually resolve the notification details from the event 
+        // and call dispatch(Notification).
         throw new UnsupportedOperationException("UC-35: not implemented");
     }
 
     // UC-36: store an offline notification in PENDING state.
+    // Deprecated: logic now moved into dispatch()
+    @Deprecated
     public void storePending(Notification notification) {
-
-        log.info("Storing pending notification for userId={}, type={}", notification.getRecipientUserId(),
-                notification.getType());
-        try {
-            notificationRepository.save(notification);
-        } catch (Exception e) {
-            log.error("Failed to store pending notification for userId={}, type={}. Error: {}",
-                    notification.getRecipientUserId(), notification.getType(), e.getMessage());
-            throw e; // rethrow or handle as needed
-        }
+        dispatch(notification);
     }
 
-    // UC-37: triggered by MemberLoggedIn event. Pushes all PENDING notifications
-    // for the user
-    // and flips them to DELIVERED in bulk. Returns the delivered notifications so
-    // the caller
-    // can show them to the just-logged-in user.
+    // UC-37: triggered by MemberLoggedIn event.
     public List<NotificationDTO> deliverPending(int userId) {
         log.info("Delivering pending notifications for userId={}", userId);
 
@@ -74,21 +94,18 @@ public class NotificationDispatchService {
         List<NotificationDTO> deliveredNotifications = new java.util.ArrayList<>();
 
         for (Notification notification : pendingNotifications) {
-            notification.markDelivered();
-            boolean pushSuccess = notificationService.send(userId, notification);
+            boolean pushSuccess = pushService.send(userId, notification);
             if (pushSuccess) {
+                notification.markDelivered();
                 notificationRepository.save(notification); // persist the status change
                 deliveredNotifications.add(notification.toDTO()); // convert to DTO for return
             } else {
-                // Handle push failure as needed (e.g. log, retry later, etc.)
                 log.error(
                         "Failed to push notification id={} to userId={}. Will remain pending for next login attempt.",
                         notification.getId(), userId);
-                notification.markPending(); // revert status change if push failed
             }
         }
         log.info("Delivered {} pending notifications to userId={}", deliveredNotifications.size(), userId);
         return deliveredNotifications;
-
     }
 }
