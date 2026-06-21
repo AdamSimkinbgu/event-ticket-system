@@ -10,6 +10,8 @@ import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -51,7 +53,9 @@ public class ReservationAcceptanceTests {
                 eventRepository,
                 activeOrderRepository,
                 sessionManager,
-                notificationService
+                notificationService,
+                mock(IProductionCompanyRepository.class),
+                mock(IUserRepository.class)
         );
 
         event = mock(Event.class, RETURNS_DEEP_STUBS);

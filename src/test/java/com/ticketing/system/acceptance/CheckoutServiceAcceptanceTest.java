@@ -46,7 +46,7 @@ public class CheckoutServiceAcceptanceTest {
     @Autowired private AuthenticationService authService;
     @Autowired private CompanyManagementService companyService;
     @Autowired private EventManagementService eventManagementService;
-    @Autowired private IProductionCompanyRepository companyRepository;
+    private IProductionCompanyRepository companyRepository;
     @Autowired private IEventRepository eventRepository1;
     @Autowired private ITicketRepository ticketRepository1;
     @Autowired private IOrderReceiptRepository orderReceiptRepository1;
@@ -89,6 +89,7 @@ public class CheckoutServiceAcceptanceTest {
         eventRepository = mock(IEventRepository.class);
         ticketRepository = mock(ITicketRepository.class);
         userRepository = mock(IUserRepository.class);
+        companyRepository = mock(IProductionCompanyRepository.class);
 
         orderReceiptRepository = mock(IOrderReceiptRepository.class);
         AtomicInteger receiptIds = new AtomicInteger(1);
@@ -108,7 +109,8 @@ public class CheckoutServiceAcceptanceTest {
                 paymentGateway,
                 notificationService,
                 sessionManager,
-                userRepository
+                userRepository,
+                companyRepository
         );
 
         event1 = mock(Event.class);

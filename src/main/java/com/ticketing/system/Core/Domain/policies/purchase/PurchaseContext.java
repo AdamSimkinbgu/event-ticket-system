@@ -8,7 +8,15 @@ public class PurchaseContext {
     private final int companyId;
     private final int quantity;
 
+    private final PurchaseStage stage;
+
+    /** Final-checkout context (every rule enforced). */
     public PurchaseContext(int buyerId, Integer buyerAge, int eventId, int companyId, int quantity) {
+        this(buyerId, buyerAge, eventId, companyId, quantity, PurchaseStage.CHECKOUT);
+    }
+
+    public PurchaseContext(int buyerId, Integer buyerAge, int eventId, int companyId, int quantity,
+            PurchaseStage stage) {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be positive");
         }
@@ -18,6 +26,11 @@ public class PurchaseContext {
         this.eventId = eventId;
         this.companyId = companyId;
         this.quantity = quantity;
+        this.stage = stage == null ? PurchaseStage.CHECKOUT : stage;
+    }
+
+    public PurchaseStage getStage() {
+        return stage;
     }
 
     public int getBuyerId() {

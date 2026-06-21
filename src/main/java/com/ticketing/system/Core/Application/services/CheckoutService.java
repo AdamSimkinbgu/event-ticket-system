@@ -41,6 +41,8 @@ import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchaseContext;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
+import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
+import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.users.User;
 
 
@@ -57,6 +59,7 @@ public class CheckoutService {
     private final INotificationService notificationService;
     private final ISessionManager sessionManager;
     private final IUserRepository userRepository;
+    private final IProductionCompanyRepository companyRepository;
 
     // In-memory cache for completed checkouts to handle idempotency. Keyed by a combination of buyer identity and idempotency key, since the same idempotency key could be used 
     // by different users (e.g. if they copy-paste it from a confirmation page). In a real implementation this would likely be a distributed cache like Redis with an expiration time.
@@ -76,7 +79,8 @@ public class CheckoutService {
             IPaymentGateway paymentGateway,
             INotificationService notificationService,
             ISessionManager sessionManager,
-            IUserRepository userRepository
+            IUserRepository userRepository,
+            IProductionCompanyRepository companyRepository
     ) {
         this.activeOrderRepository = activeOrderRepository;
         this.eventRepository = eventRepository;
@@ -87,7 +91,7 @@ public class CheckoutService {
         this.notificationService = notificationService;
         this.sessionManager = sessionManager;
          this.userRepository = userRepository;
-
+        this.companyRepository = companyRepository;
     }
 
 
@@ -1248,7 +1252,8 @@ private void validatePurchasePolicies(List<CartLineItem> boughtItems, Integer us
                 quantity
         );
 
-        event.validatePurchasePolicy(context);
+        ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
+        event.validateEffectivePolicy(company == null ? null : company.getPurchasePolicy(), context);
     }
 }
     private Integer getBuyerAgeByUserId(int userId) {
