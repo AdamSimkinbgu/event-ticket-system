@@ -1,5 +1,6 @@
 package com.ticketing.system.Core.Application.dtoMappers;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -138,6 +139,11 @@ public class OrderReceiptMapper {
         String eventName = event == null ? null : event.getName();
         String zoneName = resolveZoneName(event, line.getZoneId());
         String companyName = resolveCompanyName(event, companyRepository);
+        String category = (event == null || event.getCategory() == null) ? null : event.getCategory().toString();
+        LocalDateTime eventStartsAt = resolveEventStart(event);
+        String venue = (event == null || event.getVenueMap() == null || event.getVenueMap().getLocation() == null)
+                ? null : event.getVenueMap().getLocation().toString();
+        String barcode = ticket == null ? null : ticket.getBarcode();
 
         return new PurchaseHistoryDTO.TicketRecordDTO(
                 line.getTicketId(),
@@ -149,7 +155,16 @@ public class OrderReceiptMapper {
                 currentStatus,
                 eventName,
                 zoneName,
-                companyName);
+                companyName,
+                category,
+                eventStartsAt,
+                venue,
+                barcode);
+    }
+
+    private static LocalDateTime resolveEventStart(Event event) {
+        if (event == null || event.getShowDates() == null || event.getShowDates().isEmpty()) return null;
+        return event.getShowDates().get(0).getStartTime();
     }
 
     // ---- name resolution (all null-safe; a null repo yields a null name) ----

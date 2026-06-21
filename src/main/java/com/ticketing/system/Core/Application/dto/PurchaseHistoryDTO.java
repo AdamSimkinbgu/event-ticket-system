@@ -43,6 +43,10 @@ public record PurchaseHistoryDTO(List<PurchaseRecordDTO> records) {
         TicketStatus currentStatus,
         String eventName,      // resolved at mapping time; null if unresolved
         String zoneName,       // resolved at mapping time; null if unresolved
-        String companyName     // resolved at mapping time; null if unresolved
+        String companyName,    // resolved at mapping time; null if unresolved
+        String category,       // event category; null if unresolved
+        LocalDateTime eventStartsAt, // first show date; null if unresolved
+        String venue,          // event location; null if unresolved
+        String barcode         // issued-ticket barcode; null if not yet issued
     ) {}
 }

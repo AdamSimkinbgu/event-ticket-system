@@ -4,9 +4,12 @@ import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.PurchaseRecordDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.TicketRecordDTO;
 import com.ticketing.system.Core.Domain.Tickets.TicketStatus;
+import com.ticketing.system.Presentation.components.buyer.BzTicketDialog;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkGrid;
+import com.ticketing.system.Presentation.components.kit.LkIcon;
+import com.ticketing.system.Presentation.components.kit.LkIconBtn;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkStatusDot;
 import com.ticketing.system.Presentation.layouts.MainLayout;
@@ -34,13 +37,12 @@ import java.util.Map;
 public class MyAccountView extends LkPage {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("d MMM yyyy");
+    private static final DateTimeFormatter DATETIME_FMT = DateTimeFormatter.ofPattern("EEE d MMM yyyy · HH:mm");
 
     private final PurchaseHistoryDTO history;
-    private final Map<Integer, String> eventNames;
 
     public MyAccountView(MyAccountPresenter presenter) {
         this.history = presenter.loadHistory();
-        this.eventNames = presenter.eventNames();
 
         add(buildHero());
         add(Lk.h2("My orders"));
@@ -147,7 +149,8 @@ public class MyAccountView extends LkPage {
             .col("Zone",   "zone")
             .col("Seat",   "seat")
             .col("Price",  "price", LkGrid.Align.RIGHT)
-            .col("Status", "status");
+            .col("Status", "status")
+            .col("",       "act", LkGrid.Align.RIGHT);
         tickets.forEach(t -> ticketRow(grid, t));
         grid.build();
         card.add(grid);
@@ -157,31 +160,50 @@ public class MyAccountView extends LkPage {
     private void ticketRow(LkGrid grid, TicketRecordDTO t) {
         Map<String, Object> row = new LinkedHashMap<>();
         Span ev = new Span();
-        ev.getElement().setProperty("innerHTML", "<b>" + escape(eventLabel(t.eventId())) + "</b>");
+        ev.getElement().setProperty("innerHTML", "<b>" + escape(orElse(t.eventName(), "Event #" + t.eventId())) + "</b>");
         row.put("evt", ev);
-        row.put("zone", "Zone " + t.zoneId());
-        row.put("seat", t.seatNumber() == null || t.seatNumber().isBlank() ? "—" : t.seatNumber());
+        row.put("zone", orElse(t.zoneName(), "Zone #" + t.zoneId()));
+        row.put("seat", orElse(t.seatNumber(), "—"));
         row.put("price", money(t.pricePaid()));
         TicketStatus st = t.currentStatus();
         row.put("status", new LkStatusDot(statusTone(st), prettyStatus(st)));
+
+        LkIconBtn viewBtn = new LkIconBtn(new LkIcon("eye", 15), "View ticket + barcode");
+        viewBtn.addClickListener(e -> BzTicketDialog.show(toTicketInfo(t)));
+        row.put("act", viewBtn);
         grid.row(row);
+    }
+
+    private static BzTicketDialog.TicketInfo toTicketInfo(TicketRecordDTO t) {
+        return new BzTicketDialog.TicketInfo(
+            orElse(t.eventName(), "Event #" + t.eventId()),
+            orElse(t.category(), "—"),
+            t.eventStartsAt() == null ? "—" : t.eventStartsAt().format(DATETIME_FMT),
+            orElse(t.venue(), "—"),
+            orElse(t.zoneName(), "Zone #" + t.zoneId()),
+            orElse(t.seatNumber(), "—"),
+            money(t.pricePaid()),
+            orElse(t.barcode(), "Not yet issued"),
+            "#" + t.orderReceiptId());
     }
 
     // ---- helpers ----
 
-    private String eventLabel(int eventId) {
-        return eventNames.getOrDefault(eventId, "Event #" + eventId);
-    }
-
     private String orderEventLabel(PurchaseRecordDTO r) {
-        List<Integer> ids = r.tickets().stream().map(TicketRecordDTO::eventId).distinct().toList();
-        if (ids.isEmpty()) return "—";
-        if (ids.size() == 1) return eventLabel(ids.get(0));
-        return ids.size() + " events";
+        List<String> names = r.tickets().stream()
+            .map(t -> orElse(t.eventName(), "Event #" + t.eventId()))
+            .distinct().toList();
+        if (names.isEmpty()) return "—";
+        if (names.size() == 1) return names.get(0);
+        return names.size() + " events";
     }
 
     private static String money(double amount) {
         return String.format("$%,.2f", amount);
+    }
+
+    private static String orElse(String value, String fallback) {
+        return (value == null || value.isBlank()) ? fallback : value;
     }
 
     private static LkStatusDot.Tone statusTone(TicketStatus st) {

@@ -1,25 +1,20 @@
 package com.ticketing.system.Presentation.presenters.account;
 
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
-import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
-import com.ticketing.system.Core.Application.services.CatalogService;
 import com.ticketing.system.Core.Application.services.MemberAccountService;
 import com.ticketing.system.Presentation.session.AuthSession;
 
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Read-only presenter for {@code MyAccountView}. Loads the signed-in
- * member's purchase history and a best-effort eventId→name map (so the
- * tickets list can show names rather than raw ids — {@link PurchaseHistoryDTO}
- * is a thin id-based projection).
+ * Read-only presenter for {@code MyAccountView}. Loads the signed-in member's
+ * purchase history (orders + tickets, already enriched with event/zone names
+ * and barcodes by {@code OrderReceiptMapper}).
  *
  * <p>Holds no Vaadin imports. Reconstructs the {@link AuthTokenDTO} from the
  * session because {@link MemberAccountService#viewMyHistory} takes the DTO but
@@ -30,11 +25,9 @@ import lombok.extern.slf4j.Slf4j;
 public class MyAccountPresenter {
 
     private final MemberAccountService memberAccountService;
-    private final CatalogService catalogService;
 
-    public MyAccountPresenter(MemberAccountService memberAccountService, CatalogService catalogService) {
+    public MyAccountPresenter(MemberAccountService memberAccountService) {
         this.memberAccountService = memberAccountService;
-        this.catalogService = catalogService;
     }
 
     /** The signed-in member's purchase history; empty when signed out or on failure. */
@@ -48,16 +41,6 @@ public class MyAccountPresenter {
         } catch (RuntimeException e) {
             log.warn("Failed to load purchase history: {}", e.getMessage());
             return new PurchaseHistoryDTO(List.of());
-        }
-    }
-
-    /** Best-effort eventId → name for currently on-sale events. */
-    public Map<Integer, String> eventNames() {
-        try {
-            return catalogService.browseEventCatalog().stream()
-                    .collect(Collectors.toMap(EventSummaryDTO::eventId, EventSummaryDTO::name, (a, b) -> a));
-        } catch (RuntimeException e) {
-            return Map.of();
         }
     }
 
