@@ -127,11 +127,11 @@ public class ManagerListView extends LkPage {
             LkIconBtn revoke = new LkIconBtn(new LkIcon("trash", 15), "Revoke");
             revoke.addClickListener(e -> new LkConfirm("Revoke manager",
                 "Remove " + m.targetUsername() + " from the team? They'll lose all "
-                    + "access to this company.")
-                .severity(LkConfirm.Severity.danger)
+                    + "access to this company.",
+                LkConfirm.Severity.danger)
                 .confirmText("Revoke")
-                .onConfirm(() -> handleRevoke(m))
-                .open());
+                .prompt()
+                .thenAccept(ok -> { if (Boolean.TRUE.equals(ok)) handleRevoke(m); }));
             actions.add(revoke);
         }
         row.put("act", actions);

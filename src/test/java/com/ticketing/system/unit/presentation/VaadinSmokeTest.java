@@ -138,10 +138,9 @@ class VaadinSmokeTest {
     @Test
     void managerActionDialogsConstruct() {
         // V2-CADMIN-03 dialogs — build path only (open() needs a UI context).
-        assertDoesNotThrow(() -> new LkConfirm("Revoke manager", "Remove Carol?")
-                .severity(LkConfirm.Severity.danger)
-                .confirmText("Revoke")
-                .onConfirm(() -> { }),
+        assertDoesNotThrow(() -> new LkConfirm("Revoke manager", "Remove Carol?",
+                LkConfirm.Severity.danger)
+                .confirmText("Revoke"),
             "LkConfirm failed to construct");
         assertDoesNotThrow(() -> new EditPermissionsDialog(
                 "carol", "Manager", List.of("VIEW_SALES"), names -> { }),
