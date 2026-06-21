@@ -232,6 +232,16 @@ public final class DemoEvents {
         Event event = eventRepository.findById(Integer.parseInt(created.eventId()));
         event.transitionToOnSale();
         eventRepository.save(event);
+        // forceStatusOnSale(event);
+        // Existing events must be locked before save (MemoryEventRepository contract); the
+        // reflection-forced status write is a direct repo save, so lock/unlock around it.
+        int eventId = event.getId();
+        eventRepository.lockForUpdate(eventId);
+        try {
+            eventRepository.save(event);
+        } finally {
+            eventRepository.unlock(eventId);
+        }
         return created;
     }
 
