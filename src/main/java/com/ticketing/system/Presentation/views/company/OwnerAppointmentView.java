@@ -1,5 +1,6 @@
 package com.ticketing.system.Presentation.views.company;
 
+import com.ticketing.system.Core.Application.dto.UserCompanyDTO;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
@@ -9,9 +10,9 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.presenters.company.MyCompaniesPresenter;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
-import com.ticketing.system.Presentation.session.MockCompanies;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -29,13 +30,13 @@ public class OwnerAppointmentView extends LkPage {
     private final TextField invitee = new TextField("Invitee username or email");
     private final TextField scope   = new TextField("Scope");
 
-    public OwnerAppointmentView() {
+    public OwnerAppointmentView(MyCompaniesPresenter membershipPresenter) {
         title("Appoint co-owner");
         subtitle("Co-owners have full company access, except removing the founder.");
-        add(buildForm());
+        add(buildForm(membershipPresenter));
     }
 
-    private Component buildForm() {
+    private Component buildForm(MyCompaniesPresenter membershipPresenter) {
         Div narrow = new Div();
         narrow.addClassName("form-narrow");
 
@@ -45,9 +46,10 @@ public class OwnerAppointmentView extends LkPage {
         invitee.setRequired(true);
         invitee.setWidthFull();
 
-        String companyName = MockCompanies.forCurrentUser().isEmpty()
+        UserCompanyDTO current = membershipPresenter.currentCompany();
+        String companyName = current == null
             ? "this company"
-            : MockCompanies.forCurrentUser().get(0).name() + " (this company)";
+            : current.name() + " (this company)";
         scope.setValue(companyName);
         scope.setReadOnly(true);
         scope.setWidthFull();

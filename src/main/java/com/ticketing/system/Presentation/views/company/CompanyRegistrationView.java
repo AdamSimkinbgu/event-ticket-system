@@ -9,7 +9,7 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Presentation.session.MockCompanies;
+import com.ticketing.system.Presentation.presenters.company.CompanyRegistrationPresenter;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -20,29 +20,25 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
-import java.util.UUID;
-
 /**
  * Register-a-company form — the entry point for a registered member to
  * become an organizer. Deliberately <i>not</i> gated by
  * {@link com.ticketing.system.Presentation.security.RequireCapability}
  * so non-owners can reach it as the workspace fallback destination.
- *
- * <p>Lives in {@link MainLayout} so a member who hasn't yet founded a
- * company stays in the buyer shell while they fill out the form. After
- * submit, they're navigated to {@code OwnerDashboardView} (WorkspaceLayout)
- * with their new company in {@link MockCompanies}.
  */
 @Route(value = "register-company", layout = MainLayout.class)
 @PageTitle("Register a company · TicketHub")
 @PermitAll
 public class CompanyRegistrationView extends LkPage {
 
+    private final CompanyRegistrationPresenter presenter;
+
     private final TextField name        = new TextField("Company name");
     private final TextArea  description = new TextArea("Description");
     private final EmailField email      = new EmailField("Contact email");
 
-    public CompanyRegistrationView() {
+    public CompanyRegistrationView(CompanyRegistrationPresenter presenter) {
+        this.presenter = presenter;
         title("Register a production company");
         subtitle("Found a new company — you become its immutable founder.");
         add(buildForm());
@@ -92,18 +88,31 @@ public class CompanyRegistrationView extends LkPage {
             return;
         }
 
-        MockCompanies.Company c = new MockCompanies.Company(
-            "co-" + UUID.randomUUID().toString().substring(0, 8),
-            name.getValue(),
-            description.getValue() == null ? "" : description.getValue(),
-            email.getValue(),
-            "Founder",
-            "Active",
-            1,
-            0
-        );
-        MockCompanies.add(c);
-        Toasts.success("'" + c.name() + "' registered — welcome to the organizer workspace.");
-        UI.getCurrent().navigate(OwnerDashboardView.class);
+        String descriptionValue = description.getValue() == null ? "" : description.getValue().trim();
+        if (descriptionValue.isEmpty()) {
+            Toasts.failure("Please provide a company description.");
+            return;
+        }
+
+        CompanyRegistrationPresenter.Outcome outcome = presenter.register(
+                name.getValue().trim(),
+                descriptionValue);
+
+        switch (outcome) {
+            case CompanyRegistrationPresenter.Outcome.Success success ->
+                Toasts.success("'" + success.company().name() + "' registered — welcome to the organizer workspace.");
+            case CompanyRegistrationPresenter.Outcome.NotAuthenticated ignored ->
+                Toasts.failure("Sign in again to register a company.");
+            case CompanyRegistrationPresenter.Outcome.InvalidInput invalid ->
+                Toasts.failure(invalid.reason());
+            case CompanyRegistrationPresenter.Outcome.NameTaken taken ->
+                Toasts.failure(taken.reason());
+            case CompanyRegistrationPresenter.Outcome.Failure fail ->
+                Toasts.failure("Registration failed: " + fail.reason());
+        }
+
+        if (outcome instanceof CompanyRegistrationPresenter.Outcome.Success) {
+            UI.getCurrent().navigate(OwnerDashboardView.class);
+        }
     }
 }

@@ -8,6 +8,7 @@ import java.util.Set;
 
 import lombok.extern.slf4j.Slf4j;
 
+import com.ticketing.system.Core.Application.dto.UserCompanyDTO;
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO;
 import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
@@ -25,8 +26,11 @@ import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
+import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
+import com.ticketing.system.Core.Domain.users.AppointmentStatus;
 import com.ticketing.system.Core.Domain.users.CompanyAppointment;
 import com.ticketing.system.Core.Domain.users.CompanyRole;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
@@ -441,6 +445,65 @@ public class CompanyManagementService {
 
 
 
+
+    public List<UserCompanyDTO> listForUser(int userId) {
+        User user = userRepository.getUserById(userId);
+        List<UserCompanyDTO> memberships = new ArrayList<>();
+        for (CompanyAppointment appointment : user.getAllCompanyAppointments()) {
+            if (appointment.getStatus() != AppointmentStatus.ACTIVE) {
+                continue;
+            }
+            ProductionCompany company;
+            try {
+                company = companyRepository.getCompanyById(appointment.getCompanyId());
+            } catch (RuntimeException e) {
+                log.warn("Skipping membership for missing companyId={}", appointment.getCompanyId());
+                continue;
+            }
+            memberships.add(toMembershipDto(userId, appointment, company));
+        }
+        return memberships;
+    }
+
+    public boolean isOwnerOf(int userId, int companyId) {
+        User user = userRepository.getUserById(userId);
+        CompanyAppointment appointment = user.getActiveCompanyAppointment(companyId);
+        return appointment != null && appointment.getRole() == CompanyRole.Owner;
+    }
+
+    private UserCompanyDTO toMembershipDto(int userId, CompanyAppointment appointment, ProductionCompany company) {
+        List<Permission> managerPermissions = appointment.getRole() == CompanyRole.Manager
+                ? List.copyOf(appointment.getPermissions())
+                : List.of();
+        return new UserCompanyDTO(
+                company.getCompanyId(),
+                company.getName(),
+                company.getDescription(),
+                "",
+                displayRole(userId, appointment, company),
+                company.getStatus().name(),
+                company.getOwnersIds().size() + company.getManagers().size(),
+                countActiveEvents(company.getCompanyId()),
+                managerPermissions);
+    }
+
+    private static String displayRole(int userId, CompanyAppointment appointment, ProductionCompany company) {
+        if (company.getFounderId() == userId) return "Founder";
+        if (appointment.getRole() == CompanyRole.Owner) return "Co-owner";
+        if (appointment.getRole() == CompanyRole.Manager) return "Manager";
+        return appointment.getRole().name();
+    }
+
+    private int countActiveEvents(int companyId) {
+        int count = 0;
+        for (Event event : eventRepository.findByCompanyId(companyId)) {
+            EventStatus status = event.getStatus();
+            if (status == EventStatus.ON_SALE || status == EventStatus.SCHEDULED || status == EventStatus.SOLD_OUT) {
+                count++;
+            }
+        }
+        return count;
+    }
 
     private int authenticate(String token) {
         if (!sessionManager.validateToken(token)) {

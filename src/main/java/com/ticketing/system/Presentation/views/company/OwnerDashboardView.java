@@ -1,5 +1,6 @@
 package com.ticketing.system.Presentation.views.company;
 
+import com.ticketing.system.Core.Application.dto.UserCompanyDTO;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
@@ -7,10 +8,10 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkStat;
 import com.ticketing.system.Presentation.components.kit.LkTile;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.presenters.company.MyCompaniesPresenter;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
-import com.ticketing.system.Presentation.session.MockCompanies;
 import com.ticketing.system.Presentation.views.admin.CompanySalesView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -19,17 +20,14 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
-import java.util.List;
-
 @Route(value = "owner", layout = WorkspaceLayout.class)
 @PageTitle("Workspace · TicketHub")
 @PermitAll
 @RequireCapability(Capability.OWNER_WORKSPACE)
 public class OwnerDashboardView extends LkPage {
 
-    public OwnerDashboardView() {
-        List<MockCompanies.Company> companies = MockCompanies.forCurrentUser();
-        MockCompanies.Company company = companies.get(0); // gated → guaranteed non-empty
+    public OwnerDashboardView(MyCompaniesPresenter membershipPresenter) {
+        UserCompanyDTO company = membershipPresenter.currentCompany();
 
         title("Workspace");
         subtitle(company.name() + "  ·  you are the " + company.role());
@@ -43,7 +41,7 @@ public class OwnerDashboardView extends LkPage {
         add(buildTiles());
     }
 
-    private Component buildStats(MockCompanies.Company company) {
+    private Component buildStats(UserCompanyDTO company) {
         Div stats = new Div();
         stats.addClassName("ow-stats");
         boolean fresh = company.activeEvents() == 0;
@@ -59,12 +57,6 @@ public class OwnerDashboardView extends LkPage {
         return stats;
     }
 
-    /**
-     * Build the tile grid, dropping any tile whose target view the user
-     * doesn't have access to. Without this filter, a manager clicking
-     * (say) "Managers" would just bounce off the capability gate and
-     * land back here — the dead-click UX problem.
-     */
     private Component buildTiles() {
         Div tiles = new Div();
         tiles.addClassName("ow-tiles");
@@ -99,8 +91,6 @@ public class OwnerDashboardView extends LkPage {
                 "Visual AND/OR builder for company- or event-level rules.",
                 PurchasePolicyEditorView.class));
 
-        // "Register new company" is universal — any signed-in user can start
-        // a new company and become its founder.
         if (Capabilities.has(Capability.REGISTER_COMPANY))
             tiles.add(tile("briefcase", "Register New Company",
                 "Found another production company. You become the founder.",
