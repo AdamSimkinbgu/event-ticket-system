@@ -1,6 +1,7 @@
 package com.ticketing.system.Presentation.views.order;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
+import com.ticketing.system.Presentation.components.Money;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
@@ -13,7 +14,6 @@ import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.order.CartPresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
-import com.ticketing.system.Presentation.views.auth.LoginView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -21,7 +21,10 @@ import com.vaadin.flow.component.html.NativeButton;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
+
+import java.util.UUID;
 
 @Route(value = "cart", layout = MainLayout.class)
 @PageTitle("Cart · TicketHub")
@@ -31,6 +34,7 @@ public class CartView extends LkPage {
     private final CartPresenter presenter;
     private final String credential;
     private ActiveOrderDTO activeOrder;
+    private long subtotalCents;
 
     private LkCol linesCol;
     private Span sub, total, subText;
@@ -38,17 +42,17 @@ public class CartView extends LkPage {
 
     public CartView(CartPresenter presenter) {
         this.presenter = presenter;
-        this.credential = AuthSession.token();
+        this.credential = resolveCredential();
 
         switch (presenter.loadCart(credential)) {
-            case CartPresenter.LoadOutcome.NotAuthenticated na -> {
-                UI.getCurrent().navigate(LoginView.class);
-                return;
+            case CartPresenter.LoadOutcome.Shown s -> {
+                this.activeOrder   = s.order();
+                this.subtotalCents = s.subtotalCents();
             }
-            case CartPresenter.LoadOutcome.Shown s -> this.activeOrder = s.order();
-            case CartPresenter.LoadOutcome.Empty e -> this.activeOrder = null;
+            case CartPresenter.LoadOutcome.Empty e -> clearCart();
+            case CartPresenter.LoadOutcome.NotAuthenticated na -> clearCart();
             case CartPresenter.LoadOutcome.Failure f -> {
-                this.activeOrder = null;
+                clearCart();
                 Toasts.failure("Could not load your cart: " + f.reason());
             }
         }   // no default — a new variant forces an update here
@@ -56,6 +60,28 @@ public class CartView extends LkPage {
         title("Your cart");
         renderHeaderSubtitle();
         add(buildSplit());
+    }
+
+    /** Member token if signed in, otherwise the guest session id (same key SeatPicker/Checkout use). */
+    private String resolveCredential() {
+        String token = AuthSession.token();
+        return token != null ? token : guestSessionId();
+    }
+
+    private String guestSessionId() {
+        VaadinSession session = VaadinSession.getCurrent();
+        if (session == null) return null;
+        String guestId = (String) session.getAttribute("guestSessionId");
+        if (guestId == null) {
+            guestId = UUID.randomUUID().toString();
+            session.setAttribute("guestSessionId", guestId);
+        }
+        return guestId;
+    }
+
+    private void clearCart() {
+        this.activeOrder   = null;
+        this.subtotalCents = 0L;
     }
 
     private Component buildSplit() {
@@ -106,7 +132,8 @@ public class CartView extends LkPage {
         removeBtn.addClickListener(e -> {
             switch (presenter.removeLine(credential, line)) {
                 case CartPresenter.RemoveOutcome.Removed r -> {
-                    this.activeOrder = r.order();
+                    this.activeOrder   = r.order();
+                    this.subtotalCents = r.subtotalCents();
                     populateLines();
                     renderHeaderSubtitle();
                     renderTotals();
@@ -121,7 +148,7 @@ public class CartView extends LkPage {
 
         Div priceTag = new Div();
         priceTag.addClassName("bz-cartline-price");
-        priceTag.setText(formatPrice(line.pricePerTicket()));
+        priceTag.setText(Money.format(Money.toCents(line.pricePerTicket())));
         lineDiv.add(priceTag);
 
         return lineDiv;
@@ -201,13 +228,12 @@ public class CartView extends LkPage {
     }
 
     private void renderTotals() {
-        int subtotal = activeOrder != null ? (int) Math.round(activeOrder.currentTotalPrice()) : 0;
         boolean empty = activeOrder == null || activeOrder.lines().isEmpty();
-        int totalCents = empty ? 0 : subtotal;
+        long shownTotal = empty ? 0L : subtotalCents;
 
-        if (sub != null)   sub.setText(formatPrice(subtotal));
+        if (sub != null)   sub.setText(Money.format(shownTotal));
         if (total != null) total.getElement().setProperty("innerHTML",
-            "<b style='font-size:17px'>" + formatPrice(totalCents) + "</b>");
+            "<b style='font-size:17px'>" + Money.format(shownTotal) + "</b>");
         if (subText != null) {
             subText.setText(empty
                 ? "Add tickets from Browse to start an order."
@@ -234,11 +260,6 @@ public class CartView extends LkPage {
         l.getElement().setProperty("innerHTML", "<b style='font-size:17px'>" + label + "</b>");
         r.add(l, value);
         return r;
-    }
-
-    private static String formatPrice(double cents) {
-        int totalCents = (int) Math.round(cents);
-        return String.format("$%d.%02d", totalCents / 100, Math.abs(totalCents % 100));
     }
 
     private static String escape(String s) {

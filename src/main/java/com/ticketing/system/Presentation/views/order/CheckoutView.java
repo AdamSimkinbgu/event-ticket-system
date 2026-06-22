@@ -6,6 +6,7 @@ import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
+import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
@@ -18,9 +19,8 @@ import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.Key;
+import com.vaadin.flow.component.Shortcuts;
 import com.vaadin.flow.component.UI;
-import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.textfield.EmailField;
@@ -58,6 +58,9 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     private long subtotalCents;
     private long totalCents;
 
+    /** Guards against a second charge from a rapid double-click / Enter. */
+    private boolean paymentInProgress;
+
     private final TextField    cardholder = new TextField("Cardholder name");
     private final TextField    cardNumber  = new TextField("Card number");
     private final TextField    expiry      = new TextField("Expiry");
@@ -66,12 +69,12 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     private final EmailField   guestEmail  = new EmailField("Your email");
     private final IntegerField guestAge    = new IntegerField("Your age");
 
-    private Div    linesContainer;
-    private Span   subtotalSpan;
-    private Span   totalSpan;
-    private Button payButton;
-    private Span   timerSpan;
-    private Button editCartBtn;
+    private Div   linesContainer;
+    private Span  subtotalSpan;
+    private Span  totalSpan;
+    private LkBtn payButton;
+    private Span  timerSpan;
+    private LkBtn editCartBtn;
 
     /** Vaadin-free expiry callback; the presenter invokes it, the view repaints. */
     private final CheckoutPresenter.ExpiryListener expiryListener =
@@ -117,7 +120,9 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
         resolveIdentity();
-        loadAndApply();
+        if (reload() instanceof CheckoutPresenter.LoadOutcome.Failure) {
+            Toasts.warn("Could not load your cart — please try again.");
+        }
 
         if (getChildren().findAny().isEmpty()) {
             buildPage();
@@ -153,9 +158,10 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         return guestId;
     }
 
-    /** Ask the presenter for the order + pricing and store it; no service call here. */
-    private void loadAndApply() {
-        switch (presenter.loadOrder(memberToken, sessionId)) {
+    /** Reload order + pricing into view state; returns the outcome for the caller to message on. */
+    private CheckoutPresenter.LoadOutcome reload() {
+        CheckoutPresenter.LoadOutcome outcome = presenter.loadOrder(memberToken, sessionId);
+        switch (outcome) {
             case CheckoutPresenter.LoadOutcome.Loaded l -> {
                 this.activeOrder   = l.order();
                 this.subtotalCents = l.pricing().subtotalCents();
@@ -163,11 +169,9 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             }
             case CheckoutPresenter.LoadOutcome.Empty e -> clearOrder();
             case CheckoutPresenter.LoadOutcome.NotAuthenticated na -> clearOrder();
-            case CheckoutPresenter.LoadOutcome.Failure f -> {
-                clearOrder();
-                Toasts.warn("Could not load your cart — please try again.");
-            }
+            case CheckoutPresenter.LoadOutcome.Failure f -> clearOrder();
         }
+        return outcome;
     }
 
     private void clearOrder() {
@@ -201,8 +205,9 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                 empty.setText("No items in cart. Add tickets from Browse first.");
             } else {
                 empty.setText("Sign in to view your saved cart, or browse events as a guest.");
-                Button signInBtn = new Button("Sign in", e -> UI.getCurrent().navigate("login"));
-                signInBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+                LkBtn signInBtn = new LkBtn("Sign in")
+                        .variant(LkBtn.Variant.primary)
+                        .onClick(e -> UI.getCurrent().navigate("login"));
                 signInBtn.getStyle().set("margin-top", "10px");
                 empty.add(signInBtn);
             }
@@ -217,8 +222,8 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         if (totalSpan    != null) totalSpan.setText(formatCents(totalCents));
 
         if (payButton != null) {
-            payButton.setText("Pay " + formatCents(totalCents));
-            payButton.setEnabled(totalCents > 0);
+            payButton.label("Pay " + formatCents(totalCents));
+            payButton.getElement().setEnabled(totalCents > 0);
         }
 
         if (timerSpan != null && activeOrder != null
@@ -282,11 +287,12 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         // Coupon is captured but not applied (no coupon backend yet) — left inline on purpose.
         coupon.setPlaceholder("Coupon code");
         coupon.getStyle().set("flex", "1 1 auto");
-        Button apply = new Button("Apply", e -> {
-            if (coupon.isEmpty()) Toasts.warn("Enter a coupon code first.");
-            else Toasts.success("Coupon applied (no discount in placeholder).");
-        });
-        apply.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        LkBtn apply = new LkBtn("Apply")
+                .variant(LkBtn.Variant.tertiary)
+                .onClick(e -> {
+                    if (coupon.isEmpty()) Toasts.warn("Enter a coupon code first.");
+                    else Toasts.success("Coupon applied (no discount in placeholder).");
+                });
         LkRow couponRow = new LkRow().gap(8);
         couponRow.add(coupon, apply);
         foot.add(couponRow);
@@ -300,8 +306,10 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         totals.add(summaryRow("Total",    totalSpan, true));
         foot.add(totals);
 
-        editCartBtn = new Button("Edit cart", e -> UI.getCurrent().navigate("cart"));
-        editCartBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
+        editCartBtn = new LkBtn("Edit cart")
+                .variant(LkBtn.Variant.tertiary)
+                .size(LkBtn.Size.s)
+                .onClick(e -> UI.getCurrent().navigate("cart"));
         editCartBtn.getStyle().set("margin-top", "8px");
 
         orderCard.add(foot);
@@ -318,7 +326,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                 + (line.seatNumber() != null ? " · " + line.seatNumber() : "");
         Span label = new Span(labelText);
 
-        long lineCents = Math.round(line.pricePerTicket() * 100);
+        long lineCents = CheckoutPresenter.toCents(line.pricePerTicket());
         Span price = new Span(formatCents(lineCents));
         price.getStyle().set("font-weight", "700");
 
@@ -382,11 +390,13 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
 
         col.add(Lk.divider());
 
-        payButton = new Button("Pay " + formatCents(totalCents), e -> attemptPay());
-        payButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_LARGE);
-        payButton.setWidthFull();
-        payButton.addClickShortcut(Key.ENTER);
-        payButton.setEnabled(totalCents > 0);
+        payButton = new LkBtn("Pay " + formatCents(totalCents))
+                .variant(LkBtn.Variant.primary)
+                .size(LkBtn.Size.l)
+                .full()
+                .onClick(e -> attemptPay());
+        Shortcuts.addShortcutListener(payButton, this::attemptPay, Key.ENTER);
+        payButton.getElement().setEnabled(totalCents > 0);
         col.add(payButton);
 
         Span hint = new Span();
@@ -427,15 +437,32 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             }
         }
 
-        // (b) re-check the reservation hasn't expired since the page rendered
-        loadAndApply();
-        if (totalCents == 0L) {
-            syncDynamicUI();
-            Toasts.failure("Your reservation has expired. Please add tickets again.");
-            return;
+        // (b) re-check the reservation; distinct messages for expiry vs. load failure
+        CheckoutPresenter.LoadOutcome reloaded = reload();
+        syncDynamicUI();
+        switch (reloaded) {
+            case CheckoutPresenter.LoadOutcome.Loaded l -> { /* still valid — continue */ }
+            case CheckoutPresenter.LoadOutcome.Failure f -> {
+                Toasts.failure("Couldn't reach the server. Please try again.");
+                return;
+            }
+            case CheckoutPresenter.LoadOutcome.Empty e -> {
+                Toasts.failure("Your reservation has expired. Please add tickets again.");
+                return;
+            }
+            case CheckoutPresenter.LoadOutcome.NotAuthenticated na -> {
+                Toasts.failure("Your reservation has expired. Please add tickets again.");
+                return;
+            }
         }
 
-        // (c) ask the presenter, then switch on the labelled outcome — no try/catch here
+        // (c) guard against double submission, then charge — no try/catch here
+        if (paymentInProgress) {
+            return;
+        }
+        paymentInProgress = true;
+        payButton.getElement().setEnabled(false);
+
         CheckoutPresenter.PayOutcome outcome = isMember
             ? presenter.payAsMember(memberToken, cardNumber.getValue())
             : presenter.payAsGuest(sessionId, guestEmail.getValue().trim(),
@@ -444,9 +471,10 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         switch (outcome) {
             case CheckoutPresenter.PayOutcome.Success ok -> {
                 Toasts.success("Payment successful — "
-                        + formatCents(Math.round(ok.result().totalCharged() * 100))
+                        + formatCents(CheckoutPresenter.toCents(ok.result().totalCharged()))
                         + " charged.");
                 UI.getCurrent().navigate("order/" + ok.result().orderReceiptId());
+                return;   // navigating away — keep the button locked
             }
             case CheckoutPresenter.PayOutcome.PaymentDeclined d ->
                 Toasts.failure("Payment declined: " + d.reason());
@@ -457,6 +485,10 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             case CheckoutPresenter.PayOutcome.Failure f ->
                 Toasts.failure("Payment could not be completed. Please try again or contact support.");
         }
+
+        // reached only on a non-success outcome — allow another attempt
+        paymentInProgress = false;
+        payButton.getElement().setEnabled(totalCents > 0);
     }
 
     private static String formatCents(long cents) {

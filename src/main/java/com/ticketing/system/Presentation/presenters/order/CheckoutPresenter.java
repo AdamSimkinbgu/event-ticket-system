@@ -17,6 +17,7 @@ import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Core.Domain.exceptions.IdempotencyConflictException;
 import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryException;
 import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
+import com.ticketing.system.Presentation.components.Money;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -42,11 +43,7 @@ public class CheckoutPresenter {
     private final CheckoutService    checkoutService;
     private final ISessionManager    sessionManager;
 
-    /**
-     * Per-view expiry callbacks. The presenter is a Spring singleton, so this
-     * registry lets every open CheckoutView react to the Core OrderExpiredEvent
-     * without itself importing or subscribing to a Core type.
-     */
+   
     private final Set<ExpiryListener> expiryListeners = ConcurrentHashMap.newKeySet();
 
     @Autowired
@@ -58,12 +55,8 @@ public class CheckoutPresenter {
         this.sessionManager     = sessionManager;
     }
 
-    // ---- identity -------------------------------------------------------
-
-    /**
-     * Resolve who the caller is from their auth token. Fully defensive: a
-     * malformed/expired token never throws out of here — it resolves to guest.
-     */
+   
+     
     public Identity resolveIdentity(String memberToken) {
         try {
             if (memberToken != null && sessionManager.validateToken(memberToken)) {
@@ -77,9 +70,6 @@ public class CheckoutPresenter {
 
     public record Identity(boolean member, Integer userId) { }
 
-    // ---- load -----------------------------------------------------------
-
-    /** Load the order for member (token) or guest (sessionId), with pricing. */
     public LoadOutcome loadOrder(String memberToken, String guestSessionId) {
         try {
             if (memberToken != null && sessionManager.validateToken(memberToken)) {
@@ -102,21 +92,19 @@ public class CheckoutPresenter {
         return new LoadOutcome.Loaded(order, price(order));
     }
 
-    /**
-     * Single source of pricing truth. Total equals the ticket subtotal — the
-     * exact amount {@code CheckoutService} charges — so the displayed total
-     * always matches the charge.
-     */
-    private Pricing price(ActiveOrderDTO order) {
+           private Pricing price(ActiveOrderDTO order) {
         long subtotal = order.lines().stream()
-                .mapToLong(l -> Math.round(l.pricePerTicket() * 100))
+                .mapToLong(l -> Money.toCents(l.pricePerTicket()))
                 .sum();
         return new Pricing(subtotal, subtotal);
     }
 
     public record Pricing(long subtotalCents, long totalCents) { }
 
-    // ---- pay ------------------------------------------------------------
+    public static long toCents(double amount) {
+        return Math.round(amount * 100);
+    }
+
 
     public PayOutcome payAsMember(String memberToken, String rawCardNumber) {
         return runPay(() -> checkoutService.checkoutMember(
@@ -153,9 +141,7 @@ public class CheckoutPresenter {
         return "tok_" + cardNumber.replaceAll("\\s+", "");
     }
 
-    // ---- order-expiry push (keeps Core out of the View) -----------------
 
-    /** Vaadin-free callback a View implements to learn its order expired. */
     public interface ExpiryListener {
         /** True if this expiry event concerns the order this listener cares about. */
         boolean matches(int userId, String sessionId);
