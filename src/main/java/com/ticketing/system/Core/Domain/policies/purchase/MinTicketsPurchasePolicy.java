@@ -24,6 +24,11 @@ public class MinTicketsPurchasePolicy implements PurchasePolicy, InvariantChecke
             throw new IllegalArgumentException("Purchase context cannot be null");
         }
 
+        // The minimum is only enforced at checkout — at reserve the cart is still being built up.
+        if (context.getStage() == PurchaseStage.RESERVE) {
+            return true;
+        }
+
         return context.getQuantity() >= minimumTickets;
     }
 

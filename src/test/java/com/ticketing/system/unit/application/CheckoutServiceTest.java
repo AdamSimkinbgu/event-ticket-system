@@ -63,6 +63,7 @@ import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.User;
+import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.policies.purchase.AgePurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.MaxTicketsPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.MinTicketsPurchasePolicy;
@@ -142,7 +143,8 @@ class CheckoutServiceTest {
                 mockPaymentGateway,
                 mockNotificationService,
                 mockiSessionManager,
-                mockUserRepository
+                mockUserRepository,
+                mock(IProductionCompanyRepository.class)
         );
 
         mockOrder = mock(ActiveOrder.class);

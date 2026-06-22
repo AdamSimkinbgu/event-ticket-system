@@ -36,6 +36,8 @@ import org.mockito.ArgumentCaptor;
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
+import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.events.EventStatus;
@@ -82,7 +84,9 @@ public class ReservationServiceTest {
                 eventRepository,
                 activeOrderRepository,
                 sessionManager,
-                notificationService
+                notificationService,
+                mock(IProductionCompanyRepository.class),
+                mock(IUserRepository.class)
         );
     }
 

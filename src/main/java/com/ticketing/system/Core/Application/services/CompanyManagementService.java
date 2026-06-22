@@ -524,7 +524,8 @@ public class CompanyManagementService {
                             .filter(ticket -> companyEventIdSet.contains(ticket.getEventId()))
                             .toList();
 
-                    return new PurchaseHistoryDTO(List.of(mapper.toPurchaseRecordDTO(receipt, companyTickets)));
+                    return new PurchaseHistoryDTO(List.of(mapper.toPurchaseRecordDTO(
+                            receipt, companyTickets, eventRepository, companyRepository, userRepository)));
                     // use overloaded mapper to pass the filtered list of tickets for richer DTO construction without bloating service logic
                 }).toList();
 
