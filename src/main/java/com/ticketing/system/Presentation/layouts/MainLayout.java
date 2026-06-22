@@ -76,71 +76,75 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         rebuildTopBar(findActiveLabel(event));
     }
 
-    private void rebuildTopBar(String activeLabel) {
-        if (topBar != null) topBar.getElement().removeFromParent();
+   private void rebuildTopBar(String activeLabel) {
+    if (topBar != null) topBar.getElement().removeFromParent();
 
-        boolean signedIn = AuthSession.isSignedIn();
-        String name = signedIn ? AuthSession.displayName() : "Guest";
+    boolean signedIn = AuthSession.isSignedIn();
+    String name = signedIn ? AuthSession.displayName() : "Guest";
 
-        // Read cart state from the real service
-                // Cart badge: cache for 10 seconds to avoid sync calls on every nav
-        long now = System.currentTimeMillis();
-        Long lastFetchMs = (Long) VaadinSession.getCurrent().getAttribute("cart.fetch.time");
-        Integer cachedSize = (Integer) VaadinSession.getCurrent().getAttribute("cart.size");
-        Long cachedDeadlineMs = (Long) VaadinSession.getCurrent().getAttribute("cart.deadline");
-        
-        int cartSize = 0;
-        Long cartDeadlineMs = null;
-        
-        if (lastFetchMs != null && (now - lastFetchMs) < 10_000 && cachedSize != null) {
-            // Use cached value
-            cartSize = cachedSize;
-            cartDeadlineMs = cachedDeadlineMs;
-        } else {
-            // Fetch fresh value
-            try {
-                String credential = identity.credential();
-                ActiveOrderDTO order = (credential != null)
-                        ? reservationService.viewMyActiveOrder(credential) : null;
-                if (order != null && !order.lines().isEmpty()) {
-                    cartSize = order.lines().size();
-                    long remSec = order.remainingSecondsBeforeExpiry();
-                    if (remSec > 0) {
-                        cartDeadlineMs = System.currentTimeMillis() + remSec * 1000L;
+    int cartSize = 0;
+    Long cartDeadlineMs = null;
+
+    VaadinSession session = VaadinSession.getCurrent();
+    if (session != null) {
+        session.lock();
+        try {
+            long now = System.currentTimeMillis();
+            Long lastFetchMs = (Long) session.getAttribute("cart.fetch.time");
+            Integer cachedSize = (Integer) session.getAttribute("cart.size");
+            Long cachedDeadlineMs = (Long) session.getAttribute("cart.deadline");
+
+            if (lastFetchMs != null && (now - lastFetchMs) < 10_000 && cachedSize != null) {
+                cartSize = cachedSize;
+                cartDeadlineMs = cachedDeadlineMs;
+            } else {
+                try {
+                    String credential = identity.credential();
+                    ActiveOrderDTO order = (credential != null)
+                            ? reservationService.viewMyActiveOrder(credential) : null;
+                    if (order != null && !order.lines().isEmpty()) {
+                        cartSize = order.lines().size();
+                        long remSec = order.remainingSecondsBeforeExpiry();
+                        if (remSec > 0) {
+                            cartDeadlineMs = now + remSec * 1000L;
+                        }
                     }
+                } catch (Exception e) {
+                    // Log but don't fail topbar render
                 }
-                // Cache the result
-                VaadinSession.getCurrent().setAttribute("cart.size", cartSize);
-                VaadinSession.getCurrent().setAttribute("cart.deadline", cartDeadlineMs);
-                VaadinSession.getCurrent().setAttribute("cart.fetch.time", now);
-            } catch (Exception ignored) { }
+                session.setAttribute("cart.size", cartSize);
+                session.setAttribute("cart.deadline", cartDeadlineMs);
+                session.setAttribute("cart.fetch.time", now);
+            }
+        } finally {
+            session.unlock();
         }
-        List<LkTopBar.NavItem> nav = new ArrayList<>();
-        nav.add(new LkTopBar.NavItem("Browse",     BrowseEventsView.class));
-        nav.add(new LkTopBar.NavItem("My Tickets", MyAccountView.class));
-        // An admin who is also browsing as a member gets a fast-jump tab into
-        // the platform shell. Driven by Capabilities so a dev-panel toggle
-        // flips it on without rewiring routes.
-        if (Capabilities.has(Capability.ADMIN_WORKSPACE)) {
-            nav.add(new LkTopBar.NavItem("Admin", AdminDashboardView.class));
-        }
-
-        LkTopBar bar = new LkTopBar(LkTopBar.Variant.MAIN)
-            .brand("TicketHub", LandingView.class)
-            .nav(nav, activeLabel)
-            .searchDefault()
-            .cart(CartView.class, cartSize, cartDeadlineMs)
-            .bellDefault(false);
-
-        if (signedIn) {
-            bar.account(initials(name), name, buildMemberMenu(name));
-        } else {
-            bar.guestActions(LoginView.class, RegisterView.class);
-        }
-
-        topBar = bar;
-        addToNavbar(topBar);
     }
+
+    List<LkTopBar.NavItem> nav = new ArrayList<>();
+    nav.add(new LkTopBar.NavItem("Browse",     BrowseEventsView.class));
+    nav.add(new LkTopBar.NavItem("My Tickets", MyAccountView.class));
+
+    if (Capabilities.has(Capability.ADMIN_WORKSPACE)) {
+        nav.add(new LkTopBar.NavItem("Admin", AdminDashboardView.class));
+    }
+
+    LkTopBar bar = new LkTopBar(LkTopBar.Variant.MAIN)
+        .brand("TicketHub", LandingView.class)
+        .nav(nav, activeLabel)
+        .searchDefault()
+        .cart(CartView.class, cartSize, cartDeadlineMs)
+        .bellDefault(false);
+
+    if (signedIn) {
+        bar.account(initials(name), name, buildMemberMenu(name));
+    } else {
+        bar.guestActions(LoginView.class, RegisterView.class);
+    }
+
+    topBar = bar;
+    addToNavbar(topBar);
+}
 
     /** Member-persona account menu — wired to {@link AuthSession} + view routes. */
     private LkAccountMenu buildMemberMenu(String name) {
@@ -180,6 +184,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         }
         return null;
     }
+    
 
     private static String initials(String name) {
         if (name == null || name.isBlank()) return "??";

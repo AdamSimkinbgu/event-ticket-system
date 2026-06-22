@@ -1,11 +1,8 @@
 package com.ticketing.system.Presentation.views.catalog;
 
-import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
+import java.util.List;
+
 import com.ticketing.system.Core.Application.dto.InventoryZoneDTO;
-import com.ticketing.system.Core.Application.dto.SeatDTO;
-import com.ticketing.system.Core.Application.dto.VenueMapDTO;
-import com.ticketing.system.Core.Application.services.CatalogService;
-import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Core.Domain.events.ZoneType;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
@@ -22,7 +19,7 @@ import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
 import com.ticketing.system.Presentation.components.venue.VkSeatedZonePicker;
 import com.ticketing.system.Presentation.components.venue.VkStandingZone;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Presentation.session.SessionIdentity;
+import com.ticketing.system.Presentation.presenters.catalog.SeatPickerPresenter;
 import com.ticketing.system.Presentation.views.order.CartView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -34,17 +31,10 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.TreeMap;
-
 /**
- * Zone picker (V2-CAT-03 / V2-RES-01 / V2-RES-02). Loads the selected zone and
- * renders the picker that matches its <b>type</b> — {@link VkSeatedZonePicker} for
- * a SEATED zone, {@link VkQuantitySelector} for a STANDING zone — both fed with
- * real {@code getEventVenueMap} data. New zone types are a compile error in
- * {@link #buildBody} until handled (exhaustive switch on {@link ZoneType}).
+ * Zone picker (V2-CAT-03 / V2-RES-01 / V2-RES-02). Loads the selected zone via presenter
+ * and renders the picker matching its type — {@link VkSeatedZonePicker} for SEATED,
+ * {@link VkQuantitySelector} for STANDING.
  */
 @Route(value = "events/:eventId/seats/:zoneId", layout = MainLayout.class)
 @PageTitle("Pick tickets · TicketHub")
@@ -53,9 +43,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
 
     private static final int SEAT_STEP = 34;
 
-    private final CatalogService catalogService;
-    private final ReservationService reservationService;
-    private final SessionIdentity identity;
+    private final SeatPickerPresenter presenter;
 
     private int eventId;
     private int zoneId;
@@ -68,10 +56,8 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
     private LkBtn holdButton;
     private final Div bodyHolder = new Div();
 
-    public SeatPickerView(CatalogService catalogService, ReservationService reservationService, SessionIdentity identity) {
-        this.catalogService = catalogService;
-        this.reservationService = reservationService;
-        this.identity = identity;
+    public SeatPickerView(SeatPickerPresenter presenter) {
+        this.presenter = presenter;
         add(bodyHolder);
     }
 
@@ -84,34 +70,35 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
 
     private void loadAndBuild() {
         bodyHolder.removeAll();
-        InventoryZoneDTO loaded;
-        try {
-            VenueMapDTO map = catalogService.getEventVenueMap(identity.credential(), eventId);
-            loaded = map.inventoryZones().stream()
-                    .filter(z -> z.getId() == zoneId).findFirst().orElse(null);
-        } catch (RuntimeException ex) {
-            bodyHolder.add(infoBanner("Could not load this zone: " + ex.getMessage()));
-            return;
+        seatPicker = null;
+        qtySelector = null;
+        holdButton = null;
+
+        SeatPickerPresenter.LoadOutcome outcome = presenter.loadZone(eventId, zoneId);
+        switch (outcome) {
+            case SeatPickerPresenter.LoadOutcome.Loaded l -> {
+                this.zone = l.zone();
+                this.zonePrice = l.zone().getPrice();
+                bodyHolder.add(buildBody(l.zoneType()));
+            }
+            case SeatPickerPresenter.LoadOutcome.NotFound nf ->
+                bodyHolder.add(infoBanner(nf.message()));
+            case SeatPickerPresenter.LoadOutcome.Failure f ->
+                bodyHolder.add(infoBanner(f.message()));
         }
-        if (loaded == null) {
-            bodyHolder.add(infoBanner("That zone is no longer available."));
-            return;
-        }
-        this.zone = loaded;
-        this.zonePrice = loaded.getPrice();
-        bodyHolder.add(buildBody());
     }
 
-    private Component buildBody() {
-        return switch (ZoneType.valueOf(zone.getZoneType())) {
+    private Component buildBody(ZoneType zoneType) {
+        return switch (zoneType) {
             case SEATED -> buildSeatedPicker();
             case STANDING -> buildStandingPicker();
         };
     }
 
     private Component buildSeatedPicker() {
-        seatPicker = new VkSeatedZonePicker(buildSeatModels(), this::updateSelectionRail);
-
+        seatPicker = new VkSeatedZonePicker(
+        SeatPickerPresenter.buildSeatModels(zone, SEAT_STEP),
+        this::updateSelectionRail);
         Div wrap = new Div();
         wrap.add(buildBreadcrumb(zone.getName() + " · seated"));
 
@@ -126,34 +113,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         wrap.add(ref);
         return wrap;
     }
-
-    private List<VkSeatedZonePicker.SeatModel> buildSeatModels() {
-        TreeMap<String, List<SeatDTO>> byRow = new TreeMap<>();
-        for (SeatDTO s : zone.getSeats()) {
-            byRow.computeIfAbsent(rowOf(s.label()), k -> new ArrayList<>()).add(s);
-        }
-        List<VkSeatedZonePicker.SeatModel> models = new ArrayList<>();
-        int rowIdx = 0;
-        for (List<SeatDTO> rowSeats : byRow.values()) {
-            rowSeats.sort(Comparator.comparingInt(s -> seatNumber(s.label())));
-            int colIdx = 0;
-            for (SeatDTO s : rowSeats) {
-                models.add(new VkSeatedZonePicker.SeatModel(
-                        s.label(), colIdx * SEAT_STEP, rowIdx * SEAT_STEP, stateFor(s.status())));
-                colIdx++;
-            }
-            rowIdx++;
-        }
-        return models;
-    }
-
-    private static VkSeat.State stateFor(String status) {
-        return switch (status) {
-            case "AVAILABLE" -> VkSeat.State.free;
-            case "SOLD" -> VkSeat.State.sold;
-            default -> VkSeat.State.held;
-        };
-    }
+    
 
     private Component buildSeatCanvas() {
         LkCard card = new LkCard().pad(0);
@@ -201,7 +161,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
     }
 
     private void updateSelectionRail() {
-        if (selectionListCol == null) {
+        if (selectionListCol == null || seatPicker == null) {
             return;
         }
         selectionListCol.removeAll();
@@ -244,24 +204,31 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         Span remove = new Span();
         remove.addClassName("vz-selseat-x");
         remove.add(new LkIcon("close", 15));
-        remove.getElement().addEventListener("click", e -> seatPicker.deselect(label));
+        remove.getElement().addEventListener("click", e -> {
+            if (seatPicker != null) {
+                seatPicker.deselect(label);
+            }
+        });
         row.add(info, remove);
         return row;
     }
 
     private void reserveSeated() {
-        InventorySelectionDTO selection = seatPicker.getSelection();
-        if (selection == null) {
+        if (seatPicker == null || !seatPicker.hasSelection()) {
             return;
         }
+        var selection = seatPicker.getSelection();
         int count = selection.getSeatNumbers().size();
-        try {
-            callReserveService(selection);
-            seatPicker.clearSelection();
-            Toasts.success(count + " seat" + (count == 1 ? "" : "s") + " reserved — continue to cart.");
-            UI.getCurrent().navigate(CartView.class);
-        } catch (Exception ex) {
-            Toasts.failure("Could not reserve seats: " + ex.getMessage());
+        
+        SeatPickerPresenter.ReserveOutcome outcome = presenter.reserveSeated(selection, eventId, zoneId);
+        switch (outcome) {
+            case SeatPickerPresenter.ReserveOutcome.Success s -> {
+                seatPicker.clearSelection();
+                Toasts.success(count + " seat" + (count == 1 ? "" : "s") + " reserved — continue to cart.");
+                UI.getCurrent().navigate(CartView.class);
+            }
+            case SeatPickerPresenter.ReserveOutcome.Failure f ->
+                Toasts.failure(f.message());
         }
     }
 
@@ -292,7 +259,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
     }
 
     private void updateHoldButton() {
-        if (holdButton == null) {
+        if (holdButton == null || qtySelector == null) {
             return;
         }
         int q = qtySelector.getQuantity();
@@ -303,18 +270,20 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
     }
 
     private void reserveStanding() {
-        InventorySelectionDTO selection = qtySelector.getSelection();
-        if (selection == null) {
+        if (qtySelector == null || !qtySelector.hasSelection()) {
             Toasts.failure("No tickets available.");
             return;
         }
         int q = qtySelector.getQuantity();
-        try {
-            callReserveService(selection);
-            Toasts.success(q + " ticket" + (q == 1 ? "" : "s") + " reserved — continue to cart.");
-            UI.getCurrent().navigate(CartView.class);
-        } catch (Exception ex) {
-            Toasts.failure("Could not reserve tickets: " + ex.getMessage());
+        
+        SeatPickerPresenter.ReserveOutcome outcome = presenter.reserveStanding(q, eventId, zoneId);
+        switch (outcome) {
+            case SeatPickerPresenter.ReserveOutcome.Success s -> {
+                Toasts.success(q + " ticket" + (q == 1 ? "" : "s") + " reserved — continue to cart.");
+                UI.getCurrent().navigate(CartView.class);
+            }
+            case SeatPickerPresenter.ReserveOutcome.Failure f ->
+                Toasts.failure(f.message());
         }
     }
 
@@ -384,40 +353,12 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         return cell;
     }
 
-    private void callReserveService(InventorySelectionDTO selection) {
-        if (identity.isMember()) {
-            reservationService.reserveForMember(identity.memberToken(), eventId, zoneId, selection);
-        } else {
-            reservationService.reserveForGuest(identity.guestSessionId(), eventId, zoneId, selection);
-        }
-    }
-
     private Component infoBanner(String message) {
         LkBanner banner = new LkBanner();
         banner.tone(LkBanner.Tone.info);
         banner.setIcon(new LkIcon("info", 18));
         banner.setBody(new Span(message));
         return banner;
-    }
-
-    private static String rowOf(String label) {
-        int i = 0;
-        while (i < label.length() && !Character.isDigit(label.charAt(i))) {
-            i++;
-        }
-        return i > 0 ? label.substring(0, i) : label;
-    }
-
-    private static int seatNumber(String label) {
-        int i = 0;
-        while (i < label.length() && !Character.isDigit(label.charAt(i))) {
-            i++;
-        }
-        try {
-            return Integer.parseInt(label.substring(i));
-        } catch (NumberFormatException e) {
-            return 0;
-        }
     }
 
     private static int parseId(String s) {

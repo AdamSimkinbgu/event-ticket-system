@@ -1,5 +1,8 @@
 package com.ticketing.system.Presentation.views.order;
 
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Presentation.components.Money;
 import com.ticketing.system.Presentation.components.Toasts;
@@ -11,7 +14,6 @@ import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
-import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.order.CheckoutPresenter;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
@@ -30,14 +32,18 @@ import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
-@Route(value = "checkout", layout = MainLayout.class)
+@Route(value = "checkout", layout = com.ticketing.system.Presentation.layouts.MainLayout.class)
 @PageTitle("Checkout · TicketHub")
 @AnonymousAllowed
 public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNavigationObserver {
 
+    private static final String IDEMPOTENCY_ATTR = "checkout.idempotencyKey";
+
     private final CheckoutPresenter presenter;
+    private final Object uiLock = new Object();
 
     private String  memberToken;
     private String  sessionId;
@@ -45,12 +51,13 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
     private int     resolvedUserId;
 
     private volatile UI ui;
+    private boolean listenerRegistered = false;
 
     private ActiveOrderDTO activeOrder;
     private long subtotalCents;
     private long totalCents;
 
-    private volatile boolean paymentInProgress;
+    private final AtomicBoolean paymentInProgress = new AtomicBoolean(false);
 
     private final TextField    cardholder = new TextField("Cardholder name");
     private final TextField    cardNumber  = new TextField("Card number");
@@ -79,33 +86,46 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
 
             @Override
             public void onExpired() {
-                UI currentUi = ui;
-                if (currentUi == null || !currentUi.isAttached()) return;
-                currentUi.access(() -> {
-                    clearOrder();
-                    syncDynamicUI();
-                    Toasts.failure("Your reservation has expired. Please add tickets again.");
-                });
+                synchronized (uiLock) {
+                    UI currentUi = ui;
+                    if (currentUi == null || !currentUi.isAttached()) return;
+                    currentUi.access(() -> {
+                        clearOrder();
+                        syncDynamicUI();
+                        Toasts.failure("Your reservation has expired. Please add tickets again.");
+                    });
+                }
             }
         };
 
     public CheckoutView(CheckoutPresenter presenter) {
         this.presenter = presenter;
         this.sessionId = "";
+        this.linesContainer = new Div();
     }
 
     @Override
     protected void onAttach(AttachEvent attachEvent) {
         super.onAttach(attachEvent);
-        this.ui = attachEvent.getUI();
-        presenter.registerExpiryListener(expiryListener);
+        synchronized (uiLock) {
+            this.ui = attachEvent.getUI();
+            if (!listenerRegistered) {
+                presenter.registerExpiryListener(expiryListener);
+                listenerRegistered = true;
+            }
+        }
     }
 
     @Override
     protected void onDetach(DetachEvent detachEvent) {
         super.onDetach(detachEvent);
-        presenter.unregisterExpiryListener(expiryListener);
-        this.ui = null;
+        synchronized (uiLock) {
+            if (listenerRegistered) {
+                presenter.unregisterExpiryListener(expiryListener);
+                listenerRegistered = false;
+            }
+            this.ui = null;
+        }
     }
 
     @Override
@@ -196,7 +216,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
         if (totalSpan    != null) totalSpan.setText(formatCents(totalCents));
 
         if (payButton != null) {
-            payButton.label("Pay " + formatCents(totalCents));
+            payButton.setText("Pay " + formatCents(totalCents));
             payButton.getElement().setEnabled(totalCents > 0);
         }
 
@@ -251,7 +271,6 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
         LkCol col = new LkCol().gap(14);
         LkCard orderCard = new LkCard("Your order").pad(0);
 
-        linesContainer = new Div();
         linesContainer.addClassName("bz-order-lines");
         orderCard.add(linesContainer);
 
@@ -388,13 +407,17 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
     }
 
     private void attemptPay() {
-        if (totalCents == 0L) {
+        if (totalCents <= 0L) {
             Toasts.failure("Your cart is empty.");
             return;
         }
         if (cardholder.isEmpty() || cardNumber.isEmpty()
                 || expiry.isEmpty() || cvc.isEmpty()) {
             Toasts.failure("Please fill in every payment field.");
+            return;
+        }
+        if (cardNumber.getValue().replaceAll("\\s+", "").length() != 16) {
+            Toasts.failure("Card number must be 16 digits.");
             return;
         }
         if (!isMember) {
@@ -427,42 +450,63 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
             }
         }
 
-        if (paymentInProgress) {
+        if (!paymentInProgress.compareAndSet(false, true)) {
             return;
         }
-        paymentInProgress = true;
         payButton.getElement().setEnabled(false);
 
-        CheckoutPresenter.PayOutcome outcome = isMember
-            ? presenter.payAsMember(memberToken, cardNumber.getValue())
-            : presenter.payAsGuest(sessionId, guestEmail.getValue().trim(),
-                                   guestAge.getValue(), cardNumber.getValue());
+        try {
+            CheckoutPresenter.PayOutcome outcome = isMember
+                ? presenter.payAsMember(memberToken, cardNumber.getValue())
+                : presenter.payAsGuest(sessionId, guestEmail.getValue().trim(),
+                                       guestAge.getValue(), cardNumber.getValue());
 
-        switch (outcome) {
-            case CheckoutPresenter.PayOutcome.Success ok -> {
-                presenter.setOrderSession(ok.result());
-                Toasts.success("Payment successful — "
-                        + formatCents(Money.toCents(ok.result().totalCharged()))
-                        + " charged.");
-                UI.getCurrent().navigate("order-confirmed");
-                return;
+            switch (outcome) {
+                case CheckoutPresenter.PayOutcome.Success ok -> {
+                    presenter.setOrderSession(ok.result());
+                    Toasts.success("Payment successful — "
+                            + formatCents(Money.toCents(ok.result().totalCharged()))
+                            + " charged.");
+                    UI.getCurrent().navigate("order-confirmed");
+                    return;
+                }
+                case CheckoutPresenter.PayOutcome.PolicyRejected p ->
+                    Toasts.failure("Cannot purchase: " + p.reason());
+                case CheckoutPresenter.PayOutcome.PaymentDeclined d ->
+                    Toasts.failure("Payment declined: " + d.reason());
+                case CheckoutPresenter.PayOutcome.SoldOut s ->
+                    Toasts.failure("Those seats just sold out. Please choose again.");
+                case CheckoutPresenter.PayOutcome.OrderExpired e ->
+                    Toasts.failure("Your reservation has expired. Please add tickets again.");
+                case CheckoutPresenter.PayOutcome.DuplicateSubmission dup ->
+                    Toasts.warn("This order was already submitted.");
+                case CheckoutPresenter.PayOutcome.Failure f ->
+                    Toasts.failure("Payment could not be completed. Please try again or contact support.");
             }
-            case CheckoutPresenter.PayOutcome.PolicyRejected p ->
-                Toasts.failure("Cannot purchase: " + p.reason());
-            case CheckoutPresenter.PayOutcome.PaymentDeclined d ->
-                Toasts.failure("Payment declined: " + d.reason());
-            case CheckoutPresenter.PayOutcome.SoldOut s ->
-                Toasts.failure("Those seats just sold out. Please choose again.");
-            case CheckoutPresenter.PayOutcome.OrderExpired e ->
-                Toasts.failure("Your reservation has expired. Please add tickets again.");
-            case CheckoutPresenter.PayOutcome.DuplicateSubmission dup ->
-                Toasts.warn("This order was already submitted.");
-            case CheckoutPresenter.PayOutcome.Failure f ->
-                Toasts.failure("Payment could not be completed. Please try again or contact support.");
+        } finally {
+            paymentInProgress.set(false);
+            payButton.getElement().setEnabled(totalCents > 0);
         }
+    }
 
-        paymentInProgress = false;
-        payButton.getElement().setEnabled(totalCents > 0);
+    private String currentIdempotencyKey() {
+        VaadinSession session = VaadinSession.getCurrent();
+        if (session == null) {
+            return UUID.randomUUID().toString();
+        }
+        String key = (String) session.getAttribute(IDEMPOTENCY_ATTR);
+        if (key == null) {
+            key = UUID.randomUUID().toString();
+            session.setAttribute(IDEMPOTENCY_ATTR, key);
+        }
+        return key;
+    }
+
+    private void clearIdempotencyKey() {
+        VaadinSession session = VaadinSession.getCurrent();
+        if (session != null) {
+            session.setAttribute(IDEMPOTENCY_ATTR, null);
+        }
     }
 
     private static String formatCents(long cents) {
