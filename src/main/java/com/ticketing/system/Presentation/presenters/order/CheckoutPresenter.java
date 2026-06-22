@@ -18,6 +18,7 @@ import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Core.Domain.exceptions.IdempotencyConflictException;
 import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryException;
 import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
+import com.ticketing.system.Core.Domain.exceptions.PolicyViolationException;
 import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.vaadin.flow.server.VaadinSession;
 
@@ -113,13 +114,14 @@ public class CheckoutPresenter {
         try {
             return new PayOutcome.Success(charge.run());
         } catch (RuntimeException e) {
-            Throwable cause = (e.getCause() != null) ? e.getCause() : e;
-            if (cause instanceof PaymentGatewayException)        return new PayOutcome.PaymentDeclined(cause.getMessage());
-            if (cause instanceof InsufficientInventoryException) return new PayOutcome.SoldOut(cause.getMessage());
-            if (cause instanceof IdempotencyConflictException)   return new PayOutcome.DuplicateSubmission();
-            log.error("Checkout failed unexpectedly", e);
-            return new PayOutcome.Failure(cause.getMessage());
-        }
+    Throwable cause = (e.getCause() != null) ? e.getCause() : e;
+    if (cause instanceof PolicyViolationException)       return new PayOutcome.PolicyRejected(cause.getMessage());
+    if (cause instanceof PaymentGatewayException)        return new PayOutcome.PaymentDeclined(cause.getMessage());
+    if (cause instanceof InsufficientInventoryException) return new PayOutcome.SoldOut(cause.getMessage());
+    if (cause instanceof IdempotencyConflictException)   return new PayOutcome.DuplicateSubmission();
+    log.error("Checkout failed unexpectedly", e);
+    return new PayOutcome.Failure(cause.getMessage());
+}
     }
 
     private static String newKey() {
@@ -173,10 +175,11 @@ public class CheckoutPresenter {
     }
 
     public sealed interface PayOutcome {
-        record Success(CheckoutResultDTO result) implements PayOutcome { }
-        record PaymentDeclined(String reason)    implements PayOutcome { }
-        record SoldOut(String reason)            implements PayOutcome { }
-        record DuplicateSubmission()             implements PayOutcome { }
-        record Failure(String reason)            implements PayOutcome { }
-    }
+    record Success(CheckoutResultDTO result) implements PayOutcome { }
+    record PolicyRejected(String reason)      implements PayOutcome { }  
+    record PaymentDeclined(String reason)     implements PayOutcome { }
+    record SoldOut(String reason)             implements PayOutcome { }
+    record DuplicateSubmission()              implements PayOutcome { }
+    record Failure(String reason)             implements PayOutcome { }
+}
 }

@@ -33,8 +33,21 @@ import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.Seat;
 import com.ticketing.system.Core.Domain.events.SeatStatus;
 import com.ticketing.system.Core.Domain.events.SeatedZone;
+import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
+import com.ticketing.system.Core.Domain.exceptions.ConcurrentReservationException;
+import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
+import com.ticketing.system.Core.Domain.exceptions.EventNotOnSaleException;
 import com.ticketing.system.Core.Domain.exceptions.IdempotencyConflictException;
+import com.ticketing.system.Core.Domain.exceptions.IdempotencyConflictException;
+import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
+import com.ticketing.system.Core.Domain.exceptions.PolicyViolationException;
+import com.ticketing.system.Core.Domain.exceptions.SessionExpiredException;
+import com.ticketing.system.Core.Domain.exceptions.TicketIssuanceFailedException;
+import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
+import com.ticketing.system.Core.Domain.exceptions.EntityNotFoundException;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
@@ -283,7 +296,7 @@ public class CheckoutService {
             activeOrderRepository.lockForUpdate(orderLockKey);
 
             order = activeOrderRepository.getBySessionId(guestSessionId)
-                    .orElseThrow(() -> new IllegalStateException("Active guest order not found"));
+                    .orElseThrow(() -> new EntityNotFoundException("Active guest order not found"));
             validateOrderForCheckout(order, null);
 
             List<CartLineItem> snapshotItems = List.copyOf(order.getItems());
@@ -315,7 +328,7 @@ public class CheckoutService {
             // ---------------------------------------------------------------
             activeOrderRepository.lockForUpdate(orderLockKey);
             order = activeOrderRepository.getBySessionId(guestSessionId)
-                    .orElseThrow(() -> new IllegalStateException("Active guest order not found in Phase 3"));
+                    .orElseThrow(() -> new EntityNotFoundException("Active guest order not found in Phase 3"));
 
 
             validateOrderStillInCheckout(order);
@@ -372,16 +385,16 @@ public class CheckoutService {
     // We validate member checkout identity by checking that the authentication token is present and valid (i.e. corresponds to an active session in our session manager) and that the user ID can be extracted from the token. This ensures that we can associate the checkout with a specific member for tracking and that we have a valid user ID to process the order. If any of these validations fail, we throw an exception to prevent the checkout from proceeding.
     private int authenticateAndGetUserId(String token) {
         if (token == null || token.isBlank()) {
-            throw new IllegalArgumentException("Missing authentication token");
+            throw new InvalidTokenException("Missing authentication token");
         }
 
         if (!sessionManager.validateToken(token)) {
-            throw new IllegalStateException("Invalid or expired authentication token");
+            throw new AuthenticationFailedException();
         }
 
         int userId = sessionManager.extractUserId(token);
         if (userId <= 0) {
-            throw new IllegalStateException("Invalid user id in token");
+            throw new UserNotFoundException("Invalid user id in token");
         }
 
         return userId;
@@ -393,15 +406,15 @@ public class CheckoutService {
     // We validate guest checkout identity by checking that the guest session ID is present and valid (i.e. corresponds to an active guest session in our session manager) and that the guest email is present. This ensures that we can associate the checkout with a specific guest session for tracking and that we have an email to send the receipt to. If any of these validations fail, we throw an exception to prevent the checkout from proceeding.
     private void validateGuestCheckoutIdentity(String guestSessionId, String guestEmail) {
         if (guestSessionId == null || guestSessionId.isBlank()) {
-            throw new IllegalArgumentException("guestSessionId is required");
+            throw new InvalidTokenException("guestSessionId is required");
         }
 
         if (!sessionManager.validateCredential(guestSessionId)) {
-            throw new IllegalStateException("Invalid or expired guest session");
+            throw new SessionExpiredException();
         }
 
         if (guestEmail == null || guestEmail.isBlank()) {
-            throw new IllegalArgumentException("guestEmail is required");
+            throw new InvalidTokenException("guestEmail is required");
         }
     }
 
@@ -430,11 +443,11 @@ public class CheckoutService {
     // We validate the active order for checkout by checking that it exists and that it is in a state that allows checkout (e.g. not empty, not already bought, etc.). This ensures that we have a valid order to process and that we don't allow checkouts on orders that are not ready for it. If any of these validations fail, we throw an exception to prevent the checkout from proceeding with an invalid order.
     private void validateOrderForCheckout(ActiveOrder order, Integer userId) {
         if (order == null) {
-            throw new IllegalStateException("Active order not found");
+            throw new EntityNotFoundException("Active order not found");
         }
 
         if (!order.validateCanCheckout()) {
-            throw new IllegalStateException("Order cannot checkout");
+            throw new InvalidStateTransitionException("Order cannot checkout");
         }
     }
 
@@ -475,12 +488,12 @@ public class CheckoutService {
             Event event = eventRepository.findById(eventId);
 
             if (event == null) {
-                throw new IllegalStateException("Event not found: " + eventId);
+                throw new EventNotFoundException("Event not found: " + eventId);
             }
 
             if (event.getStatus() != EventStatus.ON_SALE) {
-                throw new IllegalStateException(
-                        "Cannot complete checkout because event " + eventId + " is no longer on sale");
+                throw new EventNotOnSaleException(
+                         eventId , "" + event.getStatus());
             }
         }
     }
@@ -502,7 +515,7 @@ public class CheckoutService {
         for (CartLineItem item : boughtItems) {
             Event event = eventRepository.findById(item.geteventId());
             if (event == null) {
-                throw new IllegalStateException("Event not found: " + item.geteventId());
+                throw new EventNotFoundException("Event not found: " + item.geteventId());
             }
 
             int eventQuantity = quantityByEvent.get(item.geteventId()).intValue();
@@ -596,7 +609,7 @@ public class CheckoutService {
                 .map(item -> {
                     Event event = eventRepository.findById(item.geteventId());
                     if (event == null) {
-                        throw new IllegalStateException("Event not found: " + item.geteventId());
+                        throw new EventNotFoundException("Event not found: " + item.geteventId());
                     }
 
                     return new IssuanceRequestDTO.TicketIssuanceItemDTO(
@@ -628,36 +641,36 @@ public class CheckoutService {
             Integer userId
     ) {
         if (issuanceResult == null) {
-            throw new IllegalStateException("Ticket issuance failed");
+            throw new TicketIssuanceFailedException("Ticket issuance failed");
         }
 
         if (issuanceResult.issuanceTransactionId() == null || issuanceResult.issuanceTransactionId().isBlank()) {
-            throw new IllegalStateException("Ticket issuance transaction id is missing");
+            throw new TicketIssuanceFailedException("Ticket issuance transaction id is missing");
         }
 
         if (issuanceResult.issuerName() == null || issuanceResult.issuerName().isBlank()) {
-            throw new IllegalStateException("Ticket issuer name is missing");
+            throw new TicketIssuanceFailedException("Ticket issuer name is missing");
         }
 
         if (issuanceResult.issuedAt() == null) {
-            throw new IllegalStateException("Ticket issuance time is missing");
+            throw new TicketIssuanceFailedException("Ticket issuance time is missing");
         }
 
         if (issuanceResult.barcodes() == null || issuanceResult.barcodes().isEmpty()) {
-            throw new IllegalStateException("Ticket issuance returned no barcodes");
+            throw new TicketIssuanceFailedException("Ticket issuance returned no barcodes");
         }
 
         if (issuanceResult.barcodes().size() != boughtItems.size()) {
-            throw new IllegalStateException("Ticket issuance count mismatch");
+            throw new TicketIssuanceFailedException("Ticket issuance count mismatch");
         }
 
         for (var barcode : issuanceResult.barcodes()) {
             if (barcode.ticketId() <= 0) {
-                throw new IllegalStateException("Issued ticket id must be positive");
+                throw new TicketIssuanceFailedException("Issued ticket id must be positive");
             }
 
             if (barcode.barcodeValue() == null || barcode.barcodeValue().isBlank()) {
-                throw new IllegalStateException("Issued barcode value must not be blank");
+                throw new TicketIssuanceFailedException("Issued barcode value must not be blank");
             }
         }
     }
@@ -668,11 +681,11 @@ public class CheckoutService {
 
     private void validateOrderStillInCheckout(ActiveOrder order) {
         if (order == null) {
-            throw new IllegalStateException("Active order disappeared during checkout");
+            throw new EntityNotFoundException("Active order disappeared during checkout");
         }
 
         if (!order.isCheckoutInProgress()) {
-            throw new IllegalStateException("Active order is no longer in checkout progress");
+            throw new InvalidStateTransitionException("Active order is no longer in checkout progress");
         }
     }
 
@@ -682,7 +695,7 @@ public class CheckoutService {
         List<String> snapshotSignature = cartLineSignature(snapshotItems);
 
         if (!currentSignature.equals(snapshotSignature)) {
-            throw new IllegalStateException("Active order changed during checkout");
+            throw new ConcurrentReservationException("Active order changed during checkout");
         }
     }
 
@@ -719,7 +732,7 @@ public class CheckoutService {
         for (Map.Entry<Integer, Map<Integer, List<CartLineItem>>> eventEntry : grouped.entrySet()) {
             Event event = eventRepository.findById(eventEntry.getKey());
             if (event == null) {
-                throw new IllegalStateException("Event not found: " + eventEntry.getKey());
+                throw new EventNotFoundException("Event not found: " + eventEntry.getKey());
             }
 
             for (Map.Entry<Integer, List<CartLineItem>> zoneEntry : eventEntry.getValue().entrySet()) {
@@ -732,24 +745,24 @@ public class CheckoutService {
 
                 if (seatNumbers.isEmpty()) {
                     if (zone.isSeated()) {
-                        throw new IllegalStateException("Seated cart item is missing seat numbers");
+                        throw new InsufficientInventoryException("Seated cart item is missing seat numbers");
                     }
 
                     if (zone.getReservedAmount() < zoneItems.size()) {
-                        throw new IllegalStateException("Not enough reserved standing tickets to confirm sale");
+                        throw new InsufficientInventoryException("Not enough reserved standing tickets to confirm sale");
                     }
                 } else {
                     if (zone.isStanding()) {
-                        throw new IllegalStateException("Standing cart item cannot contain seat numbers");
+                        throw new InsufficientInventoryException("Standing cart item cannot contain seat numbers");
                     }
 
                     if (!(zone instanceof SeatedZone seatedZone)) {
-                        throw new IllegalStateException("Zone is not a seated zone");
+                        throw new InsufficientInventoryException("Zone is not a seated zone");
                     }
 
                     for (String seatNumber : seatNumbers) {
                         if (seatedZone.getSeatStatus(seatNumber) != SeatStatus.RESERVED) {
-                            throw new IllegalStateException("Seat " + seatNumber + " is no longer RESERVED — reservation may have expired");
+                            throw new ConcurrentReservationException("Seat " + seatNumber + " is no longer RESERVED — reservation may have expired");
                         }
                         // Ownership check: ensure this checkout's order still holds the seat.
                         // Skip when the seat was reserved without an explicit order key (e.g. test
@@ -758,7 +771,7 @@ public class CheckoutService {
                         Seat seat = seatedZone.getSeatByLabel(seatNumber);  //? Note: ownership check below.
                         String seatOwner = seat.getReservedByOrderKey();
                         if (orderKey != null && !orderKey.equals(seatOwner)) {
-                            throw new IllegalStateException(
+                            throw new ConcurrentReservationException(
                                     "Seat " + seatNumber + " is held by a different order — cannot confirm sale");
                         }
                     }
@@ -1275,7 +1288,7 @@ private void validatePurchasePolicies(List<CartLineItem> boughtItems, Integer us
         Event event = eventRepository.findById(eventId);
 
         if (event == null) {
-            throw new IllegalStateException("Event not found: " + eventId);
+            throw new InvalidTokenException("Event not found: " + eventId);
         }
 
         int buyerId;
@@ -1300,7 +1313,7 @@ private void validatePurchasePolicies(List<CartLineItem> boughtItems, Integer us
     User user = userRepository.getUserById(userId);
 
     if (user == null) {
-        throw new IllegalStateException("User not found: " + userId);
+        throw new UserNotFoundException("User not found: " + userId);
     }
 
     return user.getAge();

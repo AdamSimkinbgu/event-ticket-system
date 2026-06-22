@@ -90,19 +90,15 @@ public class OrderConfirmationView extends LkPage implements BeforeEnterObserver
         LkCard card = new LkCard("Your tickets").pad(0);
 
         LkGrid grid = new LkGrid()
-            .col("Event",   "evt")
-            .col("Date",    "date")
-            .col("Zone",    "zone")
-            .col("Seat",    "seat")
-            .col("Price",   "price", LkGrid.Align.RIGHT)
-            .col("Barcode", "code");
+            .col("Ticket ID",  "ticketId")
+            .col("Barcode",    "barcode");
 
         if (result != null && result.issuedTicketIds() != null && !result.issuedTicketIds().isEmpty()) {
             for (int ticketId : result.issuedTicketIds()) {
-                ticket(grid, "Event details pending", "—", "—", "—", "$0.00", "▮▯▮▯▮ " + String.format("%04X", ticketId));
+                ticketRow(grid, ticketId);
             }
         } else {
-            ticket(grid, "No tickets", "—", "—", "—", "$0.00", "—");
+            ticketRow(grid, 0);
         }
 
         grid.build();
@@ -110,18 +106,19 @@ public class OrderConfirmationView extends LkPage implements BeforeEnterObserver
         return card;
     }
 
-    private void ticket(LkGrid grid, String event, String date, String zone, String seat, String price, String code) {
+    private void ticketRow(LkGrid grid, int ticketId) {
         Map<String, Object> row = new LinkedHashMap<>();
-        Span ev = new Span();
-        ev.getElement().setProperty("innerHTML", "<b>" + escape(event) + "</b>");
-        row.put("evt",   ev);
-        row.put("date",  date);
-        row.put("zone",  zone);
-        row.put("seat",  seat);
-        row.put("price", price);
-        Span barcode = Lk.mono(code);
-        barcode.addClassName("bz-barcode");
-        row.put("code", barcode);
+        
+        if (ticketId > 0) {
+            row.put("ticketId", String.valueOf(ticketId));
+            Span barcode = Lk.mono("▮▯▮▯▮ " + String.format("%04X-%04X", ticketId >> 16, ticketId & 0xFFFF));
+            barcode.addClassName("bz-barcode");
+            row.put("barcode", barcode);
+        } else {
+            row.put("ticketId", "—");
+            row.put("barcode", "—");
+        }
+        
         grid.row(row);
     }
 
@@ -134,9 +131,5 @@ public class OrderConfirmationView extends LkPage implements BeforeEnterObserver
             .variant(LkBtn.Variant.secondary)
             .onClick(e -> UI.getCurrent().navigate(BrowseEventsView.class)));
         return row;
-    }
-
-    private static String escape(String s) {
-        return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }

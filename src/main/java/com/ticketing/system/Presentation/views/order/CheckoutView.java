@@ -47,7 +47,6 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     private long subtotalCents;
     private long totalCents;
 
-    /** Guards against a second charge from a rapid double-click / Enter. */
     private boolean paymentInProgress;
 
     private final TextField    cardholder = new TextField("Cardholder name");
@@ -433,7 +432,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                                    guestAge.getValue(), cardNumber.getValue());
 
         switch (outcome) {
-                       case CheckoutPresenter.PayOutcome.Success ok -> {
+            case CheckoutPresenter.PayOutcome.Success ok -> {
                 presenter.setOrderSession(ok.result());
                 Toasts.success("Payment successful — "
                         + formatCents(CheckoutPresenter.toCents(ok.result().totalCharged()))
@@ -441,6 +440,8 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                 UI.getCurrent().navigate("order-confirmed");
                 return;
             }
+            case CheckoutPresenter.PayOutcome.PolicyRejected p ->
+                Toasts.failure("Cannot purchase: " + p.reason());
             case CheckoutPresenter.PayOutcome.PaymentDeclined d ->
                 Toasts.failure("Payment declined: " + d.reason());
             case CheckoutPresenter.PayOutcome.SoldOut s ->
