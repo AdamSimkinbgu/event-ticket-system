@@ -379,8 +379,14 @@ public class CompanyManagementService {
         for (CompanyAppointment appt : user.getAllCompanyAppointments()) {
             ProductionCompany company = companyRepository.getCompanyById(appt.getCompanyId());
             String companyName = company != null ? company.getName() : "(unknown company)";
-            User inviter = userRepository.getUserById(appt.getInviterId());
-            String fromUsername = inviter != null ? inviter.getUsername() : "(unknown)";
+            // getUserById throws (never returns null) when the inviter no longer
+            // exists, so fall back to a placeholder rather than failing the whole list.
+            String fromUsername;
+            try {
+                fromUsername = userRepository.getUserById(appt.getInviterId()).getUsername();
+            } catch (UserNotFoundException e) {
+                fromUsername = "(unknown)";
+            }
 
             invitations.add(new InvitationDTO(
                     String.valueOf(appt.getAppointmentId()),

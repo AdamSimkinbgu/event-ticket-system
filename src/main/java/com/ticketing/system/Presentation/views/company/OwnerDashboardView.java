@@ -24,7 +24,10 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Route(value = "owner", layout = WorkspaceLayout.class)
 @PageTitle("Workspace · TicketHub")
@@ -86,12 +89,27 @@ public class OwnerDashboardView extends LkPage {
             return new Component[] { newEvent };
         }
 
-        List<String> names = companies.stream().map(MyCompanyDTO::name).toList();
-        LkSelect selector = new LkSelect(selected.name(), names).label("Company");
-        selector.onChange(name -> companies.stream()
-            .filter(c -> c.name().equals(name))
-            .findFirst()
-            .ifPresent(c -> reload(c.companyId())));
+        // Two companies can share a display name, so key the selector on a label
+        // that maps unambiguously back to a single companyId (disambiguating
+        // collisions with the id) — otherwise switching could reload the wrong stats.
+        List<String> labels = new ArrayList<>();
+        Map<String, Integer> idByLabel = new LinkedHashMap<>();
+        String selectedLabel = selected.name();
+        for (MyCompanyDTO c : companies) {
+            String label = idByLabel.containsKey(c.name()) ? c.name() + " · #" + c.companyId() : c.name();
+            labels.add(label);
+            idByLabel.put(label, c.companyId());
+            if (c.companyId() == selected.companyId()) {
+                selectedLabel = label;
+            }
+        }
+        LkSelect selector = new LkSelect(selectedLabel, labels).label("Company");
+        selector.onChange(label -> {
+            Integer companyId = idByLabel.get(label);
+            if (companyId != null) {
+                reload(companyId);
+            }
+        });
         return new Component[] { selector, newEvent };
     }
 

@@ -611,32 +611,9 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
     }
 
 
-    // COMMENTED OUT: this test exercises ReservationService.expireActiveOrders(), which is now
-    // commented out (an orphaned duplicate of the live SessionAndOrderSweeper expiry path). With the
-    // method gone the test no longer compiles and has nothing to verify, so it is parked here
-    // alongside its subject. The equivalent in-checkout guard is already covered for the live path by
+    // NOTE: the in-checkout expiry guard formerly tested here against the now-removed
+    // ReservationService.expireActiveOrders() lives on the live path and is covered by
     // SessionAndOrderSweeperTest.GivenExpiredCartInCheckoutProgress_WhenSweepExpiredOrders_ThenDoNotReleaseOrDelete.
-    // Restore this together with expireActiveOrders/safelyReleaseAndDelete if that path is ever revived.
-    //
-    // @Test
-    // void GivenExpiredOrderInCheckoutProgress_WhenExpireActiveOrders_ThenDoNotReleaseOrDelete() {
-    //     ActiveOrder cart = new ActiveOrder(USER_ID);
-    //     cart.addStandingReservation(EVENT_ID, ZONE_ID, QUANTITY, 100.0, LocalDateTime.now().minusMinutes(30));
-    //     cart.markCheckoutInProgress();
-    //
-    //     when(activeOrderRepository.findExpired()).thenReturn(List.of(cart));
-    //
-    //     reservationService.expireActiveOrders();
-    //
-    //     verify(activeOrderRepository).lockForUpdate("user:" + USER_ID);
-    //     verify(activeOrderRepository).unlock("user:" + USER_ID);
-    //     verify(activeOrderRepository, never()).delete(any());
-    //     verify(eventRepository, never()).lockForUpdate(anyInt());
-    //     verify(eventRepository, never()).save(any());
-    // }
-
-
-
 
 
     @Test

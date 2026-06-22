@@ -107,8 +107,10 @@ public class ManagerListView extends LkPage {
 
     private void activeRow(LkGrid grid, AppointmentInfoDTO m) {
         Map<String, Object> row = new LinkedHashMap<>();
-        Span n = new Span();
-        n.getElement().setProperty("innerHTML", "<b>" + m.targetUsername() + "</b>");
+        // Username is user-controlled — render as text (not innerHTML) so it can't
+        // inject markup. Bold via CSS instead of a <b> tag.
+        Span n = new Span(m.targetUsername());
+        n.getStyle().set("font-weight", "600");
         row.put("name", n);
         row.put("role", new LkBadge(m.role(), LkBadge.Tone.success).small());
         Span p = Lk.muted(permissionLabels(m.grantedPermissions()));
