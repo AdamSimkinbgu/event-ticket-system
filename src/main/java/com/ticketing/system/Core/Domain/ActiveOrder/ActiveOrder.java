@@ -672,7 +672,7 @@ public class ActiveOrder implements InvariantChecked {
             }
 
             return new ActiveOrderDTO(
-                    getUserId(),
+                    userIdOrNull(),
                     sessionId,
                     getCreatedAt(),
                     this.getRemainingTime().getSeconds(),
