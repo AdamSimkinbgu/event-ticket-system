@@ -607,6 +607,9 @@ public class Event implements InvariantChecked {
 
 
 
+    private void setVenueMap(VenueMap venueMap) {
+        this.venueMap = venueMap;
+    }
 
 
 

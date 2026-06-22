@@ -186,7 +186,9 @@ public class EventManagementService {
         User user = userRepository.getUserById(userId);
         user.requirePermissionInCompany(companyId, Permission.MANAGE_INVENTORY);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
-
+        if (company == null) {
+            throw new RuntimeException("Company not found");
+        }
         return eventRepository.findByCompanyId(companyId).stream()
             .map(e -> new EventDetailDTO(
                 String.valueOf(e.getId()),
@@ -203,12 +205,41 @@ public class EventManagementService {
             .toList();
     }
 
+      public EventDetailDTO getEvent(String token, int eventId) {
+        int userId = validateTokenAndGetUserId(token);
+        Event event = eventRepository.findById(eventId);
+        if (event == null) {
+            throw new EventNotFoundException(eventId);
+        }
+        User user = userRepository.getUserById(userId);
+        user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
+        ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
+        if (company == null) {
+            throw new RuntimeException("Company not found");
+        }
+        return new EventDetailDTO(
+            String.valueOf(event.getId()),
+            event.getName(),
+            event.getRating(),
+            null,
+            event.getCategory(),
+            event.getVenueMap() != null ? event.getVenueMap().getLocation() : null,
+            String.valueOf(event.getCompanyId()),
+            company.getName(),
+            event.getStatus(),
+            event.getShowDates()
+        );
+    }
+
     // II.4.2.3 — Read back the current zone states from the domain so the
     // editor reflects real-time inventory (capacity consumed by sales, etc.).
     public VenueLayoutDTO getEventZones(String token, int eventId) {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
         Event event = eventRepository.findById(eventId);
+        if (event == null) {
+            throw new EventNotFoundException(eventId);
+        }
         user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
 
         VenueMap map = event.getVenueMap();

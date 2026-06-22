@@ -41,7 +41,6 @@ import java.util.Locale;
 @RequireCapability(Capability.MANAGE_VENUE_MAPS)
 public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
 
-    /** Venue canvas grid — per event; defaults to the backend default (3×3), owner-resizable. */
     private int gridRows = 3;
     private int gridCols = 3;
     private static final int MAX_GRID = 12;
@@ -49,19 +48,16 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     private final VenueMapPresenter presenter;
     private String eventId = "0";
 
-    /** A zone being edited. {@code placement} is always non-null so it renders on the grid. */
     private record ZoneState(String name, boolean seated, int rows, int seatsPerRow,
                              int capacity, double price, GridPlacementDTO placement) {}
 
     private final List<ZoneState> zoneStates = new ArrayList<>();
     private int selectedZoneIdx = 0;
 
-    // Live slots, re-rendered whenever zoneStates changes.
     private final Div mapHolder = new Div();
     private final Div zonesTableHolder = new Div();
     private final Div seatPreview = new Div();
 
-    // Zone editor fields.
     private final TextField zoneNameField = new TextField("Zone name");
     private final TextField priceField = new TextField("Price");
     private final RadioButtonGroup<String> zoneTypeGroup = new RadioButtonGroup<>();
@@ -79,7 +75,6 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
 
     public VenueMapEditorView(VenueMapPresenter presenter) {
         this.presenter = presenter;
-        // Start with one example zone so a fresh venue isn't empty; backend load replaces it.
         zoneStates.add(new ZoneState("Zone 1", true, 10, 20, 0, 100.0, defaultPlacement(0)));
         title("Venue map editor");
         subtitle("Place zones on the " + gridRows + "×" + gridCols + " venue grid, then define seats.");
@@ -101,9 +96,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     }
 
     private void loadZonesFromBackend() {
-        if ("0".equals(eventId)) {
-            return;
-        }
+        if ("0".equals(eventId)) return;
         switch (presenter.loadZones(AuthSession.token(), Integer.parseInt(eventId))) {
             case VenueMapPresenter.LoadOutcome.Success ok -> {
                 gridRows = ok.layout().gridRows();
@@ -174,7 +167,6 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     private Component buildZonesCard() {
         LkCard card = new LkCard("Zones").pad(14);
         card.add(zonesTableHolder);
-
         Div actions = new Div();
         actions.addClassName("ow-card-actions");
         actions.add(
@@ -187,21 +179,16 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
         return card;
     }
 
-    /** Re-renders the zones table from the live zoneStates list. */
     private void refreshZonesTable() {
         zonesTableHolder.removeAll();
         for (int i = 0; i < zoneStates.size(); i++) {
             final int idx = i;
             ZoneState z = zoneStates.get(i);
-
             Div row = new Div();
             row.addClassName("ow-zone-row");
-            if (idx == selectedZoneIdx) {
-                row.getStyle().set("font-weight", "600");
-            }
+            if (idx == selectedZoneIdx) row.getStyle().set("font-weight", "600");
             row.getStyle().set("display", "flex").set("align-items", "center")
                     .set("gap", "8px").set("padding", "6px 4px").set("cursor", "pointer");
-
             Span name = new Span(z.name());
             name.getStyle().set("flex", "1");
             LkBadge type = new LkBadge(z.seated() ? "Seated" : "Standing",
@@ -210,7 +197,6 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
                     ? z.rows() * z.seatsPerRow() + " seats"
                     : z.capacity() + " cap");
             cap.getStyle().set("color", "var(--lk-muted, #888)").set("font-size", "13px");
-
             row.add(name, type, cap, removeButton(idx));
             row.getElement().addEventListener("click", e -> selectZone(idx));
             zonesTableHolder.add(row);
@@ -235,7 +221,6 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
         return card;
     }
 
-    /** Re-renders the schematic preview, positioning each zone from its grid placement. */
     private void refreshMapHolder() {
         mapHolder.removeAll();
         List<VkVenueMap.Zone> zones = new ArrayList<>();
@@ -265,22 +250,19 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
             try {
                 selectZone(Integer.parseInt(visualId.substring(1)));
             } catch (NumberFormatException ignored) {
-                // non-zone click — ignore
             }
         }
     }
 
     private void selectZone(int idx) {
-        if (idx < 0 || idx >= zoneStates.size()) {
-            return;
-        }
+        if (idx < 0 || idx >= zoneStates.size()) return;
         selectedZoneIdx = idx;
         loadZoneIntoEditor(idx);
         refreshZonesTable();
         refreshMapHolder();
     }
 
-    // ── Zone editor ─────────────────────────────────────────────────────────
+    // ── Zone editor ──────────────────────────────────────────────────────────
 
     private Component buildZoneEditorCard() {
         LkCard card = new LkCard("Edit zone").pad(20);
@@ -297,7 +279,6 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
         zoneTypeGroup.setItems("Seated", "Standing");
         zoneTypeGroup.getStyle().set("margin-bottom", "8px");
 
-        // Seated dimensions
         seatedEditor = new Div();
         LkRow dims = new LkRow().gap(12).align("flex-end");
         rowsField.setMin(1); rowsField.setMax(99); rowsField.setWidth("120px");
@@ -310,7 +291,6 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
         seatHint.getStyle().set("font-size", "12px").set("margin-top", "8px").set("display", "block");
         seatedEditor.add(dims, seatPreview, seatHint);
 
-        // Standing capacity (own labelled field — no longer overloading "Rows")
         capacityField.setMin(1); capacityField.setMax(1_000_000); capacityField.setWidthFull();
         standingEditor = new Div();
         standingEditor.add(capacityField);
@@ -321,7 +301,6 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
             standingEditor.setVisible(!seated);
         });
 
-        // Grid placement
         LkCard placementCard = new LkCard("Grid placement (" + gridRows + "×" + gridCols + ")").pad(12);
         Div placeGrid = new Div();
         placeGrid.getStyle().set("display", "grid").set("grid-template-columns", "1fr 1fr").set("gap", "12px");
@@ -354,9 +333,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     }
 
     private void loadZoneIntoEditor(int idx) {
-        if (idx < 0 || idx >= zoneStates.size()) {
-            return;
-        }
+        if (idx < 0 || idx >= zoneStates.size()) return;
         ZoneState z = zoneStates.get(idx);
         zoneNameField.setValue(z.name());
         priceField.setValue(String.valueOf((int) z.price()));
@@ -364,12 +341,8 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
         rowsField.setValue(z.rows() == 0 ? 1 : z.rows());
         seatsPerRowField.setValue(z.seatsPerRow() == 0 ? 1 : z.seatsPerRow());
         capacityField.setValue(z.capacity() == 0 ? 1 : z.capacity());
-        if (seatedEditor != null) {
-            seatedEditor.setVisible(z.seated());
-        }
-        if (standingEditor != null) {
-            standingEditor.setVisible(!z.seated());
-        }
+        if (seatedEditor != null) seatedEditor.setVisible(z.seated());
+        if (standingEditor != null) standingEditor.setVisible(!z.seated());
         GridPlacementDTO p = z.placement();
         gridRowField.setValue(p.row());
         gridColField.setValue(p.col());
@@ -378,7 +351,6 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
         refreshSeatPreview();
     }
 
-    /** Live seat-grid preview reflecting the entered rows × seats/row (capped for display). */
     private void refreshSeatPreview() {
         seatPreview.removeAll();
         int rows = Math.min(orDefault(rowsField.getValue(), 1), 8);
@@ -391,19 +363,6 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     }
 
     private void saveZone() {
-        String name = zoneNameField.getValue() == null ? "" : zoneNameField.getValue().trim();
-        if (name.isEmpty()) {
-            Toasts.failure("Zone name is required.");
-            return;
-        }
-        boolean seated = "Seated".equals(zoneTypeGroup.getValue());
-        double price;
-        try {
-            price = Double.parseDouble(priceField.getValue().trim());
-        } catch (NumberFormatException ex) {
-            Toasts.failure("Invalid price.");
-            return;
-        }
         GridPlacementDTO placement = new GridPlacementDTO(
                 orDefault(gridRowField.getValue(), 1),
                 orDefault(gridColField.getValue(), 1),
@@ -414,15 +373,27 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
             Toasts.failure("Grid placement falls outside the " + gridRows + "×" + gridCols + " canvas.");
             return;
         }
-
-        ZoneState updated = seated
-            ? new ZoneState(name, true, orDefault(rowsField.getValue(), 1),
-                    orDefault(seatsPerRowField.getValue(), 1), 0, price, placement)
-            : new ZoneState(name, false, 0, 0, orDefault(capacityField.getValue(), 1), price, placement);
-
-        zoneStates.set(selectedZoneIdx, updated);
-        refreshAll();
-        Toasts.success("Zone \"" + name + "\" updated — click Save map to persist.");
+        boolean seated = "Seated".equals(zoneTypeGroup.getValue());
+        switch (presenter.validateZone(
+                zoneNameField.getValue() == null ? "" : zoneNameField.getValue().trim(),
+                priceField.getValue(),
+                seated,
+                rowsField.getValue(),
+                seatsPerRowField.getValue(),
+                capacityField.getValue(),
+                placement)) {
+            case VenueMapPresenter.ZoneOutcome.Valid v -> {
+                zoneStates.set(selectedZoneIdx,
+                    new ZoneState(v.name(), v.seated(), v.rows(), v.seatsPerRow(),
+                            v.capacity(), v.price(), v.placement()));
+                refreshAll();
+                Toasts.success("Zone \"" + v.name() + "\" updated — click Save map to persist.");
+            }
+            case VenueMapPresenter.ZoneOutcome.InvalidName ignored ->
+                Toasts.failure("Zone name is required.");
+            case VenueMapPresenter.ZoneOutcome.InvalidPrice ignored ->
+                Toasts.failure("Invalid price.");
+        }
     }
 
     private void addZone(boolean seated) {
@@ -437,9 +408,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     }
 
     private void removeZone(int idx) {
-        if (idx < 0 || idx >= zoneStates.size()) {
-            return;
-        }
+        if (idx < 0 || idx >= zoneStates.size()) return;
         if (zoneStates.size() == 1) {
             Toasts.failure("A venue needs at least one zone.");
             return;
@@ -484,7 +453,6 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
         }
     }
 
-    // Generates A1…H40 style labels with (col, row) coordinates.
     private List<VenueMapConfigDTO.SeatConfigDTO> generateSeats(int rows, int seatsPerRow) {
         List<VenueMapConfigDTO.SeatConfigDTO> seats = new ArrayList<>();
         for (int r = 0; r < rows; r++) {
@@ -496,7 +464,6 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
         return seats;
     }
 
-    /** Flows zones into distinct 1×1 grid cells by index so freshly-added zones don't overlap. */
     private GridPlacementDTO defaultPlacement(int idx) {
         int row = (idx / gridCols) + 1;
         int col = (idx % gridCols) + 1;

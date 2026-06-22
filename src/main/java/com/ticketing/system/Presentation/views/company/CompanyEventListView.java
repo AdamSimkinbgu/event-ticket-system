@@ -104,7 +104,7 @@ public class CompanyEventListView extends LkPage {
         row.put("name", name);
 
         String date = ev.showDates() != null && !ev.showDates().isEmpty()
-            ? ev.showDates().get(0).toString() : "—";
+            ? ev.showDates().get(0).getStartTime().toString() : "—";
         row.put("date", date);
 
         String venue = ev.location() != null ? ev.location().toString() : "—";

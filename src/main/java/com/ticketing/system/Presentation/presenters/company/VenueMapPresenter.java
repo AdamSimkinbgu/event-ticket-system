@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.ticketing.system.Core.Application.dto.GridPlacementDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.dto.VenueLayoutDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
@@ -50,6 +51,26 @@ public class VenueMapPresenter {
         } catch (RuntimeException e) {
             return new SaveOutcome.Failure(e.getMessage());
         }
+    }
+
+    public ZoneOutcome validateZone(String name, String priceText, boolean seated,
+                                    Integer rows, Integer seatsPerRow, Integer standingCapacity,
+                                    GridPlacementDTO placement) {
+        if (name == null || name.isBlank()) return new ZoneOutcome.InvalidName();
+        double price;
+        try { price = Double.parseDouble(priceText == null ? "" : priceText.trim()); }
+        catch (NumberFormatException e) { return new ZoneOutcome.InvalidPrice(); }
+        int r   = rows == null ? 1 : rows;
+        int spr = seatsPerRow == null ? 1 : seatsPerRow;
+        int cap = seated ? 0 : (standingCapacity == null ? 1 : standingCapacity);
+        return new ZoneOutcome.Valid(name, seated, r, spr, cap, price, placement);
+    }
+
+    public sealed interface ZoneOutcome {
+        record Valid(String name, boolean seated, int rows, int seatsPerRow,
+                    int capacity, double price, GridPlacementDTO placement) implements ZoneOutcome {}
+        record InvalidName()  implements ZoneOutcome {}
+        record InvalidPrice() implements ZoneOutcome {}
     }
 
     public sealed interface LoadOutcome {
