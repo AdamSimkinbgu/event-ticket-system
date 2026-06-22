@@ -124,11 +124,11 @@ public class ReservationService {
             activeOrder = getOrCreateActiveOrder(buyer);
 
             // CheckoutService now marks orders as CHECKOUT_IN_PROGRESS and releases the order lock during Phase 2. ReservationService should reject reserve attempts against an order in that state; otherwise a concurrent reservation can mutate the cart while checkout is pricing/charging based on a snapshot, causing inconsistencies.
-            // if (activeOrder.isCheckoutInProgress()) {
-            //     log.warn("Request rejected: cannot modify active order during checkout. eventId={}, zoneId={}, userId={}, sessionId={}",
-            //             eventId, zoneId, buyer.isMember() ? buyer.userId() : null, buyer.isMember() ? null : buyer.sessionId());
-            //     throw new IllegalStateException("Cannot modify active order during checkout");
-            // }
+            if (activeOrder.isCheckoutInProgress()) {
+                log.warn("Request rejected: cannot modify active order during checkout. eventId={}, zoneId={}, userId={}, sessionId={}",
+                        eventId, zoneId, buyer.isMember() ? buyer.userId() : null, buyer.isMember() ? null : buyer.sessionId());
+                throw new IllegalStateException("Cannot modify active order during checkout");
+            }
 
             // Effective purchase policy (company AND event) at the RESERVE stage: max + (member)
             // age are enforced; minimum and unknown (guest) age are deferred to checkout. Quantity

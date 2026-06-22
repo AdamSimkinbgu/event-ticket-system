@@ -1,83 +1,50 @@
 package com.ticketing.system.Presentation.views.order;
 
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
-import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
-import com.ticketing.system.Core.Application.events.OrderExpiredEvent;
-import com.ticketing.system.Core.Application.interfaces.ISessionManager;
-import com.ticketing.system.Core.Application.services.CheckoutService;
-import com.ticketing.system.Core.Application.services.ReservationService;
+import com.ticketing.system.Presentation.components.Money;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
+import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Core.Domain.exceptions.ActiveOrderExpiredException;
-import com.ticketing.system.Core.Domain.exceptions.ConcurrentReservationException;
-import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryException;
-import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
-import com.ticketing.system.Core.Domain.exceptions.PolicyViolationException;
-import com.ticketing.system.Core.Domain.exceptions.SessionExpiredException;
-import com.ticketing.system.Presentation.session.AuthSession;
-import java.util.UUID;
+import com.ticketing.system.Presentation.presenters.order.CheckoutPresenter;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.Key;
+import com.vaadin.flow.component.Shortcuts;
 import com.vaadin.flow.component.UI;
-import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.textfield.EmailField;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.router.AfterNavigationEvent;
+import com.vaadin.flow.router.AfterNavigationObserver;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
 
-
-/**
- * Checkout view — wired to real CheckoutService and ReservationService.
- *
- * STATE DESIGN
- * ------------
- * Vaadin creates a new View instance on every navigation (default scope).
- * We load the active order fresh in beforeEnter(), which fires before the
- * DOM is shown. This means:
- *   - Expired orders are caught before the user sees stale totals.
- *   - A cart change in another tab is reflected on the next navigation here.
- *
- * FINANCIAL ARITHMETIC
- * --------------------
- * All monetary values are kept as integer cents (long) throughout.
- * Conversion to a display string happens only at the last moment in
- * formatCents(). This eliminates floating-point rounding errors entirely.
- *
- * GUEST PATH (UC-3 / UC-5)
- * ------------------------
- * Guest order loading falls back to restoreActiveOrderForGuest(sessionId).
- */
 @Route(value = "checkout", layout = MainLayout.class)
 @PageTitle("Checkout · TicketHub")
 @AnonymousAllowed
-@Slf4j
-public class CheckoutView extends LkPage implements BeforeEnterObserver {
+public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNavigationObserver {
 
-    private static final long SERVICE_FEE_CENTS = 2400L;
     private static final String IDEMPOTENCY_ATTR = "checkout.idempotencyKey";
 
-    private final ReservationService reservationService;
-    private final CheckoutService    checkoutService;
-    private final ISessionManager    sessionManager;
+    private final CheckoutPresenter presenter;
+    private final Object uiLock = new Object();
 
     private String  memberToken;
     private String  sessionId;
@@ -85,10 +52,13 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     private int     resolvedUserId;
 
     private volatile UI ui;
+    private boolean listenerRegistered = false;
 
     private ActiveOrderDTO activeOrder;
     private long subtotalCents;
     private long totalCents;
+
+    private final AtomicBoolean paymentInProgress = new AtomicBoolean(false);
 
     private final TextField    cardholder = new TextField("Cardholder name");
     private final TextField    cardNumber  = new TextField("Card number");
@@ -98,39 +68,71 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     private final EmailField   guestEmail  = new EmailField("Your email");
     private final IntegerField guestAge    = new IntegerField("Your age");
 
-    private Div    linesContainer;
-    private Span   subtotalSpan;
-    private Span   serviceFeeSpan;
-    private Span   totalSpan;
-    private Button payButton;
-    private Span   timerSpan;
-    private Button editCartBtn;
+    private Div   linesContainer;
+    private Span  subtotalSpan;
+    private Span  totalSpan;
+    private LkBtn payButton;
+    private Span  timerSpan;
+    private LkBtn editCartBtn;
 
-    public CheckoutView(ReservationService reservationService,
-                        CheckoutService    checkoutService,
-                        ISessionManager    sessionManager) {
-        this.reservationService = reservationService;
-        this.checkoutService    = checkoutService;
-        this.sessionManager     = sessionManager;
+    private final CheckoutPresenter.ExpiryListener expiryListener =
+        new CheckoutPresenter.ExpiryListener() {
+            @Override
+            public boolean matches(int userId, String sessionId) {
+                return isMember
+                    ? (userId == resolvedUserId && resolvedUserId != 0)
+                    : (CheckoutView.this.sessionId != null && !CheckoutView.this.sessionId.isBlank()
+                        && CheckoutView.this.sessionId.equals(sessionId));
+            }
+
+            @Override
+            public void onExpired() {
+                UI currentUi;
+                synchronized (uiLock) {
+                    currentUi = ui;
+                }
+                if (currentUi == null || !currentUi.isAttached()) return;
+                currentUi.access(() -> {
+                    clearOrder();
+                    syncDynamicUI();
+                    Toasts.failure("Your reservation has expired. Please add tickets again.");
+                });
+            }
+        };
+
+    public CheckoutView(CheckoutPresenter presenter) {
+        this.presenter = presenter;
+        this.sessionId = "";
+        this.linesContainer = new Div();
     }
 
     @Override
     protected void onAttach(AttachEvent attachEvent) {
         super.onAttach(attachEvent);
-        this.ui = attachEvent.getUI();
+        synchronized (uiLock) {
+            this.ui = attachEvent.getUI();
+            if (!listenerRegistered) {
+                presenter.registerExpiryListener(expiryListener);
+                listenerRegistered = true;
+            }
+        }
     }
 
     @Override
     protected void onDetach(DetachEvent detachEvent) {
         super.onDetach(detachEvent);
-        this.ui = null;
+        synchronized (uiLock) {
+            if (listenerRegistered) {
+                presenter.unregisterExpiryListener(expiryListener);
+                listenerRegistered = false;
+            }
+            this.ui = null;
+        }
     }
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
         resolveIdentity();
-        refreshFromOrder(renewAndLoadActiveOrder());
-
         if (getChildren().findAny().isEmpty()) {
             buildPage();
         } else {
@@ -138,114 +140,40 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         }
     }
 
+    @Override
+    public void afterNavigation(AfterNavigationEvent event) {
+        if (reload() instanceof CheckoutPresenter.LoadOutcome.Failure) {
+            Toasts.warn("Could not load your cart — please try again.");
+        }
+    }
+
     private void resolveIdentity() {
-        String token = AuthSession.token();
-        if (token != null && sessionManager.validateToken(token)) {
-            this.memberToken = token;
-            this.sessionId   = null;
-            this.isMember    = true;
-        } else {
-            this.memberToken = null;
-            this.sessionId   = resolveGuestSessionId();
-            this.isMember    = false;
-        }
+        CheckoutPresenter.Identity id = presenter.resolveIdentity();
+        this.isMember       = id.member();
+        this.memberToken    = id.memberToken();
+        this.sessionId      = id.guestSessionId() != null ? id.guestSessionId() : "";
+        this.resolvedUserId = id.userId();
     }
 
-    private String resolveGuestSessionId() {
-        VaadinSession session = VaadinSession.getCurrent();
-        if (session == null) return null;
-        String guestId = (String) session.getAttribute("guestSessionId");
-        if (guestId == null) {
-            guestId = UUID.randomUUID().toString();
-            session.setAttribute("guestSessionId", guestId);
-        }
-        return guestId;
-    }
-
-    /**
-     * Like {@link #loadActiveOrder()}, but resets every reserved ticket's 10-minute hold
-     * timer to a fresh full window. Used only on checkout-page entry ({@link #beforeEnter})
-     * so the buyer gets the maximum time to pay; the pre-pay refresh keeps using the plain
-     * {@link #loadActiveOrder()} so its "cart expired while you were typing" guard stays intact.
-     */
-    private ActiveOrderDTO renewAndLoadActiveOrder() {
-        if (isMember) {
-            try {
-                this.resolvedUserId = sessionManager.extractUserId(memberToken);
-                return reservationService.renewReservationsForMemberCheckout(resolvedUserId);
-            } catch (Exception e) {
-                log.warn("Failed to renew/load active order for member", e);
-                Toasts.warn("Could not load your cart — please try again.");
-                return null;
+    private CheckoutPresenter.LoadOutcome reload() {
+        CheckoutPresenter.LoadOutcome outcome = presenter.loadOrder(resolvedUserId, memberToken, sessionId);
+        switch (outcome) {
+            case CheckoutPresenter.LoadOutcome.Loaded l -> {
+                this.activeOrder   = l.order();
+                this.subtotalCents = l.pricing().subtotalCents();
+                this.totalCents    = l.pricing().totalCents();
             }
+            case CheckoutPresenter.LoadOutcome.Empty e -> clearOrder();
+            case CheckoutPresenter.LoadOutcome.NotAuthenticated na -> clearOrder();
+            case CheckoutPresenter.LoadOutcome.Failure f -> clearOrder();
         }
-
-        if (sessionId != null) {
-            try {
-                return reservationService.renewReservationsForGuestCheckout(sessionId);
-            } catch (Exception e) {
-                log.warn("Failed to renew/load active order for guest", e);
-                return null;
-            }
-        }
-        return null;
+        return outcome;
     }
 
-    private ActiveOrderDTO loadActiveOrder() {
-        if (isMember) {
-            try {
-                this.resolvedUserId = sessionManager.extractUserId(memberToken);
-                return reservationService.restoreActiveOrder(resolvedUserId);
-            } catch (Exception e) {
-                log.warn("Failed to load active order for member", e);
-                Toasts.warn("Could not load your cart — please try again.");
-                return null;
-            }
-        }
-
-        if (sessionId != null) {
-            try {
-                return reservationService.restoreActiveOrderForGuest(sessionId);
-            } catch (Exception e) {
-                log.warn("Failed to load active order for guest", e);
-                return null;
-            }
-        }
-        return null;
-    }
-
-    @EventListener
-    public void onOrderExpired(OrderExpiredEvent event) {
-        UI currentUi = this.ui;
-        if (currentUi == null || !currentUi.isAttached()) return;
-
-        boolean isForMe = isMember
-                ? event.userId() == resolvedUserId && resolvedUserId != 0
-                : sessionId != null && sessionId.equals(event.sessionId());
-
-        if (!isForMe) return;
-
-        currentUi.access(() -> {
-            refreshFromOrder(null);
-            syncDynamicUI();
-            Toasts.failure("Your reservation has expired. Please add tickets again.");
-        });
-    }
-
-    private void refreshFromOrder(ActiveOrderDTO order) {
-        this.activeOrder = order;
-
-        if (order == null || order.lines().isEmpty()) {
-            this.subtotalCents = 0L;
-            this.totalCents    = 0L;
-            return;
-        }
-
-        long subtotal = order.lines().stream()
-                .mapToLong(l -> Math.round(l.pricePerTicket() * 100))
-                .sum();
-        this.subtotalCents = subtotal;
-        this.totalCents    = subtotal + SERVICE_FEE_CENTS;
+    private void clearOrder() {
+        this.activeOrder   = null;
+        this.subtotalCents = 0L;
+        this.totalCents    = 0L;
     }
 
     private void buildPage() {
@@ -273,8 +201,9 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                 empty.setText("No items in cart. Add tickets from Browse first.");
             } else {
                 empty.setText("Sign in to view your saved cart, or browse events as a guest.");
-                Button signInBtn = new Button("Sign in", e -> UI.getCurrent().navigate("login"));
-                signInBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+                LkBtn signInBtn = new LkBtn("Sign in")
+                        .variant(LkBtn.Variant.primary)
+                        .onClick(e -> UI.getCurrent().navigate("login"));
                 signInBtn.getStyle().set("margin-top", "10px");
                 empty.add(signInBtn);
             }
@@ -285,13 +214,12 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             }
         }
 
-        if (subtotalSpan   != null) subtotalSpan.setText(formatCents(subtotalCents));
-        if (serviceFeeSpan != null) serviceFeeSpan.setText(formatCents(totalCents > 0 ? SERVICE_FEE_CENTS : 0L));
-        if (totalSpan      != null) totalSpan.setText(formatCents(totalCents));
+        if (subtotalSpan != null) subtotalSpan.setText(formatCents(subtotalCents));
+        if (totalSpan    != null) totalSpan.setText(formatCents(totalCents));
 
         if (payButton != null) {
             payButton.setText("Pay " + formatCents(totalCents));
-            payButton.setEnabled(totalCents > 0);
+            payButton.getElement().setEnabled(totalCents > 0);
         }
 
         if (timerSpan != null && activeOrder != null
@@ -305,10 +233,9 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                     "function tick(){" +
                     "  const s=Math.max(0,Math.floor((end-Date.now())/1000));" +
                     "  t.textContent=pad(Math.floor(s/60))+':'+pad(s%60);" +
-                               "  if (s > 0) { setTimeout(tick, 1000); }" +
-            "  else { document.querySelectorAll('vaadin-button.bz-pay-btn').forEach(b => b.setAttribute('disabled', '')); }" +
-            "}" +
-            "tick();",
+                    "  if(s>0) setTimeout(tick,1000);" +
+                    "}" +
+                    "tick();",
                     endMs);
         }
     }
@@ -346,7 +273,6 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         LkCol col = new LkCol().gap(14);
         LkCard orderCard = new LkCard("Your order").pad(0);
 
-        linesContainer = new Div();
         linesContainer.addClassName("bz-order-lines");
         orderCard.add(linesContainer);
 
@@ -355,28 +281,29 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
 
         coupon.setPlaceholder("Coupon code");
         coupon.getStyle().set("flex", "1 1 auto");
-        Button apply = new Button("Apply", e -> {
-            if (coupon.isEmpty()) Toasts.warn("Enter a coupon code first.");
-            else Toasts.success("Coupon applied (no discount in placeholder).");
-        });
-        apply.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        LkBtn apply = new LkBtn("Apply")
+                .variant(LkBtn.Variant.tertiary)
+                .onClick(e -> {
+                    if (coupon.isEmpty()) Toasts.warn("Enter a coupon code first.");
+                    else Toasts.success("Coupon applied (no discount in placeholder).");
+                });
         LkRow couponRow = new LkRow().gap(8);
         couponRow.add(coupon, apply);
         foot.add(couponRow);
 
-        subtotalSpan    = new Span(formatCents(subtotalCents));
-        serviceFeeSpan  = new Span(formatCents(totalCents > 0 ? SERVICE_FEE_CENTS : 0L));
-        totalSpan       = new Span(formatCents(totalCents));
+        subtotalSpan = new Span(formatCents(subtotalCents));
+        totalSpan    = new Span(formatCents(totalCents));
 
         LkCol totals = new LkCol().gap(6);
         totals.getStyle().set("margin-top", "12px");
-        totals.add(summaryRow("Subtotal",    subtotalSpan, false));
-        totals.add(summaryRow("Service fee", serviceFeeSpan, false));
-        totals.add(summaryRow("Total",       totalSpan, true));
+        totals.add(summaryRow("Subtotal", subtotalSpan, false));
+        totals.add(summaryRow("Total",    totalSpan, true));
         foot.add(totals);
 
-        editCartBtn = new Button("Edit cart", e -> UI.getCurrent().navigate("cart"));
-        editCartBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
+        editCartBtn = new LkBtn("Edit cart")
+                .variant(LkBtn.Variant.tertiary)
+                .size(LkBtn.Size.s)
+                .onClick(e -> UI.getCurrent().navigate("cart"));
         editCartBtn.getStyle().set("margin-top", "8px");
 
         orderCard.add(foot);
@@ -393,7 +320,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                 + (line.seatNumber() != null ? " · " + line.seatNumber() : "");
         Span label = new Span(labelText);
 
-        long lineCents = Math.round(line.pricePerTicket() * 100);
+        long lineCents = Money.toCents(line.pricePerTicket());
         Span price = new Span(formatCents(lineCents));
         price.getStyle().set("font-weight", "700");
 
@@ -457,12 +384,13 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
 
         col.add(Lk.divider());
 
-        payButton = new Button("Pay " + formatCents(totalCents), e -> attemptPay());
-        payButton.addClassName("bz-pay-btn");
-        payButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_LARGE);
-        payButton.setWidthFull();
-        payButton.addClickShortcut(Key.ENTER);
-        payButton.setEnabled(totalCents > 0);
+        payButton = new LkBtn("Pay " + formatCents(totalCents))
+                .variant(LkBtn.Variant.primary)
+                .size(LkBtn.Size.l)
+                .full()
+                .onClick(e -> attemptPay());
+        Shortcuts.addShortcutListener(payButton, this::attemptPay, Key.ENTER);
+        payButton.getElement().setEnabled(totalCents > 0);
         col.add(payButton);
 
         Span hint = new Span();
@@ -481,17 +409,19 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     }
 
     private void attemptPay() {
-        if (totalCents == 0L) {
+        if (totalCents <= 0L) {
             Toasts.failure("Your cart is empty.");
             return;
         }
-
         if (cardholder.isEmpty() || cardNumber.isEmpty()
                 || expiry.isEmpty() || cvc.isEmpty()) {
             Toasts.failure("Please fill in every payment field.");
             return;
         }
-
+        if (cardNumber.getValue().replaceAll("\\s+", "").length() != 16) {
+            Toasts.failure("Card number must be 16 digits.");
+            return;
+        }
         if (!isMember) {
             if (guestEmail.isInvalid() || guestEmail.isEmpty()) {
                 Toasts.failure("Please enter a valid email address.");
@@ -504,90 +434,70 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             }
         }
 
-        refreshFromOrder(loadActiveOrder());
-        if (totalCents == 0L) {
-            syncDynamicUI();
-            Toasts.failure("Your reservation has expired. Please add tickets again.");
-            return;
+        CheckoutPresenter.LoadOutcome reloaded = reload();
+        syncDynamicUI();
+        switch (reloaded) {
+            case CheckoutPresenter.LoadOutcome.Loaded l -> { /* still valid — continue */ }
+            case CheckoutPresenter.LoadOutcome.Failure f -> {
+                Toasts.failure("Couldn't reach the server. Please try again.");
+                return;
+            }
+            case CheckoutPresenter.LoadOutcome.Empty e -> {
+                Toasts.failure("Your reservation has expired. Please add tickets again.");
+                return;
+            }
+            case CheckoutPresenter.LoadOutcome.NotAuthenticated na -> {
+                Toasts.failure("Your reservation has expired. Please add tickets again.");
+                return;
+            }
         }
 
-        payButton.setEnabled(false);
-        payButton.setText("Processing…");
-
-        String idempotencyKey = currentIdempotencyKey();
-        String paymentMethodToken = "tok_" + cardNumber.getValue().replaceAll("\\s+", "");
-        String currency = "USD";
+        if (!paymentInProgress.compareAndSet(false, true)) {
+            return;
+        }
+        payButton.getElement().setEnabled(false);
 
         try {
-            CheckoutResultDTO result;
+            String idempotencyKey = currentIdempotencyKey();
+            CheckoutPresenter.PayOutcome outcome = isMember
+                ? presenter.payAsMember(memberToken, idempotencyKey, cardNumber.getValue())
+                : presenter.payAsGuest(sessionId, guestEmail.getValue().trim(),
+                                       guestAge.getValue(), idempotencyKey, cardNumber.getValue());
 
-            if (isMember) {
-                result = checkoutService.checkoutMember(
-                        memberToken,
-                        idempotencyKey,
-                        currency,
-                        paymentMethodToken);
-            } else {
-                result = checkoutService.checkoutGuest(
-                        sessionId,
-                        guestEmail.getValue().trim(),
-                        idempotencyKey,
-                        currency,
-                        paymentMethodToken,
-                        guestAge.getValue());
+            switch (outcome) {
+                case CheckoutPresenter.PayOutcome.Success ok -> {
+                    presenter.setOrderSession(ok.result());
+                    clearIdempotencyKey();
+                    Toasts.success("Payment successful — "
+                            + formatCents(Money.toCents(ok.result().totalCharged()))
+                            + " charged.");
+                    UI.getCurrent().navigate("order-confirmed");
+                    return;
+                }
+                case CheckoutPresenter.PayOutcome.PolicyRejected p ->
+                    Toasts.failure("Cannot purchase: " + p.reason());
+                case CheckoutPresenter.PayOutcome.PaymentDeclined d ->
+                    Toasts.failure("Payment declined: " + d.reason());
+                case CheckoutPresenter.PayOutcome.SoldOut s ->
+                    Toasts.failure("Those seats just sold out. Please choose again.");
+                case CheckoutPresenter.PayOutcome.OrderExpired e ->
+                    Toasts.failure("Your reservation has expired. Please add tickets again.");
+                case CheckoutPresenter.PayOutcome.DuplicateSubmission dup ->
+                    Toasts.warn("This order was already submitted.");
+                case CheckoutPresenter.PayOutcome.Failure f ->
+                    Toasts.failure("Payment could not be completed. Please try again or contact support.");
             }
-
-            Toasts.success("Payment successful — "
-                    + formatCents(Math.round(result.totalCharged() * 100))
-                    + " charged.");
-            clearIdempotencyKey();
-            UI.getCurrent().navigate("order/" + result.orderReceiptId());
-
-        } catch (RuntimeException e) {
-            log.error("Checkout failed for {} user", isMember ? "member" : "guest", e);
-            handlePaymentError(e);
+        } finally {
+            paymentInProgress.set(false);
+            payButton.getElement().setEnabled(totalCents > 0);
         }
-    }
-
-    // Maps a checkout failure to a clear, actionable message + recovery navigation (SLR.3.2).
-    // CheckoutService re-wraps failures as RuntimeException(cause), so we unwrap one level.
-    // Today only PaymentGatewayException is surfaced as a distinct type; the PolicyViolation /
-    // InsufficientInventory / ConcurrentReservation / Session- & ActiveOrderExpired branches are
-    // forward-looking — they activate once checkout/domain throw those typed exceptions (until
-    // then those failures arrive as IllegalStateException and hit the generic branch below).
-    private void handlePaymentError(RuntimeException ex) {
-        Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
-
-        if (cause instanceof PolicyViolationException pve) {
-            Toasts.failure("Purchase not allowed: " + pve.getMessage());
-        } else if (cause instanceof PaymentGatewayException) {
-            Toasts.failure("Payment declined. Please check your card details and try again.");
-        } else if (cause instanceof InsufficientInventoryException) {
-            Toasts.failure("Some tickets are no longer available. Please review your cart.");
-            UI.getCurrent().navigate("cart");
-            return;
-        } else if (cause instanceof ConcurrentReservationException) {
-            Toasts.warn("Your cart was modified by another session. Please review and try again.");
-        } else if (cause instanceof SessionExpiredException || cause instanceof ActiveOrderExpiredException) {
-            Toasts.failure("Your session expired. Please start a new order.");
-            UI.getCurrent().navigate("browse");
-            return;
-        } else {
-            Toasts.failure("Checkout couldn't be completed — no charge remains on your card. Please try again.");
-        }
-        resetPayButton();
-    }
-
-    private void resetPayButton() {
-        payButton.setEnabled(totalCents > 0);
-        payButton.setText("Pay " + formatCents(totalCents));
     }
 
     /**
      * Stable idempotency key for this checkout, persisted in the {@link VaadinSession} so a
      * retry after a network timeout / page refresh reuses it and {@code CheckoutService}'s
-     * idempotency cache de-dupes the charge instead of billing the buyer twice. Generated once
-     * (lazily) per checkout and dropped on success by {@link #clearIdempotencyKey()}.
+     * idempotency cache de-dupes the charge instead of billing the buyer twice. Dropped on
+     * success by {@link #clearIdempotencyKey()}.
      */
     private String currentIdempotencyKey() {
         VaadinSession session = VaadinSession.getCurrent();
@@ -611,7 +521,10 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     }
 
     private static String formatCents(long cents) {
-        long abs  = Math.abs(cents);
+        if (cents < 0 || cents > 99_999_999) {
+            throw new IllegalArgumentException("Invalid price: " + cents + " cents");
+        }
+        long abs = Math.abs(cents);
         String sign = cents < 0 ? "-" : "";
         return sign + "$" + (abs / 100) + "." + String.format("%02d", abs % 100);
     }

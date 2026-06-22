@@ -9,6 +9,7 @@ import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.session.GuestSession;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.company.CompanyRegistrationView;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
@@ -31,6 +32,7 @@ import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.router.AfterNavigationEvent;
 import com.vaadin.flow.router.AfterNavigationObserver;
 import com.vaadin.flow.server.VaadinSession;
+import com.ticketing.system.Presentation.session.SessionIdentity;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,10 +62,12 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
     private final ReservationService reservationService;
     private LkTopBar topBar;
     private final SignOutFlow signOutFlow;
+    private final SessionIdentity identity;
 
-    public MainLayout(ReservationService reservationService, SignOutFlow signOutFlow) {
+    public MainLayout(ReservationService reservationService, SignOutFlow signOutFlow, SessionIdentity identity) {
         this.reservationService = reservationService;
         this.signOutFlow = signOutFlow;
+        this.identity = identity;
         rebuildTopBar(null);
     }
 
@@ -72,64 +76,75 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         rebuildTopBar(findActiveLabel(event));
     }
 
-    private void rebuildTopBar(String activeLabel) {
-        if (topBar != null) topBar.getElement().removeFromParent();
+   private void rebuildTopBar(String activeLabel) {
+    if (topBar != null) topBar.getElement().removeFromParent();
 
-        boolean signedIn = AuthSession.isSignedIn();
-        String name = signedIn ? AuthSession.displayName() : "Guest";
+    boolean signedIn = AuthSession.isSignedIn();
+    String name = signedIn ? AuthSession.displayName() : "Guest";
 
-        // Read cart state from the real service
-        int cartSize = 0;
-        Long cartDeadlineMs = null;
+    int cartSize = 0;
+    Long cartDeadlineMs = null;
+
+    VaadinSession session = VaadinSession.getCurrent();
+    if (session != null) {
+        session.lock();
         try {
-            String token = AuthSession.token();
-            ActiveOrderDTO order = null;
-            if (token != null) {
-                order = reservationService.viewMyActiveOrder(token);
+            long now = System.currentTimeMillis();
+            Long lastFetchMs = (Long) session.getAttribute("cart.fetch.time");
+            Integer cachedSize = (Integer) session.getAttribute("cart.size");
+            Long cachedDeadlineMs = (Long) session.getAttribute("cart.deadline");
+
+            if (lastFetchMs != null && (now - lastFetchMs) < 10_000 && cachedSize != null) {
+                cartSize = cachedSize;
+                cartDeadlineMs = cachedDeadlineMs;
             } else {
-                VaadinSession s = VaadinSession.getCurrent();
-                if (s != null) {
-                    String guestId = (String) s.getAttribute("guestSessionId");
-                    if (guestId != null) {
-                        order = reservationService.viewMyActiveOrder(guestId);
+                try {
+                    String credential = identity.credential();
+                    ActiveOrderDTO order = (credential != null)
+                            ? reservationService.viewMyActiveOrder(credential) : null;
+                    if (order != null && !order.lines().isEmpty()) {
+                        cartSize = order.lines().size();
+                        long remSec = order.remainingSecondsBeforeExpiry();
+                        if (remSec > 0) {
+                            cartDeadlineMs = now + remSec * 1000L;
+                        }
                     }
+                } catch (Exception e) {
+                    // Log but don't fail topbar render
                 }
+                session.setAttribute("cart.size", cartSize);
+                session.setAttribute("cart.deadline", cartDeadlineMs);
+                session.setAttribute("cart.fetch.time", now);
             }
-            if (order != null && !order.lines().isEmpty()) {
-                cartSize = order.lines().size();
-                long remSec = order.remainingSecondsBeforeExpiry();
-                if (remSec > 0) {
-                    cartDeadlineMs = System.currentTimeMillis() + remSec * 1000L;
-                }
-            }
-        } catch (Exception ignored) { }
-
-        List<LkTopBar.NavItem> nav = new ArrayList<>();
-        nav.add(new LkTopBar.NavItem("Browse",     BrowseEventsView.class));
-        nav.add(new LkTopBar.NavItem("My Tickets", MyAccountView.class));
-        // An admin who is also browsing as a member gets a fast-jump tab into
-        // the platform shell. Driven by Capabilities so a dev-panel toggle
-        // flips it on without rewiring routes.
-        if (Capabilities.has(Capability.ADMIN_WORKSPACE)) {
-            nav.add(new LkTopBar.NavItem("Admin", AdminDashboardView.class));
+        } finally {
+            session.unlock();
         }
-
-        LkTopBar bar = new LkTopBar(LkTopBar.Variant.MAIN)
-            .brand("TicketHub", LandingView.class)
-            .nav(nav, activeLabel)
-            .searchDefault()
-            .cart(CartView.class, cartSize, cartDeadlineMs)
-            .bellDefault(false);
-
-        if (signedIn) {
-            bar.account(initials(name), name, buildMemberMenu(name));
-        } else {
-            bar.guestActions(LoginView.class, RegisterView.class);
-        }
-
-        topBar = bar;
-        addToNavbar(topBar);
     }
+
+    List<LkTopBar.NavItem> nav = new ArrayList<>();
+    nav.add(new LkTopBar.NavItem("Browse",     BrowseEventsView.class));
+    nav.add(new LkTopBar.NavItem("My Tickets", MyAccountView.class));
+
+    if (Capabilities.has(Capability.ADMIN_WORKSPACE)) {
+        nav.add(new LkTopBar.NavItem("Admin", AdminDashboardView.class));
+    }
+
+    LkTopBar bar = new LkTopBar(LkTopBar.Variant.MAIN)
+        .brand("TicketHub", LandingView.class)
+        .nav(nav, activeLabel)
+        .searchDefault()
+        .cart(CartView.class, cartSize, cartDeadlineMs)
+        .bellDefault(false);
+
+    if (signedIn) {
+        bar.account(initials(name), name, buildMemberMenu(name));
+    } else {
+        bar.guestActions(LoginView.class, RegisterView.class);
+    }
+
+    topBar = bar;
+    addToNavbar(topBar);
+}
 
     /** Member-persona account menu — wired to {@link AuthSession} + view routes. */
     private LkAccountMenu buildMemberMenu(String name) {
@@ -169,6 +184,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         }
         return null;
     }
+    
 
     private static String initials(String name) {
         if (name == null || name.isBlank()) return "??";

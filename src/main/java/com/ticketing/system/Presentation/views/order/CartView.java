@@ -1,10 +1,6 @@
 package com.ticketing.system.Presentation.views.order;
 
-import java.util.List;
-
-import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
-import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
-import com.ticketing.system.Core.Application.services.ReservationService;
+import com.ticketing.system.Presentation.components.Money;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
@@ -15,12 +11,10 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Presentation.session.AuthSession;
-import com.ticketing.system.Presentation.views.auth.LoginView;
+import com.ticketing.system.Presentation.presenters.order.CartPresenter;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.NativeButton;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
@@ -31,29 +25,38 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 @AnonymousAllowed
 public class CartView extends LkPage {
 
-    private final ReservationService reservationService;
-    private final String userToken;
-    private ActiveOrderDTO activeOrder;
+    private final CartPresenter presenter;
+    private CartPresenter.CartVM activeOrder;
+    private long subtotalCents;
 
     private LkCol linesCol;
     private Span sub, total, subText;
     private LkBtn proceedBtn;
 
-    public CartView(ReservationService reservationService) {
-        this.reservationService = reservationService;
-        this.userToken = AuthSession.token();
+    public CartView(CartPresenter presenter) {
+        this.presenter = presenter;
 
-        // Guard against anonymous/signed-out users to prevent NPE in the downstream service call.
-        if (this.userToken == null) {
-            UI.getCurrent().navigate(LoginView.class);
-            return;
+        switch (presenter.loadCart()) {
+            case CartPresenter.LoadOutcome.Shown s -> {
+                this.activeOrder   = s.cart();
+                this.subtotalCents = s.subtotalCents();
+            }
+            case CartPresenter.LoadOutcome.Empty e             -> clearCart();
+            case CartPresenter.LoadOutcome.NotAuthenticated na -> clearCart();
+            case CartPresenter.LoadOutcome.Failure f -> {
+                clearCart();
+                Toasts.failure("Could not load your cart: " + f.reason());
+            }
         }
-
-        this.activeOrder = reservationService.viewMyActiveOrder(userToken);
 
         title("Your cart");
         renderHeaderSubtitle();
         add(buildSplit());
+    }
+
+    private void clearCart() {
+        this.activeOrder   = null;
+        this.subtotalCents = 0L;
     }
 
     private Component buildSplit() {
@@ -76,13 +79,13 @@ public class CartView extends LkPage {
             linesCol.add(buildEmptyState());
         } else {
             linesCol.add(buildCountdownBanner(activeOrder.remainingSecondsBeforeExpiry()));
-            for (ActiveOrderDTO.CartLineDTO line : activeOrder.lines()) {
-                linesCol.add(cartLineFromDTO(line));
+            for (CartPresenter.CartVM.LineVM line : activeOrder.lines()) {
+                linesCol.add(cartLineFromVM(line));
             }
         }
     }
 
-    private Component cartLineFromDTO(ActiveOrderDTO.CartLineDTO line) {
+    private Component cartLineFromVM(CartPresenter.CartVM.LineVM line) {
         Div lineDiv = new Div();
         lineDiv.addClassName("bz-cartline");
 
@@ -96,32 +99,30 @@ public class CartView extends LkPage {
         seatLine.getStyle().set("font-size", "13.5px");
         info.add(titleSpan, seatLine);
 
-        NativeButton removeBtn = new NativeButton("Remove");
-        removeBtn.addClassName("bz-link");
-        removeBtn.getStyle()
-            .set("background", "none").set("border", "none").set("padding", "0").set("cursor", "pointer");
+        LkBtn removeBtn = new LkBtn("Remove")
+            .variant(LkBtn.Variant.tertiary)
+            .size(LkBtn.Size.s)
+            .onClick(e -> {
+                switch (presenter.removeLine(line)) {
+                    case CartPresenter.RemoveOutcome.Removed r -> {
+                        this.activeOrder   = r.cart();
+                        this.subtotalCents = r.subtotalCents();
+                        populateLines();
+                        renderHeaderSubtitle();
+                        renderTotals();
+                        Toasts.success("Removed from cart.");
+                    }
+                    case CartPresenter.RemoveOutcome.Failure f ->
+                        Toasts.failure("Failed to remove item: " + f.reason());
+                }
+            });
 
-        removeBtn.addClickListener(e -> {
-            InventorySelectionDTO selection = (line.seatNumber() != null)
-                ? InventorySelectionDTO.seated(List.of(line.seatNumber()))
-                : InventorySelectionDTO.standing(1);
-            try {
-                reservationService.removeLine(userToken, line.eventId(), line.zoneId(), selection);
-                activeOrder = reservationService.viewMyActiveOrder(userToken);
-                populateLines();
-                renderHeaderSubtitle();
-                renderTotals();
-                Toasts.success("Removed from cart.");
-            } catch (Exception ex) {
-                Toasts.failure("Failed to remove item. Please try again.");
-            }
-        });
         info.add(removeBtn);
         lineDiv.add(info);
 
         Div priceTag = new Div();
         priceTag.addClassName("bz-cartline-price");
-        priceTag.setText(formatPrice(line.pricePerTicket()));
+        priceTag.setText(Money.format(Money.toCents(line.pricePerTicket())));
         lineDiv.add(priceTag);
 
         return lineDiv;
@@ -201,13 +202,12 @@ public class CartView extends LkPage {
     }
 
     private void renderTotals() {
-        int subtotal = activeOrder != null ? (int) Math.round(activeOrder.currentTotalPrice()) : 0;
         boolean empty = activeOrder == null || activeOrder.lines().isEmpty();
-        int totalCents = empty ? 0 : subtotal;
+        long shownTotal = empty ? 0L : subtotalCents;
 
-        if (sub != null)   sub.setText(formatPrice(subtotal));
+        if (sub != null)   sub.setText(Money.format(shownTotal));
         if (total != null) total.getElement().setProperty("innerHTML",
-            "<b style='font-size:17px'>" + formatPrice(totalCents) + "</b>");
+            "<b style='font-size:17px'>" + Money.format(shownTotal) + "</b>");
         if (subText != null) {
             subText.setText(empty
                 ? "Add tickets from Browse to start an order."
@@ -234,11 +234,6 @@ public class CartView extends LkPage {
         l.getElement().setProperty("innerHTML", "<b style='font-size:17px'>" + label + "</b>");
         r.add(l, value);
         return r;
-    }
-
-    private static String formatPrice(double cents) {
-        int totalCents = (int) Math.round(cents);
-        return String.format("$%d.%02d", totalCents / 100, Math.abs(totalCents % 100));
     }
 
     private static String escape(String s) {
