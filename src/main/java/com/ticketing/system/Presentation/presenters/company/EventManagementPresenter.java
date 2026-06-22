@@ -22,7 +22,7 @@ public class EventManagementPresenter {
     public LoadOutcome load(String token, int eventId) {
         if (token == null) return new LoadOutcome.NotAuthenticated();
         try {
-            EventDetailDTO ev = eventService.getEvent(token, eventId);
+            EventDetailDTO ev = eventService.getEventDetail(token, eventId);
             return new LoadOutcome.Success(ev);
         } catch (InvalidTokenException e) {
             return new LoadOutcome.NotAuthenticated();

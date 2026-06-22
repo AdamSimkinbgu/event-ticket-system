@@ -15,7 +15,6 @@ import com.ticketing.system.Core.Application.dto.InvitationDTO;
 import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO;
-import com.ticketing.system.Core.Application.dto.PendingInvitationDTO;
 import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
 import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
 import com.ticketing.system.Core.Application.dto.CompanyPolicyConfigDTO;
@@ -196,35 +195,6 @@ public class CompanyManagementService {
     }
 
 
-    // UC-24 / II.4.7.3 — list all pending invitations for the signed-in user.
-    public List<PendingInvitationDTO> listPendingInvitations(String token) {
-        int userId = authenticate(token);
-        User user = userRepository.getUserById(userId);
-
-        return user.getAllCompanyAppointments().stream()
-            .filter(a -> a.getStatus() == AppointmentStatus.PENDING)
-            .map(a -> {
-                ProductionCompany company = companyRepository.getCompanyById(a.getCompanyId());
-                String companyName = company != null ? company.getName() : "Unknown company";
-                String inviterName;
-                try {
-                    inviterName = userRepository.getUserById(a.getInviterId()).getUsername();
-                } catch (Exception e) {
-                    inviterName = "Unknown";
-                }
-                return new PendingInvitationDTO(
-                    a.getCompanyId(),
-                    companyName,
-                    a.getRole().name(),
-                    a.getPermissions().stream().toList(),
-                    inviterName
-                );
-            })
-            .toList();
-    }
-
-
-
 
 
 
@@ -262,15 +232,6 @@ public class CompanyManagementService {
                 edit.companyId());
     }
 
-    public List<Permission> getManagerPermissions(String token, int companyId, int managerId) {
-        authenticate(token);
-        User manager = userRepository.getUserById(managerId);
-        CompanyAppointment appt = manager.getActiveCompanyAppointment(companyId);
-        if (appt == null || appt.getRole() != CompanyRole.Manager) {
-            throw new RuntimeException("No active manager appointment found for user " + managerId);
-        }
-        return new ArrayList<>(appt.getPermissions());
-    }
 
 
 
@@ -315,7 +276,7 @@ public class CompanyManagementService {
         Optional<User> byEmail = userRepository.findByEmail(identifier.trim());
         if (byEmail.isPresent()) return byEmail.get().getUserId();
 
-        throw new RuntimeException("No user found with username or email: " + identifier);
+        throw new UserNotFoundException(identifier);
     }
 
     

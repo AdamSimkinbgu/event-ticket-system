@@ -2,7 +2,9 @@ package com.ticketing.system.Core.Application.services;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Application.dto.EventCreationDTO;
@@ -20,6 +23,8 @@ import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
 import com.ticketing.system.Core.Application.dto.ShowDateDTO;
+import com.ticketing.system.Core.Application.dto.GridPlacementDTO;
+import com.ticketing.system.Core.Application.dto.VenueLayoutDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.dto.ZoneDetailDTO;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
@@ -187,7 +192,7 @@ public class EventManagementService {
                 String.valueOf(e.getId()),
                 e.getName(),
                 e.getRating(),
-                null,
+                e.getDescription(),
                 e.getCategory(),
                 e.getVenueMap() != null ? e.getVenueMap().getLocation() : null,
                 String.valueOf(companyId),
@@ -198,60 +203,51 @@ public class EventManagementService {
             .toList();
     }
 
-    // II.4.1.1 — Load a single event for the edit form.
-    public EventDetailDTO getEvent(String token, int eventId) {
-        int userId = validateTokenAndGetUserId(token);
-        Event event = eventRepository.findById(eventId);
-        User user = userRepository.getUserById(userId);
-        user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
-        ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
-
-        return new EventDetailDTO(
-            String.valueOf(event.getId()),
-            event.getName(),
-            event.getRating(),
-            null,
-            event.getCategory(),
-            event.getVenueMap() != null ? event.getVenueMap().getLocation() : null,
-            String.valueOf(event.getCompanyId()),
-            company.getName(),
-            event.getStatus(),
-            event.getShowDates()
-        );
-    }
-
     // II.4.2.3 — Read back the current zone states from the domain so the
     // editor reflects real-time inventory (capacity consumed by sales, etc.).
-    public List<ZoneDetailDTO> getEventZones(String token, int eventId) {
+    public VenueLayoutDTO getEventZones(String token, int eventId) {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
         Event event = eventRepository.findById(eventId);
         user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
 
         VenueMap map = event.getVenueMap();
-        if (map == null || map.getInventoryZones().isEmpty()) return List.of();
+        if (map == null) {
+            return new VenueLayoutDTO(VenueMap.DEFAULT_GRID_ROWS, VenueMap.DEFAULT_GRID_COLS, List.of());
+        }
+        if (map.getInventoryZones().isEmpty()) {
+            return new VenueLayoutDTO(map.getGridRows(), map.getGridCols(), List.of());
+        }
 
         List<ZoneDetailDTO> result = new ArrayList<>();
         for (InventoryZone zone : map.getInventoryZones()) {
+            GridPlacementDTO placement = zone.hasGridPlacement()
+                ? new GridPlacementDTO(zone.getGridRow(), zone.getGridCol(),
+                                       zone.getGridRowSpan(), zone.getGridColSpan())
+                : null;
             if (zone.isSeated()) {
                 SeatedZone sz = (SeatedZone) zone;
                 List<Seat> seats = sz.getSeats();
-                int rows = 0, seatsPerRow = 0;
-                if (!seats.isEmpty()) {
-                    Set<Character> rowLetters = new HashSet<>();
-                    for (Seat s : seats) {
-                        if (!s.getLabel().isEmpty()) rowLetters.add(s.getLabel().charAt(0));
-                    }
-                    rows = rowLetters.size();
-                    seatsPerRow = rows > 0 ? seats.size() / rows : seats.size();
+                // Seat labels are "<rowLabel><number>" where rowLabel may be multi-char
+                // (e.g. "AA12"). Group by the leading non-digit run so the row/seat-per-row
+                // counts stay accurate for multi-char rows and >26 rows — not just charAt(0).
+                Map<String, Integer> seatsByRow = new LinkedHashMap<>();
+                for (Seat s : seats) {
+                    String label = s.getLabel();
+                    int i = 0;
+                    while (i < label.length() && !Character.isDigit(label.charAt(i))) i++;
+                    String rowLabel = i > 0 ? label.substring(0, i) : label;
+                    seatsByRow.merge(rowLabel, 1, Integer::sum);
                 }
-                result.add(new ZoneDetailDTO(zone.getName(), true, rows, seatsPerRow, 0, zone.getprice()));
+                int rows = seatsByRow.size();
+                int seatsPerRow = seatsByRow.values().stream().mapToInt(Integer::intValue).max().orElse(0);
+                result.add(new ZoneDetailDTO(zone.getName(), true, rows, seatsPerRow, 0, zone.getprice(), placement));
             } else {
                 result.add(new ZoneDetailDTO(
-                    zone.getName(), false, 0, 0, zone.getCapacity(), zone.getprice()));
+                    zone.getName(), false, 0, 0, zone.getCapacity(), zone.getprice(), placement));
             }
         }
-        return result;
+        return new VenueLayoutDTO(map.getGridRows(), map.getGridCols(), result);
     }
 
     
@@ -310,10 +306,25 @@ public class EventManagementService {
                 nextZoneId++;
             }
 
+            int gridRows = config.gridRows() > 0 ? config.gridRows() : VenueMap.DEFAULT_GRID_ROWS;
+            int gridCols = config.gridCols() > 0 ? config.gridCols() : VenueMap.DEFAULT_GRID_COLS;
             VenueMap venueMap = new VenueMap(
                     event.getVenueMap() != null ? event.getVenueMap().getId() : eventRepository.nextVenueMapId(),
                     event.getVenueMap() != null ? event.getVenueMap().getLocation() : null,
-                    zones);
+                    zones, gridRows, gridCols);
+
+            // Apply each zone's grid placement. Zone IDs were assigned 1..N in config order,
+            // so the same iteration order maps each config back to its zone. Bounds + overlap
+            // are validated by VenueMap.placeZoneOnGrid.
+            int placementZoneId = 1;
+            for (VenueMapConfigDTO.ZoneConfigDTO zoneConfig : config.zones()) {
+                GridPlacementDTO placement = zoneConfig.placement();
+                if (placement != null) {
+                    venueMap.placeZoneOnGrid(placementZoneId, placement.row(), placement.col(),
+                            placement.rowSpan(), placement.colSpan());
+                }
+                placementZoneId++;
+            }
 
             event.configureVenueMap(venueMap, companyId);
             eventRepository.save(event);
@@ -409,6 +420,11 @@ public class EventManagementService {
                         zoneConfig.capacity(),
                         zoneConfig.pricePerTicket(),
                         companyId);
+            }
+
+            if (zoneConfig.placement() != null) {
+                GridPlacementDTO p = zoneConfig.placement();
+                event.getVenueMap().placeZoneOnGrid(newZoneId, p.row(), p.col(), p.rowSpan(), p.colSpan());
             }
 
             eventRepository.save(event);
@@ -681,17 +697,10 @@ public class EventManagementService {
 
 
     // Detail view for owner-side editing pages.
-    public EventDetailDTO getEventDetail(String token, String eventId) {  //TODO: make this eventId an int
+    public EventDetailDTO getEventDetail(String token, int eventId) {
         int userId = validateTokenAndGetUserId(token);
 
-        int id;
-        try {
-            id = Integer.parseInt(eventId);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Invalid event ID: " + eventId);
-        }
-
-        Event event = eventRepository.findById(id);
+        Event event = eventRepository.findById(eventId);
 
         ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
 
@@ -1078,7 +1087,7 @@ public class EventManagementService {
   private int validateTokenAndGetUserId(String token) {
         if (!sessionManager.validateToken(token)) {
             log.warn("Invalid token provided");
-            throw new RuntimeException("Invalid token");
+            throw new InvalidTokenException();
         }
         return sessionManager.extractUserId(token);
     }
