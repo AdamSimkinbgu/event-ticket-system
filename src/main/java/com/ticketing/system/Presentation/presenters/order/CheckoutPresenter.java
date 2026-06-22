@@ -19,6 +19,7 @@ import com.ticketing.system.Core.Domain.exceptions.IdempotencyConflictException;
 import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryException;
 import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
 import com.ticketing.system.Presentation.session.SessionIdentity;
+import com.vaadin.flow.server.VaadinSession;
 
 /**
  * MVP presenter for {@code CheckoutView}. No Vaadin imports. Identity is resolved
@@ -127,6 +128,15 @@ public class CheckoutPresenter {
 
     private static String paymentToken(String cardNumber) {
         return "tok_" + cardNumber.replaceAll("\\s+", "");
+    }
+
+    // ---- session --------------------------------------------------------
+
+    public void setOrderSession(CheckoutResultDTO result) {
+        VaadinSession s = VaadinSession.getCurrent();
+        if (s != null) {
+            s.setAttribute("checkout.result", result);
+        }
     }
 
     // ---- order-expiry push ---------------------------------------------

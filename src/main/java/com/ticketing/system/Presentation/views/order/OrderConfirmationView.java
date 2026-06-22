@@ -1,5 +1,7 @@
 package com.ticketing.system.Presentation.views.order;
 
+import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
+import com.ticketing.system.Presentation.components.Money;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
@@ -15,17 +17,37 @@ import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-@Route(value = "order/:receiptId", layout = MainLayout.class)
+@Route(value = "order-confirmed", layout = MainLayout.class)
 @PageTitle("Order confirmed · TicketHub")
 @AnonymousAllowed
-public class OrderConfirmationView extends LkPage {
+public class OrderConfirmationView extends LkPage implements BeforeEnterObserver {
+
+    private CheckoutResultDTO result;
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        VaadinSession s = VaadinSession.getCurrent();
+        if (s == null) {
+            result = null;
+        } else {
+            result = (CheckoutResultDTO) s.getAttribute("checkout.result");
+            s.setAttribute("checkout.result", null);
+        }
+        if (result == null) {
+            event.rerouteTo(BrowseEventsView.class);
+            return;
+        }
+    }
 
     public OrderConfirmationView() {
         add(buildConfirmHero());
@@ -44,7 +66,19 @@ public class OrderConfirmationView extends LkPage {
         Div text = new Div();
         H2 title = new H2("Your tickets are confirmed");
         title.getStyle().set("margin", "0").set("color", "#fff");
-        Span sub = new Span("Receipt #TKT-20847 · Transaction 4c1f-9a · $504.00 paid · emailed to you");
+
+        String receiptDisplay = (result != null)
+            ? "Receipt #TKT-" + String.format("%05d", result.orderReceiptId())
+            : "Receipt pending";
+        String totalDisplay = (result != null)
+            ? Money.format(Money.toCents(result.totalCharged()))
+            : "$0.00";
+        String transactionDisplay = (result != null)
+            ? String.format("%04x", result.paymentTransactionId())
+            : "—";
+
+        Span sub = new Span(receiptDisplay + " · Transaction " + transactionDisplay
+            + " · " + totalDisplay + " paid · emailed to you");
         sub.getStyle().set("color", "rgba(255,255,255,0.9)").set("font-size", "14.5px");
         text.add(title, sub);
 
@@ -63,10 +97,13 @@ public class OrderConfirmationView extends LkPage {
             .col("Price",   "price", LkGrid.Align.RIGHT)
             .col("Barcode", "code");
 
-        ticket(grid, "Coldplay · MOTS", "26 Jun 20:00", "Lower L", "C-14", "$160", "▮▯▮▯▮ 7B2K-4Q");
-        ticket(grid, "Coldplay · MOTS", "26 Jun 20:00", "Lower L", "C-15", "$160", "▮▯▮▯▮ 7B2K-4R");
-        ticket(grid, "Hapoel TLV",      "28 Jun 21:00", "GA",      "—",    "$80",  "▮▯▮▯▮ 9F1A-2M");
-        ticket(grid, "Hapoel TLV",      "28 Jun 21:00", "GA",      "—",    "$80",  "▮▯▮▯▮ 9F1A-2N");
+        if (result != null && result.issuedTicketIds() != null && !result.issuedTicketIds().isEmpty()) {
+            for (int ticketId : result.issuedTicketIds()) {
+                ticket(grid, "Event details pending", "—", "—", "—", "$0.00", "▮▯▮▯▮ " + String.format("%04X", ticketId));
+            }
+        } else {
+            ticket(grid, "No tickets", "—", "—", "—", "$0.00", "—");
+        }
 
         grid.build();
         card.add(grid);

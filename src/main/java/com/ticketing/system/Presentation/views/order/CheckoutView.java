@@ -433,11 +433,12 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                                    guestAge.getValue(), cardNumber.getValue());
 
         switch (outcome) {
-            case CheckoutPresenter.PayOutcome.Success ok -> {
+                       case CheckoutPresenter.PayOutcome.Success ok -> {
+                presenter.setOrderSession(ok.result());
                 Toasts.success("Payment successful — "
                         + formatCents(CheckoutPresenter.toCents(ok.result().totalCharged()))
                         + " charged.");
-                UI.getCurrent().navigate("order/" + ok.result().orderReceiptId());
+                UI.getCurrent().navigate("order-confirmed");
                 return;
             }
             case CheckoutPresenter.PayOutcome.PaymentDeclined d ->
