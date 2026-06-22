@@ -6,8 +6,10 @@ import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkConfirm;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
+import com.ticketing.system.Presentation.components.venue.VkQuantitySelector;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
+import com.ticketing.system.Presentation.components.venue.VkSeatedZonePicker;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.layouts.MainLayout;
@@ -17,6 +19,8 @@ import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
+import com.ticketing.system.Presentation.presenters.admin.GlobalHistoryPresenter;
+import com.ticketing.system.Presentation.presenters.catalog.BrowseEventsPresenter;
 import com.ticketing.system.Presentation.views.company.ManagerListView;
 import com.ticketing.system.Presentation.views.company.OwnerDashboardView;
 import com.ticketing.system.Presentation.views.account.MyInvitationsView;
@@ -116,9 +120,14 @@ class VaadinSmokeTest {
     @Test
     void coreViewsInstantiate() {
         // Spot-check one MainLayout view and one WorkspaceLayout view as a
-        // cheap canary for kit-API breakage.
-        assertDoesNotThrow(BrowseEventsView::new, "BrowseEventsView (root route) failed to construct");
-        assertDoesNotThrow(GlobalHistoryView::new, "GlobalHistoryView (admin route) failed to construct");
+        // cheap canary for kit-API breakage. Both now take an injected
+        // presenter, so resolve it from the Spring context.
+        assertDoesNotThrow(
+            () -> new BrowseEventsView(context.getBean(BrowseEventsPresenter.class)),
+            "BrowseEventsView (root route) failed to construct");
+        assertDoesNotThrow(
+            () -> new GlobalHistoryView(context.getBean(GlobalHistoryPresenter.class)),
+            "GlobalHistoryView (admin route) failed to construct");
     }
 
     @Test
@@ -202,6 +211,22 @@ class VaadinSmokeTest {
         // Domain components used by the venue / seat picker views.
         assertDoesNotThrow(() -> new VkSeat(VkSeat.State.free, "1"), "VkSeat failed");
         assertDoesNotThrow(VkSeatLegend::new,             "VkSeatLegend failed");
+        assertDoesNotThrow(() -> {
+            VkSeat seat = new VkSeat(VkSeat.State.free, "1");
+            seat.setState(VkSeat.State.mine);
+            seat.setState(VkSeat.State.sold);
+            seat.setState(VkSeat.State.free);
+        }, "VkSeat.setState failed");
+        assertDoesNotThrow(() -> new VkSeatedZonePicker(List.of(), null),
+            "VkSeatedZonePicker (empty) failed");
+        assertDoesNotThrow(() -> new VkSeatedZonePicker(
+                List.of(new VkSeatedZonePicker.SeatModel("A1", 0, 0, VkSeat.State.free),
+                        new VkSeatedZonePicker.SeatModel("A2", 32, 0, VkSeat.State.held)),
+                null), "VkSeatedZonePicker (with seats) failed");
+        assertDoesNotThrow(() -> new VkQuantitySelector(100, 9000, null),
+            "VkQuantitySelector (positive available) failed");
+        assertDoesNotThrow(() -> new VkQuantitySelector(0, 9000, null),
+            "VkQuantitySelector (sold out) failed");
     }
 
     @Test

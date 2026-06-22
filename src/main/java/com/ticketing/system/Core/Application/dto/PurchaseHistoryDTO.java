@@ -20,7 +20,8 @@ public record PurchaseHistoryDTO(List<PurchaseRecordDTO> records) {
         double totalPaid,
         boolean refunded,
         List<TransactionRecordDTO> transactions,
-        List<TicketRecordDTO> tickets
+        List<TicketRecordDTO> tickets,
+        String buyerName           // resolved member username; null for guests (use guestEmail)
     ) {}
     
     public record TransactionRecordDTO(
@@ -39,6 +40,13 @@ public record PurchaseHistoryDTO(List<PurchaseRecordDTO> records) {
         int orderReceiptId,
         String seatNumber,     // nullable for standing zones
         double pricePaid,
-        TicketStatus currentStatus
+        TicketStatus currentStatus,
+        String eventName,      // resolved at mapping time; null if unresolved
+        String zoneName,       // resolved at mapping time; null if unresolved
+        String companyName,    // resolved at mapping time; null if unresolved
+        String category,       // event category; null if unresolved
+        LocalDateTime eventStartsAt, // first show date; null if unresolved
+        String venue,          // event location; null if unresolved
+        String barcode         // issued-ticket barcode; null if not yet issued
     ) {}
 }

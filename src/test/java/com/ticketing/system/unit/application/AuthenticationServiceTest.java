@@ -37,6 +37,10 @@ import com.ticketing.system.Core.Application.services.NotificationDispatchServic
 import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
+import com.ticketing.system.Core.Domain.Admin.Admin;
+import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
+import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
+import com.ticketing.system.Core.Domain.exceptions.AccountLockedException;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateEmailException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateUsernameException;
@@ -59,6 +63,7 @@ class AuthenticationServiceTest {
     private ISessionManager mockSessionManager;
     private ISessionRepository mockSessionRepo;
     private IActiveOrderRepository mockActiveOrderRepo;
+    private IAdminRepository mockAdminRepo;
     private Clock fixedClock;
     private AuthenticationService service;
     private NotificationDispatchService mockNotification;
@@ -73,11 +78,12 @@ class AuthenticationServiceTest {
         mockReservation = mock(ReservationService.class);
         mockSessionRepo = mock(ISessionRepository.class);
         mockActiveOrderRepo = mock(IActiveOrderRepository.class);
+        mockAdminRepo = mock(IAdminRepository.class);
         fixedClock = Clock.fixed(T0, ZoneOffset.UTC);
         service = new AuthenticationService(
                 mockUserRepo, mockHasher, mockSessionManager, mockReservation, mockNotification,
                 mockSessionRepo, mockActiveOrderRepo,
-                fixedClock, GUEST_IDLE_MINUTES, MEMBER_TTL_MINUTES);
+                fixedClock, mockAdminRepo, GUEST_IDLE_MINUTES, MEMBER_TTL_MINUTES, 5, 15L);
         // Default mocks: no cart for anyone. Individual D9a tests override.
         when(mockActiveOrderRepo.getBySessionId(any())).thenReturn(Optional.empty());
         when(mockActiveOrderRepo.getByUserId(anyInt())).thenReturn(null);
@@ -524,5 +530,47 @@ class AuthenticationServiceTest {
         service.logout(new LogoutRequestDTO("SOME_TOKEN"));
         verify(mockActiveOrderRepo, never()).delete(any());
         verify(mockActiveOrderRepo, never()).save(any());
+    }
+
+    // ---- admin sign-in (#290) ----
+
+    @Test
+    void signInAsAdmin_validCredentials_returnsAdminFlaggedToken() {
+        when(mockAdminRepo.findByUsername("admin")).thenReturn(new Admin(1, "admin", "hashed", true));
+        when(mockHasher.matches("pw", "hashed")).thenReturn(true);
+        when(mockSessionManager.generateAdminToken(1, "admin")).thenReturn("admin-jwt");
+        when(mockSessionManager.extractExpiration("admin-jwt")).thenReturn(999L);
+
+        AuthTokenDTO token = service.signInAsAdmin("admin", "pw");
+
+        assertTrue(token.isAdmin());
+        assertEquals("admin", token.username());
+        assertEquals("admin-jwt", token.token());
+    }
+
+    @Test
+    void signInAsAdmin_unknownUsername_throwsAuthenticationFailed() {
+        when(mockAdminRepo.findByUsername("ghost")).thenReturn(null);
+        assertThrows(AuthenticationFailedException.class, () -> service.signInAsAdmin("ghost", "pw"));
+    }
+
+    @Test
+    void signInAsAdmin_wrongPassword_throwsAuthenticationFailed() {
+        when(mockAdminRepo.findByUsername("admin")).thenReturn(new Admin(1, "admin", "hashed", true));
+        when(mockHasher.matches("wrong", "hashed")).thenReturn(false);
+        assertThrows(AuthenticationFailedException.class, () -> service.signInAsAdmin("admin", "wrong"));
+    }
+
+    @Test
+    void signInAsAdmin_locksAfterFiveFailures() {
+        when(mockAdminRepo.findByUsername("admin")).thenReturn(new Admin(1, "admin", "hashed", true));
+        when(mockHasher.matches(any(), any())).thenReturn(false);
+
+        for (int i = 0; i < 5; i++) {
+            assertThrows(AuthenticationFailedException.class, () -> service.signInAsAdmin("admin", "wrong"));
+        }
+        // 6th attempt is blocked even with the correct password.
+        when(mockHasher.matches("pw", "hashed")).thenReturn(true);
+        assertThrows(AccountLockedException.class, () -> service.signInAsAdmin("admin", "pw"));
     }
 }

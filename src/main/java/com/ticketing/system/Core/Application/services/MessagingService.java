@@ -104,6 +104,8 @@ public class MessagingService {
         return new ConversationMapper().toDTO(conversation, memberId);
     }
 
+
+
     // Append a reply to an existing conversation. Sender must be a participant.
     public void sendMessage(String token, SendMessageRequestDTO request) {
         int callerId = authenticate(token);
@@ -126,6 +128,8 @@ public class MessagingService {
         log.info("Message appended to conversation {} by {} {}", conversationId, sender.type(), sender.id());
     }
 
+
+
     // II.3.3 — Member submits a COMPLAINT (counterparty = ADMIN_GROUP).
     public ConversationDTO submitComplaint(String token, SubmitComplaintRequestDTO request) {
         int memberId = authenticate(token);
@@ -145,6 +149,8 @@ public class MessagingService {
         log.info("Complaint {} submitted by member {}", conversation.getConversationId(), memberId);
         return new ConversationMapper().toDTO(conversation, memberId);
     }
+
+
 
     // II.6.3.1 — admin responds to a complaint and may transition status.
     public void respondToComplaint(String token, RespondToComplaintRequestDTO request) {
@@ -213,6 +219,8 @@ public class MessagingService {
         return new ConversationMapper().toDTO(created.get(0), adminId);
     }
 
+
+
     // UI action — mark a single message as read by the viewer.
     public void markMessageAsRead(String token, String conversationId, String messageId) {
         int callerId = authenticate(token);
@@ -226,6 +234,8 @@ public class MessagingService {
             conversationRepository.unlock(conversationId);
         }
     }
+
+
 
     // Terminal action — close a conversation (no further messages allowed).
     public void closeConversation(String token, String conversationId) {
@@ -553,4 +563,9 @@ public class MessagingService {
     private static <T> List<T> safeList(List<T> list) {
         return list == null ? List.of() : list;
     }
+
+
+
+
+
 }

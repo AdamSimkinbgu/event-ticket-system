@@ -58,7 +58,7 @@ public final class MockPermissions {
     }
 
     public static Set<Capability> forCurrentCompany() {
-        return forCompany(MockSession.currentCompanyId());
+        return forCompany(CurrentCompanies.currentCompanyIdAsString());
     }
 
     public static void grant(String companyId, Capability c) {

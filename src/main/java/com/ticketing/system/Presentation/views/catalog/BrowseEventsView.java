@@ -1,5 +1,6 @@
 package com.ticketing.system.Presentation.views.catalog;
 
+import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
 import com.ticketing.system.Presentation.components.buyer.BzPoster;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
@@ -14,6 +15,7 @@ import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkSelect;
 import com.ticketing.system.Presentation.components.kit.LkStatusDot;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.presenters.catalog.BrowseEventsPresenter;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -27,6 +29,8 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,28 +48,15 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
             LkStatusDot.Tone tone, String status, String id) {
     }
 
-    private static final List<EventRow> ALL_EVENTS = List.of(
-            new EventRow("Coldplay · Music of the Spheres", "Concerts", "Park HaYarkon", "Tel Aviv", "26 Jun", 177,
-                    25000, LkStatusDot.Tone.ok, "On sale", "coldplay"),
-            new EventRow("Hapoel TLV vs Maccabi Haifa", "Sports", "Bloomfield Stadium", "Tel Aviv", "28 Jun", 179, 8000,
-                    LkStatusDot.Tone.ok, "On sale", "hapoel-tlv"),
-            new EventRow("Othello at Habima", "Theatre", "Habima Theatre", "Tel Aviv", "30 Jun", 181, 12000,
-                    LkStatusDot.Tone.ok, "On sale", "othello"),
-            new EventRow("Mashina · 35-Year Tour", "Concerts", "TLV Convention Center", "Tel Aviv", "5 Jul", 186, 18000,
-                    LkStatusDot.Tone.warn, "Selling fast", "mashina"),
-            new EventRow("Beitar Jerusalem vs Hapoel BS", "Sports", "Teddy Stadium", "Jerusalem", "7 Jul", 188, 6000,
-                    LkStatusDot.Tone.ok, "On sale", "beitar-hapoel"),
-            new EventRow("Spring AI Conference 2026", "Conferences", "David InterContinental", "Tel Aviv", "12 Jul",
-                    193, 40000, LkStatusDot.Tone.warn, "Few left", "spring-ai-2026"),
-            new EventRow("Eden Hason · Live", "Concerts", "Caesarea Amphitheatre", "Caesarea", "20 Jul", 201, 22000,
-                    LkStatusDot.Tone.ok, "On sale", "eden-hason"),
-            new EventRow("Beitar Jerusalem vs Maccabi TA", "Sports", "Teddy Stadium", "Jerusalem", "23 Jul", 204, 7500,
-                    LkStatusDot.Tone.muted, "Pre-sale", "beitar-maccabi"));
+    // Real catalog (ON_SALE events from active companies), loaded once at construction
+    // via BrowseEventsPresenter and mapped to EventRow. All filtering/sorting below is
+    // client-side over this list.
+    private final List<EventRow> allEvents;
 
     private static final String CAT_ALL = "All categories";
     private static final String REGION_ALL = "All regions";
     private static final String DATE_ANY = "Any time";
-    private static final List<String> CATEGORIES = List.of(CAT_ALL, "Concerts", "Sports", "Theatre", "Conferences");
+    private static final List<String> CATEGORIES = List.of(CAT_ALL, "Concerts", "Sports", "Theatre", "Festivals", "Comedy");
     private static final List<String> REGIONS = List.of(REGION_ALL, "Tel Aviv", "Jerusalem", "Haifa", "Caesarea",
             "Be'er Sheva");
     private static final List<String> SORTS = List.of(
@@ -92,11 +83,17 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     private Div gridSlot;
     private Span resultsCountSpan;
 
-    public BrowseEventsView() {
+    public BrowseEventsView(BrowseEventsPresenter presenter) {
+        this.allEvents = presenter.loadCatalog().stream()
+                .map(BrowseEventsView::toRow)
+                .toList();
+
         add(buildHero());
         add(buildCategoryChips());
-        add(Lk.h2("Featured this week"));
-        add(buildPosterGrid());
+        if (!allEvents.isEmpty()) {
+            add(Lk.h2("Featured this week"));
+            add(buildPosterGrid());
+        }
         add(buildAllEventsHeader());
         add(buildBrowseSplit());
         renderGrid();
@@ -143,7 +140,8 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         addChip(row, "music", "Concerts", "Concerts", false);
         addChip(row, "trophy", "Sports", "Sports", false);
         addChip(row, "theater", "Theatre", "Theatre", false);
-        addChip(row, "mic", "Conferences", "Conferences", false);
+        addChip(row, "music", "Festivals", "Festivals", false);
+        addChip(row, "mic", "Comedy", "Comedy", false);
         row.getStyle().set("margin", "4px 0 2px");
         return row;
     }
@@ -174,15 +172,10 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     private Component buildPosterGrid() {
         Div grid = new Div();
         grid.addClassName("bz-poster-grid");
-        grid.add(
-                new BzPoster("Concert", "Coldplay Live in Tel Aviv", "Park HaYarkon · 26 Jun · 20:00", "From $250")
-                        .onClick(() -> UI.getCurrent().navigate("events/coldplay")),
-                new BzPoster("Sport", "Hapoel TLV vs Maccabi Haifa", "Bloomfield · 28 Jun · 21:00", "From $80")
-                        .onClick(() -> UI.getCurrent().navigate("events/hapoel-tlv")),
-                new BzPoster("Theatre", "Othello at Habima", "Habima Theatre · 30 Jun", "From $120")
-                        .onClick(() -> UI.getCurrent().navigate("events/othello")),
-                new BzPoster("Conference", "Spring AI Conference 2026", "David InterContinental · 12 Jul", "From $400")
-                        .onClick(() -> UI.getCurrent().navigate("events/spring-ai-2026")));
+        allEvents.stream().limit(4).forEach(ev ->
+                grid.add(new BzPoster(ev.category, ev.name, ev.venue + " · " + ev.date,
+                        "From $" + (ev.priceCents / 100))
+                        .onClick(() -> UI.getCurrent().navigate("events/" + ev.id))));
         return grid;
     }
 
@@ -309,7 +302,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     // ---- filter + render ----
 
     private List<EventRow> applyFilters() {
-        return ALL_EVENTS.stream()
+        return allEvents.stream()
                 .filter(this::matchesCategory)
                 .filter(this::matchesRegion)
                 .filter(this::matchesDateRange)
@@ -323,7 +316,8 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     }
 
     private boolean matchesRegion(EventRow e) {
-        return REGION_ALL.equals(filterRegion) || filterRegion.equals(e.region);
+        return REGION_ALL.equals(filterRegion)
+                || (e.region != null && e.region.toLowerCase().contains(filterRegion.toLowerCase()));
     }
 
     private boolean matchesDateRange(EventRow e) {
@@ -432,6 +426,35 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
                 .set("color", "var(--muted)").set("background", "#fff")
                 .set("border", "1px dashed var(--border-strong)").set("border-radius", "12px");
         return empty;
+    }
+
+    // ---- DTO → row mapping ----
+
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("d MMM");
+
+    private static EventRow toRow(EventSummaryDTO dto) {
+        LocalDateTime start = (dto.showDates() == null || dto.showDates().isEmpty())
+                ? null : dto.showDates().get(0).startsAt();
+        String date = start == null ? "TBA" : start.format(DATE_FMT);
+        int dayOfYear = start == null ? 0 : start.getDayOfYear();
+        int priceCents = (int) Math.round(dto.minPrice() * 100);
+        LkStatusDot.Tone tone = dto.soldOut() ? LkStatusDot.Tone.muted : LkStatusDot.Tone.ok;
+        String status = dto.soldOut() ? "Sold out" : "On sale";
+        return new EventRow(dto.name(), prettyCategory(dto.category()), dto.location(),
+                dto.location(), date, dayOfYear, priceCents, tone, status,
+                String.valueOf(dto.eventId()));
+    }
+
+    private static String prettyCategory(String enumName) {
+        if (enumName == null) return "Other";
+        return switch (enumName.toUpperCase()) {
+            case "CONCERT", "MUSIC" -> "Concerts";
+            case "SPORTS" -> "Sports";
+            case "THEATER" -> "Theatre";
+            case "FESTIVAL" -> "Festivals";
+            case "COMEDY" -> "Comedy";
+            default -> "Other";
+        };
     }
 
     private static String escape(String s) {

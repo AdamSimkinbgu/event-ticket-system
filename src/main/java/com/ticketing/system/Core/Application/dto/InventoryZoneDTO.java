@@ -12,6 +12,7 @@ public class InventoryZoneDTO {
     private final int soldAmount;
     private final double price;
     private final List<SeatDTO> seats;
+    private final GridPlacementDTO placement;   // null = unplaced (auto-layout)
 
     public InventoryZoneDTO(
             int id,
@@ -22,7 +23,8 @@ public class InventoryZoneDTO {
             int reservedAmount,
             int soldAmount,
             double price,
-            List<SeatDTO> seats
+            List<SeatDTO> seats,
+            GridPlacementDTO placement
     ) {
         this.id = id;
         this.name = name;
@@ -33,6 +35,7 @@ public class InventoryZoneDTO {
         this.soldAmount = soldAmount;
         this.price = price;
         this.seats = seats == null ? List.of() : List.copyOf(seats);
+        this.placement = placement;
     }
 
 
@@ -71,6 +74,10 @@ public class InventoryZoneDTO {
 
     public List<SeatDTO> getSeats() {
         return seats;
+    }
+
+    public GridPlacementDTO getPlacement() {
+        return placement;
     }
 
 }
