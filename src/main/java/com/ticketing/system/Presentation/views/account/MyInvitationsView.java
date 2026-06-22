@@ -1,37 +1,23 @@
 package com.ticketing.system.Presentation.views.account;
 
-import com.ticketing.system.Core.Application.dto.InvitationDTO;
-import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
-import com.ticketing.system.Core.Application.dto.PendingInvitationDTO;
-import com.ticketing.system.Core.Application.services.CompanyManagementService;
-import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
-import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
-import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkGrid;
-import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStatusDot;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Route(value = "my-invitations", layout = MainLayout.class)
 @PageTitle("Invitations · TicketHub")
@@ -41,38 +27,10 @@ public class MyInvitationsView extends LkPage {
     public MyInvitationsView() {
         title("Invitations");
         subtitle("Accept a role to manage events for a production company.");
-
-        add(content);
-        reload();
-    }
-
-    /** (Re)loads the member's invitations into {@link #content}; called on open and after actions. */
-    private void reload() {
-        content.removeAll();
-        switch (presenter.load(AuthSession.token())) {
-            case MyInvitationsPresenter.Outcome.Success ok -> render(ok);
-            case MyInvitationsPresenter.Outcome.NotAuthenticated ignored -> content.add(banner(
-                "Your session has expired — please sign in again."));
-            case MyInvitationsPresenter.Outcome.Failure fail -> content.add(banner(
-                "Could not load invitations: " + fail.reason()));
-        }
-    }
-
-    private void render(MyInvitationsPresenter.Outcome.Success ok) {
-        content.add(Lk.h2("Pending invitations"));
-        if (ok.pending().isEmpty()) {
-            content.add(banner("You have no pending invitations right now."));
-        } else {
-            content.add(buildPendingCard(ok.pending()));
-        }
-        if (!ok.history().isEmpty()) {
-            content.add(Lk.h2("History"));
-            content.add(buildHistoryCard(ok.history()));
-        }
-    }
-
-    private Component banner(String message) {
-        return new LkBanner(LkBanner.Tone.info, new LkIcon("info", 18), message);
+        add(Lk.h2("Pending invitations"));
+        add(buildPendingCard());
+        add(Lk.h2("History"));
+        add(buildHistoryCard());
     }
 
     private Component buildPendingCard() {
@@ -122,110 +80,23 @@ public class MyInvitationsView extends LkPage {
             .col("Outcome", "outcome")
             .col("Date",    "date");
 
-        for (InvitationDTO inv : history) {
-            historyRow(grid, inv);
-        }
+        history(grid, "Mashina Productions", "Manager", "Accepted", LkStatusDot.Tone.ok,    "12 Mar 2026");
+        history(grid, "Teddy Events",        "Manager", "Rejected", LkStatusDot.Tone.muted, "2 Feb 2026");
+
         grid.build();
         card.add(grid);
         return card;
     }
 
-    private void historyRow(LkGrid grid, InvitationDTO inv) {
+    private void history(LkGrid grid, String company, String role, String outcome, LkStatusDot.Tone tone, String date) {
         Map<String, Object> row = new LinkedHashMap<>();
         Span c = new Span();
-        c.getElement().setProperty("innerHTML", "<b>" + escape(inv.companyName()) + "</b>");
+        c.getElement().setProperty("innerHTML", "<b>" + escape(company) + "</b>");
         row.put("company", c);
-        row.put("role", humanize(inv.role()));
-        row.put("outcome", new LkStatusDot(outcomeTone(inv.status()), outcomeLabel(inv.status())));
-        row.put("date", inv.sentAt() == null ? "—" : DATE.format(inv.sentAt()));
+        row.put("role", role);
+        row.put("outcome", new LkStatusDot(tone, outcome));
+        row.put("date", date);
         grid.row(row);
-    }
-
-    // -- Actions --------------------------------------------------------------
-
-    private void handleAccept(InvitationDTO inv) {
-        switch (presenter.accept(AuthSession.token(), inv.companyId())) {
-            case MyInvitationsPresenter.ActionOutcome.Success ignored -> {
-                Toasts.success("Accepted — you are now a " + humanize(inv.role()).toLowerCase(Locale.ENGLISH)
-                    + " at " + inv.companyName() + ".");
-                // Accepting an owner invitation flips ownership; re-navigate so MainLayout
-                // rebuilds the avatar/persona chrome (and the view re-fetches). Manager
-                // accepts only need the local grid refresh.
-                if (OWNER_ROLE.equals(inv.role())) {
-                    UI.getCurrent().navigate(MyInvitationsView.class);
-                } else {
-                    reload();
-                }
-            }
-            case MyInvitationsPresenter.ActionOutcome.NotAuthenticated ignored ->
-                Toasts.failure("Your session has expired — please sign in again.");
-            case MyInvitationsPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not accept invitation: " + fail.reason());
-        }
-    }
-
-    private void handleDecline(InvitationDTO inv) {
-        switch (presenter.decline(AuthSession.token(), inv.companyId())) {
-            case MyInvitationsPresenter.ActionOutcome.Success ignored -> {
-                Toasts.warn("Invitation from " + inv.companyName() + " declined.");
-                reload();
-            }
-            case MyInvitationsPresenter.ActionOutcome.NotAuthenticated ignored ->
-                Toasts.failure("Your session has expired — please sign in again.");
-            case MyInvitationsPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not decline invitation: " + fail.reason());
-        }
-    }
-
-    // -- Display helpers ------------------------------------------------------
-
-    private static LkBadge.Tone roleTone(String role) {
-        return OWNER_ROLE.equals(role) ? LkBadge.Tone.primary : LkBadge.Tone.success;
-    }
-
-    /** Permission summary for a row — Owner offers grant full access, Managers a list. */
-    private static String permissionLabels(InvitationDTO inv) {
-        if (OWNER_ROLE.equals(inv.role())) {
-            return "Full company access";
-        }
-        List<String> perms = inv.permissions();
-        if (perms == null || perms.isEmpty()) {
-            return "—";
-        }
-        return perms.stream().map(MyInvitationsView::humanize).collect(Collectors.joining(" · "));
-    }
-
-    private static String outcomeLabel(String status) {
-        return switch (status) {
-            case "ACTIVE" -> "Accepted";
-            case "REJECTED" -> "Rejected";
-            case "REVOKED" -> "Revoked";
-            default -> humanize(status);
-        };
-    }
-
-    private static LkStatusDot.Tone outcomeTone(String status) {
-        return "ACTIVE".equals(status) ? LkStatusDot.Tone.ok : LkStatusDot.Tone.muted;
-    }
-
-    private static String humanize(String enumName) {
-        return Arrays.stream(enumName.toLowerCase(Locale.ENGLISH).split("_"))
-            .reduce((a, b) -> a + " " + b)
-            .map(s -> Character.toUpperCase(s.charAt(0)) + s.substring(1))
-            .orElse(enumName);
-    }
-
-    /** Compact "received" label from the invitation timestamp. */
-    private static String relativeSent(LocalDateTime sentAt) {
-        if (sentAt == null) {
-            return "—";
-        }
-        long days = Duration.between(sentAt, LocalDateTime.now()).toDays();
-        if (days <= 0) return "today";
-        if (days == 1) return "yesterday";
-        if (days < 7) return days + " days ago";
-        long weeks = days / 7;
-        return weeks == 1 ? "1 week ago" : weeks + " weeks ago";
     }
 
     private static String escape(String s) {
