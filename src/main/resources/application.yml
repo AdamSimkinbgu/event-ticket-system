@@ -28,7 +28,7 @@ session:
 
 constants:
   # System-wide constant
-  ticket-reservation-duration: ${TICKET_RESERVATION_DURATION:15}
+  ticket-reservation-duration: ${TICKET_RESERVATION_DURATION:10}
   order-expiration-duration: ${ORDER_EXPIRATION_DURATION:60}
 
 
