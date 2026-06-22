@@ -1,10 +1,6 @@
 package com.ticketing.system.Presentation.views.order;
 
-import java.util.List;
-
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
-import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
-import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
@@ -15,6 +11,7 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.presenters.order.CartPresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.auth.LoginView;
 import com.vaadin.flow.component.Component;
@@ -31,25 +28,30 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 @AnonymousAllowed
 public class CartView extends LkPage {
 
-    private final ReservationService reservationService;
-    private final String userToken;
+    private final CartPresenter presenter;
+    private final String credential;
     private ActiveOrderDTO activeOrder;
 
     private LkCol linesCol;
     private Span sub, total, subText;
     private LkBtn proceedBtn;
 
-    public CartView(ReservationService reservationService) {
-        this.reservationService = reservationService;
-        this.userToken = AuthSession.token();
+    public CartView(CartPresenter presenter) {
+        this.presenter = presenter;
+        this.credential = AuthSession.token();
 
-        // Guard against anonymous/signed-out users to prevent NPE in the downstream service call.
-        if (this.userToken == null) {
-            UI.getCurrent().navigate(LoginView.class);
-            return;
-        }
-
-        this.activeOrder = reservationService.viewMyActiveOrder(userToken);
+        switch (presenter.loadCart(credential)) {
+            case CartPresenter.LoadOutcome.NotAuthenticated na -> {
+                UI.getCurrent().navigate(LoginView.class);
+                return;
+            }
+            case CartPresenter.LoadOutcome.Shown s -> this.activeOrder = s.order();
+            case CartPresenter.LoadOutcome.Empty e -> this.activeOrder = null;
+            case CartPresenter.LoadOutcome.Failure f -> {
+                this.activeOrder = null;
+                Toasts.failure("Could not load your cart: " + f.reason());
+            }
+        }   // no default — a new variant forces an update here
 
         title("Your cart");
         renderHeaderSubtitle();
@@ -102,18 +104,16 @@ public class CartView extends LkPage {
             .set("background", "none").set("border", "none").set("padding", "0").set("cursor", "pointer");
 
         removeBtn.addClickListener(e -> {
-            InventorySelectionDTO selection = (line.seatNumber() != null)
-                ? InventorySelectionDTO.seated(List.of(line.seatNumber()))
-                : InventorySelectionDTO.standing(1);
-            try {
-                reservationService.removeLine(userToken, line.eventId(), line.zoneId(), selection);
-                activeOrder = reservationService.viewMyActiveOrder(userToken);
-                populateLines();
-                renderHeaderSubtitle();
-                renderTotals();
-                Toasts.success("Removed from cart.");
-            } catch (Exception ex) {
-                Toasts.failure("Failed to remove item. Please try again.");
+            switch (presenter.removeLine(credential, line)) {
+                case CartPresenter.RemoveOutcome.Removed r -> {
+                    this.activeOrder = r.order();
+                    populateLines();
+                    renderHeaderSubtitle();
+                    renderTotals();
+                    Toasts.success("Removed from cart.");
+                }
+                case CartPresenter.RemoveOutcome.Failure f ->
+                    Toasts.failure("Failed to remove item: " + f.reason());
             }
         });
         info.add(removeBtn);

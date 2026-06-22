@@ -1,11 +1,8 @@
 package com.ticketing.system.Presentation.views.order;
 
+import java.util.UUID;
+
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
-import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
-import com.ticketing.system.Core.Application.events.OrderExpiredEvent;
-import com.ticketing.system.Core.Application.interfaces.ISessionManager;
-import com.ticketing.system.Core.Application.services.CheckoutService;
-import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
@@ -15,14 +12,8 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Core.Domain.exceptions.ActiveOrderExpiredException;
-import com.ticketing.system.Core.Domain.exceptions.ConcurrentReservationException;
-import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryException;
-import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
-import com.ticketing.system.Core.Domain.exceptions.PolicyViolationException;
-import com.ticketing.system.Core.Domain.exceptions.SessionExpiredException;
+import com.ticketing.system.Presentation.presenters.order.CheckoutPresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
-import java.util.UUID;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
@@ -41,42 +32,20 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
-
 
 /**
- * Checkout view — wired to real CheckoutService and ReservationService.
+ * Checkout view — wired through {@link CheckoutPresenter} (MVP + Outcome).
  *
- * STATE DESIGN
- * ------------
- * Vaadin creates a new View instance on every navigation (default scope).
- * We load the active order fresh in beforeEnter(), which fires before the
- * DOM is shown. This means:
- *   - Expired orders are caught before the user sees stale totals.
- *   - A cart change in another tab is reflected on the next navigation here.
- *
- * FINANCIAL ARITHMETIC
- * --------------------
- * All monetary values are kept as integer cents (long) throughout.
- * Conversion to a display string happens only at the last moment in
- * formatCents(). This eliminates floating-point rounding errors entirely.
- *
- * GUEST PATH (UC-3 / UC-5)
- * ------------------------
- * Guest order loading falls back to restoreActiveOrderForGuest(sessionId).
+ * The view reads identity from session/UI helpers and paints outcomes; all
+ * service calls, pricing, and the order-expiry subscription live in the
+ * presenter. The view imports nothing from {@code Core} and holds no try/catch.
  */
 @Route(value = "checkout", layout = MainLayout.class)
 @PageTitle("Checkout · TicketHub")
 @AnonymousAllowed
-@Slf4j
 public class CheckoutView extends LkPage implements BeforeEnterObserver {
 
-    private static final long SERVICE_FEE_CENTS = 2400L;
-
-    private final ReservationService reservationService;
-    private final CheckoutService    checkoutService;
-    private final ISessionManager    sessionManager;
+    private final CheckoutPresenter presenter;
 
     private String  memberToken;
     private String  sessionId;
@@ -99,36 +68,56 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
 
     private Div    linesContainer;
     private Span   subtotalSpan;
-    private Span   serviceFeeSpan;
     private Span   totalSpan;
     private Button payButton;
     private Span   timerSpan;
     private Button editCartBtn;
 
-    public CheckoutView(ReservationService reservationService,
-                        CheckoutService    checkoutService,
-                        ISessionManager    sessionManager) {
-        this.reservationService = reservationService;
-        this.checkoutService    = checkoutService;
-        this.sessionManager     = sessionManager;
+    /** Vaadin-free expiry callback; the presenter invokes it, the view repaints. */
+    private final CheckoutPresenter.ExpiryListener expiryListener =
+        new CheckoutPresenter.ExpiryListener() {
+            @Override
+            public boolean matches(int userId, String sessionId) {
+                return isMember
+                    ? (userId == resolvedUserId && resolvedUserId != 0)
+                    : (CheckoutView.this.sessionId != null
+                        && CheckoutView.this.sessionId.equals(sessionId));
+            }
+
+            @Override
+            public void onExpired() {
+                UI currentUi = ui;
+                if (currentUi == null || !currentUi.isAttached()) return;
+                currentUi.access(() -> {
+                    clearOrder();
+                    syncDynamicUI();
+                    Toasts.failure("Your reservation has expired. Please add tickets again.");
+                });
+            }
+        };
+
+    public CheckoutView(CheckoutPresenter presenter) {
+        this.presenter = presenter;
     }
 
     @Override
     protected void onAttach(AttachEvent attachEvent) {
         super.onAttach(attachEvent);
         this.ui = attachEvent.getUI();
+        presenter.registerExpiryListener(expiryListener);
     }
 
     @Override
     protected void onDetach(DetachEvent detachEvent) {
         super.onDetach(detachEvent);
+        presenter.unregisterExpiryListener(expiryListener);
         this.ui = null;
     }
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
         resolveIdentity();
-        refreshFromOrder(renewAndLoadActiveOrder());
+        loadAndApply();
 
         if (getChildren().findAny().isEmpty()) {
             buildPage();
@@ -139,14 +128,17 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
 
     private void resolveIdentity() {
         String token = AuthSession.token();
-        if (token != null && sessionManager.validateToken(token)) {
-            this.memberToken = token;
-            this.sessionId   = null;
-            this.isMember    = true;
+        CheckoutPresenter.Identity id = presenter.resolveIdentity(token);
+        if (id.member()) {
+            this.memberToken    = token;
+            this.sessionId      = null;
+            this.isMember       = true;
+            this.resolvedUserId = id.userId() != null ? id.userId() : 0;
         } else {
-            this.memberToken = null;
-            this.sessionId   = resolveGuestSessionId();
-            this.isMember    = false;
+            this.memberToken    = null;
+            this.sessionId      = resolveGuestSessionId();
+            this.isMember       = false;
+            this.resolvedUserId = 0;
         }
     }
 
@@ -161,90 +153,27 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         return guestId;
     }
 
-    /**
-     * Like {@link #loadActiveOrder()}, but resets every reserved ticket's 10-minute hold
-     * timer to a fresh full window. Used only on checkout-page entry ({@link #beforeEnter})
-     * so the buyer gets the maximum time to pay; the pre-pay refresh keeps using the plain
-     * {@link #loadActiveOrder()} so its "cart expired while you were typing" guard stays intact.
-     */
-    private ActiveOrderDTO renewAndLoadActiveOrder() {
-        if (isMember) {
-            try {
-                this.resolvedUserId = sessionManager.extractUserId(memberToken);
-                return reservationService.renewReservationsForMemberCheckout(resolvedUserId);
-            } catch (Exception e) {
-                log.warn("Failed to renew/load active order for member", e);
+    /** Ask the presenter for the order + pricing and store it; no service call here. */
+    private void loadAndApply() {
+        switch (presenter.loadOrder(memberToken, sessionId)) {
+            case CheckoutPresenter.LoadOutcome.Loaded l -> {
+                this.activeOrder   = l.order();
+                this.subtotalCents = l.pricing().subtotalCents();
+                this.totalCents    = l.pricing().totalCents();
+            }
+            case CheckoutPresenter.LoadOutcome.Empty e -> clearOrder();
+            case CheckoutPresenter.LoadOutcome.NotAuthenticated na -> clearOrder();
+            case CheckoutPresenter.LoadOutcome.Failure f -> {
+                clearOrder();
                 Toasts.warn("Could not load your cart — please try again.");
-                return null;
             }
         }
-
-        if (sessionId != null) {
-            try {
-                return reservationService.renewReservationsForGuestCheckout(sessionId);
-            } catch (Exception e) {
-                log.warn("Failed to renew/load active order for guest", e);
-                return null;
-            }
-        }
-        return null;
     }
 
-    private ActiveOrderDTO loadActiveOrder() {
-        if (isMember) {
-            try {
-                this.resolvedUserId = sessionManager.extractUserId(memberToken);
-                return reservationService.restoreActiveOrder(resolvedUserId);
-            } catch (Exception e) {
-                log.warn("Failed to load active order for member", e);
-                Toasts.warn("Could not load your cart — please try again.");
-                return null;
-            }
-        }
-
-        if (sessionId != null) {
-            try {
-                return reservationService.restoreActiveOrderForGuest(sessionId);
-            } catch (Exception e) {
-                log.warn("Failed to load active order for guest", e);
-                return null;
-            }
-        }
-        return null;
-    }
-
-    @EventListener
-    public void onOrderExpired(OrderExpiredEvent event) {
-        UI currentUi = this.ui;
-        if (currentUi == null || !currentUi.isAttached()) return;
-
-        boolean isForMe = isMember
-                ? event.userId() == resolvedUserId && resolvedUserId != 0
-                : sessionId != null && sessionId.equals(event.sessionId());
-
-        if (!isForMe) return;
-
-        currentUi.access(() -> {
-            refreshFromOrder(null);
-            syncDynamicUI();
-            Toasts.failure("Your reservation has expired. Please add tickets again.");
-        });
-    }
-
-    private void refreshFromOrder(ActiveOrderDTO order) {
-        this.activeOrder = order;
-
-        if (order == null || order.lines().isEmpty()) {
-            this.subtotalCents = 0L;
-            this.totalCents    = 0L;
-            return;
-        }
-
-        long subtotal = order.lines().stream()
-                .mapToLong(l -> Math.round(l.pricePerTicket() * 100))
-                .sum();
-        this.subtotalCents = subtotal;
-        this.totalCents    = subtotal + SERVICE_FEE_CENTS;
+    private void clearOrder() {
+        this.activeOrder   = null;
+        this.subtotalCents = 0L;
+        this.totalCents    = 0L;
     }
 
     private void buildPage() {
@@ -284,9 +213,8 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             }
         }
 
-        if (subtotalSpan   != null) subtotalSpan.setText(formatCents(subtotalCents));
-        if (serviceFeeSpan != null) serviceFeeSpan.setText(formatCents(totalCents > 0 ? SERVICE_FEE_CENTS : 0L));
-        if (totalSpan      != null) totalSpan.setText(formatCents(totalCents));
+        if (subtotalSpan != null) subtotalSpan.setText(formatCents(subtotalCents));
+        if (totalSpan    != null) totalSpan.setText(formatCents(totalCents));
 
         if (payButton != null) {
             payButton.setText("Pay " + formatCents(totalCents));
@@ -304,10 +232,9 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                     "function tick(){" +
                     "  const s=Math.max(0,Math.floor((end-Date.now())/1000));" +
                     "  t.textContent=pad(Math.floor(s/60))+':'+pad(s%60);" +
-                               "  if (s > 0) { setTimeout(tick, 1000); }" +
-            "  else { document.querySelectorAll('vaadin-button.bz-pay-btn').forEach(b => b.setAttribute('disabled', '')); }" +
-            "}" +
-            "tick();",
+                    "  if(s>0) setTimeout(tick,1000);" +
+                    "}" +
+                    "tick();",
                     endMs);
         }
     }
@@ -352,6 +279,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         Div foot = new Div();
         foot.addClassName("bz-order-foot");
 
+        // Coupon is captured but not applied (no coupon backend yet) — left inline on purpose.
         coupon.setPlaceholder("Coupon code");
         coupon.getStyle().set("flex", "1 1 auto");
         Button apply = new Button("Apply", e -> {
@@ -363,15 +291,13 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         couponRow.add(coupon, apply);
         foot.add(couponRow);
 
-        subtotalSpan    = new Span(formatCents(subtotalCents));
-        serviceFeeSpan  = new Span(formatCents(totalCents > 0 ? SERVICE_FEE_CENTS : 0L));
-        totalSpan       = new Span(formatCents(totalCents));
+        subtotalSpan = new Span(formatCents(subtotalCents));
+        totalSpan    = new Span(formatCents(totalCents));
 
         LkCol totals = new LkCol().gap(6);
         totals.getStyle().set("margin-top", "12px");
-        totals.add(summaryRow("Subtotal",    subtotalSpan, false));
-        totals.add(summaryRow("Service fee", serviceFeeSpan, false));
-        totals.add(summaryRow("Total",       totalSpan, true));
+        totals.add(summaryRow("Subtotal", subtotalSpan, false));
+        totals.add(summaryRow("Total",    totalSpan, true));
         foot.add(totals);
 
         editCartBtn = new Button("Edit cart", e -> UI.getCurrent().navigate("cart"));
@@ -457,7 +383,6 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         col.add(Lk.divider());
 
         payButton = new Button("Pay " + formatCents(totalCents), e -> attemptPay());
-        payButton.addClassName("bz-pay-btn");
         payButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_LARGE);
         payButton.setWidthFull();
         payButton.addClickShortcut(Key.ENTER);
@@ -480,17 +405,16 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     }
 
     private void attemptPay() {
+        // (a) instant, backend-free checks stay in the view
         if (totalCents == 0L) {
             Toasts.failure("Your cart is empty.");
             return;
         }
-
         if (cardholder.isEmpty() || cardNumber.isEmpty()
                 || expiry.isEmpty() || cvc.isEmpty()) {
             Toasts.failure("Please fill in every payment field.");
             return;
         }
-
         if (!isMember) {
             if (guestEmail.isInvalid() || guestEmail.isEmpty()) {
                 Toasts.failure("Please enter a valid email address.");
@@ -503,82 +427,36 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             }
         }
 
-        refreshFromOrder(loadActiveOrder());
+        // (b) re-check the reservation hasn't expired since the page rendered
+        loadAndApply();
         if (totalCents == 0L) {
             syncDynamicUI();
             Toasts.failure("Your reservation has expired. Please add tickets again.");
             return;
         }
 
-        payButton.setEnabled(false);
-        payButton.setText("Processing…");
+        // (c) ask the presenter, then switch on the labelled outcome — no try/catch here
+        CheckoutPresenter.PayOutcome outcome = isMember
+            ? presenter.payAsMember(memberToken, cardNumber.getValue())
+            : presenter.payAsGuest(sessionId, guestEmail.getValue().trim(),
+                                   guestAge.getValue(), cardNumber.getValue());
 
-        String idempotencyKey = UUID.randomUUID().toString();
-        String paymentMethodToken = "tok_" + cardNumber.getValue().replaceAll("\\s+", "");
-        String currency = "USD";
-
-        try {
-            CheckoutResultDTO result;
-
-            if (isMember) {
-                result = checkoutService.checkoutMember(
-                        memberToken,
-                        idempotencyKey,
-                        currency,
-                        paymentMethodToken);
-            } else {
-                result = checkoutService.checkoutGuest(
-                        sessionId,
-                        guestEmail.getValue().trim(),
-                        idempotencyKey,
-                        currency,
-                        paymentMethodToken,
-                        guestAge.getValue());
+        switch (outcome) {
+            case CheckoutPresenter.PayOutcome.Success ok -> {
+                Toasts.success("Payment successful — "
+                        + formatCents(Math.round(ok.result().totalCharged() * 100))
+                        + " charged.");
+                UI.getCurrent().navigate("order/" + ok.result().orderReceiptId());
             }
-
-            Toasts.success("Payment successful — "
-                    + formatCents(Math.round(result.totalCharged() * 100))
-                    + " charged.");
-            UI.getCurrent().navigate("order/" + result.orderReceiptId());
-
-        } catch (RuntimeException e) {
-            log.error("Checkout failed for {} user", isMember ? "member" : "guest", e);
-            handlePaymentError(e);
+            case CheckoutPresenter.PayOutcome.PaymentDeclined d ->
+                Toasts.failure("Payment declined: " + d.reason());
+            case CheckoutPresenter.PayOutcome.SoldOut s ->
+                Toasts.failure("Those seats just sold out. Please choose again.");
+            case CheckoutPresenter.PayOutcome.DuplicateSubmission dup ->
+                Toasts.warn("This order was already submitted.");
+            case CheckoutPresenter.PayOutcome.Failure f ->
+                Toasts.failure("Payment could not be completed. Please try again or contact support.");
         }
-    }
-
-    // Maps a checkout failure to a clear, actionable message + recovery navigation (SLR.3.2).
-    // CheckoutService re-wraps failures as RuntimeException(cause), so we unwrap one level.
-    // Today only PaymentGatewayException is surfaced as a distinct type; the PolicyViolation /
-    // InsufficientInventory / ConcurrentReservation / Session- & ActiveOrderExpired branches are
-    // forward-looking — they activate once checkout/domain throw those typed exceptions (until
-    // then those failures arrive as IllegalStateException and hit the generic branch below).
-    private void handlePaymentError(RuntimeException ex) {
-        Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
-
-        if (cause instanceof PolicyViolationException pve) {
-            Toasts.failure("Purchase not allowed: " + pve.getMessage());
-        } else if (cause instanceof PaymentGatewayException) {
-            Toasts.failure("Payment declined. Please check your card details and try again.");
-        } else if (cause instanceof InsufficientInventoryException) {
-            Toasts.failure("Some tickets are no longer available. Please review your cart.");
-            UI.getCurrent().navigate("cart");
-            return;
-        } else if (cause instanceof ConcurrentReservationException) {
-            Toasts.warn("Your cart was modified by another session. Please review and try again.");
-        } else if (cause instanceof SessionExpiredException || cause instanceof ActiveOrderExpiredException) {
-            Toasts.failure("Your session expired. Please start a new order.");
-            UI.getCurrent().navigate("browse");
-            return;
-        } else {
-            Toasts.failure("Checkout couldn't be completed — no charge remains on your card. Please try again.");
-        }
-        resetPayButton();
-    }
-
-    private void resetPayButton() {
-        payButton.setEnabled(totalCents > 0);
-        payButton.setText("Pay " + formatCents(totalCents));
     }
 
     private static String formatCents(long cents) {
