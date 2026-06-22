@@ -6,6 +6,7 @@ import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
+import com.ticketing.system.Presentation.components.venue.VkSeatedZonePicker;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.layouts.MainLayout;
@@ -17,6 +18,8 @@ import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.List;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.ActiveProfiles;
@@ -124,6 +127,17 @@ class VaadinSmokeTest {
         // Domain components used by the venue / seat picker views.
         assertDoesNotThrow(() -> new VkSeat(VkSeat.State.free, "1"), "VkSeat failed");
         assertDoesNotThrow(VkSeatLegend::new,             "VkSeatLegend failed");
+        assertDoesNotThrow(() -> new VkSeatedZonePicker(List.of(), null), "VkSeatedZonePicker (empty) failed");
+        assertDoesNotThrow(() -> new VkSeatedZonePicker(
+                List.of(new VkSeatedZonePicker.SeatModel("A1", 0, 0, VkSeat.State.free),
+                        new VkSeatedZonePicker.SeatModel("A2", 32, 0, VkSeat.State.held)),
+                null), "VkSeatedZonePicker (with seats) failed");
+        assertDoesNotThrow(() -> {
+            VkSeat seat = new VkSeat(VkSeat.State.free, "1");
+            seat.setState(VkSeat.State.mine);
+            seat.setState(VkSeat.State.sold);
+            seat.setState(VkSeat.State.free);
+        }, "VkSeat.setState failed");
     }
 
     @Test

@@ -14,6 +14,7 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStepper;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
+import com.ticketing.system.Presentation.components.venue.VkSeatedZonePicker;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
 import com.ticketing.system.Presentation.components.venue.VkStandingZone;
 import com.ticketing.system.Presentation.layouts.MainLayout;
@@ -36,17 +37,15 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Centerpiece seat picker (V2-CAT-03). Interactive seat grid with the
- * four race-condition states (free / mine / held / sold), live
- * selection rail with running total, plus a standing-zone variant and
- * a states reference card.
+ * Seat picker page (V2-RES-01). Hosts {@link VkSeatedZonePicker} for
+ * seat-by-seat selection, a live selection rail, and a standing-zone section.
  */
 @Route(value = "events/:eventId/seats/:zoneId", layout = MainLayout.class)
 @PageTitle("Pick seats · TicketHub")
 @AnonymousAllowed
 public class SeatPickerView extends LkPage implements BeforeEnterObserver {
 
-    /** {@code . = free, m = mine, h = held by another buyer, x = sold} */
+    /** Stub grid used until real seat data is loaded from a service. */
     private static final String[] LOWER_L_INITIAL = {
         "xxx..hh...",
         "xx...hh...",
@@ -56,20 +55,23 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         "...hh....."
     };
 
-    private static final int SEAT_PRICE_CENTS = 16000;
+    private static final int SEAT_PRICE_CENTS = 16_000;
+    private static final int SEAT_STEP        = 32;  // tile(28px) + gap(4px)
+    private static final int ROW_LABEL_W      = 36;  // column reserved for the row letter
 
-    private final ReservationService reservationService;
+    private final ReservationService  reservationService;
+    private final VkSeatedZonePicker  picker;
 
     private int eventId;
     private int zoneId;
 
-    private char[][] seatStates;
-    private Div seatGridContainer;
     private LkCol selectionListCol;
 
     public SeatPickerView(ReservationService reservationService) {
         this.reservationService = reservationService;
-        initSeatStates();
+        // TODO: replace buildSeatModels() with a real service call once
+        //       CatalogService exposes getSeatedZoneSeats(eventId, zoneId).
+        picker = new VkSeatedZonePicker(buildSeatModels(), this::updateSelectionRail);
         add(buildBreadcrumb());
         add(buildSeatedSplit());
         add(Lk.h2("Standing zone — quantity selection"));
@@ -84,11 +86,32 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         try { this.zoneId  = Integer.parseInt(zidStr); } catch (NumberFormatException e) { this.zoneId  = 0; }
     }
 
-    private void initSeatStates() {
-        seatStates = new char[LOWER_L_INITIAL.length][];
-        for (int i = 0; i < LOWER_L_INITIAL.length; i++) {
-            seatStates[i] = LOWER_L_INITIAL[i].toCharArray();
+    // ---------- stub data ----------
+
+    /**
+     * Converts the hardcoded char grid into {@link VkSeatedZonePicker.SeatModel} objects
+     * with absolute (x, y) positions.
+     *
+     * TODO: swap for a real service call once CatalogService exposes seat data.
+     */
+    private static List<VkSeatedZonePicker.SeatModel> buildSeatModels() {
+        List<VkSeatedZonePicker.SeatModel> seats = new ArrayList<>();
+        for (int ri = 0; ri < LOWER_L_INITIAL.length; ri++) {
+            char rowChar = (char) ('A' + ri);
+            for (int ci = 0; ci < LOWER_L_INITIAL[ri].length(); ci++) {
+                char c = LOWER_L_INITIAL[ri].charAt(ci);
+                String label = "Row " + rowChar + " Seat " + (ci + 1);
+                double x = ROW_LABEL_W + ci * (double) SEAT_STEP;
+                double y = ri * (double) SEAT_STEP;
+                VkSeat.State state = switch (c) {
+                    case 'h' -> VkSeat.State.held;
+                    case 'x' -> VkSeat.State.sold;
+                    default  -> VkSeat.State.free; // '.' and 'm' start as free
+                };
+                seats.add(new VkSeatedZonePicker.SeatModel(label, x, y, state));
+            }
         }
+        return seats;
     }
 
     // ---------- breadcrumb ----------
@@ -148,9 +171,22 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
 
         Div seatScroll = new Div();
         seatScroll.addClassName("vz-seatscroll");
-        seatGridContainer = new Div();
-        renderSeatGrid();
-        seatScroll.add(seatGridContainer);
+
+        // Row labels (A–F) share a relative wrapper with the picker so their
+        // y-coordinates line up with the picker's absolute seat positions.
+        Div pickerWrap = new Div();
+        pickerWrap.getStyle().set("position", "relative");
+        for (int ri = 0; ri < LOWER_L_INITIAL.length; ri++) {
+            Span rowLabel = new Span(String.valueOf((char) ('A' + ri)));
+            rowLabel.addClassName("vk-rowlabel");
+            rowLabel.getStyle()
+                    .set("position", "absolute")
+                    .set("left", "0")
+                    .set("top", (ri * SEAT_STEP) + "px");
+            pickerWrap.add(rowLabel);
+        }
+        pickerWrap.add(picker);
+        seatScroll.add(pickerWrap);
         canvas.add(seatScroll);
 
         Div legendWrap = new Div();
@@ -162,56 +198,10 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         return card;
     }
 
-    private void renderSeatGrid() {
-        seatGridContainer.removeAll();
-        Div block = new Div();
-        block.addClassName("vk-seatblock");
-
-        for (int ri = 0; ri < seatStates.length; ri++) {
-            Div row = new Div();
-            row.addClassName("vk-seatrow");
-
-            Span label = new Span(String.valueOf((char) ('A' + ri)));
-            label.addClassName("vk-rowlabel");
-            row.add(label);
-
-            for (int ci = 0; ci < seatStates[ri].length; ci++) {
-                char c = seatStates[ri][ci];
-                VkSeat.State state = stateFor(c);
-                VkSeat seat = new VkSeat(state, String.valueOf(ci + 1));
-                if (state == VkSeat.State.free || state == VkSeat.State.mine) {
-                    final int rr = ri, cc = ci;
-                    seat.addClickListener(e -> handleSeatClick(rr, cc));
-                }
-                row.add(seat);
-            }
-            block.add(row);
-        }
-        seatGridContainer.add(block);
-    }
-
-    private static VkSeat.State stateFor(char c) {
-        return switch (c) {
-            case 'm' -> VkSeat.State.mine;
-            case 'h' -> VkSeat.State.held;
-            case 'x' -> VkSeat.State.sold;
-            default  -> VkSeat.State.free;
-        };
-    }
-
-    private void handleSeatClick(int row, int col) {
-        char current = seatStates[row][col];
-        if (current == 'h' || current == 'x') return;
-        seatStates[row][col] = (current == 'm') ? '.' : 'm';
-        renderSeatGrid();
-        updateSelectionRail();
-    }
-
     // ---------- selection rail ----------
 
     private Component buildSelectionRail() {
         LkCol rail = new LkCol().gap(14);
-
         rail.add(buildCountdownBanner());
 
         LkCard selection = new LkCard("Your selection").pad(16);
@@ -220,7 +210,6 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         rail.add(selection);
 
         rail.add(buildLockingExplainerCard());
-
         updateSelectionRail();
         return rail;
     }
@@ -247,28 +236,26 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         if (selectionListCol == null) return;
         selectionListCol.removeAll();
 
-        List<int[]> mineSeats = collectMine();
-        if (mineSeats.isEmpty()) {
+        if (!picker.hasSelection()) {
             Span hint = Lk.muted("Click a green seat above to select.");
             hint.getStyle().set("text-align", "center").set("display", "block").set("padding", "8px 0");
             selectionListCol.add(hint);
             return;
         }
 
-        for (int[] seat : mineSeats) {
-            String rowLabel = String.valueOf((char) ('A' + seat[0]));
-            int seatNum = seat[1] + 1;
-            selectionListCol.add(selectedSeatRow(rowLabel, seatNum, seat[0], seat[1]));
+        List<String> labels = picker.getSelection().getSeatNumbers();
+        for (String label : labels) {
+            selectionListCol.add(selectedSeatRow(label));
         }
 
         selectionListCol.add(Lk.divider());
 
-        int totalCents = mineSeats.size() * SEAT_PRICE_CENTS;
+        int count = labels.size();
         LkRow totalRow = new LkRow().justify("space-between");
-        totalRow.add(Lk.muted(mineSeats.size() + " seat" + (mineSeats.size() == 1 ? "" : "s")));
+        totalRow.add(Lk.muted(count + " seat" + (count == 1 ? "" : "s")));
         Span totalDisplay = new Span();
         totalDisplay.getElement().setProperty("innerHTML",
-            "<b style='font-size:16px'>" + formatPrice(totalCents) + "</b>");
+            "<b style='font-size:16px'>" + formatPrice((long) count * SEAT_PRICE_CENTS) + "</b>");
         totalRow.add(totalDisplay);
         selectionListCol.add(totalRow);
 
@@ -276,17 +263,17 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
             .variant(LkBtn.Variant.primary)
             .size(LkBtn.Size.l)
             .full()
-            .onClick(e -> addSelectionToCart(mineSeats));
+            .onClick(e -> addSelectionToCart());
         selectionListCol.add(addBtn);
     }
 
-    private Component selectedSeatRow(String rowLabel, int seatNum, int rIdx, int cIdx) {
+    private Component selectedSeatRow(String label) {
         Div row = new Div();
         row.addClassName("vz-selseat");
 
         Div info = new Div();
         Span name = new Span();
-        name.getElement().setProperty("innerHTML", "<b>Row " + rowLabel + " · Seat " + seatNum + "</b>");
+        name.getElement().setProperty("innerHTML", "<b>" + label + "</b>");
         Span subline = Lk.muted("Lower L · " + formatPrice(SEAT_PRICE_CENTS));
         subline.getStyle().set("font-size", "12.5px").set("display", "block");
         info.add(name, subline);
@@ -294,44 +281,25 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         Span remove = new Span();
         remove.addClassName("vz-selseat-x");
         remove.add(new LkIcon("close", 15));
-        remove.getElement().addEventListener("click", e -> {
-            seatStates[rIdx][cIdx] = '.';
-            renderSeatGrid();
-            updateSelectionRail();
-        });
+        // picker.deselect() fires onSelectionChange → updateSelectionRail()
+        remove.getElement().addEventListener("click", e -> picker.deselect(label));
 
         row.add(info, remove);
         return row;
     }
 
-    private void addSelectionToCart(List<int[]> mineSeats) {
-        List<String> seatIds = new ArrayList<>();
-        for (int[] seat : mineSeats) {
-            String rowLabel = String.valueOf((char) ('A' + seat[0]));
-            int seatNum = seat[1] + 1;
-            seatIds.add("Row " + rowLabel + " Seat " + seatNum);
-            seatStates[seat[0]][seat[1]] = '.';
-        }
+    private void addSelectionToCart() {
+        InventorySelectionDTO selection = picker.getSelection();
+        if (selection == null) return;
+        int count = selection.getQuantity();
         try {
-            InventorySelectionDTO selection = InventorySelectionDTO.seated(seatIds);
             callReserveService(selection);
-            renderSeatGrid();
-            updateSelectionRail();
-            Toasts.success(mineSeats.size() + " seat" + (mineSeats.size() == 1 ? "" : "s") + " reserved — continue to cart.");
+            picker.clearSelection();
+            Toasts.success(count + " seat" + (count == 1 ? "" : "s") + " reserved — continue to cart.");
             UI.getCurrent().navigate(CartView.class);
         } catch (Exception ex) {
             Toasts.failure("Could not reserve seats: " + ex.getMessage());
         }
-    }
-
-    private List<int[]> collectMine() {
-        List<int[]> mine = new ArrayList<>();
-        for (int r = 0; r < seatStates.length; r++) {
-            for (int c = 0; c < seatStates[r].length; c++) {
-                if (seatStates[r][c] == 'm') mine.add(new int[]{r, c});
-            }
-        }
-        return mine;
     }
 
     // ---------- "How locking works" card ----------
@@ -397,8 +365,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
             .full()
             .onClick(e -> {
                 try {
-                    InventorySelectionDTO selection = InventorySelectionDTO.standing(2);
-                    callReserveService(selection);
+                    callReserveService(InventorySelectionDTO.standing(2));
                     Toasts.success("2 GA tickets reserved — continue to cart.");
                     UI.getCurrent().navigate(CartView.class);
                 } catch (Exception ex) {
@@ -418,10 +385,10 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
 
         Div grid = new Div();
         grid.addClassName("vz-state-grid");
-        grid.add(stateCell(VkSeat.State.free, "", "Available", "Tap to hold"));
-        grid.add(stateCell(VkSeat.State.mine, "14", "In your order", "Locked 10 min"));
+        grid.add(stateCell(VkSeat.State.free, "",   "Available",        "Tap to hold"));
+        grid.add(stateCell(VkSeat.State.mine, "14", "In your order",    "Locked 10 min"));
         grid.add(stateCell(VkSeat.State.held, "14", "Locked by others", "Live update"));
-        grid.add(stateCell(VkSeat.State.sold, "14", "Sold", "Unavailable"));
+        grid.add(stateCell(VkSeat.State.sold, "14", "Sold",             "Unavailable"));
         card.add(grid);
 
         LkBanner info = new LkBanner();
@@ -437,7 +404,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
     private Div stateCell(VkSeat.State state, String num, String title, String sub) {
         Div cell = new Div();
         cell.addClassName("vz-state-cell");
-        VkSeat seat = new VkSeat(state, num);
+        VkSeat seat = new VkSeat(state, num.isEmpty() ? null : num);
         Div meta = new Div();
         Span t = new Span();
         t.getElement().setProperty("innerHTML", "<b style='font-size:13.5px'>" + title + "</b>");
@@ -447,6 +414,8 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         cell.add(seat, meta);
         return cell;
     }
+
+    // ---------- service calls ----------
 
     private void callReserveService(InventorySelectionDTO selection) {
         String token = AuthSession.token();
@@ -468,7 +437,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         return guestId;
     }
 
-    private static String formatPrice(int cents) {
+    private static String formatPrice(long cents) {
         return "$" + (cents / 100) + "." + String.format("%02d", cents % 100);
     }
 }
