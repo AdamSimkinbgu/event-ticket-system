@@ -25,10 +25,12 @@ import com.ticketing.system.Presentation.views.company.ManagerListView;
 import com.ticketing.system.Presentation.views.company.OwnerDashboardView;
 import com.ticketing.system.Presentation.views.account.MyInvitationsView;
 import com.ticketing.system.Presentation.views.landing.LandingView;
+import com.ticketing.system.Presentation.views.messaging.SubmitComplaintView;
 import com.ticketing.system.Presentation.presenters.company.ManagerListPresenter;
 import com.ticketing.system.Presentation.presenters.company.OwnerDashboardPresenter;
 import com.ticketing.system.Presentation.presenters.account.MyInvitationsPresenter;
 import com.ticketing.system.Presentation.presenters.landing.LandingPresenter;
+import com.ticketing.system.Presentation.presenters.messaging.SubmitComplaintPresenter;
 import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
 import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import org.junit.jupiter.api.Test;
@@ -187,6 +189,16 @@ class VaadinSmokeTest {
             new LandingPresenter.Outcome.Success(List.of(), List.of()));
         assertDoesNotThrow(() -> new LandingView(presenter),
             "LandingView failed to construct");
+    }
+
+    @Test
+    void submitComplaintViewInstantiates() {
+        // Messaging view wired to a presenter (#267). Construction doesn't invoke
+        // submit(), so a bare mock presenter is enough to exercise the form-build
+        // path without a UI context — a canary for kit-API breakage.
+        SubmitComplaintPresenter presenter = mock(SubmitComplaintPresenter.class);
+        assertDoesNotThrow(() -> new SubmitComplaintView(presenter),
+            "SubmitComplaintView failed to construct");
     }
 
     @Test
