@@ -86,6 +86,7 @@ class SystemAdminServiceTest {
                 "admin"
         );
         when(sessionManager.validateToken(ADMIN_TOKEN)).thenReturn(true);
+        when(sessionManager.isAdminToken(ADMIN_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(ADMIN_TOKEN)).thenReturn(ADMIN_USER_ID);
         when(adminRepository.findById(ADMIN_USER_ID)).thenReturn(new Admin(ADMIN_USER_ID, "admin", "hash", true));
     }
