@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import lombok.extern.slf4j.Slf4j;
@@ -198,7 +199,6 @@ public class CompanyManagementService {
 
 
 
-
     // UC-24 — edit a Manager's permission set (only by the original appointer).
     public void editManagerPermissions(String token, PermissionEditDTO edit) {
         int ownerId = authenticate(token);
@@ -236,6 +236,7 @@ public class CompanyManagementService {
 
 
 
+
     public void RevokeAppointment(String token, AppointmentRevokeDTO revokeRequest) {
         int ownerId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(revokeRequest.companyId());
@@ -264,7 +265,19 @@ public class CompanyManagementService {
     }
 
 
+    // Resolves a username-or-email string to a userId — used by the invite flow.
+    public int resolveUserId(String identifier) {
+        if (identifier == null || identifier.isBlank())
+            throw new IllegalArgumentException("Identifier must not be blank");
 
+        Optional<User> byName = userRepository.findByUsername(identifier.trim());
+        if (byName.isPresent()) return byName.get().getUserId();
+
+        Optional<User> byEmail = userRepository.findByEmail(identifier.trim());
+        if (byEmail.isPresent()) return byEmail.get().getUserId();
+
+        throw new UserNotFoundException(identifier);
+    }
 
     
     // ---------------------------------------------------------------------------
