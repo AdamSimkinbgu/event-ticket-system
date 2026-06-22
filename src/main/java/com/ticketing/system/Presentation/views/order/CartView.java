@@ -14,6 +14,7 @@ import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.order.CartPresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.session.GuestSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -21,10 +22,9 @@ import com.vaadin.flow.component.html.NativeButton;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
-import com.vaadin.flow.server.VaadinSession;
+import com.ticketing.system.Presentation.session.GuestSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
-import java.util.UUID;
 
 @Route(value = "cart", layout = MainLayout.class)
 @PageTitle("Cart · TicketHub")
@@ -68,16 +68,9 @@ public class CartView extends LkPage {
         return token != null ? token : guestSessionId();
     }
 
-    private String guestSessionId() {
-        VaadinSession session = VaadinSession.getCurrent();
-        if (session == null) return null;
-        String guestId = (String) session.getAttribute("guestSessionId");
-        if (guestId == null) {
-            guestId = UUID.randomUUID().toString();
-            session.setAttribute("guestSessionId", guestId);
-        }
-        return guestId;
-    }
+   private String guestSessionId() {
+    return GuestSession.sessionId();
+}
 
     private void clearCart() {
         this.activeOrder   = null;

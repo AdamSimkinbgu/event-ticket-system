@@ -9,6 +9,7 @@ import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.session.GuestSession;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.company.CompanyRegistrationView;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
@@ -89,7 +90,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
             } else {
                 VaadinSession s = VaadinSession.getCurrent();
                 if (s != null) {
-                    String guestId = (String) s.getAttribute("guestSessionId");
+                   String guestId = GuestSession.sessionId();
                     if (guestId != null) {
                         order = reservationService.viewMyActiveOrder(guestId);
                     }

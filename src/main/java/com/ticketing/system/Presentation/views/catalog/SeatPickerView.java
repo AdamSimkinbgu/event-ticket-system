@@ -18,6 +18,7 @@ import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
 import com.ticketing.system.Presentation.components.venue.VkStandingZone;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.session.GuestSession;
 import com.ticketing.system.Presentation.views.order.CartView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -458,15 +459,8 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
     }
 
     private String resolveGuestSessionId() {
-        VaadinSession session = VaadinSession.getCurrent();
-        if (session == null) return UUID.randomUUID().toString();
-        String guestId = (String) session.getAttribute("guestSessionId");
-        if (guestId == null) {
-            guestId = UUID.randomUUID().toString();
-            session.setAttribute("guestSessionId", guestId);
-        }
-        return guestId;
-    }
+    return GuestSession.sessionId();
+}
 
     private static String formatPrice(int cents) {
         return "$" + (cents / 100) + "." + String.format("%02d", cents % 100);

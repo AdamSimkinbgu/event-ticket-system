@@ -1,7 +1,4 @@
 package com.ticketing.system.Presentation.views.order;
-
-import java.util.UUID;
-
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
@@ -15,6 +12,7 @@ import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.order.CheckoutPresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.session.GuestSession;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
@@ -30,7 +28,6 @@ import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
-import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
 /**
@@ -147,16 +144,9 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         }
     }
 
-    private String resolveGuestSessionId() {
-        VaadinSession session = VaadinSession.getCurrent();
-        if (session == null) return null;
-        String guestId = (String) session.getAttribute("guestSessionId");
-        if (guestId == null) {
-            guestId = UUID.randomUUID().toString();
-            session.setAttribute("guestSessionId", guestId);
-        }
-        return guestId;
-    }
+  private String resolveGuestSessionId() {
+    return GuestSession.sessionId();
+}
 
     /** Reload order + pricing into view state; returns the outcome for the caller to message on. */
     private CheckoutPresenter.LoadOutcome reload() {
