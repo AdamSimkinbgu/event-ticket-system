@@ -12,7 +12,7 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkIconBtn;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
-import com.ticketing.system.Presentation.components.kit.LkStepper;
+import com.ticketing.system.Presentation.components.venue.VkQuantitySelector;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
 import com.ticketing.system.Presentation.components.venue.VkStandingZone;
@@ -376,36 +376,36 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         LkCol col = new LkCol().gap(16);
         col.add(new VkStandingZone("GA Floor", 7600, 9000, "$90 each"));
 
-        LkRow qtyRow = new LkRow().gap(14).align("flex-end");
-        LkStepper stepper = new LkStepper("2").label("Quantity").width("160px");
-        Span policy = Lk.muted("Max 4 per buyer (policy)");
-        policy.getStyle().set("font-size", "13px");
-        qtyRow.add(stepper, policy);
-        col.add(qtyRow);
+        // available = capacity − sold; price $90 = 9000 cents
+        int available = 9000 - 7600;
+        int priceCents = 9000;
 
-        col.add(Lk.divider());
-
-        LkRow priceRow = new LkRow().justify("space-between");
-        priceRow.add(Lk.muted("2 × $90"));
-        Span priceTotal = new Span();
-        priceTotal.getElement().setProperty("innerHTML", "<b style='font-size:16px'>$180.00</b>");
-        priceRow.add(priceTotal);
-        col.add(priceRow);
-
-        LkBtn hold = new LkBtn("Hold 2 tickets →")
+        LkBtn holdBtn = new LkBtn("Hold 1 ticket →")
             .variant(LkBtn.Variant.primary)
-            .full()
-            .onClick(e -> {
-                try {
-                    InventorySelectionDTO selection = InventorySelectionDTO.standing(2);
-                    callReserveService(selection);
-                    Toasts.success("2 GA tickets reserved — continue to cart.");
-                    UI.getCurrent().navigate(CartView.class);
-                } catch (Exception ex) {
-                    Toasts.failure("Could not reserve tickets: " + ex.getMessage());
-                }
-            });
-        col.add(hold);
+            .full();
+
+        VkQuantitySelector[] sel = {null};
+        sel[0] = new VkQuantitySelector(available, priceCents, () -> {
+            int q = sel[0].getQuantity();
+            holdBtn.label("Hold " + q + " ticket" + (q == 1 ? "" : "s") + " →");
+        });
+        VkQuantitySelector selector = sel[0];
+
+        col.add(selector);
+        col.add(Lk.divider());
+        holdBtn.onClick(e -> {
+            try {
+                InventorySelectionDTO selection = selector.getSelection();
+                if (selection == null) return;
+                int qty = selector.getQuantity();
+                callReserveService(selection);
+                Toasts.success(qty + " GA ticket" + (qty == 1 ? "" : "s") + " reserved — continue to cart.");
+                UI.getCurrent().navigate(CartView.class);
+            } catch (Exception ex) {
+                Toasts.failure("Could not reserve tickets: " + ex.getMessage());
+            }
+        });
+        col.add(holdBtn);
 
         card.add(col);
         return card;

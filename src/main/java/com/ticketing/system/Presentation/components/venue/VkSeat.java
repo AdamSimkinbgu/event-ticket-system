@@ -18,4 +18,10 @@ public class VkSeat extends NativeButton {
             getElement().setAttribute("title", "Seat " + num + " · " + state.name());
         }
     }
+
+    /** Swaps the state CSS class in place — avoids recreating the DOM node on toggle. */
+    public void setState(State state) {
+        for (State s : State.values()) removeClassName("vk-seat-" + s.name());
+        addClassName("vk-seat-" + state.name());
+    }
 }
