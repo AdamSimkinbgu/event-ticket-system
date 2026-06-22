@@ -30,6 +30,7 @@ import com.ticketing.system.Presentation.views.landing.LandingView;
 import com.ticketing.system.Presentation.views.messaging.SubmitComplaintView;
 import com.ticketing.system.Presentation.presenters.company.ManagerListPresenter;
 import com.ticketing.system.Presentation.presenters.company.OwnerDashboardPresenter;
+import com.ticketing.system.Presentation.presenters.messaging.AdminAnnouncementsPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.AdminComplaintQueuePresenter;
 import com.ticketing.system.Presentation.presenters.messaging.CompanyInquiryInboxPresenter;
 import com.ticketing.system.Presentation.presenters.account.MyInvitationsPresenter;
@@ -145,7 +146,6 @@ class VaadinSmokeTest {
         // Every PlatformAdminLayout view. Sign-in is now the unified LoginView
         // (which is exercised by the buyer-side construction path).
         assertDoesNotThrow(AdminDashboardView::new,      "AdminDashboardView failed to construct");
-        assertDoesNotThrow(AdminAnnouncementsView::new,  "AdminAnnouncementsView failed to construct");
         assertDoesNotThrow(OrganizationalTreeView::new,  "OrganizationalTreeView failed to construct");
     }
 
@@ -259,6 +259,20 @@ class VaadinSmokeTest {
             new AdminComplaintQueuePresenter.Outcome.Success(List.of(conv)));
         assertDoesNotThrow(() -> new AdminComplaintQueueView(presenter),
             "AdminComplaintQueueView failed to construct");
+    }
+
+    @Test
+    void adminAnnouncementsViewInstantiates() {
+        // Admin announcements wired to a presenter (#270). A mock presenter returning one
+        // sent-announcement row exercises the composer + history-grid build path without a UI
+        // context. (The view now takes a presenter, so it moved out of platformAdminViewsInstantiate.)
+        AdminAnnouncementsPresenter presenter = mock(AdminAnnouncementsPresenter.class);
+        AdminAnnouncementsPresenter.SentAnnouncement row = new AdminAnnouncementsPresenter.SentAnnouncement(
+            LocalDateTime.now(), "Maintenance window", "Members", 82481, "Admin #1");
+        when(presenter.load(any())).thenReturn(
+            new AdminAnnouncementsPresenter.Outcome.Success(List.of(row)));
+        assertDoesNotThrow(() -> new AdminAnnouncementsView(presenter),
+            "AdminAnnouncementsView failed to construct");
     }
 
     @Test

@@ -7,6 +7,7 @@ import java.util.Objects;
 
 import org.springframework.stereotype.Service;
 
+import com.ticketing.system.Core.Application.dto.AnnounceResultDTO;
 import com.ticketing.system.Core.Application.dto.AnnouncementRequestDTO;
 import com.ticketing.system.Core.Application.dto.ComplaintFilterDTO;
 import com.ticketing.system.Core.Application.dto.ConversationDTO;
@@ -180,7 +181,7 @@ public class MessagingService {
 
     // II.6.3.2 — admin outreach. Fans out to one ANNOUNCEMENT conversation per recipient
     // (a real two-party thread each), so read-tracking and the notification bridge stay uniform.
-    public ConversationDTO announce(String token, AnnouncementRequestDTO request) {
+    public AnnounceResultDTO announce(String token, AnnouncementRequestDTO request) {
         int adminId = requireSystemAdmin(token);
         String audience = request.audienceType() == null ? "" : request.audienceType().trim().toUpperCase();
 
@@ -216,7 +217,7 @@ public class MessagingService {
             throw new BusinessRuleViolationException("Announcement matched no recipients");
         }
         log.info("Admin {} announced to {} recipient(s) (audience={})", adminId, created.size(), audience);
-        return new ConversationMapper().toDTO(created.get(0), adminId);
+        return new AnnounceResultDTO(created.size(), created.get(0).getConversationId());
     }
 
 
@@ -298,6 +299,17 @@ public class MessagingService {
         ConversationMapper mapper = new ConversationMapper();
         return complaints.stream()
                 .filter(c -> matchesComplaintFilter(c, filters))
+                .sorted(Comparator.comparing(Conversation::getLastMessageAt).reversed())
+                .map(c -> mapper.toDTO(c, adminId))
+                .toList();
+    }
+
+    // II.6.3.2 — admin "sent history": every ANNOUNCEMENT conversation across the platform.
+    // The fan-out creates one conversation per recipient; callers group them into broadcasts.
+    public List<ConversationDTO> viewSentAnnouncements(String token) {
+        int adminId = requireSystemAdmin(token);
+        ConversationMapper mapper = new ConversationMapper();
+        return conversationRepository.findByType(ConversationType.ANNOUNCEMENT).stream()
                 .sorted(Comparator.comparing(Conversation::getLastMessageAt).reversed())
                 .map(c -> mapper.toDTO(c, adminId))
                 .toList();

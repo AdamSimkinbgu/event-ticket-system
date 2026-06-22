@@ -15,6 +15,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.system.Core.Application.dto.AnnounceResultDTO;
 import com.ticketing.system.Core.Application.dto.AnnouncementRequestDTO;
 import com.ticketing.system.Core.Application.dto.ComplaintFilterDTO;
 import com.ticketing.system.Core.Application.dto.ConversationDTO;
@@ -197,9 +198,10 @@ class MessagingServiceTest {
         User u11 = plainUser(MEMBER2_ID);
         when(userRepository.findAll()).thenReturn(List.of(u10, u11));
 
-        service.announce(ADMIN_TOKEN, new AnnouncementRequestDTO(
+        AnnounceResultDTO result = service.announce(ADMIN_TOKEN, new AnnouncementRequestDTO(
                 ADMIN_ID, "Notice", "Body", "ALL_MEMBERS", List.of(), List.of()));
 
+        assertEquals(2, result.recipientCount());
         assertEquals(2, conversationRepository.findByType(ConversationType.ANNOUNCEMENT).size());
         verify(notificationService).notifyNewMessage(eq(MEMBER_ID), anyString(), anyString(), eq("Notice"), anyString());
         verify(notificationService).notifyNewMessage(eq(MEMBER2_ID), anyString(), anyString(), eq("Notice"), anyString());
@@ -207,18 +209,20 @@ class MessagingServiceTest {
 
     @Test
     void announce_memberList_targetsOnlyListed() {
-        service.announce(ADMIN_TOKEN, new AnnouncementRequestDTO(
+        AnnounceResultDTO result = service.announce(ADMIN_TOKEN, new AnnouncementRequestDTO(
                 ADMIN_ID, "Notice", "Body", "MEMBER_LIST", List.of(MEMBER2_ID), List.of()));
 
+        assertEquals(1, result.recipientCount());
         assertEquals(1, conversationRepository.findByType(ConversationType.ANNOUNCEMENT).size());
         verify(notificationService).notifyNewMessage(eq(MEMBER2_ID), anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
     void announce_producers_targetsCompanyAndNotifiesOwners() {
-        service.announce(ADMIN_TOKEN, new AnnouncementRequestDTO(
+        AnnounceResultDTO result = service.announce(ADMIN_TOKEN, new AnnouncementRequestDTO(
                 ADMIN_ID, "Notice", "Body", "PRODUCERS", List.of(), List.of(COMPANY_ID)));
 
+        assertEquals(1, result.recipientCount());
         var convs = conversationRepository.findByType(ConversationType.ANNOUNCEMENT);
         assertEquals(1, convs.size());
         assertEquals(ParticipantType.COMPANY, convs.get(0).getCounterpartyType());
@@ -230,6 +234,26 @@ class MessagingServiceTest {
         assertThrows(UnauthorizedActionException.class,
                 () -> service.announce(MEMBER_TOKEN, new AnnouncementRequestDTO(
                         MEMBER_ID, "x", "y", "ALL_MEMBERS", List.of(), List.of())));
+    }
+
+    @Test
+    void viewSentAnnouncements_returnsAllAnnouncements_forAdmin() {
+        User u10 = plainUser(MEMBER_ID);
+        User u11 = plainUser(MEMBER2_ID);
+        when(userRepository.findAll()).thenReturn(List.of(u10, u11));
+        service.announce(ADMIN_TOKEN, new AnnouncementRequestDTO(
+                ADMIN_ID, "Notice", "Body", "ALL_MEMBERS", List.of(), List.of()));
+
+        List<ConversationDTO> sent = service.viewSentAnnouncements(ADMIN_TOKEN);
+
+        assertEquals(2, sent.size());
+        assertTrue(sent.stream().allMatch(c -> "ANNOUNCEMENT".equals(c.type())));
+    }
+
+    @Test
+    void viewSentAnnouncements_byNonAdmin_rejected() {
+        assertThrows(UnauthorizedActionException.class,
+                () -> service.viewSentAnnouncements(MEMBER_TOKEN));
     }
 
     // --- views ---
