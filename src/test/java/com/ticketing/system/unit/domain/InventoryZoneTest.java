@@ -529,5 +529,47 @@ public class InventoryZoneTest extends BaseDomainTest {
         assertEquals(SeatStatus.RESERVED, zone.getSeatStatus("A1"));
     }
 
+    // -- grid placement ---------------------------------------------------
+
+    @Test
+    void GivenValidPlacement_WhenPlaceOnGrid_ThenGettersAndHasPlacementReflectIt() {
+        InventoryZone gridZone = track(new StandingZone(ZONE_ID, "Grid VIP", 10, 100));
+
+        assertFalse(gridZone.hasGridPlacement());
+
+        gridZone.placeOnGrid(2, 3, 1, 2);
+
+        assertTrue(gridZone.hasGridPlacement());
+        assertEquals(2, gridZone.getGridRow());
+        assertEquals(3, gridZone.getGridCol());
+        assertEquals(1, gridZone.getGridRowSpan());
+        assertEquals(2, gridZone.getGridColSpan());
+    }
+
+    @Test
+    void GivenRowBelowOne_WhenPlaceOnGrid_ThenThrowsIllegalArgument() {
+        InventoryZone gridZone = track(new StandingZone(ZONE_ID, "Grid VIP", 10, 100));
+
+        assertThrows(IllegalArgumentException.class, () -> gridZone.placeOnGrid(0, 1, 1, 1));
+        assertFalse(gridZone.hasGridPlacement());
+    }
+
+    @Test
+    void GivenColBelowOne_WhenPlaceOnGrid_ThenThrowsIllegalArgument() {
+        InventoryZone gridZone = track(new StandingZone(ZONE_ID, "Grid VIP", 10, 100));
+
+        assertThrows(IllegalArgumentException.class, () -> gridZone.placeOnGrid(1, 0, 1, 1));
+        assertFalse(gridZone.hasGridPlacement());
+    }
+
+    @Test
+    void GivenSpanBelowOne_WhenPlaceOnGrid_ThenThrowsIllegalArgument() {
+        InventoryZone gridZone = track(new StandingZone(ZONE_ID, "Grid VIP", 10, 100));
+
+        assertThrows(IllegalArgumentException.class, () -> gridZone.placeOnGrid(1, 1, 0, 1));
+        assertThrows(IllegalArgumentException.class, () -> gridZone.placeOnGrid(1, 1, 1, 0));
+        assertFalse(gridZone.hasGridPlacement());
+    }
+
 
 }
