@@ -15,9 +15,9 @@ import com.ticketing.system.Core.Application.dto.VenueMapDTO;
 import com.ticketing.system.Core.Application.services.CatalogService;
 import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Core.Domain.events.ZoneType;
-import com.ticketing.system.Presentation.session.SessionIdentity;
-import com.ticketing.system.Presentation.components.venue.VkSeatedZonePicker;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
+import com.ticketing.system.Presentation.components.venue.VkSeatedZonePicker;
+import com.ticketing.system.Presentation.session.SessionIdentity;
 
 @Component
 public class SeatPickerPresenter {
@@ -27,9 +27,9 @@ public class SeatPickerPresenter {
     private final SessionIdentity identity;
 
     @Autowired
-    public SeatPickerPresenter(CatalogService catalogService, 
-                              ReservationService reservationService,
-                              SessionIdentity identity) {
+    public SeatPickerPresenter(CatalogService catalogService,
+                               ReservationService reservationService,
+                               SessionIdentity identity) {
         this.catalogService = catalogService;
         this.reservationService = reservationService;
         this.identity = identity;
@@ -48,7 +48,6 @@ public class SeatPickerPresenter {
             if (zone == null) {
                 return new LoadOutcome.NotFound("That zone is no longer available");
             }
-            
             ZoneType zoneType = ZoneType.valueOf(zone.getZoneType());
             return new LoadOutcome.Loaded(zone, zoneType);
         } catch (RuntimeException e) {
@@ -65,7 +64,7 @@ public class SeatPickerPresenter {
             }
             return new ReserveOutcome.Success(selection.getSeatNumbers().size());
         } catch (RuntimeException e) {
-            return new ReserveOutcome.Failure("Could not reserve seats");
+            return new ReserveOutcome.Failure(e.getMessage());
         }
     }
 
@@ -79,38 +78,37 @@ public class SeatPickerPresenter {
             }
             return new ReserveOutcome.Success(quantity);
         } catch (RuntimeException e) {
-            return new ReserveOutcome.Failure("Could not reserve tickets");
+            return new ReserveOutcome.Failure(e.getMessage());
         }
     }
 
-   public static List<VkSeatedZonePicker.SeatModel> buildSeatModels(InventoryZoneDTO zone, int seatStepPixels) {
-    TreeMap<String, List<SeatDTO>> byRow = new TreeMap<>();
-    for (SeatDTO s : zone.getSeats()) {
-        byRow.computeIfAbsent(rowOf(s.label()), k -> new ArrayList<>()).add(s);
-    }
-    List<VkSeatedZonePicker.SeatModel> models = new ArrayList<>();
-    int rowIdx = 0;
-    for (List<SeatDTO> rowSeats : byRow.values()) {
-        rowSeats.sort(Comparator.comparingInt(s -> seatNumber(s.label())));
-        int colIdx = 0;
-        for (SeatDTO s : rowSeats) {
-            models.add(new VkSeatedZonePicker.SeatModel(
-                    s.label(), colIdx * seatStepPixels, rowIdx * seatStepPixels, stateFor(s.status())));
-            colIdx++;
+    public static List<VkSeatedZonePicker.SeatModel> buildSeatModels(InventoryZoneDTO zone, int seatStepPixels) {
+        TreeMap<String, List<SeatDTO>> byRow = new TreeMap<>();
+        for (SeatDTO s : zone.getSeats()) {
+            byRow.computeIfAbsent(rowOf(s.label()), k -> new ArrayList<>()).add(s);
         }
-        rowIdx++;
+        List<VkSeatedZonePicker.SeatModel> models = new ArrayList<>();
+        int rowIdx = 0;
+        for (List<SeatDTO> rowSeats : byRow.values()) {
+            rowSeats.sort(Comparator.comparingInt(s -> seatNumber(s.label())));
+            int colIdx = 0;
+            for (SeatDTO s : rowSeats) {
+                models.add(new VkSeatedZonePicker.SeatModel(
+                        s.label(), colIdx * seatStepPixels, rowIdx * seatStepPixels, stateFor(s.status())));
+                colIdx++;
+            }
+            rowIdx++;
+        }
+        return models;
     }
-    return models;
-}
 
-public record SeatModel(String label, int x, int y, String state) { }
-   private static VkSeat.State stateFor(String status) {
-    return switch (status) {
-        case "AVAILABLE" -> VkSeat.State.free;
-        case "SOLD"      -> VkSeat.State.sold;
-        default          -> VkSeat.State.held;
-    };
-}
+    private static VkSeat.State stateFor(String status) {
+        return switch (status) {
+            case "AVAILABLE" -> VkSeat.State.free;
+            case "SOLD"      -> VkSeat.State.sold;
+            default          -> VkSeat.State.held;
+        };
+    }
 
     private static String rowOf(String label) {
         int i = 0;
@@ -135,11 +133,11 @@ public record SeatModel(String label, int x, int y, String state) { }
     public sealed interface LoadOutcome {
         record Loaded(InventoryZoneDTO zone, ZoneType zoneType) implements LoadOutcome { }
         record NotFound(String message) implements LoadOutcome { }
-        record Failure(String message) implements LoadOutcome { }
+        record Failure(String message)  implements LoadOutcome { }
     }
 
     public sealed interface ReserveOutcome {
-        record Success(int quantity) implements ReserveOutcome { }
+        record Success(int quantity)   implements ReserveOutcome { }
         record Failure(String message) implements ReserveOutcome { }
     }
 }
