@@ -153,9 +153,24 @@ public class DemoDataSeeder implements ApplicationRunner {
         Map<String, EventDetailDTO> events =
             new DemoEvents(eventManagementService, eventRepository, users, companies, demoClock).seed();
 
-        new DemoOrders(reservationService, checkoutService, users, events).seed();
-        new DemoMessaging(authenticationService, messagingService, userRepository, users, companies).seed();
-        new DemoNotifications(notificationRepository, users, demoClock).seed();
+        // Leaf seeders: tolerate stages whose feature is not built yet (UnsupportedOperationException)
+        // by skipping them; any other exception still aborts the seed so real bugs surface.
+        runTolerant("orders", () ->
+            new DemoOrders(reservationService, checkoutService, users, events).seed());
+        runTolerant("messaging", () ->
+            new DemoMessaging(authenticationService, messagingService, userRepository, users, companies).seed());
+        runTolerant("notifications", () ->
+            new DemoNotifications(notificationRepository, users, demoClock).seed());
+    }
+
+    /** Runs a leaf sub-seeder, skipping it (with a log line) only when the feature it needs is not
+     *  implemented yet. Any other exception propagates so genuine bugs still fail the seed. */
+    private void runTolerant(String stage, Runnable subSeeder) {
+        try {
+            subSeeder.run();
+        } catch (UnsupportedOperationException notImplemented) {
+            log.warn("demo seed: skipped '{}' — feature not implemented yet ({})", stage, notImplemented.getMessage());
+        }
     }
 
     private boolean alreadySeeded() {

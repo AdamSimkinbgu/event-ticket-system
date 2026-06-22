@@ -47,19 +47,19 @@ class SessionTest extends BaseDomainTest {
 
     @Test
     void constructor_rejectsBlankSessionId() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(IllegalStateException.class,
                 () -> new Session("", null, T0, T_EXPIRES));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(IllegalStateException.class,
                 () -> new Session("   ", null, T0, T_EXPIRES));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(IllegalStateException.class,
                 () -> new Session(null, null, T0, T_EXPIRES));
     }
 
     @Test
     void constructor_rejectsNullTimestamps() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(IllegalStateException.class,
                 () -> new Session("sid", null, null, T_EXPIRES));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(IllegalStateException.class,
                 () -> new Session("sid", null, T0, null));
     }
 

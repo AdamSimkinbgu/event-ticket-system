@@ -25,6 +25,13 @@ session:
   member-ttl-minutes: ${SESSION_MEMBER_TTL_MINUTES:1440}
   guest-idle-timeout-minutes: ${SESSION_GUEST_IDLE_TIMEOUT_MINUTES:30}
 
+# Brute-force lock-after-N policy (SLR.2 #148) for member + admin sign-in.
+# max-attempts: 0 disables the lockout entirely.
+auth:
+  lockout:
+    max-attempts: ${AUTH_LOCKOUT_MAX_ATTEMPTS:5}
+    lock-minutes: ${AUTH_LOCKOUT_LOCK_MINUTES:15}
+
 
 constants:
   # System-wide constant

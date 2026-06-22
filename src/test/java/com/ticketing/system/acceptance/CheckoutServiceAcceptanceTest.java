@@ -13,6 +13,7 @@ import com.ticketing.system.Core.Domain.events.*;
 import com.ticketing.system.Core.Domain.orders.*;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.User;
+import com.ticketing.system.Infrastructure.persistence.MemoryActiveOrderRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -46,7 +47,7 @@ public class CheckoutServiceAcceptanceTest {
     @Autowired private AuthenticationService authService;
     @Autowired private CompanyManagementService companyService;
     @Autowired private EventManagementService eventManagementService;
-    @Autowired private IProductionCompanyRepository companyRepository;
+    private IProductionCompanyRepository companyRepository;
     @Autowired private IEventRepository eventRepository1;
     @Autowired private ITicketRepository ticketRepository1;
     @Autowired private IOrderReceiptRepository orderReceiptRepository1;
@@ -89,6 +90,7 @@ public class CheckoutServiceAcceptanceTest {
         eventRepository = mock(IEventRepository.class);
         ticketRepository = mock(ITicketRepository.class);
         userRepository = mock(IUserRepository.class);
+        companyRepository = mock(IProductionCompanyRepository.class);
 
         orderReceiptRepository = mock(IOrderReceiptRepository.class);
         AtomicInteger receiptIds = new AtomicInteger(1);
@@ -108,7 +110,8 @@ public class CheckoutServiceAcceptanceTest {
                 paymentGateway,
                 notificationService,
                 sessionManager,
-                userRepository
+                userRepository,
+                companyRepository
         );
 
         event1 = mock(Event.class);
@@ -624,6 +627,8 @@ public class CheckoutServiceAcceptanceTest {
                 checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
+        // Ticket save fails BEFORE confirmInventorySale (the sale is committed last), so the inventory
+        // is still RESERVED and is cleanly returned to stock, and the payment is refunded.
         assertEquals(true, refundRequested.get());
         assertEquals(1, returnedTickets.get());
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -644,6 +649,8 @@ public class CheckoutServiceAcceptanceTest {
                 checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN)
         );
 
+        // Receipt save fails BEFORE confirmInventorySale (the sale is committed last), so the inventory
+        // is still RESERVED and is cleanly returned to stock, and the payment is refunded.
         assertEquals(true, refundRequested.get());
         assertEquals(1, returnedTickets.get());
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -888,6 +895,96 @@ public class CheckoutServiceAcceptanceTest {
         assertEquals(true, userNotified.get());
     }
 
+
+
+
+
+    // Regression tests for the "stuck order" bug: after a successful checkout the consumed cart must
+    // be deleted (not saved while still CHECKOUT_IN_PROGRESS), otherwise the buyer's next reservation
+    // hits ensureModifiable() and throws "Cannot modify active order while checkout is in progress".
+    // These use a REAL MemoryActiveOrderRepository so delete-vs-save is observable across lookups —
+    // the mock-based suites cannot catch this (their save/delete are no-ops).
+
+    private CheckoutService checkoutServiceWith(IActiveOrderRepository realRepo) {
+        return new CheckoutService(
+                realRepo,
+                eventRepository,
+                ticketRepository,
+                orderReceiptRepository,
+                ticketIssuer,
+                paymentGateway,
+                notificationService,
+                sessionManager,
+                userRepository,
+                companyRepository
+        );
+    }
+
+    @Test
+    void GivenSuccessfulMemberCheckout_WhenBuyerChecksOutAgain_ThenSecondCheckoutSucceeds() {
+        validSession();
+        validPaymentAndIssuance(1);
+
+        MemoryActiveOrderRepository realRepo = new MemoryActiveOrderRepository();
+        CheckoutService service = checkoutServiceWith(realRepo);
+
+        ActiveOrder firstOrder = new ActiveOrder(USER_ID);
+        firstOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 10.0, LocalDateTime.now());
+        realRepo.save(firstOrder);
+
+        service.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY + "-1", CURRENCY, PAYMENT_METHOD_TOKEN);
+
+        // The consumed cart must be gone so the buyer's next reservation/checkout starts clean.
+        assertNull(realRepo.getByUserId(USER_ID));
+
+        // Buyer comes back and reserves again on the same account, then checks out a second time.
+        ActiveOrder secondOrder = new ActiveOrder(USER_ID);
+        secondOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 10.0, LocalDateTime.now());
+        realRepo.save(secondOrder);
+
+        CheckoutResultDTO secondResult = assertDoesNotThrow(() ->
+                service.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY + "-2", CURRENCY, PAYMENT_METHOD_TOKEN));
+
+        assertEquals(10.0, secondResult.totalCharged());
+    }
+
+    @Test
+    void GivenSuccessfulGuestCheckout_WhenGuestChecksOutAgain_ThenSecondCheckoutSucceeds() {
+        String guestSessionId = "guest-sess";
+        String guestEmail = "guest@test.com";
+        when(sessionManager.validateCredential(guestSessionId)).thenReturn(true);
+        validPaymentAndIssuance(1);
+
+        MemoryActiveOrderRepository realRepo = new MemoryActiveOrderRepository();
+        CheckoutService service = checkoutServiceWith(realRepo);
+
+        ActiveOrder firstOrder = ActiveOrder.forGuest(guestSessionId);
+        firstOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 10.0, LocalDateTime.now());
+        realRepo.save(firstOrder);
+
+        service.checkoutGuest(guestSessionId, guestEmail, IDEMPOTENCY_KEY + "-g1", CURRENCY, PAYMENT_METHOD_TOKEN, 30);
+
+        assertTrue(realRepo.getBySessionId(guestSessionId).isEmpty());
+
+        ActiveOrder secondOrder = ActiveOrder.forGuest(guestSessionId);
+        secondOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 10.0, LocalDateTime.now());
+        realRepo.save(secondOrder);
+
+        assertDoesNotThrow(() ->
+                service.checkoutGuest(guestSessionId, guestEmail, IDEMPOTENCY_KEY + "-g2", CURRENCY, PAYMENT_METHOD_TOKEN, 30));
+    }
+
+    @Test
+    void GivenCheckoutSucceeds_WhenCheckout_ThenConsumedOrderIsDeleted() {
+        validSession();
+        ActiveOrder order = order(List.of(item(EVENT_ID_1, ZONE_ID_1, 10.0)), true);
+        when(activeOrderRepository.getByUserId(USER_ID)).thenReturn(order);
+        validPaymentAndIssuance(1);
+
+        checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN);
+
+        verify(activeOrderRepository).delete(order);
+    }
 
 
 

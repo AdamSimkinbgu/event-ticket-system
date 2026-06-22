@@ -1,6 +1,8 @@
 package com.ticketing.system.Core.Application.services;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +11,7 @@ import com.ticketing.system.Core.Domain.exceptions.*;
 
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
+import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapDTO;
@@ -60,6 +63,48 @@ public class CatalogService {
                 .filter(event -> event.getStatus() == EventStatus.ON_SALE)
                 .map(event -> mapper.convertEventToEventSummaryDTO(event, productionCompanyRepository))
                 .toList();
+    }
+
+
+
+
+    //* V2-LANDING-01: Featured events for the public landing page — the ON_SALE events from active companies,
+    //* ordered best-rated first (events without a rating sort last), capped at {limit}. No credential required:
+    //* the landing page is anonymous, like browseEventCatalog above. There is no curation flag on Event, so
+    //* "featured" is a rating-based heuristic for now.
+    public List<EventSummaryDTO> featured(int limit) {
+        EventMapper mapper = new EventMapper();
+        return productionCompanyRepository.findActive().stream()
+                .flatMap(company -> eventRepository.findActiveByCompany(company.getCompanyId()).stream())
+                .sorted(Comparator.comparing(Event::getRating, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(Math.max(0, limit))
+                .map(event -> mapper.convertEventToEventSummaryDTO(event, productionCompanyRepository))
+                .toList();
+    }
+
+
+
+
+    //* V2-LANDING-01: "On sale soon" teaser for the landing page — SCHEDULED events (a venue map is bound but
+    //* sales haven't opened) from active companies, soonest show date first, capped at {limit}. findActiveByCompany
+    //* returns ON_SALE only, so we source these from findByStatus(SCHEDULED) and drop any whose company isn't active.
+    public List<EventSummaryDTO> upcomingOnSale(int limit) {
+        EventMapper mapper = new EventMapper();
+        return eventRepository.findByStatus(EventStatus.SCHEDULED).stream()
+                .filter(event -> activeCompanyOrNull(event.getCompanyId()) != null)
+                .sorted(Comparator.comparing(this::earliestShowStart, Comparator.nullsLast(Comparator.naturalOrder())))
+                .limit(Math.max(0, limit))
+                .map(event -> mapper.convertEventToEventSummaryDTO(event, productionCompanyRepository))
+                .toList();
+    }
+
+    // *HELPER METHOD* — earliest show start for an event, or null if it somehow has no show dates
+    // (an Event invariant requires >=1, so the null branch only guards against future changes).
+    private LocalDateTime earliestShowStart(Event event) {
+        return event.getShowDates().stream()
+                .map(ShowDate::getStartTime)
+                .min(Comparator.naturalOrder())
+                .orElse(null);
     }
 
 

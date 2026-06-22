@@ -19,6 +19,7 @@ import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
+import com.ticketing.system.Core.Application.dto.ShowDateDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.dto.ZoneDetailDTO;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
@@ -46,6 +47,7 @@ import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.events.Seat;
 import com.ticketing.system.Core.Domain.events.SeatedZone;
+import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.OrPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
@@ -145,6 +147,7 @@ public class EventManagementService {
         Event newEvent = new Event(
                 newEventId,
                 request.name(),
+                request.description(),
                 request.rating(),
                 request.artistsNames(),
                 request.category(),
@@ -162,7 +165,7 @@ public class EventManagementService {
                 String.valueOf(newEventId),
                 newEvent.getName(),
                 newEvent.getRating(),
-                request.description(),
+                newEvent.getDescription(),
                 newEvent.getCategory(),
                 request.location(),
                 String.valueOf(newEvent.getCompanyId()),
@@ -350,7 +353,17 @@ public class EventManagementService {
                 }
             }
 
-            event.editDetails(update.name(), newCategory);
+            Location newLocation = update.location() == null
+                    ? null
+                    : new Location(update.location().country(), update.location().city());
+
+            List<ShowDate> newShowDates = update.showDates() == null
+                    ? null
+                    : update.showDates().stream()
+                            .map(sd -> new ShowDate(sd.startsAt(), sd.endsAt()))
+                            .toList();
+
+            event.editDetails(update.name(), update.description(), newCategory, newLocation, newShowDates);
             eventRepository.save(event);
 
             log.info("Event {} details updated by user {}", eventId, userId);
@@ -668,7 +681,7 @@ public class EventManagementService {
 
 
     // Detail view for owner-side editing pages.
-    public EventDetailDTO getEventDetail(String token, String eventId) {
+    public EventDetailDTO getEventDetail(String token, String eventId) {  //TODO: make this eventId an int
         int userId = validateTokenAndGetUserId(token);
 
         int id;
@@ -691,7 +704,7 @@ public class EventManagementService {
                 String.valueOf(event.getId()),
                 event.getName(),
                 event.getRating(),
-                null, // Event domain doesn't persist description
+                event.getDescription(),
                 event.getCategory(),
                 location,
                 String.valueOf(event.getCompanyId()),
@@ -713,6 +726,35 @@ public class EventManagementService {
 
 
 
+
+
+
+
+    // UC-19 — owner opens an event's sales: SCHEDULED -> ON_SALE.
+    // The actual transition (and its venue-map/show-date/invariant guards) lives in
+    // Event.transitionToOnSale(); this method enforces auth, ownership, and locking.
+    public void publishEvent(String token, int companyId, int eventId) {
+        int userId = validateTokenAndGetUserId(token);
+
+        eventRepository.lockForUpdate(eventId);
+        try {
+            Event event = eventRepository.findById(eventId);
+
+            if (event.getCompanyId() != companyId) {
+                throw new RuntimeException("Event does not belong to this company");
+            }
+
+            User user = userRepository.getUserById(userId);
+            user.requirePermissionInCompany(companyId, Permission.CONFIGURE_VENUE);
+
+            event.transitionToOnSale(); // SCHEDULED -> ON_SALE (idempotent if already ON_SALE)
+            eventRepository.save(event);
+
+            log.info("Event {} published (ON_SALE) by user {}", eventId, userId);
+        } finally {
+            eventRepository.unlock(eventId);
+        }
+    }
 
 
 
@@ -846,7 +888,7 @@ public class EventManagementService {
             try {
                 notificationService.notifyEventCancelled(userId, eventId, eventName);
             } catch (Exception e) {
-                log.warn("Failed to send cancellation notification to userId={} for eventId={}", userId, eventId);
+                log.warn("Failed to send cancellation notification to userId={} for eventId={}", userId, eventId, e);
             }
         }
     }

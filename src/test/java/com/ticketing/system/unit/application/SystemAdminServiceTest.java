@@ -33,6 +33,8 @@ import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.exceptions.ExternalServiceUnavailableException;
 import com.ticketing.system.Core.Domain.exceptions.MissingDefaultAdminException;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
@@ -49,6 +51,8 @@ class SystemAdminServiceTest {
     private IOrderReceiptRepository orderReceiptRepository;
     private ITicketRepository ticketRepository;
     private IEventRepository eventRepository;
+    private IProductionCompanyRepository companyRepository;
+    private IUserRepository userRepository;
     private IPasswordHasher passwordHasher;
     private SystemIntegrityVerifier integrityVerifier;
     private SystemAdminService service;
@@ -61,6 +65,8 @@ class SystemAdminServiceTest {
         orderReceiptRepository = mock(IOrderReceiptRepository.class);
         ticketRepository = mock(ITicketRepository.class);
         eventRepository = mock(IEventRepository.class);
+        companyRepository = mock(IProductionCompanyRepository.class);
+        userRepository = mock(IUserRepository.class);
         passwordHasher = mock(IPasswordHasher.class);
         integrityVerifier = mock(SystemIntegrityVerifier.class);
         when(passwordHasher.hash(anyString())).thenReturn("hashed-password");
@@ -70,6 +76,8 @@ class SystemAdminServiceTest {
                 orderReceiptRepository,
                 ticketRepository,
                 eventRepository,
+                companyRepository,
+                userRepository,
                 List.of(),
                 List.of(),
                 passwordHasher,
@@ -78,6 +86,7 @@ class SystemAdminServiceTest {
                 "admin"
         );
         when(sessionManager.validateToken(ADMIN_TOKEN)).thenReturn(true);
+        when(sessionManager.isAdminToken(ADMIN_TOKEN)).thenReturn(true);
         when(sessionManager.extractUserId(ADMIN_TOKEN)).thenReturn(ADMIN_USER_ID);
         when(adminRepository.findById(ADMIN_USER_ID)).thenReturn(new Admin(ADMIN_USER_ID, "admin", "hash", true));
     }
@@ -242,7 +251,8 @@ class SystemAdminServiceTest {
     private SystemAdminService serviceWith(List<IPaymentGateway> gateways, List<ITicketIssuer> issuers) {
         return new SystemAdminService(
                 sessionManager, adminRepository, orderReceiptRepository,
-                ticketRepository, eventRepository, gateways, issuers, passwordHasher,
+                ticketRepository, eventRepository, companyRepository, userRepository,
+                gateways, issuers, passwordHasher,
                 integrityVerifier, "admin", "admin");
     }
 

@@ -5,6 +5,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
 /**
  * Domain value object representing a buyer's inventory selection.
  *
@@ -17,7 +19,7 @@ import java.util.Set;
  * concept as part of business logic.
  */
 // This avoids passing random combinations of: quantity, ticketId, seatNumber and seatNumbers, all over the system.
-public final class InventorySelection {
+public final class InventorySelection implements InvariantChecked {
 
     private final int quantity;                // tickets quantity, For standing zones, this is the only relevant field.
     private final List<String> seatNumbers;    // only non-empty For seated zones, must contain no duplicates.
@@ -27,6 +29,36 @@ public final class InventorySelection {
         this.quantity = quantity;
         this.seatNumbers = seatNumbers == null ? List.of() : List.copyOf(seatNumbers);
         this.orderKey = orderKey;
+        checkInvariants();
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (seatNumbers == null) {
+            throw new IllegalStateException("InventorySelection invariant violated: seatNumbers must not be null");
+        }
+        if (seatNumbers.isEmpty()) {
+            // standing selection
+            if (quantity <= 0) {
+                throw new IllegalStateException(
+                        "InventorySelection invariant violated: standing selection quantity must be positive (was " + quantity + ")");
+            }
+        } else {
+            // seated selection
+            if (quantity != seatNumbers.size()) {
+                throw new IllegalStateException("InventorySelection invariant violated: seated selection quantity ("
+                        + quantity + ") must equal seatNumbers size (" + seatNumbers.size() + ")");
+            }
+            Set<String> unique = new HashSet<>(seatNumbers);
+            if (unique.size() != seatNumbers.size()) {
+                throw new IllegalStateException("InventorySelection invariant violated: duplicate seat numbers are not allowed");
+            }
+            for (String seatNumber : seatNumbers) {
+                if (seatNumber == null || seatNumber.isBlank()) {
+                    throw new IllegalStateException("InventorySelection invariant violated: seat number must be non-blank");
+                }
+            }
+        }
     }
 
     public static InventorySelection standing(int quantity) {

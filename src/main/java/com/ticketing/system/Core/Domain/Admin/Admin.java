@@ -17,6 +17,7 @@ public class Admin implements InvariantChecked {
         this.username = username;
         this.passwordHash = passwordHash;
         this.isDefault = isDefault;
+        checkInvariants();
     }
 
     public int getId() { return id; }

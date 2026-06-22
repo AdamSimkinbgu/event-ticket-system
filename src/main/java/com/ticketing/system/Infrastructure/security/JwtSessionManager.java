@@ -47,6 +47,9 @@ public class JwtSessionManager implements ISessionManager {
 
     private static final String CLAIM_USERNAME = "username";
     private static final String CLAIM_SID = "sid";
+    private static final String CLAIM_ROLE = "role";
+    private static final String ROLE_ADMIN = "ADMIN";
+    private static final String ROLE_MEMBER = "MEMBER";
 
     private final SecretKey signingKey;
     private final long expirationMillis;
@@ -72,7 +75,27 @@ public class JwtSessionManager implements ISessionManager {
         Instant expiry = now.plusMillis(expirationMillis);
         String sid = UUID.randomUUID().toString();
         sessions.save(new Session(sid, userId, now, expiry));
-        return buildJwt(userId, username, sid, now, expiry);
+        return buildJwt(userId, username, sid, ROLE_MEMBER, now, expiry);
+    }
+
+    // Admin sign-in (#290): issue a JWT carrying the ADMIN role so the admin-authorization gate
+    // can never be satisfied by a member token (admin ids and member ids share an id space).
+    @Override
+    public String generateAdminToken(int adminId, String username) {
+        Instant now = clock.instant();
+        Instant expiry = now.plusMillis(expirationMillis);
+        String sid = UUID.randomUUID().toString();
+        sessions.save(new Session(sid, adminId, now, expiry));
+        return buildJwt(adminId, username, sid, ROLE_ADMIN, now, expiry);
+    }
+
+    @Override
+    public boolean isAdminToken(String token) {
+        try {
+            return ROLE_ADMIN.equals(parseClaims(token).get(CLAIM_ROLE, String.class));
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     // UC-12: issue a new JWT for an existing session (e.g. after password login to a guest session).
@@ -86,7 +109,7 @@ public class JwtSessionManager implements ISessionManager {
             throw new IllegalStateException("cannot issue JWT for a guest session");
         }
         Instant now = clock.instant();
-        return buildJwt(session.getUserId(), username, session.getSessionId(), now, session.getExpiresAt());
+        return buildJwt(session.getUserId(), username, session.getSessionId(), ROLE_MEMBER, now, session.getExpiresAt());
     }
 
     // UC-12: validate a JWT's signature, expiry, and revocation status. Revocation is checked by verifying that the Session row still exists.
@@ -239,11 +262,13 @@ public class JwtSessionManager implements ISessionManager {
         }
     }
 
-    private String buildJwt(int userId, String username, String sid, Instant issuedAt, Instant expiresAt) {
+    private String buildJwt(int userId, String username, String sid, String role,
+            Instant issuedAt, Instant expiresAt) {
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim(CLAIM_USERNAME, username)
                 .claim(CLAIM_SID, sid)
+                .claim(CLAIM_ROLE, role)
                 .issuedAt(Date.from(issuedAt))
                 .expiration(Date.from(expiresAt))
                 .signWith(signingKey)

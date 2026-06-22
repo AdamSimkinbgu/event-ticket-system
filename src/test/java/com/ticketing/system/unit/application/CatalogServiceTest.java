@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +31,7 @@ import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.VenueMap;
@@ -507,6 +509,54 @@ class CatalogServiceTest {
 
     
     // -------------------------------------------------------------------------
+    // V2-LANDING-01: featured / upcomingOnSale (guest-facing landing rows)
+    // -------------------------------------------------------------------------
+
+    // featured returns the ON_SALE events of active companies, best-rated first, capped at the limit.
+    @Test
+    void givenOnSaleEvents_whenFeatured_thenReturnsBestRatedFirstWithinLimit() {
+        ProductionCompany company = createMockCompany("Acme", 4.5);
+        when(company.getCompanyId()).thenReturn(10);
+        Event low  = onSaleEvent(1, 10, 3.0);
+        Event high = onSaleEvent(2, 10, 5.0);
+        Event mid  = onSaleEvent(3, 10, 4.0);
+
+        when(mockCompanyRepository.findActive()).thenReturn(List.of(company));
+        when(mockEventRepository.findActiveByCompany(10)).thenReturn(List.of(low, high, mid));
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
+
+        List<EventSummaryDTO> results = catalogService.featured(2);
+
+        assertEquals(2, results.size());
+        assertEquals("Event 2", results.get(0).name()); // rating 5.0
+        assertEquals("Event 3", results.get(1).name()); // rating 4.0
+    }
+
+    // upcomingOnSale returns SCHEDULED events of active companies only, soonest show date first.
+    @Test
+    void givenScheduledEvents_whenUpcomingOnSale_thenSoonestFirstAndActiveCompaniesOnly() {
+        ProductionCompany active = createMockCompany("Acme", 4.5);
+        ProductionCompany inactive = mock(ProductionCompany.class);
+        when(inactive.getStatus()).thenReturn(CompanyStatus.INACTIVE);
+
+        Event later = scheduledEvent(2, 10, LocalDateTime.of(2026, 8, 1, 20, 0));
+        Event soon  = scheduledEvent(1, 10, LocalDateTime.of(2026, 7, 1, 20, 0));
+        Event hidden = mock(Event.class); // belongs to an inactive company → excluded
+        when(hidden.getCompanyId()).thenReturn(20);
+
+        when(mockEventRepository.findByStatus(EventStatus.SCHEDULED))
+                .thenReturn(List.of(later, soon, hidden));
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(active);
+        when(mockCompanyRepository.getCompanyById(20)).thenReturn(inactive);
+
+        List<EventSummaryDTO> results = catalogService.upcomingOnSale(5);
+
+        assertEquals(2, results.size());
+        assertEquals("Event 1", results.get(0).name()); // earliest show date
+        assertEquals("Event 2", results.get(1).name());
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
@@ -536,5 +586,39 @@ class CatalogServiceTest {
         when(mockCompany.getRating()).thenReturn(rating);
         when(mockCompany.getStatus()).thenReturn(CompanyStatus.ACTIVE);
         return mockCompany;
+    }
+
+    // An ON_SALE event with an explicit rating (for featured ordering). No show dates needed —
+    // the mapper handles an empty schedule.
+    private Event onSaleEvent(int id, int companyId, Double rating) {
+        Event mockEvent = mock(Event.class);
+        when(mockEvent.getId()).thenReturn(id);
+        when(mockEvent.getName()).thenReturn("Event " + id);
+        when(mockEvent.getStatus()).thenReturn(EventStatus.ON_SALE);
+        when(mockEvent.getRating()).thenReturn(rating);
+        when(mockEvent.getCategory()).thenReturn(EventCategory.MUSIC);
+        when(mockEvent.getCompanyId()).thenReturn(companyId);
+        when(mockEvent.getVenueMap()).thenReturn(
+                new VenueMap(id, LOCATION, List.of(new StandingZone(1, "Floor", 100, 50))));
+        when(mockEvent.getShowDates()).thenReturn(List.of());
+        return mockEvent;
+    }
+
+    // A SCHEDULED event with a single show date at {start} (for upcomingOnSale ordering).
+    private Event scheduledEvent(int id, int companyId, LocalDateTime start) {
+        Event mockEvent = mock(Event.class);
+        when(mockEvent.getId()).thenReturn(id);
+        when(mockEvent.getName()).thenReturn("Event " + id);
+        when(mockEvent.getStatus()).thenReturn(EventStatus.SCHEDULED);
+        when(mockEvent.getRating()).thenReturn(4.0);
+        when(mockEvent.getCategory()).thenReturn(EventCategory.MUSIC);
+        when(mockEvent.getCompanyId()).thenReturn(companyId);
+        when(mockEvent.getVenueMap()).thenReturn(
+                new VenueMap(id, LOCATION, List.of(new StandingZone(1, "Floor", 100, 50))));
+        ShowDate showDate = mock(ShowDate.class);
+        when(showDate.getStartTime()).thenReturn(start);
+        when(showDate.getEndTime()).thenReturn(start.plusHours(2));
+        when(mockEvent.getShowDates()).thenReturn(List.of(showDate));
+        return mockEvent;
     }
 }

@@ -41,6 +41,8 @@ import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchaseContext;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
+import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
+import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.users.User;
 
 
@@ -57,6 +59,7 @@ public class CheckoutService {
     private final INotificationService notificationService;
     private final ISessionManager sessionManager;
     private final IUserRepository userRepository;
+    private final IProductionCompanyRepository companyRepository;
 
     // In-memory cache for completed checkouts to handle idempotency. Keyed by a combination of buyer identity and idempotency key, since the same idempotency key could be used 
     // by different users (e.g. if they copy-paste it from a confirmation page). In a real implementation this would likely be a distributed cache like Redis with an expiration time.
@@ -76,7 +79,8 @@ public class CheckoutService {
             IPaymentGateway paymentGateway,
             INotificationService notificationService,
             ISessionManager sessionManager,
-            IUserRepository userRepository
+            IUserRepository userRepository,
+            IProductionCompanyRepository companyRepository
     ) {
         this.activeOrderRepository = activeOrderRepository;
         this.eventRepository = eventRepository;
@@ -87,7 +91,7 @@ public class CheckoutService {
         this.notificationService = notificationService;
         this.sessionManager = sessionManager;
          this.userRepository = userRepository;
-
+        this.companyRepository = companyRepository;
     }
 
 
@@ -187,16 +191,25 @@ public class CheckoutService {
             lockEvents(lockedEventIds);
 
             validateEventsStillOnSale(snapshotItems);
+            // Fail-fast ownership check (read-only): the reservation must still be ours and RESERVED.
             validateCanConfirmInventorySale(snapshotItems, orderKey);
-            confirmInventorySale(snapshotItems, orderKey);
-            inventorySaleConfirmed = true;
 
+            // Persist tickets + receipt BEFORE the irreversible RESERVED→SOLD confirmation. If any of
+            // this fails, the inventory is still RESERVED, so the normal (!inventorySaleConfirmed)
+            // rollback cleanly returns it to stock and refunds — nothing is stranded as SOLD.
             int orderReceiptId = orderReceiptRepository.nextId();
             List<ReceiptLine> receiptLines = saveTicketsAndBuildReceiptLines(userId, orderReceiptId, pricedItems, issuanceResult);
             saveMemberReceipt(userId, orderReceiptId, totalPrice, receiptLines, paymentResult, issuanceResult);
 
+            // Point of no return: commit the sale last, once everything fallible has succeeded.
+            confirmInventorySale(snapshotItems, orderKey);
+            inventorySaleConfirmed = true;
+
             order.buy();
-            activeOrderRepository.save(order);
+            // The sale is committed and the receipt is the durable record; the cart has done its job.
+            // Delete the consumed order (don't save it) — buy() leaves it CHECKOUT_IN_PROGRESS, so a
+            // save would strand an empty, unmodifiable cart that wedges the buyer's next reservation.
+            activeOrderRepository.delete(order);
 
             CheckoutResultDTO result = buildCheckoutResult(totalPrice, orderReceiptId, paymentResult, issuanceResult);
             cacheCheckoutResult(idempotencyKey, buyerKey, result);
@@ -316,16 +329,25 @@ public class CheckoutService {
             lockEvents(lockedEventIds);
 
             validateEventsStillOnSale(snapshotItems);
+            // Fail-fast ownership check (read-only): the reservation must still be ours and RESERVED.
             validateCanConfirmInventorySale(snapshotItems, orderKey);
-            confirmInventorySale(snapshotItems, orderKey);
-            inventorySaleConfirmed = true;
 
+            // Persist tickets + receipt BEFORE the irreversible RESERVED→SOLD confirmation. If any of
+            // this fails, the inventory is still RESERVED, so the normal (!inventorySaleConfirmed)
+            // rollback cleanly returns it to stock and refunds — nothing is stranded as SOLD.
             int orderReceiptId = orderReceiptRepository.nextId();
             List<ReceiptLine> receiptLines = saveTicketsAndBuildReceiptLines(null, orderReceiptId, pricedItems, issuanceResult);
             saveGuestReceipt(guestEmail, guestSessionId, orderReceiptId, totalPrice, receiptLines, paymentResult, issuanceResult);
 
+            // Point of no return: commit the sale last, once everything fallible has succeeded.
+            confirmInventorySale(snapshotItems, orderKey);
+            inventorySaleConfirmed = true;
+
             order.buy();
-            activeOrderRepository.save(order);
+            // The sale is committed and the receipt is the durable record; the cart has done its job.
+            // Delete the consumed order (don't save it) — buy() leaves it CHECKOUT_IN_PROGRESS, so a
+            // save would strand an empty, unmodifiable cart that wedges the buyer's next reservation.
+            activeOrderRepository.delete(order);
 
             CheckoutResultDTO result = buildCheckoutResult(totalPrice, orderReceiptId, paymentResult, issuanceResult);
             cacheCheckoutResult(idempotencyKey, buyerKey, result);
@@ -994,7 +1016,13 @@ public class CheckoutService {
 
         resetCheckoutStatusAfterFailure(orderLockKey, phase1Complete, inventorySaleConfirmed);
 
-        safelyReturnTicketsToStock(order);
+        // Only roll back inventory/cart when the sale was NOT confirmed. Once confirmInventorySale
+        // has run, the inventory is SOLD and the order is still CHECKOUT_IN_PROGRESS, so a release
+        // would throw (nothing is RESERVED any more) and clear() would throw (ensureModifiable).
+        // Mirrors handleGuestCheckoutFailure.
+        if (!inventorySaleConfirmed) {
+            safelyReturnTicketsToStock(order);
+        }
 
         if (inventorySaleConfirmed) {
             log.error(
@@ -1124,30 +1152,57 @@ public class CheckoutService {
         Map<Integer, Map<Integer, List<CartLineItem>>> grouped = groupItemsByEventAndZone(returnToStock);
 
         for (Map.Entry<Integer, Map<Integer, List<CartLineItem>>> eventEntry : grouped.entrySet()) {
-            Event event = eventRepository.findById(eventEntry.getKey());
+            int eventId = eventEntry.getKey();
+            Event event = eventRepository.findById(eventId);
 
             if (event == null) {
                 continue;
             }
 
+            // Release each (event, zone) independently: a single zone that can no longer be
+            // released (e.g. its reservation was already confirmed/expired) must not abort the
+            // rollback for the remaining zones and events. We log and continue, then save the
+            // event if anything in it was actually released.
+            boolean anyReleased = false;
             for (Map.Entry<Integer, List<CartLineItem>> zoneEntry : eventEntry.getValue().entrySet()) {
                 int zoneId = zoneEntry.getKey();
                 List<CartLineItem> zoneItems = zoneEntry.getValue();
 
                 List<String> seatNumbers = extractSeatNumbers(zoneItems);
 
-                if (seatNumbers.isEmpty()) {
-                    event.releaseInventory(zoneId, InventorySelection.standing(zoneItems.size(), orderKey));
-                } else {
-                    event.releaseInventory(zoneId, InventorySelection.seated(seatNumbers, orderKey));
+                try {
+                    if (seatNumbers.isEmpty()) {
+                        event.releaseInventory(zoneId, InventorySelection.standing(zoneItems.size(), orderKey));
+                    } else {
+                        event.releaseInventory(zoneId, InventorySelection.seated(seatNumbers, orderKey));
+                    }
+                    anyReleased = true;
+                } catch (RuntimeException zoneReleaseFailure) {
+                    log.warn(
+                            "Could not release inventory during checkout rollback. eventId={}, zoneId={}, orderKey={}",
+                            eventId, zoneId, orderKey, zoneReleaseFailure);
                 }
             }
 
-            eventRepository.save(event);
+            if (anyReleased) {
+                eventRepository.save(event);
+            }
         }
 
-        order.clear();
-        activeOrderRepository.save(order);
+        safelyClearCart(order);
+    }
+
+
+    // We clear and persist the cart after a rollback without letting a failure here mask the
+    // original checkout failure. The release loop above is resilient and always reaches this point,
+    // so the clear is no longer skipped by an earlier release throwing.
+    private void safelyClearCart(ActiveOrder order) {
+        try {
+            order.clear();
+            activeOrderRepository.save(order);
+        } catch (RuntimeException clearFailure) {
+            log.warn("Could not clear cart during checkout rollback for orderKey={}", order.getOrderKey(), clearFailure);
+        }
     }
 
 
@@ -1242,7 +1297,8 @@ private void validatePurchasePolicies(List<CartLineItem> boughtItems, Integer us
                 quantity
         );
 
-        event.validatePurchasePolicy(context);
+        ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
+        event.validateEffectivePolicy(company == null ? null : company.getPurchasePolicy(), context);
     }
 }
     private Integer getBuyerAgeByUserId(int userId) {
