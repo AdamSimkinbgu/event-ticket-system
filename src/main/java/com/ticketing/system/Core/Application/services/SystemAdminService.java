@@ -311,6 +311,13 @@ public class SystemAdminService {
             throw new UnauthorizedActionException("Invalid or non-admin token.");
         }
 
+        // The token must carry the ADMIN role. Without this, a member whose id happens to equal an
+        // admin's id (both pools start at 1) would pass the adminRepository lookup below.
+        if (!sessionManager.isAdminToken(token)) {
+            log.warn("Unauthorized access attempt (non-admin token) with id: {}", sessionManager.extractUserId(token));
+            throw new UnauthorizedActionException("Invalid or non-admin token.");
+        }
+
         int userId = sessionManager.extractUserId(token);
         if (adminRepository.findById(userId) == null) {
             log.warn("Unauthorized access attempt with id: {}", userId);

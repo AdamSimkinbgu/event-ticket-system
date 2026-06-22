@@ -4,6 +4,8 @@ import java.util.List;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -26,6 +28,9 @@ import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
+import com.ticketing.system.Core.Domain.exceptions.AccountLockedException;
+import com.ticketing.system.Core.Domain.Admin.Admin;
+import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateEmailException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateUsernameException;
 import com.ticketing.system.Core.Domain.exceptions.GuestSessionRequiredException;
@@ -66,6 +71,15 @@ public class AuthenticationService {
     private final long guestIdleMinutes;
     private final long memberTtlMinutes;
 
+    // Admin sign-in (#290).
+    private final IAdminRepository adminRepository;
+    // Brute-force lockout (SLR.2 / #148) — shared by member AND admin sign-in. In-memory for
+    // V1/V2 (a restart clears it). Keys are namespaced by pool ("m:"/"a:") so the two forms are
+    // rate-limited independently.
+    private final int lockoutMaxAttempts;    // 0 disables the lockout entirely
+    private final long lockoutLockMinutes;
+    private final ConcurrentMap<String, LoginAttempts> loginAttempts = new ConcurrentHashMap<>();
+
     public AuthenticationService(
             IUserRepository userRepository,
             IPasswordHasher passwordHasher,
@@ -75,8 +89,11 @@ public class AuthenticationService {
             ISessionRepository sessionRepository,
             IActiveOrderRepository activeOrderRepository,
             Clock clock,
+            IAdminRepository adminRepository,
             @Value("${session.guest-idle-timeout-minutes}") long guestIdleMinutes,
-            @Value("${session.member-ttl-minutes}") long memberTtlMinutes) {
+            @Value("${session.member-ttl-minutes}") long memberTtlMinutes,
+            @Value("${auth.lockout.max-attempts:5}") int lockoutMaxAttempts,
+            @Value("${auth.lockout.lock-minutes:15}") long lockoutLockMinutes) {
         this.userRepository = userRepository;
         this.passwordHasher = passwordHasher;
         this.sessionManager = sessionManager;
@@ -85,8 +102,11 @@ public class AuthenticationService {
         this.sessionRepository = sessionRepository;
         this.activeOrderRepository = activeOrderRepository;
         this.clock = clock;
+        this.adminRepository = adminRepository;
         this.guestIdleMinutes = guestIdleMinutes;
         this.memberTtlMinutes = memberTtlMinutes;
+        this.lockoutMaxAttempts = lockoutMaxAttempts;
+        this.lockoutLockMinutes = lockoutLockMinutes;
     }
 
     /** Delegates to {@link ISessionManager#extractUserId}. */
@@ -236,6 +256,15 @@ public class AuthenticationService {
         // 1. Guest session must exist.
         Session session = requireActiveGuestSession(request.guestSessionId());
 
+        // 1b. Brute-force lockout (SLR.2 #148) — same policy as admin sign-in.
+        String lockKey = lockoutKey("m", request.username());
+        if (isLockedOut(lockKey)) {
+            log.warn("MEMBER AUTH BLOCKED · username={} · reason=locked-out · at={}",
+                    request.username(), clock.instant());
+            throw new AccountLockedException(
+                    "Too many failed attempts. Try again in about " + lockoutLockMinutes + " minutes.");
+        }
+
         // 2. Authenticate (same exception for both unknown-user and wrong-password).
         User user;
         try {
@@ -245,9 +274,11 @@ public class AuthenticationService {
                 throw new AuthenticationFailedException();
             }
         } catch (AuthenticationFailedException e) {
-            log.warn("login failed for username={}", request.username());
+            int failures = recordFailure(lockKey);
+            log.warn("MEMBER AUTH FAILED · username={} · failures={}", request.username(), failures);
             throw e;
         }
+        clearFailures(lockKey);
 
         // 3. Promote — same sessionId, userId set, expiry bumped to Member TTL.
         Instant memberExpiry = clock.instant().plus(memberTtlMinutes, ChronoUnit.MINUTES);
@@ -269,6 +300,78 @@ public class AuthenticationService {
         List<NotificationDTO> notifications = notificationDispatchService.deliverPending(user.getUserId());
         return new LoginDTO(authTokenDTO, activeOrderDTO, notifications);
     }
+
+    /**
+     * Admin sign-in (#290). Authenticates against the persisted admin pool (never the member pool
+     * — disjoint-pool rule), applies the shared lock-after-N policy, audit-logs every failure, and
+     * issues an ADMIN-role JWT so the backend admin gate can authorize it.
+     */
+    public AuthTokenDTO signInAsAdmin(String username, String rawPassword) {
+        String lockKey = lockoutKey("a", username);
+
+        if (isLockedOut(lockKey)) {
+            log.warn("ADMIN AUTH BLOCKED · username={} · reason=locked-out · at={}", username, clock.instant());
+            throw new AccountLockedException(
+                    "Too many failed attempts. Try again in about " + lockoutLockMinutes + " minutes.");
+        }
+
+        Admin admin = adminRepository.findByUsername(username == null ? "" : username.trim());
+        if (admin == null || !passwordHasher.matches(rawPassword, admin.getPasswordHash())) {
+            int failures = recordFailure(lockKey);
+            log.warn("ADMIN AUTH FAILED · username={} · reason={} · failures={} · at={}",
+                    username, admin == null ? "unknown-admin" : "bad-password", failures, clock.instant());
+            throw new AuthenticationFailedException();
+        }
+
+        clearFailures(lockKey);
+        String token = sessionManager.generateAdminToken(admin.getId(), admin.getUsername());
+        long expiresAt = sessionManager.extractExpiration(token);
+        log.info("ADMIN AUTH OK · username={} · id={}", admin.getUsername(), admin.getId());
+        return new AuthTokenDTO(token, expiresAt, admin.getId(), admin.getUsername(), true);
+    }
+
+    // ---- shared brute-force lockout (SLR.2 #148) — member + admin sign-in ----
+
+    private static String lockoutKey(String pool, String username) {
+        return pool + ":" + (username == null ? "" : username.trim().toLowerCase());
+    }
+
+    /** True while the key is inside an active lock window; clears an expired lock for a fresh start. */
+    private boolean isLockedOut(String key) {
+        if (lockoutMaxAttempts <= 0) {
+            return false;
+        }
+        LoginAttempts a = loginAttempts.get(key);
+        if (a == null || a.lockedUntil() == null) {
+            return false;
+        }
+        if (clock.instant().isBefore(a.lockedUntil())) {
+            return true;
+        }
+        loginAttempts.remove(key); // lock expired — fresh window
+        return false;
+    }
+
+    /** Records a failed attempt; locks the key once it reaches the configured threshold. */
+    private int recordFailure(String key) {
+        if (lockoutMaxAttempts <= 0) {
+            return 0;
+        }
+        LoginAttempts updated = loginAttempts.compute(key, (k, prev) -> {
+            int failures = (prev == null ? 0 : prev.failures()) + 1;
+            Instant lockedUntil = failures >= lockoutMaxAttempts
+                    ? clock.instant().plus(lockoutLockMinutes, ChronoUnit.MINUTES)
+                    : null;
+            return new LoginAttempts(failures, lockedUntil);
+        });
+        return updated.failures();
+    }
+
+    private void clearFailures(String key) {
+        loginAttempts.remove(key);
+    }
+
+    private record LoginAttempts(int failures, Instant lockedUntil) { }
 
     /**
      * D9a cart wiring at promotion time. Two cases:
