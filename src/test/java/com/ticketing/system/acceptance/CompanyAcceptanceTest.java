@@ -460,4 +460,30 @@ class CompanyAcceptanceTest {
                                 () -> eventManagementService.editEventDetails(manager.token(),
                                                 new EventUpdateDTO(created.eventId(), "Blocked Edit", null, null, null, null)));
         }
+
+
+        @Test
+        void GivenEventOnSale_WhenEditEventDetails_ThenThrows() {
+        AuthTokenDTO owner = registerAndLoginMember("saleEditOwner1");
+        int companyId = companyService.registerCompany(
+                owner.token(), new CompanyRegistrationDTO("saleEditCo1", "desc")).companyId();
+
+        EventDetailDTO created = eventManagementService.addEvent(owner.token(), new EventCreationDTO(
+                companyId, "Sale Event", "desc", List.of("Artist"),
+                EventCategory.CONCERT, 4.0,
+                new Location("Venue", "City"),
+                List.of(new ShowDate(
+                LocalDateTime.now().plusDays(1),
+                LocalDateTime.now().plusDays(1).plusHours(3))), null));
+
+        // Advance the event to ON_SALE directly via domain (bypasses service auth)
+        Event stored = eventRepository.findById(Integer.parseInt(created.eventId()));
+        stored.transitionToScheduled();
+        eventManagementService.publishEvent(owner.token(), companyId, Integer.parseInt(created.eventId()));
+
+        assertThrows(RuntimeException.class, () ->
+                eventManagementService.editEventDetails(owner.token(),
+                new EventUpdateDTO(created.eventId(), "Blocked Edit", null, null, null, null)));
+        }
+        
 }

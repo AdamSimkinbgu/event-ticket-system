@@ -55,6 +55,7 @@ import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.dto.LocationDTO;
 import com.ticketing.system.Core.Application.dto.ShowDateDTO;
+import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Domain.events.DiscountPolicy;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.users.Permission;
@@ -351,6 +352,76 @@ class EventManagementServiceTest {
                 () -> eventService.publishEvent(OWNER_TOKEN, COMPANY_ID, EVENT_ID));
         assertEquals(EventStatus.DRAFT, draftEvent.getStatus());
     }
+
+
+        ///////////////////////////Tests for configureVenueMap
+
+        @Test
+        void GivenInvalidToken_WhenConfigureVenueMap_ThenThrows() {
+        when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
+
+        VenueMapConfigDTO config = new VenueMapConfigDTO(
+                String.valueOf(EVENT_ID), "Venue",
+                List.of(new VenueMapConfigDTO.ZoneConfigDTO("GA Floor", false, 500, null, 50.0)));
+
+        assertThrows(RuntimeException.class,
+                () -> eventService.configureVenueMap(INVALID_TOKEN, COMPANY_ID, config));
+        }
+
+        @Test
+        void GivenOwnerAndStandingZone_WhenConfigureVenueMap_ThenVenueMapSavedOnEvent() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+
+        VenueMapConfigDTO config = new VenueMapConfigDTO(
+                String.valueOf(EVENT_ID), "Venue",
+                List.of(new VenueMapConfigDTO.ZoneConfigDTO("GA Floor", false, 500, null, 50.0)));
+
+        eventService.configureVenueMap(OWNER_TOKEN, COMPANY_ID, config);
+
+        verify(mockEventRepo).save(event);
+        assertNotNull(event.getVenueMap());
+        }
+
+        @Test
+        void GivenManagerWithConfigureVenuePermission_WhenConfigureVenueMap_ThenVenueMapSaved() {
+        when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+
+        VenueMapConfigDTO config = new VenueMapConfigDTO(
+                String.valueOf(EVENT_ID), "Venue",
+                List.of(new VenueMapConfigDTO.ZoneConfigDTO("GA Floor", false, 500, null, 50.0)));
+
+        eventService.configureVenueMap(MANAGER_TOKEN, COMPANY_ID, config);
+
+        verify(mockEventRepo).save(event);
+        }
+
+        @Test
+        void GivenManagerWithoutConfigureVenuePermission_WhenConfigureVenueMap_ThenThrows() {
+        User noPermUser = new User(MANAGER_ID, "No Perm", "noperm@test.com", "hashedpassword", 30);
+        noPermUser.receiveManagerAppointment(COMPANY_ID, OWNER_ID, List.of(Permission.VIEW_SALES));
+        noPermUser.acceptInvitation(COMPANY_ID);
+
+        when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(noPermUser);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+
+        VenueMapConfigDTO config = new VenueMapConfigDTO(
+                String.valueOf(EVENT_ID), "Venue",
+                List.of(new VenueMapConfigDTO.ZoneConfigDTO("GA Floor", false, 500, null, 50.0)));
+
+        assertThrows(RuntimeException.class,
+                () -> eventService.configureVenueMap(MANAGER_TOKEN, COMPANY_ID, config));
+        }
 
     // new test
     @Test
