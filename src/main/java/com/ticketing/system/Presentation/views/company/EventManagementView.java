@@ -15,8 +15,8 @@ import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
-import com.ticketing.system.Presentation.security.MockAuth;
 import com.ticketing.system.Presentation.security.RequireCapability;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.admin.CompanySalesView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -71,7 +71,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
 
 
     private void loadEvent(String id) {
-        String token = MockAuth.token();
+        String token = AuthSession.token();
         if (token == null) return;
         try {
             EventDetailDTO ev = eventService.getEvent(token, Integer.parseInt(id));
@@ -84,7 +84,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     }
 
     private void saveEvent() {
-        String token = MockAuth.token();
+        String token = AuthSession.token();
         if (token == null) { Toasts.failure("Session token missing."); return; }
 
         if ("new".equals(eventId) || eventId == null) {
@@ -240,7 +240,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
 
     private void cancelEvent() {
         if (eventId == null || "new".equals(eventId)) return;
-        String token = MockAuth.token();
+        String token = AuthSession.token();
         if (token == null) { Toasts.failure("Session token missing."); return; }
         try {
             eventService.cancelEventAndRefund(token, Integer.parseInt(eventId));

@@ -11,15 +11,13 @@ import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkGrid;
 import com.ticketing.system.Presentation.components.kit.LkPage;
-import com.ticketing.system.Presentation.components.kit.LkRadio;
 import com.ticketing.system.Presentation.components.kit.LkRow;
-import com.ticketing.system.Presentation.components.kit.LkStepper;
 import com.ticketing.system.Presentation.components.venue.VkSeatBlock;
 import com.ticketing.system.Presentation.components.venue.VkVenueMap;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.security.Capability;
-import com.ticketing.system.Presentation.security.MockAuth;
 import com.ticketing.system.Presentation.security.RequireCapability;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.MockSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -113,7 +111,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     }
 
     private void loadZonesFromBackend() {
-        String token = MockAuth.token();
+        String token = AuthSession.token();
         if (token == null || "0".equals(eventId)) return;
         try {
             List<ZoneDetailDTO> loaded = eventService.getEventZones(
@@ -296,7 +294,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     }
 
     private void saveMap() {
-        String token = MockAuth.token();
+        String token = AuthSession.token();
         if (token == null) { Toasts.failure("Session token missing — please log in again."); return; }
         String companyIdStr = MockSession.currentCompanyId();
         if (companyIdStr == null) { Toasts.failure("No company selected."); return; }

@@ -12,8 +12,8 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.security.Capability;
-import com.ticketing.system.Presentation.security.MockAuth;
 import com.ticketing.system.Presentation.security.RequireCapability;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.MockSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -103,7 +103,7 @@ public class ManagerInvitationView extends LkPage {
             return;
         }
 
-        String token = MockAuth.token();
+        String token = AuthSession.token();
         if (token == null) {
             Toasts.failure("Session token missing — please log in again.");
             return;

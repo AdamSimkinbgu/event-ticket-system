@@ -1,6 +1,8 @@
 package com.ticketing.system.Presentation.views.company;
 
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
+import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Presentation.components.Toasts;
@@ -16,9 +18,8 @@ import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStatusDot;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.security.Capability;
-import com.ticketing.system.Presentation.security.MockAuth;
 import com.ticketing.system.Presentation.security.RequireCapability;
-import com.ticketing.system.Presentation.session.MockSession;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Span;
@@ -36,21 +37,12 @@ import java.util.Map;
 @RequireCapability(Capability.VIEW_COMPANY_EVENTS)
 public class CompanyEventListView extends LkPage {
     private final EventManagementService eventService;
-
-    private record EventRow(String name, String date, String venue, String sold,
-                            LkStatusDot.Tone tone, String status, String id) { }
-
-    private static final List<EventRow> EVENTS = List.of(
-        new EventRow("Coldplay · MOTS",            "26 Jun", "Park HaYarkon",         "38,420 / 45,000", LkStatusDot.Tone.ok,    "Live",          "coldplay"),
-        new EventRow("Coldplay · MOTS (2nd night)", "27 Jun", "Park HaYarkon",         "12,090 / 45,000", LkStatusDot.Tone.ok,    "Live",          "coldplay-2"),
-        new EventRow("Mashina · 35-Year Tour",     "5 Jul",  "TLV Convention Center", "4,330 / 6,000",   LkStatusDot.Tone.warn,  "Selling fast",  "mashina"),
-        new EventRow("Eden Hason · Live",          "20 Jul", "Caesarea Amphitheatre", "0 / 3,800",       LkStatusDot.Tone.muted, "Draft",         "eden-hason"),
-        new EventRow("NYE Festival 2026",          "31 Dec", "Rishon Park",           "—",               LkStatusDot.Tone.muted, "Draft",         "nye-2026")
-    );
+    private final CompanyManagementService companyManagementService;
 
 
-    public CompanyEventListView(EventManagementService eventService) {
+    public CompanyEventListView(EventManagementService eventService , CompanyManagementService companyManagementService) {
         this.eventService = eventService;
+        this.companyManagementService = companyManagementService;
         title("My events");
         subtitle("All events under the selected company.");
         actions(
@@ -89,23 +81,24 @@ public class CompanyEventListView extends LkPage {
             .col("Status",       "status")
             .col("Actions",      "act", LkGrid.Align.RIGHT);
 
-        String token = MockAuth.token();
-        String companyIdStr = MockSession.currentCompanyId();
-
-        if (token != null && companyIdStr != null) {
-            try {
-                List<EventDetailDTO> events =
-                    eventService.listEventsForCompany(token, Integer.parseInt(companyIdStr));
-                for (EventDetailDTO ev : events) {
-                    addEventRow(grid, ev);
-                }
-            } catch (Exception ex) {
-                card.add(Lk.muted("Could not load events: " + ex.getMessage()));
+        String token = AuthSession.token();
+        if (token == null) {
+            card.add(Lk.muted("Your session has expired — please sign in again."));
+            return card;
+        }
+        try {
+            List<ProductionCompanyDTO> owned = companyManagementService.findOwnedCompanies(token);
+            if (owned.isEmpty()) {
+                card.add(Lk.muted("You don't own a company yet."));
                 return card;
             }
-        } else {
-            // fallback: keep one row so the page isn't empty while MockAuth is not set
-            card.add(Lk.muted("Sign in to view events."));
+            int companyId = owned.get(0).companyId();
+            List<EventDetailDTO> events = eventService.listEventsForCompany(token, companyId);
+            for (EventDetailDTO ev : events) {
+                addEventRow(grid, ev);
+            }
+        } catch (Exception ex) {
+            card.add(Lk.muted("Could not load events: " + ex.getMessage()));
             return card;
         }
 
