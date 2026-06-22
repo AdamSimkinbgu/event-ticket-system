@@ -1,8 +1,10 @@
 package com.ticketing.system.unit.presentation;
 
+import com.ticketing.system.Presentation.components.company.EditPermissionsDialog;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
+import com.ticketing.system.Presentation.components.kit.LkConfirm;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
@@ -15,6 +17,16 @@ import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
+import com.ticketing.system.Presentation.views.company.ManagerListView;
+import com.ticketing.system.Presentation.views.company.OwnerDashboardView;
+import com.ticketing.system.Presentation.views.account.MyInvitationsView;
+import com.ticketing.system.Presentation.views.landing.LandingView;
+import com.ticketing.system.Presentation.presenters.company.ManagerListPresenter;
+import com.ticketing.system.Presentation.presenters.company.OwnerDashboardPresenter;
+import com.ticketing.system.Presentation.presenters.account.MyInvitationsPresenter;
+import com.ticketing.system.Presentation.presenters.landing.LandingPresenter;
+import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
+import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,6 +36,11 @@ import org.springframework.test.context.ActiveProfiles;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.util.List;
 
 /**
  * Smoke tests for the V2 Presentation layer.
@@ -112,6 +129,67 @@ class VaadinSmokeTest {
         assertDoesNotThrow(AdminAnnouncementsView::new,  "AdminAnnouncementsView failed to construct");
         assertDoesNotThrow(AdminComplaintQueueView::new, "AdminComplaintQueueView failed to construct");
         assertDoesNotThrow(OrganizationalTreeView::new,  "OrganizationalTreeView failed to construct");
+    }
+
+    @Test
+    void managerListViewInstantiates() {
+        // Owner-workspace view wired to a presenter (#264). A mock presenter
+        // returning an empty success roster exercises the grid-building path
+        // without a UI context — a canary for kit-API breakage.
+        ManagerListPresenter presenter = mock(ManagerListPresenter.class);
+        when(presenter.loadRoster(any())).thenReturn(
+            new ManagerListPresenter.Outcome.Success("Acme", List.of(), List.of()));
+        assertDoesNotThrow(() -> new ManagerListView(presenter),
+            "ManagerListView failed to construct");
+    }
+
+    @Test
+    void myInvitationsViewInstantiates() {
+        // Member account view wired to a presenter (#275). A mock presenter
+        // returning an empty success outcome exercises the grid-building path
+        // without a UI context — a canary for kit-API breakage.
+        MyInvitationsPresenter presenter = mock(MyInvitationsPresenter.class);
+        when(presenter.load(any())).thenReturn(
+            new MyInvitationsPresenter.Outcome.Success(List.of(), List.of()));
+        assertDoesNotThrow(() -> new MyInvitationsView(presenter),
+            "MyInvitationsView failed to construct");
+    }
+
+    @Test
+    void ownerDashboardViewInstantiates() {
+        // Owner-workspace hub wired to a presenter (#292). A mock presenter returning a
+        // single-company success outcome exercises the stat-tile + tile-grid build path
+        // without a UI context.
+        OwnerDashboardPresenter presenter = mock(OwnerDashboardPresenter.class);
+        MyCompanyDTO company = new MyCompanyDTO(1, "Acme", "Founder");
+        when(presenter.loadFor(any(), any())).thenReturn(
+            new OwnerDashboardPresenter.Outcome.Success(
+                List.of(company), company, new CompanyDashboardDTO(0, 0, 0.0, 0)));
+        assertDoesNotThrow(() -> new OwnerDashboardView(presenter),
+            "OwnerDashboardView failed to construct");
+    }
+
+    @Test
+    void landingViewInstantiates() {
+        // Public landing root wired to a presenter (#285). A mock presenter returning an
+        // empty success outcome exercises the poster-row build path without a UI context.
+        LandingPresenter presenter = mock(LandingPresenter.class);
+        when(presenter.load()).thenReturn(
+            new LandingPresenter.Outcome.Success(List.of(), List.of()));
+        assertDoesNotThrow(() -> new LandingView(presenter),
+            "LandingView failed to construct");
+    }
+
+    @Test
+    void managerActionDialogsConstruct() {
+        // V2-CADMIN-03 dialogs — build path only (open() needs a UI context).
+        assertDoesNotThrow(() -> new LkConfirm("Revoke manager", "Remove Carol?",
+                LkConfirm.Severity.danger)
+                .confirmText("Revoke"),
+            "LkConfirm failed to construct");
+        assertDoesNotThrow(() -> new EditPermissionsDialog(
+                "carol", "Manager", List.of("VIEW_SALES"), names -> { }),
+            "EditPermissionsDialog failed to construct");
     }
 
     @Test

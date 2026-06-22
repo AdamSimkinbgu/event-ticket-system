@@ -60,7 +60,7 @@ public class Conversation implements InvariantChecked {
     public String getSubject() { return subject; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getLastMessageAt() { return lastMessageAt; }
-    public List<Message> getMessages() { return messages; }
+    public List<Message> getMessages() { return List.copyOf(messages); }
 
     // Append a new message. Updates lastMessageAt and may transition status (OPEN→RESPONDED, etc).
     // Throws ConversationClosedException if status is CLOSED or RESOLVED.

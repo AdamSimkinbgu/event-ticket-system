@@ -8,6 +8,9 @@ import java.util.Set;
 
 import lombok.extern.slf4j.Slf4j;
 
+import com.ticketing.system.Core.Application.dto.AppointmentInfoDTO;
+import com.ticketing.system.Core.Application.dto.InvitationDTO;
+import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO;
 import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
@@ -15,6 +18,7 @@ import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
 import com.ticketing.system.Core.Application.dto.CompanyPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.AppointmentRevokeDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
+import com.ticketing.system.Core.Application.dtoMappers.AppointmentInfoMapper;
 import com.ticketing.system.Core.Application.dtoMappers.OrderReceiptMapper;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
@@ -27,6 +31,7 @@ import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
+import com.ticketing.system.Core.Domain.users.AppointmentStatus;
 import com.ticketing.system.Core.Domain.users.CompanyAppointment;
 import com.ticketing.system.Core.Domain.users.CompanyRole;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
@@ -259,6 +264,144 @@ public class CompanyManagementService {
 
 
     
+    // ---------------------------------------------------------------------------
+    // Read-side roster queries (#264 — wire ManagerListView).
+    // ---------------------------------------------------------------------------
+
+    // II.4.7.1 — active managers of a company (owner-only view).
+    public List<AppointmentInfoDTO> listManagers(String token, int companyId) {
+        int requesterId = authenticate(token);
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null) {
+            throw new CompanyNotFoundException(companyId);
+        }
+        User requester = userRepository.getUserById(requesterId);
+        requester.requireOwnerInCompany(companyId);
+
+        AppointmentInfoMapper mapper = new AppointmentInfoMapper();
+        List<AppointmentInfoDTO> managers = new ArrayList<>();
+        for (Integer managerId : company.getManagers()) {
+            User manager = userRepository.getUserById(managerId);
+            CompanyAppointment appt = manager.getActiveCompanyAppointment(companyId);
+            if (appt != null) {
+                managers.add(mapper.toDTO(appt, manager.getUsername(), company.getName()));
+            }
+        }
+        log.info("Listed {} active managers for company {}", managers.size(), companyId);
+        return managers;
+    }
+
+    // II.4.7.1 — pending invitations (manager + owner offers) awaiting acceptance.
+    public List<AppointmentInfoDTO> listPendingInvitations(String token, int companyId) {
+        int requesterId = authenticate(token);
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null) {
+            throw new CompanyNotFoundException(companyId);
+        }
+        User requester = userRepository.getUserById(requesterId);
+        requester.requireOwnerInCompany(companyId);
+
+        AppointmentInfoMapper mapper = new AppointmentInfoMapper();
+        List<AppointmentInfoDTO> pending = new ArrayList<>();
+        for (User invitee : userRepository.findUsersWithPendingAppointmentForCompany(companyId)) {
+            CompanyAppointment appt = invitee.getPendingCompanyAppointment(companyId);
+            if (appt != null) {
+                pending.add(mapper.toDTO(appt, invitee.getUsername(), company.getName()));
+            }
+        }
+        log.info("Listed {} pending invitations for company {}", pending.size(), companyId);
+        return pending;
+    }
+
+    // Companies where the authenticated user holds an ACTIVE Owner appointment.
+    // Bridges token -> companyId for the owner workspace until a real current-company
+    // selector lands (V2-CADMIN-05).
+    public List<ProductionCompanyDTO> findOwnedCompanies(String token) {
+        int userId = authenticate(token);
+        User user = userRepository.getUserById(userId);
+
+        List<ProductionCompanyDTO> owned = new ArrayList<>();
+        for (CompanyAppointment appt : user.getAllCompanyAppointments()) {
+            if (appt.getRole() == CompanyRole.Owner && appt.getStatus() == AppointmentStatus.ACTIVE) {
+                ProductionCompany company = companyRepository.getCompanyById(appt.getCompanyId());
+                if (company != null) {
+                    owned.add(new ProductionCompanyDTO(
+                            company.getCompanyId(),
+                            company.getName(),
+                            company.getDescription(),
+                            company.getStatus().name(),
+                            company.getFounderId()));
+                }
+            }
+        }
+        log.info("User {} owns {} active company appointment(s)", userId, owned.size());
+        return owned;
+    }
+
+    // Every company the authenticated member belongs to via an ACTIVE appointment (Owner OR
+    // Manager), with the viewer's display role resolved ("Founder"/"Co-owner"/"Manager").
+    // Feeds the owner-workspace company selector + name/role subtitle (V2-WIRE-OWNER-DASH);
+    // unlike findOwnedCompanies it keeps managers, since /owner is reachable by them too.
+    public List<MyCompanyDTO> findMyCompanies(String token) {
+        int userId = authenticate(token);
+        User user = userRepository.getUserById(userId);
+
+        List<MyCompanyDTO> companies = new ArrayList<>();
+        for (CompanyAppointment appt : user.getAllCompanyAppointments()) {
+            if (appt.getStatus() != AppointmentStatus.ACTIVE) {
+                continue;
+            }
+            ProductionCompany company = companyRepository.getCompanyById(appt.getCompanyId());
+            if (company == null) {
+                continue;
+            }
+            String role;
+            if (appt.getRole() == CompanyRole.Owner) {
+                role = company.getFounderId() == userId ? "Founder" : "Co-owner";
+            } else {
+                role = "Manager";
+            }
+            companies.add(new MyCompanyDTO(company.getCompanyId(), company.getName(), role));
+        }
+        log.info("User {} belongs to {} active company appointment(s)", userId, companies.size());
+        return companies;
+    }
+
+    // II.4.7.3 / II.4.8.2 — the signed-in member's own invitation records (every status),
+    // keyed on the inviter. The presenter splits PENDING (the pending list) from the
+    // resolved ACTIVE/REJECTED/REVOKED rows (history). Names are resolved per row, mirroring
+    // listPendingInvitations.
+    public List<InvitationDTO> listMyInvitations(String token) {
+        int userId = authenticate(token);
+        User user = userRepository.getUserById(userId);
+
+        List<InvitationDTO> invitations = new ArrayList<>();
+        for (CompanyAppointment appt : user.getAllCompanyAppointments()) {
+            ProductionCompany company = companyRepository.getCompanyById(appt.getCompanyId());
+            String companyName = company != null ? company.getName() : "(unknown company)";
+            // getUserById throws (never returns null) when the inviter no longer
+            // exists, so fall back to a placeholder rather than failing the whole list.
+            String fromUsername;
+            try {
+                fromUsername = userRepository.getUserById(appt.getInviterId()).getUsername();
+            } catch (UserNotFoundException e) {
+                fromUsername = "(unknown)";
+            }
+
+            invitations.add(new InvitationDTO(
+                    String.valueOf(appt.getAppointmentId()),
+                    appt.getCompanyId(),
+                    companyName,
+                    appt.getRole().name(),
+                    fromUsername,
+                    appt.getPermissions().stream().map(Permission::name).toList(),
+                    appt.getStatus().name(),
+                    appt.getCreatedAt()));
+        }
+        log.info("Listed {} invitation record(s) for user {}", invitations.size(), userId);
+        return invitations;
+    }
+
     // ---------------------------------------------------------------------------
     // DTO-typed methods added in skeleton round (parallel to the existing
     // token-arg / List<Permission>-arg methods above; team to consolidate later).

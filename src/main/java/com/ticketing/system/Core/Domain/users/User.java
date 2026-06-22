@@ -93,6 +93,7 @@ public class User implements InvariantChecked {
                 permissions);
 
         companyAppointments.add(appointment);
+        checkInvariants();
     }
 
 
@@ -113,6 +114,7 @@ public class User implements InvariantChecked {
                 appointerId);
 
         companyAppointments.add(appointment);
+        checkInvariants();
     }
 
 
@@ -129,6 +131,7 @@ public class User implements InvariantChecked {
                 this.userId);
 
         companyAppointments.add(appointment);
+        checkInvariants();
     }
 
 
@@ -269,7 +272,8 @@ public int getAge() {
     }
 
     public List<CompanyAppointment> getAllCompanyAppointments() {
-        return companyAppointments;
+        // Defensive copy — callers must not mutate the internal appointments list.
+        return new ArrayList<>(companyAppointments);
     }
 
     // UC-11 / future profile-edit — domain receives already-hashed password (per lecture 2). Cancelled for current work plan.

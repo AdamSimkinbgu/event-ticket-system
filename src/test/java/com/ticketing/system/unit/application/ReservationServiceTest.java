@@ -611,7 +611,9 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
     }
 
 
-
+    // NOTE: the in-checkout expiry guard formerly tested here against the now-removed
+    // ReservationService.expireActiveOrders() lives on the live path and is covered by
+    // SessionAndOrderSweeperTest.GivenExpiredCartInCheckoutProgress_WhenSweepExpiredOrders_ThenDoNotReleaseOrDelete.
 
 
     @Test

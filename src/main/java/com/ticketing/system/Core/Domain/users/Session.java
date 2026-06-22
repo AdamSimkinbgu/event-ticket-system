@@ -82,6 +82,7 @@ public class Session implements InvariantChecked {
         }
         this.userId = newUserId;
         this.expiresAt = newExpiresAt;
+        checkInvariants();
     }
 
     /** Records activity. Used by the idle-timeout flow for Guest sessions. */
@@ -89,7 +90,16 @@ public class Session implements InvariantChecked {
         if (now == null) {
             throw new IllegalArgumentException("now must not be null");
         }
+        // Validate-before-commit: roll back if `now` precedes createdAt, so a rejected
+        // call never leaves lastSeenAt before createdAt.
+        Instant previous = this.lastSeenAt;
         this.lastSeenAt = now;
+        try {
+            checkInvariants();
+        } catch (RuntimeException ex) {
+            this.lastSeenAt = previous;
+            throw ex;
+        }
     }
 
     /** Extends the expiry. Used by the idle-timeout flow when a Guest is active. */
@@ -98,6 +108,7 @@ public class Session implements InvariantChecked {
             throw new IllegalArgumentException("newExpiresAt must not be null");
         }
         this.expiresAt = newExpiresAt;
+        checkInvariants();
     }
 
     /** Boundary is inclusive: {@code now == expiresAt} counts as expired. */

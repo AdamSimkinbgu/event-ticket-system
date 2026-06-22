@@ -114,7 +114,17 @@ public class CompanyAppointment implements InvariantChecked {
     }
 
     public void setPermissions(EnumSet<Permission> newPermissions) {
+        // Validate-before-commit: roll back to the previous permission set if the new one
+        // would violate an invariant (e.g. emptying a Manager's permissions), so a rejected
+        // call never leaves the appointment corrupted. checkInvariants stays the sole validator.
+        EnumSet<Permission> previous = this.permissions;
         this.permissions = newPermissions;
+        try {
+            checkInvariants();
+        } catch (RuntimeException ex) {
+            this.permissions = previous;
+            throw ex;
+        }
     }
 
     // ---------------------------------------------------------------------------
@@ -127,6 +137,7 @@ public class CompanyAppointment implements InvariantChecked {
             throw new IllegalStateException("Only pending appointments can be accepted.");
         }
         this.status = AppointmentStatus.ACTIVE;
+        checkInvariants();
     }
 
     // UC-23 / UC-24 — PENDING -> REJECTED on target rejection.
@@ -135,6 +146,7 @@ public class CompanyAppointment implements InvariantChecked {
             throw new IllegalStateException("Only pending appointments can be rejected.");
         }
         this.status = AppointmentStatus.REJECTED;
+        checkInvariants();
     }
 
     // UC-24 — ACTIVE -> REVOKED. Owner appointments do NOT support revoke (II.4.9 Cancelled in v0).
@@ -153,6 +165,7 @@ public class CompanyAppointment implements InvariantChecked {
             }
         }
         this.status = AppointmentStatus.REVOKED;
+        checkInvariants();
     }
 
     // UC-24 — replace permission set with validation (existing setPermissions does
@@ -168,6 +181,7 @@ public class CompanyAppointment implements InvariantChecked {
             throw new IllegalArgumentException("Manager role must have at least one permission.");
         }
         this.permissions = EnumSet.copyOf(newPermissions);
+        checkInvariants();
     }
 
     public boolean hasPermission(Permission permission) {

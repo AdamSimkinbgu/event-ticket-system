@@ -80,6 +80,7 @@ public class Seat implements InvariantChecked {
         this.reservedByOrderKey = orderKey;
         this.reservedUntil = reservedUntil;
         this.status = SeatStatus.RESERVED;
+        checkInvariants();
     }
 
     /**
