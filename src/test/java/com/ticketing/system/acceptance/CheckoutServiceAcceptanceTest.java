@@ -915,7 +915,8 @@ public class CheckoutServiceAcceptanceTest {
                 paymentGateway,
                 notificationService,
                 sessionManager,
-                userRepository
+                userRepository,
+                companyRepository
         );
     }
 

@@ -29,11 +29,11 @@ public class PurchaseContext implements InvariantChecked {
         this.companyId = companyId;
         this.quantity = quantity;
         this.stage = stage == null ? PurchaseStage.CHECKOUT : stage;
+        checkInvariants();
     }
 
     public PurchaseStage getStage() {
         return stage;
-        checkInvariants();
     }
 
     @Override
