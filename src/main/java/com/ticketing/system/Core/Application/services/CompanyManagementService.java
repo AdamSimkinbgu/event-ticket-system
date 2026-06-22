@@ -232,7 +232,6 @@ public class CompanyManagementService {
                 edit.companyId());
     }
 
-<<<<<<< HEAD
     public List<Permission> getManagerPermissions(String token, int companyId, int managerId) {
         int requesterId = authenticate(token);
         User requester = userRepository.getUserById(requesterId);
@@ -244,8 +243,6 @@ public class CompanyManagementService {
         }
         return new ArrayList<>(appt.getPermissions());
     }
-=======
->>>>>>> ff20e4a22ab19b9985aa811345674223b3b5757a
 
 
 
