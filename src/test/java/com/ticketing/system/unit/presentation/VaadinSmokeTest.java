@@ -24,6 +24,7 @@ import com.ticketing.system.Presentation.presenters.catalog.BrowseEventsPresente
 import com.ticketing.system.Presentation.views.company.ManagerListView;
 import com.ticketing.system.Presentation.views.company.OwnerDashboardView;
 import com.ticketing.system.Presentation.views.account.MyInvitationsView;
+import com.ticketing.system.Presentation.views.account.SupportInboxView;
 import com.ticketing.system.Presentation.views.landing.LandingView;
 import com.ticketing.system.Presentation.views.messaging.SubmitComplaintView;
 import com.ticketing.system.Presentation.presenters.company.ManagerListPresenter;
@@ -31,7 +32,10 @@ import com.ticketing.system.Presentation.presenters.company.OwnerDashboardPresen
 import com.ticketing.system.Presentation.presenters.account.MyInvitationsPresenter;
 import com.ticketing.system.Presentation.presenters.landing.LandingPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.SubmitComplaintPresenter;
+import com.ticketing.system.Presentation.presenters.messaging.SupportInboxPresenter;
 import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
+import com.ticketing.system.Core.Application.dto.ConversationDTO;
+import com.ticketing.system.Core.Application.dto.MessageDTO;
 import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,6 +50,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -199,6 +204,23 @@ class VaadinSmokeTest {
         SubmitComplaintPresenter presenter = mock(SubmitComplaintPresenter.class);
         assertDoesNotThrow(() -> new SubmitComplaintView(presenter),
             "SubmitComplaintView failed to construct");
+    }
+
+    @Test
+    void supportInboxViewInstantiates() {
+        // Member Support inbox wired to a presenter (#277). A mock presenter
+        // returning one conversation with one message exercises the master-list +
+        // thread + reply-bar build path without a UI context.
+        SupportInboxPresenter presenter = mock(SupportInboxPresenter.class);
+        ConversationDTO conv = new ConversationDTO(
+            "conv-1", "COMPLAINT", "OPEN", 1, "MEMBER", 0, "ADMIN_GROUP",
+            "Refund delay", LocalDateTime.now(), LocalDateTime.now(), 0,
+            List.of(new MessageDTO("m-1", 1, "MEMBER", "Where's my refund?",
+                LocalDateTime.now(), false)));
+        when(presenter.load(any())).thenReturn(
+            new SupportInboxPresenter.Outcome.Success(List.of(conv)));
+        assertDoesNotThrow(() -> new SupportInboxView(presenter),
+            "SupportInboxView failed to construct");
     }
 
     @Test
