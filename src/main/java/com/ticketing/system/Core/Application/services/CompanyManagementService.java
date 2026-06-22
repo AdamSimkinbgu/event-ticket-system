@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import com.ticketing.system.Core.Application.dto.AppointmentInfoDTO;
 import com.ticketing.system.Core.Application.dto.InvitationDTO;
+import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO;
 import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
@@ -335,6 +336,35 @@ public class CompanyManagementService {
         }
         log.info("User {} owns {} active company appointment(s)", userId, owned.size());
         return owned;
+    }
+
+    // Every company the authenticated member belongs to via an ACTIVE appointment (Owner OR
+    // Manager), with the viewer's display role resolved ("Founder"/"Co-owner"/"Manager").
+    // Feeds the owner-workspace company selector + name/role subtitle (V2-WIRE-OWNER-DASH);
+    // unlike findOwnedCompanies it keeps managers, since /owner is reachable by them too.
+    public List<MyCompanyDTO> findMyCompanies(String token) {
+        int userId = authenticate(token);
+        User user = userRepository.getUserById(userId);
+
+        List<MyCompanyDTO> companies = new ArrayList<>();
+        for (CompanyAppointment appt : user.getAllCompanyAppointments()) {
+            if (appt.getStatus() != AppointmentStatus.ACTIVE) {
+                continue;
+            }
+            ProductionCompany company = companyRepository.getCompanyById(appt.getCompanyId());
+            if (company == null) {
+                continue;
+            }
+            String role;
+            if (appt.getRole() == CompanyRole.Owner) {
+                role = company.getFounderId() == userId ? "Founder" : "Co-owner";
+            } else {
+                role = "Manager";
+            }
+            companies.add(new MyCompanyDTO(company.getCompanyId(), company.getName(), role));
+        }
+        log.info("User {} belongs to {} active company appointment(s)", userId, companies.size());
+        return companies;
     }
 
     // II.4.7.3 / II.4.8.2 — the signed-in member's own invitation records (every status),

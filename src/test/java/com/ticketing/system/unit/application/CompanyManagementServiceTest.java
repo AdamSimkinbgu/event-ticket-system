@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 
 import com.ticketing.system.Core.Application.dto.AppointmentInfoDTO;
 import com.ticketing.system.Core.Application.dto.InvitationDTO;
+import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
@@ -1123,6 +1124,81 @@ public class CompanyManagementServiceTest {
                 assertEquals(1, owned.size());
                 assertEquals(COMPANY_ID, owned.get(0).companyId());
                 assertEquals(COMPANY_1_NAME, owned.get(0).name());
+        }
+
+        // -- findMyCompanies (V2-WIRE-OWNER-DASH) ---------------------------------
+
+        @Test
+        public void GivenFounderAppointment_WhenFindMyCompanies_ThenRoleIsFounder() {
+                ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME,
+                                CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
+                User ownerUser = new User(OWNER_ID, "ownerUser", "owner@test.com", "password", 22);
+                ownerUser.addFounderAppointment(COMPANY_ID);
+
+                when(mockUserRepo.getUserById(OWNER_ID)).thenReturn(ownerUser);
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+                when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+
+                List<MyCompanyDTO> mine = companyService.findMyCompanies(OWNER_TOKEN);
+
+                assertEquals(1, mine.size());
+                assertEquals(COMPANY_ID, mine.get(0).companyId());
+                assertEquals(COMPANY_1_NAME, mine.get(0).name());
+                assertEquals("Founder", mine.get(0).role());
+        }
+
+        @Test
+        public void GivenActiveCoOwnerAppointment_WhenFindMyCompanies_ThenRoleIsCoOwner() {
+                // Company founded by OWNER_ID; TARGET_USER_ID is appointed co-owner and accepts.
+                ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME,
+                                CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
+                User coOwner = new User(TARGET_USER_ID, "coOwner", "co@test.com", "password", 30);
+                coOwner.receiveOwnerAppointment(COMPANY_ID, OWNER_ID);
+                coOwner.acceptInvitation(COMPANY_ID);
+
+                when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(coOwner);
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+                when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+
+                List<MyCompanyDTO> mine = companyService.findMyCompanies(TARGET_TOKEN);
+
+                assertEquals(1, mine.size());
+                assertEquals("Co-owner", mine.get(0).role());
+        }
+
+        @Test
+        public void GivenActiveManagerAppointment_WhenFindMyCompanies_ThenRoleIsManager() {
+                ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME,
+                                CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
+                User manager = new User(TARGET_USER_ID, "managerUser", "mgr@test.com", "password", 28);
+                manager.receiveManagerAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
+                manager.acceptInvitation(COMPANY_ID);
+
+                when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(manager);
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+                when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+
+                List<MyCompanyDTO> mine = companyService.findMyCompanies(TARGET_TOKEN);
+
+                assertEquals(1, mine.size());
+                assertEquals("Manager", mine.get(0).role());
+        }
+
+        @Test
+        public void GivenOnlyPendingAppointment_WhenFindMyCompanies_ThenExcluded() {
+                User invitee = new User(TARGET_USER_ID, "pendingUser", "p@test.com", "password", 28);
+                invitee.receiveManagerAppointment(COMPANY_ID, OWNER_ID, defaultPermissions); // PENDING, not accepted
+
+                when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(invitee);
+                when(sessionManager.validateToken(TARGET_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(TARGET_TOKEN)).thenReturn(TARGET_USER_ID);
+
+                List<MyCompanyDTO> mine = companyService.findMyCompanies(TARGET_TOKEN);
+
+                assertTrue(mine.isEmpty());
         }
 
 }
