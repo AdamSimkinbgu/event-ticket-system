@@ -2,7 +2,6 @@ package com.ticketing.system.Presentation.views.company;
 
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
-import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
@@ -13,6 +12,7 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.presenters.company.EventManagementPresenter;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
@@ -46,10 +46,10 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     private final IntegerField maxAttend = new IntegerField("Max attendance");
     private final TextArea description = new TextArea("Description");
 
-    private final EventManagementService eventService;
+private final EventManagementPresenter presenter;
     private String eventId = null;   // null = new event
-    public EventManagementView(EventManagementService eventService) {
-        this.eventService = eventService;
+    public EventManagementView(EventManagementPresenter presenter) {
+        this.presenter = presenter;
         title("Edit event");
         subtitle("Configure event details.");
         actions(
@@ -71,44 +71,44 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
 
 
     private void loadEvent(String id) {
-        String token = AuthSession.token();
-        if (token == null) return;
-        try {
-            EventDetailDTO ev = eventService.getEvent(token, Integer.parseInt(id));
+    switch (presenter.load(AuthSession.token(), Integer.parseInt(id))) {
+        case EventManagementPresenter.LoadOutcome.Success ok -> {
+            EventDetailDTO ev = ok.event();
             title.setValue(ev.name() != null ? ev.name() : "");
             category.setValue(ev.category() != null ? ev.category().name() : "");
             venue.setValue(ev.location() != null ? ev.location().toString() : "");
-        } catch (Exception ex) {
-            Toasts.failure("Could not load event: " + ex.getMessage());
         }
+        case EventManagementPresenter.LoadOutcome.NotFound ignored ->
+            Toasts.failure("Event not found.");
+        case EventManagementPresenter.LoadOutcome.NotAuthenticated ignored ->
+            Toasts.failure("Your session has expired — please sign in again.");
+        case EventManagementPresenter.LoadOutcome.Failure fail ->
+            Toasts.failure("Could not load event: " + fail.reason());
     }
+}
 
     private void saveEvent() {
-        String token = AuthSession.token();
-        if (token == null) { Toasts.failure("Session token missing."); return; }
-
-        if ("new".equals(eventId) || eventId == null) {
-            Toasts.warn("Create-event flow (addEvent) — pending full form wiring.");
-            return;
-        }
-
-        try {
-            eventService.editEventDetails(
-                token,
-                new EventUpdateDTO(
-                    eventId,
-                    title.getValue().isBlank()    ? null : title.getValue().trim(),
-                    null,
-                    category.getValue().isBlank() ? null : category.getValue().trim(),
-                    null,
-                    null
-                )
-            );
-            Toasts.success("Event details saved.");
-        } catch (Exception ex) {
-            Toasts.failure("Could not save event: " + ex.getMessage());
-        }
+    if ("new".equals(eventId) || eventId == null) {
+        Toasts.warn("Create-event flow (addEvent) — pending full form wiring.");
+        return;
     }
+    switch (presenter.save(AuthSession.token(),
+            new EventUpdateDTO(
+                eventId,
+                title.getValue().isBlank()    ? null : title.getValue().trim(),
+                null,
+                category.getValue().isBlank() ? null : category.getValue().trim(),
+                null,
+                null
+            ))) {
+        case EventManagementPresenter.SaveOutcome.Success ignored ->
+            Toasts.success("Event details saved.");
+        case EventManagementPresenter.SaveOutcome.NotAuthenticated ignored ->
+            Toasts.failure("Your session has expired — please sign in again.");
+        case EventManagementPresenter.SaveOutcome.Failure fail ->
+            Toasts.failure("Could not save event: " + fail.reason());
+    }
+}
     
     private Component buildSplit() {
         Div split = new Div();
@@ -240,15 +240,16 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
 
     private void cancelEvent() {
         if (eventId == null || "new".equals(eventId)) return;
-        String token = AuthSession.token();
-        if (token == null) { Toasts.failure("Session token missing."); return; }
-        try {
-            eventService.cancelEventAndRefund(token, Integer.parseInt(eventId));
-            Toasts.success("Event cancelled — all holders refunded.");
-            UI.getCurrent().navigate(CompanyEventListView.class);
-        } catch (Exception ex) {
-            Toasts.failure("Could not cancel event: " + ex.getMessage());
+        switch (presenter.cancel(AuthSession.token(), Integer.parseInt(eventId))) {
+            case EventManagementPresenter.CancelOutcome.Success ignored -> {
+                Toasts.success("Event cancelled — all holders refunded.");
+                UI.getCurrent().navigate(CompanyEventListView.class);
+            }
+            case EventManagementPresenter.CancelOutcome.NotAuthenticated ignored ->
+                Toasts.failure("Your session has expired — please sign in again.");
+            case EventManagementPresenter.CancelOutcome.Failure fail ->
+                Toasts.failure("Could not cancel event: " + fail.reason());
         }
-        
     }
+
 }

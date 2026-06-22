@@ -1,9 +1,6 @@
 package com.ticketing.system.Presentation.views.company;
 
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
-import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
-import com.ticketing.system.Core.Application.services.CompanyManagementService;
-import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
@@ -17,6 +14,7 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStatusDot;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.presenters.company.CompanyEventListPresenter;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.session.AuthSession;
@@ -36,13 +34,13 @@ import java.util.Map;
 @PermitAll
 @RequireCapability(Capability.VIEW_COMPANY_EVENTS)
 public class CompanyEventListView extends LkPage {
-    private final EventManagementService eventService;
-    private final CompanyManagementService companyManagementService;
+    
+    private final CompanyEventListPresenter presenter;
+    private final LkCard eventsCard = new LkCard().pad(0);
 
 
-    public CompanyEventListView(EventManagementService eventService , CompanyManagementService companyManagementService) {
-        this.eventService = eventService;
-        this.companyManagementService = companyManagementService;
+        public CompanyEventListView(CompanyEventListPresenter presenter) {
+        this.presenter = presenter;
         title("My events");
         subtitle("All events under the selected company.");
         actions(
@@ -53,11 +51,38 @@ public class CompanyEventListView extends LkPage {
                 .onClick(e -> UI.getCurrent().navigate("owner/events/new"))
         );
         add(buildFilters());
-        add(buildGridCard());
+        add(eventsCard);
         Span hint = Lk.muted("Row actions → Edit metadata · Venue map · Policies · Sales · Cancel.");
         hint.getStyle().set("font-size", "12.5px");
         add(hint);
+        reload();
     }
+
+    private void reload() {
+        eventsCard.removeAll();
+        LkGrid grid = new LkGrid()
+            .col("Event",   "name")
+            .col("Date",    "date")
+            .col("Venue",   "venue")
+            .col("Status",  "status")
+            .col("Actions", "act", LkGrid.Align.RIGHT);
+        switch (presenter.load(AuthSession.token())) {
+            case CompanyEventListPresenter.Outcome.Success ok -> {
+                for (EventDetailDTO ev : ok.events()) {
+                    addEventRow(grid, ev);
+                }
+                grid.build();
+                eventsCard.add(grid);
+            }
+            case CompanyEventListPresenter.Outcome.NoCompany ignored ->
+                eventsCard.add(Lk.muted("You don't own a company yet."));
+            case CompanyEventListPresenter.Outcome.NotAuthenticated ignored ->
+                eventsCard.add(Lk.muted("Your session has expired — please sign in again."));
+            case CompanyEventListPresenter.Outcome.Failure fail ->
+                eventsCard.add(Lk.muted("Could not load events: " + fail.reason()));
+        }
+    }
+
 
     private Component buildFilters() {
         LkRow row = new LkRow().gap(8);
@@ -69,42 +94,6 @@ public class CompanyEventListView extends LkPage {
                 "Caesarea Amphitheatre", "TLV Convention Center"))
         );
         return row;
-    }
-
-    private Component buildGridCard() {
-
-        LkCard card = new LkCard().pad(0);
-        LkGrid grid = new LkGrid()
-            .col("Event",        "name")
-            .col("Date",         "date")
-            .col("Venue",        "venue")
-            .col("Status",       "status")
-            .col("Actions",      "act", LkGrid.Align.RIGHT);
-
-        String token = AuthSession.token();
-        if (token == null) {
-            card.add(Lk.muted("Your session has expired — please sign in again."));
-            return card;
-        }
-        try {
-            List<ProductionCompanyDTO> owned = companyManagementService.findOwnedCompanies(token);
-            if (owned.isEmpty()) {
-                card.add(Lk.muted("You don't own a company yet."));
-                return card;
-            }
-            int companyId = owned.get(0).companyId();
-            List<EventDetailDTO> events = eventService.listEventsForCompany(token, companyId);
-            for (EventDetailDTO ev : events) {
-                addEventRow(grid, ev);
-            }
-        } catch (Exception ex) {
-            card.add(Lk.muted("Could not load events: " + ex.getMessage()));
-            return card;
-        }
-
-        grid.build();
-        card.add(grid);
-        return card;
     }
 
     private void addEventRow(LkGrid grid, EventDetailDTO ev) {

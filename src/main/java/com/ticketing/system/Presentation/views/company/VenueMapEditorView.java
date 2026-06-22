@@ -2,7 +2,6 @@ package com.ticketing.system.Presentation.views.company;
 
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.dto.ZoneDetailDTO;
-import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
@@ -15,10 +14,10 @@ import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.venue.VkSeatBlock;
 import com.ticketing.system.Presentation.components.venue.VkVenueMap;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.presenters.company.VenueMapPresenter;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.session.AuthSession;
-import com.ticketing.system.Presentation.session.MockSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -43,7 +42,7 @@ import java.util.Map;
 @RequireCapability(Capability.MANAGE_VENUE_MAPS)
 public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
 
-    private final EventManagementService eventService;
+    private final VenueMapPresenter presenter;
     private String eventId = "0";
 
     // In-memory zone list — editable before save
@@ -90,8 +89,9 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     
     
     
-    public VenueMapEditorView(EventManagementService eventService) {
-        this.eventService = eventService;
+    public VenueMapEditorView(VenueMapPresenter presenter) {
+        
+        this.presenter = presenter;
         title("Venue map editor");
         subtitle("Coldplay · MOTS  ·  drag zones, then define seats");
         actions(
@@ -111,25 +111,24 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     }
 
     private void loadZonesFromBackend() {
-        String token = AuthSession.token();
-        if (token == null || "0".equals(eventId)) return;
-        try {
-            List<ZoneDetailDTO> loaded = eventService.getEventZones(
-                token, Integer.parseInt(eventId));
-            if (!loaded.isEmpty()) {
-                zoneStates.clear();
-                for (ZoneDetailDTO z : loaded) {
-                    zoneStates.add(new ZoneState(
-                        z.name(), z.seated(), z.rows(), z.seatsPerRow(), z.capacity(), z.price()));
+        if ("0".equals(eventId)) return;
+        switch (presenter.loadZones(AuthSession.token(), Integer.parseInt(eventId))) {
+            case VenueMapPresenter.LoadOutcome.Success ok -> {
+                if (!ok.zones().isEmpty()) {
+                    zoneStates.clear();
+                    for (ZoneDetailDTO z : ok.zones()) {
+                        zoneStates.add(new ZoneState(
+                            z.name(), z.seated(), z.rows(), z.seatsPerRow(), z.capacity(), z.price()));
+                    }
+                    selectedZoneIdx = 0;
+                    loadZoneIntoEditor(0);
                 }
-                selectedZoneIdx = 0;
-                loadZoneIntoEditor(0);
             }
-            // If empty (no map configured yet), keep the placeholder defaults
-        } catch (Exception ignored) {
-            // Keep placeholder defaults if backend read fails
+            case VenueMapPresenter.LoadOutcome.NotAuthenticated ignored -> {}
+            case VenueMapPresenter.LoadOutcome.Failure ignored -> {}
         }
     }
+
 
     private Component buildSplit() {
         Div split = new Div();
@@ -294,33 +293,28 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     }
 
     private void saveMap() {
-        String token = AuthSession.token();
-        if (token == null) { Toasts.failure("Session token missing — please log in again."); return; }
-        String companyIdStr = MockSession.currentCompanyId();
-        if (companyIdStr == null) { Toasts.failure("No company selected."); return; }
-
         List<VenueMapConfigDTO.ZoneConfigDTO> zoneDTOs = new ArrayList<>();
         for (ZoneState z : zoneStates) {
             if (z.seated()) {
                 List<VenueMapConfigDTO.SeatConfigDTO> seats = generateSeats(z.rows(), z.seatsPerRow());
-                zoneDTOs.add(new VenueMapConfigDTO.ZoneConfigDTO(
-                    z.name(), true, null, seats, z.price()));
+                zoneDTOs.add(new VenueMapConfigDTO.ZoneConfigDTO(z.name(), true, null, seats, z.price()));
             } else {
                 zoneDTOs.add(new VenueMapConfigDTO.ZoneConfigDTO(
                     z.name(), false, z.capacity(), null, z.price()));
             }
         }
-
-        try {
-            eventService.configureVenueMap(
-                token,
-                Integer.parseInt(companyIdStr),
-                new VenueMapConfigDTO(eventId, "Venue", zoneDTOs)
-            );
-            Toasts.success("Venue map saved — tickets pre-generated.");
-            UI.getCurrent().navigate(CompanyEventListView.class);
-        } catch (Exception ex) {
-            Toasts.failure("Could not save venue map: " + ex.getMessage());
+        VenueMapConfigDTO config = new VenueMapConfigDTO(eventId, "Venue", zoneDTOs);
+        switch (presenter.saveMap(AuthSession.token(), eventId, config)) {
+            case VenueMapPresenter.SaveOutcome.Success ignored -> {
+                Toasts.success("Venue map saved — tickets pre-generated.");
+                UI.getCurrent().navigate(CompanyEventListView.class);
+            }
+            case VenueMapPresenter.SaveOutcome.NotAuthenticated ignored ->
+                Toasts.failure("Your session has expired — please sign in again.");
+            case VenueMapPresenter.SaveOutcome.NoCompany ignored ->
+                Toasts.failure("You don't own a company — register one first.");
+            case VenueMapPresenter.SaveOutcome.Failure fail ->
+                Toasts.failure("Could not save venue map: " + fail.reason());
         }
     }
 

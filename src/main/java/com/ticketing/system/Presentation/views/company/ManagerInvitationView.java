@@ -1,7 +1,5 @@
 package com.ticketing.system.Presentation.views.company;
 
-import com.ticketing.system.Core.Application.dto.ManagerAppointmentRequestDTO;
-import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
@@ -11,10 +9,10 @@ import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
+import com.ticketing.system.Presentation.presenters.company.ManagerInvitationPresenter;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.session.AuthSession;
-import com.ticketing.system.Presentation.session.MockSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -44,13 +42,12 @@ public class ManagerInvitationView extends LkPage {
         PERM_MAP.put("Manage venue maps",      Permission.CONFIGURE_VENUE);
     }
 
-    private final CompanyManagementService companyService;
+private final ManagerInvitationPresenter presenter;
     private final TextField invitee = new TextField("Username or email");
     // Keep references so we can read isChecked() on submit.
     private final Map<LkCheckRow, Permission> checkRows = new LinkedHashMap<>();
-
-    public ManagerInvitationView(CompanyManagementService companyService) {
-        this.companyService = companyService;
+    public ManagerInvitationView(ManagerInvitationPresenter presenter) {
+        this.presenter = presenter;
         title("Invite a manager");
         subtitle("Grant a member scoped access to manage this company.");
         add(buildForm());
@@ -88,12 +85,11 @@ public class ManagerInvitationView extends LkPage {
         return narrow;
     }
 
-    private void sendInvitation() {
+   private void sendInvitation() {
         if (invitee.isEmpty()) {
             Toasts.failure("Enter a username or email to invite.");
             return;
         }
-
         List<Permission> selected = new ArrayList<>();
         for (Map.Entry<LkCheckRow, Permission> entry : checkRows.entrySet()) {
             if (entry.getKey().isChecked()) selected.add(entry.getValue());
@@ -102,29 +98,21 @@ public class ManagerInvitationView extends LkPage {
             Toasts.failure("Select at least one permission.");
             return;
         }
-
-        String token = AuthSession.token();
-        if (token == null) {
-            Toasts.failure("Session token missing — please log in again.");
-            return;
-        }
-
-        try {
-            int targetUserId = companyService.resolveUserId(invitee.getValue());
-            
-            String companyIdStr = MockSession.currentCompanyId();
-             if (companyIdStr == null) {
-                 Toasts.failure("No company selected.");
-                 return;
-             }  
-
-             int companyId = Integer.parseInt(companyIdStr);
-            companyService.appointManager(token, new ManagerAppointmentRequestDTO(companyId, targetUserId, selected));
-            Toasts.success("Invitation sent to " + invitee.getValue() + ".");
-            UI.getCurrent().navigate(ManagerListView.class);
-        } catch (Exception ex) { 
-            Toasts.failure("Could not send invitation: " + ex.getMessage());
+        switch (presenter.invite(AuthSession.token(), invitee.getValue(), selected)) {
+            case ManagerInvitationPresenter.Outcome.Success ignored -> {
+                Toasts.success("Invitation sent to " + invitee.getValue() + ".");
+                UI.getCurrent().navigate(ManagerListView.class);
+            }
+            case ManagerInvitationPresenter.Outcome.NotAuthenticated ignored ->
+                Toasts.failure("Your session has expired — please sign in again.");
+            case ManagerInvitationPresenter.Outcome.NoCompany ignored ->
+                Toasts.failure("You don't own a company — register one first.");
+            case ManagerInvitationPresenter.Outcome.UserNotFound u ->
+                Toasts.failure("User \"" + u.username() + "\" was not found.");
+            case ManagerInvitationPresenter.Outcome.Failure fail ->
+                Toasts.failure("Could not send invitation: " + fail.reason());
         }
     }
+    
 
 }
