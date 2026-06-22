@@ -460,10 +460,6 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
     }
 }
 
-    private String resolveGuestSessionId() {
-    return GuestSession.sessionId();
-}
-
     private static String formatPrice(int cents) {
         return "$" + (cents / 100) + "." + String.format("%02d", cents % 100);
     }

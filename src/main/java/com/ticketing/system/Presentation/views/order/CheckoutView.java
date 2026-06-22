@@ -1,6 +1,7 @@
 package com.ticketing.system.Presentation.views.order;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
+import com.ticketing.system.Presentation.components.Money;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
@@ -23,6 +24,8 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.textfield.EmailField;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.router.AfterNavigationEvent;
+import com.vaadin.flow.router.AfterNavigationObserver;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
@@ -32,7 +35,7 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 @Route(value = "checkout", layout = MainLayout.class)
 @PageTitle("Checkout · TicketHub")
 @AnonymousAllowed
-public class CheckoutView extends LkPage implements BeforeEnterObserver {
+public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNavigationObserver {
 
     private final CheckoutPresenter presenter;
 
@@ -47,7 +50,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     private long subtotalCents;
     private long totalCents;
 
-    private boolean paymentInProgress;
+    private volatile boolean paymentInProgress;
 
     private final TextField    cardholder = new TextField("Cardholder name");
     private final TextField    cardNumber  = new TextField("Card number");
@@ -70,7 +73,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             public boolean matches(int userId, String sessionId) {
                 return isMember
                     ? (userId == resolvedUserId && resolvedUserId != 0)
-                    : (CheckoutView.this.sessionId != null
+                    : (CheckoutView.this.sessionId != null && !CheckoutView.this.sessionId.isBlank()
                         && CheckoutView.this.sessionId.equals(sessionId));
             }
 
@@ -88,6 +91,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
 
     public CheckoutView(CheckoutPresenter presenter) {
         this.presenter = presenter;
+        this.sessionId = "";
     }
 
     @Override
@@ -107,10 +111,6 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
         resolveIdentity();
-        if (reload() instanceof CheckoutPresenter.LoadOutcome.Failure) {
-            Toasts.warn("Could not load your cart — please try again.");
-        }
-
         if (getChildren().findAny().isEmpty()) {
             buildPage();
         } else {
@@ -118,16 +118,23 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         }
     }
 
+    @Override
+    public void afterNavigation(AfterNavigationEvent event) {
+        if (reload() instanceof CheckoutPresenter.LoadOutcome.Failure) {
+            Toasts.warn("Could not load your cart — please try again.");
+        }
+    }
+
     private void resolveIdentity() {
         CheckoutPresenter.Identity id = presenter.resolveIdentity();
         this.isMember       = id.member();
         this.memberToken    = id.memberToken();
-        this.sessionId      = id.guestSessionId();
+        this.sessionId      = id.guestSessionId() != null ? id.guestSessionId() : "";
         this.resolvedUserId = id.userId();
     }
 
     private CheckoutPresenter.LoadOutcome reload() {
-        CheckoutPresenter.LoadOutcome outcome = presenter.loadOrder(memberToken, sessionId);
+        CheckoutPresenter.LoadOutcome outcome = presenter.loadOrder(resolvedUserId, memberToken, sessionId);
         switch (outcome) {
             case CheckoutPresenter.LoadOutcome.Loaded l -> {
                 this.activeOrder   = l.order();
@@ -292,7 +299,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                 + (line.seatNumber() != null ? " · " + line.seatNumber() : "");
         Span label = new Span(labelText);
 
-        long lineCents = CheckoutPresenter.toCents(line.pricePerTicket());
+        long lineCents = Money.toCents(line.pricePerTicket());
         Span price = new Span(formatCents(lineCents));
         price.getStyle().set("font-weight", "700");
 
@@ -435,7 +442,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             case CheckoutPresenter.PayOutcome.Success ok -> {
                 presenter.setOrderSession(ok.result());
                 Toasts.success("Payment successful — "
-                        + formatCents(CheckoutPresenter.toCents(ok.result().totalCharged()))
+                        + formatCents(Money.toCents(ok.result().totalCharged()))
                         + " charged.");
                 UI.getCurrent().navigate("order-confirmed");
                 return;
@@ -446,6 +453,8 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                 Toasts.failure("Payment declined: " + d.reason());
             case CheckoutPresenter.PayOutcome.SoldOut s ->
                 Toasts.failure("Those seats just sold out. Please choose again.");
+            case CheckoutPresenter.PayOutcome.OrderExpired e ->
+                Toasts.failure("Your reservation has expired. Please add tickets again.");
             case CheckoutPresenter.PayOutcome.DuplicateSubmission dup ->
                 Toasts.warn("This order was already submitted.");
             case CheckoutPresenter.PayOutcome.Failure f ->
@@ -457,7 +466,10 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     }
 
     private static String formatCents(long cents) {
-        long abs  = Math.abs(cents);
+        if (cents < 0 || cents > 99_999_999) {
+            throw new IllegalArgumentException("Invalid price: " + cents + " cents");
+        }
+        long abs = Math.abs(cents);
         String sign = cents < 0 ? "-" : "";
         return sign + "$" + (abs / 100) + "." + String.format("%02d", abs % 100);
     }

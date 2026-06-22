@@ -17,16 +17,13 @@ import com.ticketing.system.Core.Application.services.CheckoutService;
 import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Core.Domain.exceptions.IdempotencyConflictException;
 import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
 import com.ticketing.system.Core.Domain.exceptions.PolicyViolationException;
+import com.ticketing.system.Presentation.components.Money;
 import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.vaadin.flow.server.VaadinSession;
 
-/**
- * MVP presenter for {@code CheckoutView}. No Vaadin imports. Identity is resolved
- * through {@link SessionIdentity} (the single validated rule). CheckoutService wraps
- * failures in a generic RuntimeException, so {@link #runPay} unwraps getCause().
- */
 @Component
 @Slf4j
 public class CheckoutPresenter {
@@ -61,10 +58,10 @@ public class CheckoutPresenter {
 
     // ---- load -----------------------------------------------------------
 
-    public LoadOutcome loadOrder(String memberToken, String guestSessionId) {
+    public LoadOutcome loadOrder(int userId, String memberToken, String guestSessionId) {
         try {
-            if (memberToken != null) {
-                return classify(reservationService.restoreActiveOrder(identity.memberUserId()));
+            if (memberToken != null && userId > 0) {
+                return classify(reservationService.restoreActiveOrder(userId));
             }
             if (guestSessionId != null) {
                 return classify(reservationService.restoreActiveOrderForGuest(guestSessionId));
@@ -84,16 +81,12 @@ public class CheckoutPresenter {
 
     private Pricing price(ActiveOrderDTO order) {
         long subtotal = order.lines().stream()
-                .mapToLong(l -> toCents(l.pricePerTicket()))
+                .mapToLong(l -> Money.toCents(l.pricePerTicket()))
                 .sum();
         return new Pricing(subtotal, subtotal);
     }
 
     public record Pricing(long subtotalCents, long totalCents) { }
-
-    public static long toCents(double amount) {
-        return Math.round(amount * 100);
-    }
 
     // ---- pay ------------------------------------------------------------
 
@@ -114,14 +107,15 @@ public class CheckoutPresenter {
         try {
             return new PayOutcome.Success(charge.run());
         } catch (RuntimeException e) {
-    Throwable cause = (e.getCause() != null) ? e.getCause() : e;
-    if (cause instanceof PolicyViolationException)       return new PayOutcome.PolicyRejected(cause.getMessage());
-    if (cause instanceof PaymentGatewayException)        return new PayOutcome.PaymentDeclined(cause.getMessage());
-    if (cause instanceof InsufficientInventoryException) return new PayOutcome.SoldOut(cause.getMessage());
-    if (cause instanceof IdempotencyConflictException)   return new PayOutcome.DuplicateSubmission();
-    log.error("Checkout failed unexpectedly", e);
-    return new PayOutcome.Failure(cause.getMessage());
-}
+            Throwable cause = (e.getCause() != null) ? e.getCause() : e;
+            if (cause instanceof PolicyViolationException)       return new PayOutcome.PolicyRejected(cause.getMessage());
+            if (cause instanceof PaymentGatewayException)        return new PayOutcome.PaymentDeclined(cause.getMessage());
+            if (cause instanceof InsufficientInventoryException) return new PayOutcome.SoldOut(cause.getMessage());
+            if (cause instanceof InvalidStateTransitionException) return new PayOutcome.OrderExpired("Order expired during checkout");
+            if (cause instanceof IdempotencyConflictException)   return new PayOutcome.DuplicateSubmission();
+            log.error("Checkout failed unexpectedly", e);
+            return new PayOutcome.Failure(cause.getMessage());
+        }
     }
 
     private static String newKey() {
@@ -175,11 +169,12 @@ public class CheckoutPresenter {
     }
 
     public sealed interface PayOutcome {
-    record Success(CheckoutResultDTO result) implements PayOutcome { }
-    record PolicyRejected(String reason)      implements PayOutcome { }  
-    record PaymentDeclined(String reason)     implements PayOutcome { }
-    record SoldOut(String reason)             implements PayOutcome { }
-    record DuplicateSubmission()              implements PayOutcome { }
-    record Failure(String reason)             implements PayOutcome { }
-}
+        record Success(CheckoutResultDTO result)     implements PayOutcome { }
+        record PolicyRejected(String reason)         implements PayOutcome { }
+        record PaymentDeclined(String reason)        implements PayOutcome { }
+        record SoldOut(String reason)                implements PayOutcome { }
+        record OrderExpired(String reason)           implements PayOutcome { }
+        record DuplicateSubmission()                 implements PayOutcome { }
+        record Failure(String reason)                implements PayOutcome { }
+    }
 }
