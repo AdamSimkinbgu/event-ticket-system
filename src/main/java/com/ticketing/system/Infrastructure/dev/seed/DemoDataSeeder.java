@@ -8,6 +8,7 @@ import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Application.services.MessagingService;
 import com.ticketing.system.Core.Application.services.ReservationService;
+import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.notifications.INotificationRepository;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
@@ -66,6 +67,7 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final CheckoutService checkoutService;
     private final MessagingService messagingService;
     private final IUserRepository userRepository;
+    private final IAdminRepository adminRepository;
     private final IEventRepository eventRepository;
     private final INotificationRepository notificationRepository;
     private final MemoryRepoCleaner memoryRepoCleaner;
@@ -81,6 +83,7 @@ public class DemoDataSeeder implements ApplicationRunner {
             CheckoutService checkoutService,
             MessagingService messagingService,
             IUserRepository userRepository,
+            IAdminRepository adminRepository,
             IEventRepository eventRepository,
             INotificationRepository notificationRepository,
             MemoryRepoCleaner memoryRepoCleaner,
@@ -94,6 +97,7 @@ public class DemoDataSeeder implements ApplicationRunner {
         this.checkoutService = checkoutService;
         this.messagingService = messagingService;
         this.userRepository = userRepository;
+        this.adminRepository = adminRepository;
         this.eventRepository = eventRepository;
         this.notificationRepository = notificationRepository;
         this.memoryRepoCleaner = memoryRepoCleaner;
@@ -158,7 +162,8 @@ public class DemoDataSeeder implements ApplicationRunner {
         runTolerant("orders", () ->
             new DemoOrders(reservationService, checkoutService, users, events).seed());
         runTolerant("messaging", () ->
-            new DemoMessaging(authenticationService, messagingService, userRepository, users, companies).seed());
+            new DemoMessaging(authenticationService, messagingService, userRepository, adminRepository,
+                users, companies).seed());
         runTolerant("notifications", () ->
             new DemoNotifications(notificationRepository, users, demoClock).seed());
     }

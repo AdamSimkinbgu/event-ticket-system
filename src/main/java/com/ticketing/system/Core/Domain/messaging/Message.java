@@ -57,6 +57,6 @@ public class Message implements InvariantChecked {
 
     // UI action — flips false -> true. Idempotent.
     public void markRead() {
-        throw new UnsupportedOperationException("messaging: not implemented");
+        this.read = true;
     }
 }

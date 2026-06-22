@@ -9,6 +9,8 @@ import com.ticketing.system.Core.Application.dto.StartConversationRequestDTO;
 import com.ticketing.system.Core.Application.dto.SubmitComplaintRequestDTO;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.MessagingService;
+import com.ticketing.system.Core.Domain.Admin.Admin;
+import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
 import com.ticketing.system.Core.Domain.messaging.ConversationType;
 import com.ticketing.system.Core.Domain.messaging.ParticipantType;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
@@ -31,17 +33,20 @@ public final class DemoMessaging {
     private final AuthenticationService auth;
     private final MessagingService messaging;
     private final IUserRepository userRepository;
+    private final IAdminRepository adminRepository;
     private final Map<String, SeededUser> users;
     private final Map<String, ProductionCompanyDTO> companies;
 
     public DemoMessaging(AuthenticationService auth,
                          MessagingService messaging,
                          IUserRepository userRepository,
+                         IAdminRepository adminRepository,
                          Map<String, SeededUser> users,
                          Map<String, ProductionCompanyDTO> companies) {
         this.auth = auth;
         this.messaging = messaging;
         this.userRepository = userRepository;
+        this.adminRepository = adminRepository;
         this.users = users;
         this.companies = companies;
     }
@@ -84,6 +89,15 @@ public final class DemoMessaging {
         User adminUser = userRepository.findByUsername("dev.admin")
             .orElseThrow(() -> new IllegalStateException(
                 "dev.admin not present — DevUserSeeder must run before DemoDataSeeder"));
+
+        // dev.admin is created only as a User (admin status is a Presentation-layer routing
+        // concern). Messaging gates announce() on a real domain Admin, so register one here
+        // keyed by the same id the token resolves to.
+        if (adminRepository.findById(adminUser.getUserId()) == null) {
+            adminRepository.save(new Admin(
+                adminUser.getUserId(), "dev.admin", "dev-seed-admin", false));
+        }
+
         GuestSessionDTO guest = auth.startGuestSession();
         LoginDTO login = auth.login(new LoginRequestDTO(
             "dev.admin", DemoUsers.PASSWORD, guest.sessionId()));
@@ -93,6 +107,7 @@ public final class DemoMessaging {
             "Reduced support hours during the holidays",
             "Heads up — customer support will run reduced hours from Dec 23 to Jan 2. Refunds may take an extra business day during this window.",
             ParticipantType.BROADCAST_MEMBERS.name(),
+            List.of(),
             List.of()
         ));
     }
