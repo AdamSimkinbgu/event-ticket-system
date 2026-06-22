@@ -6,5 +6,6 @@ public record ZoneDetailDTO(
     int rows,
     int seatsPerRow,
     int capacity,
-    double price
+    double price,
+    GridPlacementDTO placement   // null = unplaced
 ) {}

@@ -51,6 +51,9 @@ import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
 import com.ticketing.system.Core.Application.dto.ZoneDetailDTO;
+import com.ticketing.system.Core.Application.dto.VenueLayoutDTO;
+import com.ticketing.system.Core.Application.dto.GridPlacementDTO;
+import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.dto.LocationDTO;
@@ -398,7 +401,7 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
 
-        EventDetailDTO result = eventService.getEventDetail(OWNER_TOKEN, String.valueOf(EVENT_ID));
+        EventDetailDTO result = eventService.getEventDetail(OWNER_TOKEN, EVENT_ID);
 
         assertEquals(String.valueOf(EVENT_ID), result.eventId());
         assertEquals("Concert", result.name());
@@ -417,7 +420,7 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
 
-        EventDetailDTO result = eventService.getEventDetail(MANAGER_TOKEN, String.valueOf(EVENT_ID));
+        EventDetailDTO result = eventService.getEventDetail(MANAGER_TOKEN, EVENT_ID);
 
         assertEquals(String.valueOf(EVENT_ID), result.eventId());
         assertEquals("Concert", result.name());
@@ -428,7 +431,7 @@ class EventManagementServiceTest {
         when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
 
         assertThrows(RuntimeException.class,
-                () -> eventService.getEventDetail(INVALID_TOKEN, String.valueOf(EVENT_ID)));
+                () -> eventService.getEventDetail(INVALID_TOKEN, EVENT_ID));
     }
 
     @Test
@@ -438,16 +441,7 @@ class EventManagementServiceTest {
         when(mockEventRepo.findById(EVENT_ID)).thenThrow(new RuntimeException("Event not found"));
 
         assertThrows(RuntimeException.class,
-                () -> eventService.getEventDetail(OWNER_TOKEN, String.valueOf(EVENT_ID)));
-    }
-
-    @Test
-    void GivenNonNumericEventId_WhenGetEventDetail_ThenThrowsIllegalArgumentException() {
-        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
-        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-
-        assertThrows(IllegalArgumentException.class,
-                () -> eventService.getEventDetail(OWNER_TOKEN, "not-a-number"));
+                () -> eventService.getEventDetail(OWNER_TOKEN, EVENT_ID));
     }
 
     @Test
@@ -460,7 +454,7 @@ class EventManagementServiceTest {
         when(userRepository.getUserById(99)).thenReturn(stranger);
 
         assertThrows(RuntimeException.class,
-                () -> eventService.getEventDetail(OWNER_TOKEN, String.valueOf(EVENT_ID)));
+                () -> eventService.getEventDetail(OWNER_TOKEN, EVENT_ID));
     }
 
     @Test
@@ -476,7 +470,7 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
 
-        EventDetailDTO result = eventService.getEventDetail(OWNER_TOKEN, String.valueOf(EVENT_ID));
+        EventDetailDTO result = eventService.getEventDetail(OWNER_TOKEN, EVENT_ID);
 
         assertNull(result.location());
     }
@@ -680,7 +674,7 @@ class EventManagementServiceTest {
         when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
         when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
 
-        EventDetailDTO result = eventService.getEventDetail(OWNER_TOKEN, String.valueOf(EVENT_ID));
+        EventDetailDTO result = eventService.getEventDetail(OWNER_TOKEN, EVENT_ID);
 
         assertEquals("The headline show of the year", result.description());
     }
@@ -746,89 +740,15 @@ void GivenManagerWithoutManageInventoryPermission_WhenListEventsForCompany_ThenT
 }
 
 @Test
-void GivenOwnerAndEventId_WhenGetEvent_ThenReturnsEventDetails() {
-    when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
-    when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-    when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
-    when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
-    when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-
-    EventDetailDTO dto =
-            eventService.getEvent(OWNER_TOKEN, EVENT_ID);
-
-    assertNotNull(dto);
-    assertEquals(String.valueOf(EVENT_ID), dto.eventId());
-    assertEquals("Concert", dto.name());
-    assertEquals(4.5, dto.rating());
-    assertEquals(EventCategory.CONCERT, dto.category());
-    assertEquals(LOCATION, dto.location());
-    assertEquals(String.valueOf(COMPANY_ID), dto.companyId());
-    assertEquals(COMPANY_1_NAME, dto.companyName());
-    assertEquals(EventStatus.SCHEDULED, dto.status());
-    assertEquals(event.getShowDates(), dto.showDates());
-}
-
-@Test
-void GivenOwnerAndEventWithoutVenueMap_WhenGetEvent_ThenLocationIsNull() {
-    Event eventWithoutVenueMap = new Event(
-            EVENT_ID,
-            "Concert",
-            4.5,
-            List.of("Artist1"),
-            EventCategory.CONCERT,
-            COMPANY_ID,
-            EventStatus.SCHEDULED,
-            null,
-            event.getShowDates(),
-            null,
-            new DiscountPolicy(0)
-    );
-
-    when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
-    when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-    when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
-    when(mockEventRepo.findById(EVENT_ID)).thenReturn(eventWithoutVenueMap);
-    when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-
-    EventDetailDTO dto =
-            eventService.getEvent(OWNER_TOKEN, EVENT_ID);
-
-    assertNotNull(dto);
-    assertEquals(String.valueOf(EVENT_ID), dto.eventId());
-    assertEquals("Concert", dto.name());
-    assertNull(dto.location());
-    assertEquals(String.valueOf(COMPANY_ID), dto.companyId());
-    assertEquals(COMPANY_1_NAME, dto.companyName());
-}
-
-@Test
-void GivenInvalidToken_WhenGetEvent_ThenThrowsException() {
-    when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
-
-    assertThrows(RuntimeException.class,
-            () -> eventService.getEvent(INVALID_TOKEN, EVENT_ID));
-}
-
-@Test
-void GivenManagerWithoutManageInventoryPermission_WhenGetEvent_ThenThrowsException() {
-    when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
-    when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
-    when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
-    when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
-
-    assertThrows(RuntimeException.class,
-            () -> eventService.getEvent(MANAGER_TOKEN, EVENT_ID));
-}
-
-@Test
 void GivenManagerWithConfigureVenuePermission_WhenGetEventZones_ThenReturnsStandingZone() {
     when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
     when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
     when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
     when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
-    List<ZoneDetailDTO> result =
+    VenueLayoutDTO layout =
             eventService.getEventZones(MANAGER_TOKEN, EVENT_ID);
+    List<ZoneDetailDTO> result = layout.zones();
 
     assertNotNull(result);
     assertEquals(1, result.size());
@@ -850,8 +770,9 @@ void GivenOwner_WhenGetEventZones_ThenReturnsStandingZone() {
     when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
     when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
 
-    List<ZoneDetailDTO> result =
+    VenueLayoutDTO layout =
             eventService.getEventZones(OWNER_TOKEN, EVENT_ID);
+    List<ZoneDetailDTO> result = layout.zones();
 
     assertNotNull(result);
     assertEquals(1, result.size());
@@ -888,8 +809,9 @@ void GivenEventWithoutVenueMap_WhenGetEventZones_ThenReturnsEmptyList() {
     when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
     when(mockEventRepo.findById(EVENT_ID)).thenReturn(eventWithoutVenueMap);
 
-    List<ZoneDetailDTO> result =
+    VenueLayoutDTO layout =
             eventService.getEventZones(MANAGER_TOKEN, EVENT_ID);
+    List<ZoneDetailDTO> result = layout.zones();
 
     assertNotNull(result);
     assertTrue(result.isEmpty());
@@ -918,8 +840,9 @@ void GivenEventWithEmptyVenueMap_WhenGetEventZones_ThenReturnsEmptyList() {
     when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
     when(mockEventRepo.findById(EVENT_ID)).thenReturn(eventWithEmptyVenueMap);
 
-    List<ZoneDetailDTO> result =
+    VenueLayoutDTO layout =
             eventService.getEventZones(MANAGER_TOKEN, EVENT_ID);
+    List<ZoneDetailDTO> result = layout.zones();
 
     assertNotNull(result);
     assertTrue(result.isEmpty());
@@ -962,8 +885,9 @@ void GivenSeatedZoneWithSeats_WhenGetEventZones_ThenReturnsRowsAndSeatsPerRow() 
     when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
     when(mockEventRepo.findById(EVENT_ID)).thenReturn(seatedEvent);
 
-    List<ZoneDetailDTO> result =
+    VenueLayoutDTO layout =
             eventService.getEventZones(MANAGER_TOKEN, EVENT_ID);
+    List<ZoneDetailDTO> result = layout.zones();
 
     assertNotNull(result);
     assertEquals(1, result.size());
@@ -1009,8 +933,9 @@ void GivenSeatedZoneWithoutSeats_WhenGetEventZones_ThenRowsAndSeatsPerRowAreZero
     when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
     when(mockEventRepo.findById(EVENT_ID)).thenReturn(seatedEvent);
 
-    List<ZoneDetailDTO> result =
+    VenueLayoutDTO layout =
             eventService.getEventZones(MANAGER_TOKEN, EVENT_ID);
+    List<ZoneDetailDTO> result = layout.zones();
 
     assertNotNull(result);
     assertEquals(1, result.size());
@@ -1067,8 +992,9 @@ void GivenMixedStandingAndSeatedZones_WhenGetEventZones_ThenReturnsAllZones() {
     when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
     when(mockEventRepo.findById(EVENT_ID)).thenReturn(mixedEvent);
 
-    List<ZoneDetailDTO> result =
+    VenueLayoutDTO layout =
             eventService.getEventZones(MANAGER_TOKEN, EVENT_ID);
+    List<ZoneDetailDTO> result = layout.zones();
 
     assertNotNull(result);
     assertEquals(2, result.size());
@@ -1120,41 +1046,6 @@ void GivenCompanyNotFound_WhenListEventsForCompany_ThenThrowsException() {
 
     assertThrows(RuntimeException.class,
             () -> eventService.listEventsForCompany(OWNER_TOKEN, COMPANY_ID));
-}
-
-
-/////////////////////////////////////Tests for getEvent
-@Test
-void GivenEventNotFound_WhenGetEvent_ThenThrowsException() {
-    when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
-    when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-    when(mockEventRepo.findById(EVENT_ID)).thenReturn(null);
-
-    assertThrows(RuntimeException.class,
-            () -> eventService.getEvent(OWNER_TOKEN, EVENT_ID));
-}
-
-@Test
-void GivenCompanyNotFound_WhenGetEvent_ThenThrowsException() {
-    when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
-    when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-    when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
-    when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
-    when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(null);
-
-    assertThrows(RuntimeException.class,
-            () -> eventService.getEvent(OWNER_TOKEN, EVENT_ID));
-}
-
-@Test
-void GivenValidTokenButUserNotFound_WhenGetEvent_ThenThrowsException() {
-    when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
-    when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
-    when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
-    when(userRepository.getUserById(OWNER_ID)).thenReturn(null);
-
-    assertThrows(RuntimeException.class,
-            () -> eventService.getEvent(OWNER_TOKEN, EVENT_ID));
 }
 
 
@@ -1214,7 +1105,7 @@ void GivenManagerWithoutConfigureVenuePermission_WhenGetEventZones_ThenThrowsExc
 
 
 @Test
-void GivenSeatedZoneWithUnevenRows_WhenGetEventZones_ThenUsesIntegerDivisionForSeatsPerRow() {
+void GivenSeatedZoneWithUnevenRows_WhenGetEventZones_ThenSeatsPerRowIsMaxOfAnyRow() {
     Seat seatA1 = new Seat("A1", 0, 0);
     Seat seatA2 = new Seat("A2", 1, 0);
     Seat seatA3 = new Seat("A3", 2, 0);
@@ -1250,8 +1141,9 @@ void GivenSeatedZoneWithUnevenRows_WhenGetEventZones_ThenUsesIntegerDivisionForS
     when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
     when(mockEventRepo.findById(EVENT_ID)).thenReturn(seatedEvent);
 
-    List<ZoneDetailDTO> result =
+    VenueLayoutDTO layout =
             eventService.getEventZones(MANAGER_TOKEN, EVENT_ID);
+    List<ZoneDetailDTO> result = layout.zones();
 
     assertNotNull(result);
     assertEquals(1, result.size());
@@ -1261,10 +1153,68 @@ void GivenSeatedZoneWithUnevenRows_WhenGetEventZones_ThenUsesIntegerDivisionForS
     assertEquals("Uneven Seated Zone", dto.name());
     assertTrue(dto.seated());
     assertEquals(2, dto.rows());
-    assertEquals(2, dto.seatsPerRow());
+    // Rows are grouped by seat-label prefix: row "A" has 3 seats (A1,A2,A3),
+    // row "B" has 1 (B1). seatsPerRow is the max of any row.
+    assertEquals(3, dto.seatsPerRow());
     assertEquals(0, dto.capacity());
     assertEquals(250, dto.price());
 }
+
+
+    // -- grid: getEventZones reflects saved grid + zone placement -----------
+
+    @Test
+    void GivenPlacedZoneOnCustomGrid_WhenGetEventZones_ThenReturnsGridSizeAndPlacement() {
+        StandingZone gridZone = new StandingZone(ZONE_ID, "Grid VIP", 10, 100);
+        VenueMap gridVenueMap = new VenueMap(1, LOCATION, List.of(gridZone), 4, 5);
+        gridVenueMap.placeZoneOnGrid(ZONE_ID, 2, 3, 1, 2);
+
+        Event gridEvent = new Event(
+                EVENT_ID, "Concert", 4.5, List.of("Artist1"), EventCategory.CONCERT, COMPANY_ID,
+                EventStatus.SCHEDULED, gridVenueMap, event.getShowDates(), null, new DiscountPolicy(0));
+
+        when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
+        when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(gridEvent);
+
+        VenueLayoutDTO layout = eventService.getEventZones(MANAGER_TOKEN, EVENT_ID);
+
+        assertEquals(4, layout.gridRows());
+        assertEquals(5, layout.gridCols());
+        assertEquals(1, layout.zones().size());
+
+        GridPlacementDTO placement = layout.zones().get(0).placement();
+        assertNotNull(placement);
+        assertEquals(2, placement.row());
+        assertEquals(3, placement.col());
+        assertEquals(1, placement.rowSpan());
+        assertEquals(2, placement.colSpan());
+    }
+
+    // -- grid: configureVenueMap rejects an overlapping placement -----------
+
+    @Test
+    void GivenOverlappingZonePlacements_WhenConfigureVenueMap_ThenThrows() {
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
+        when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+        when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+
+        VenueMapConfigDTO config = new VenueMapConfigDTO(
+                String.valueOf(EVENT_ID), "Test Venue", 3, 3,
+                List.of(
+                        new VenueMapConfigDTO.ZoneConfigDTO(
+                                "Zone A", false, 100, null, 50.0,
+                                new GridPlacementDTO(1, 1, 2, 2)),
+                        new VenueMapConfigDTO.ZoneConfigDTO(
+                                "Zone B", false, 100, null, 50.0,
+                                new GridPlacementDTO(1, 1, 1, 1))));
+
+        assertThrows(IllegalStateException.class,
+                () -> eventService.configureVenueMap(OWNER_TOKEN, COMPANY_ID, config));
+    }
 
 
 }
