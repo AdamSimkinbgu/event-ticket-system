@@ -52,6 +52,26 @@ public class VenueMapPresenter {
         }
     }
 
+  public ZoneOutcome validateZone(String name, String priceText, boolean seated,
+                                    Integer rows, Integer seatsPerRow, Integer standingCapacity) {
+        
+        if (name == null || name.isBlank()) return new ZoneOutcome.InvalidName();
+        double price;
+        try { price = Double.parseDouble(priceText == null ? "" : priceText.trim()); }
+        catch (NumberFormatException e) { return new ZoneOutcome.InvalidPrice(); }
+        int r   = rows == null ? 1 : rows;
+        int spr = seatsPerRow == null ? 1 : seatsPerRow;
+        int cap = seated ? 0 : (standingCapacity == null ? 0 : standingCapacity);
+        return new ZoneOutcome.Valid(name, seated, r, spr, cap, price);
+    }
+
+    public sealed interface ZoneOutcome {
+        record Valid(String name, boolean seated, int rows, int seatsPerRow,
+                    int capacity, double price) implements ZoneOutcome {}
+        record InvalidName()  implements ZoneOutcome {}
+        record InvalidPrice() implements ZoneOutcome {}
+    }
+
     public sealed interface LoadOutcome {
         record Success(List<ZoneDetailDTO> zones) implements LoadOutcome {}
         record NotAuthenticated() implements LoadOutcome {}

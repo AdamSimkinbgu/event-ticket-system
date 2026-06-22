@@ -263,7 +263,9 @@ public class CompanyManagementService {
     }
 
     public List<Permission> getManagerPermissions(String token, int companyId, int managerId) {
-        authenticate(token);
+        int requesterId = authenticate(token);
+        User requester = userRepository.getUserById(requesterId);
+        requester.requireOwnerInCompany(companyId);
         User manager = userRepository.getUserById(managerId);
         CompanyAppointment appt = manager.getActiveCompanyAppointment(companyId);
         if (appt == null || appt.getRole() != CompanyRole.Manager) {

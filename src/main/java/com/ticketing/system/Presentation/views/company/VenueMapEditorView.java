@@ -75,6 +75,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
 
     // Wrapper div so we can swap the VkVenueMap when selection changes
     private final Div mapHolder = new Div();
+    private final Div seatedEditor = new Div();
 
     // Track selected visual zone id for the map highlight
     private String selectedZoneId = "vip";
@@ -86,7 +87,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     private final RadioButtonGroup<String> zoneTypeGroup  = new RadioButtonGroup<>();
     private final TextField              zoneNameField    = new TextField("Zone name");
     private final TextField              priceField       = new TextField("Price");
-    
+    private final IntegerField standingCapacityField = new IntegerField("Capacity");
     
     
     public VenueMapEditorView(VenueMapPresenter presenter) {
@@ -124,8 +125,10 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
                     loadZoneIntoEditor(0);
                 }
             }
-            case VenueMapPresenter.LoadOutcome.NotAuthenticated ignored -> {}
-            case VenueMapPresenter.LoadOutcome.Failure ignored -> {}
+            case VenueMapPresenter.LoadOutcome.NotAuthenticated ignored ->
+                Toasts.failure("Your session has expired — please sign in again.");
+            case VenueMapPresenter.LoadOutcome.Failure fail ->
+                Toasts.failure("Could not load venue zones: " + fail.reason());
         }
     }
 
@@ -204,8 +207,8 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
         mapHolder.add(new VkVenueMap(ZONES, selectedZoneId, true, this::selectZone));
     }
 
-    private Component buildZoneEditorCard() {
-       
+   private Component buildZoneEditorCard() {
+
         LkCard card = new LkCard("Edit zone · " + zoneStates.get(selectedZoneIdx).name()).pad(20);
 
         zoneNameField.setWidthFull();
@@ -223,7 +226,11 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
         zoneTypeGroup.setItems("Seated", "Standing");
         zoneTypeGroup.getStyle().set("margin-bottom", "8px");
 
-        Div seatedEditor = new Div();
+        standingCapacityField.setMin(0);
+        standingCapacityField.setWidthFull();
+        standingCapacityField.setVisible(false);
+
+        
         seatedEditor.addClassName("ow-seated-editor");
 
         LkRow stepperRow = new LkRow().gap(12).align("flex-end");
@@ -243,9 +250,11 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
 
         seatedEditor.add(stepperRow, preview, hint);
 
-        // Show/hide seated editor based on zone type selection
-        zoneTypeGroup.addValueChangeListener(ev ->
-            seatedEditor.setVisible("Seated".equals(ev.getValue())));
+        zoneTypeGroup.addValueChangeListener(ev -> {
+            boolean isSeated = "Seated".equals(ev.getValue());
+            seatedEditor.setVisible(isSeated);
+            standingCapacityField.setVisible(!isSeated);
+        });
 
         LkRow zoneActions = new LkRow().gap(8).justify("flex-end");
         zoneActions.getStyle().set("margin-top", "14px");
@@ -257,39 +266,45 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
         );
 
         LkCol col = new LkCol().gap(14);
-        col.add(formGrid, zoneTypeGroup, seatedEditor, zoneActions);
+        col.add(formGrid, zoneTypeGroup, standingCapacityField, seatedEditor, zoneActions);
         card.add(col);
         return card;
     }
 
-        private void loadZoneIntoEditor(int idx) {
+    private void loadZoneIntoEditor(int idx) {
         ZoneState z = zoneStates.get(idx);
         zoneNameField.setValue(z.name());
         priceField.setValue(String.valueOf((int) z.price()));
         zoneTypeGroup.setValue(z.seated() ? "Seated" : "Standing");
-        rowsField.setValue(z.rows());
-        seatsPerRowField.setValue(z.seatsPerRow());
+        seatedEditor.setVisible(z.seated());
+        standingCapacityField.setVisible(!z.seated());
+        if (z.seated()) {
+            rowsField.setValue(z.rows());
+            seatsPerRowField.setValue(z.seatsPerRow());
+        } else {
+            standingCapacityField.setValue(z.capacity());
+        }
     }
 
     private void saveZone() {
-        String name = zoneNameField.getValue().trim();
-        if (name.isEmpty()) { Toasts.failure("Zone name is required."); return; }
         boolean seated = "Seated".equals(zoneTypeGroup.getValue());
-        double price;
-        try { price = Double.parseDouble(priceField.getValue().trim()); }
-        catch (NumberFormatException ex) { Toasts.failure("Invalid price."); return; }
-
-        ZoneState updated = seated
-            ? new ZoneState(name, true,
-                rowsField.getValue() == null ? 1 : rowsField.getValue(),
-                seatsPerRowField.getValue() == null ? 1 : seatsPerRowField.getValue(),
-                0, price)
-            : new ZoneState(name, false, 0, 0,
-                (rowsField.getValue() == null ? 0 : rowsField.getValue()),  // standing: reuse rows field as capacity
-                price);
-
-        zoneStates.set(selectedZoneIdx, updated);
-        Toasts.success("Zone \"" + name + "\" updated — click Save map to persist.");
+        switch (presenter.validateZone(
+                zoneNameField.getValue().trim(),
+                priceField.getValue(),
+                seated,
+                rowsField.getValue(),
+                seatsPerRowField.getValue(),
+                standingCapacityField.getValue())) {
+            case VenueMapPresenter.ZoneOutcome.Valid v -> {
+                zoneStates.set(selectedZoneIdx,
+                    new ZoneState(v.name(), v.seated(), v.rows(), v.seatsPerRow(), v.capacity(), v.price()));
+                Toasts.success("Zone \"" + v.name() + "\" updated — click Save map to persist.");
+            }
+            case VenueMapPresenter.ZoneOutcome.InvalidName ignored ->
+                Toasts.failure("Zone name is required.");
+            case VenueMapPresenter.ZoneOutcome.InvalidPrice ignored ->
+                Toasts.failure("Invalid price.");
+        }
     }
 
     private void saveMap() {
