@@ -2,15 +2,18 @@ package com.ticketing.system.Presentation.views.company;
 
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
+import com.ticketing.system.Core.Application.dto.LocationDTO;
+import com.ticketing.system.Core.Application.dto.ShowDateDTO;
+import com.ticketing.system.Core.Domain.events.EventCategory;
+import com.ticketing.system.Core.Domain.events.EventStatus;
+import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Presentation.components.Toasts;
-import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
-import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.presenters.company.EventManagementPresenter;
 import com.ticketing.system.Presentation.security.Capabilities;
@@ -20,9 +23,10 @@ import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.admin.CompanySalesView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
-import com.vaadin.flow.component.textfield.IntegerField;
+import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.BeforeEnterEvent;
@@ -31,6 +35,10 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 @Route(value = "owner/events/:eventId", layout = WorkspaceLayout.class)
 @PageTitle("Edit event · TicketHub")
 @PermitAll
@@ -38,16 +46,21 @@ import jakarta.annotation.security.PermitAll;
 public class EventManagementView extends LkPage implements BeforeEnterObserver {
 
     private final TextField title = new TextField("Title");
-    private final TextField category = new TextField("Category");
-    private final TextField start = new TextField("Start");
-    private final TextField end = new TextField("End");
-    private final TextField venue = new TextField("Venue");
-    private final TextField city = new TextField("City / address");
-    private final IntegerField maxAttend = new IntegerField("Max attendance");
+    private final Select<String> category = new Select<>();
+    private final TextField country = new TextField("Country");
+    private final TextField city = new TextField("City");
+    private final DateTimePicker start = new DateTimePicker("Starts");
+    private final DateTimePicker end = new DateTimePicker("Ends");
     private final TextArea description = new TextArea("Description");
 
-private final EventManagementPresenter presenter;
-    private String eventId = null;   // null = new event
+    /** Status badge lives in its own slot so the loader can fill it after the DTO arrives. */
+    private final Div statusSlot = new Div();
+
+    private final EventManagementPresenter presenter;
+    private String eventId = null;   // "new"/null = create flow
+    /** The event's full schedule as loaded — kept so an edit to the first show preserves the rest. */
+    private List<ShowDate> loadedShowDates = List.of();
+
     public EventManagementView(EventManagementPresenter presenter) {
         this.presenter = presenter;
         title("Edit event");
@@ -69,47 +82,107 @@ private final EventManagementPresenter presenter;
         }
     }
 
-
     private void loadEvent(String id) {
-    switch (presenter.load(AuthSession.token(), Integer.parseInt(id))) {
-        case EventManagementPresenter.LoadOutcome.Success ok -> {
-            EventDetailDTO ev = ok.event();
-            title.setValue(ev.name() != null ? ev.name() : "");
-            category.setValue(ev.category() != null ? ev.category().name() : "");
-            venue.setValue(ev.location() != null ? ev.location().toString() : "");
+        switch (presenter.load(AuthSession.token(), Integer.parseInt(id))) {
+            case EventManagementPresenter.LoadOutcome.Success ok -> applyEvent(ok.event());
+            case EventManagementPresenter.LoadOutcome.NotFound ignored ->
+                Toasts.failure("Event not found.");
+            case EventManagementPresenter.LoadOutcome.NotAuthenticated ignored ->
+                Toasts.failure("Your session has expired — please sign in again.");
+            case EventManagementPresenter.LoadOutcome.Failure fail ->
+                Toasts.failure("Could not load event: " + fail.reason());
         }
-        case EventManagementPresenter.LoadOutcome.NotFound ignored ->
-            Toasts.failure("Event not found.");
-        case EventManagementPresenter.LoadOutcome.NotAuthenticated ignored ->
-            Toasts.failure("Your session has expired — please sign in again.");
-        case EventManagementPresenter.LoadOutcome.Failure fail ->
-            Toasts.failure("Could not load event: " + fail.reason());
     }
-}
+
+    /** Populates every control from the loaded event — no hardcoded values anywhere. */
+    private void applyEvent(EventDetailDTO ev) {
+        title.setValue(ev.name() != null ? ev.name() : "");
+        category.setValue(ev.category() != null ? ev.category().name() : null);
+        if (ev.location() != null) {
+            country.setValue(ev.location().country() != null ? ev.location().country() : "");
+            city.setValue(ev.location().city() != null ? ev.location().city() : "");
+        }
+        loadedShowDates = ev.showDates() != null ? ev.showDates() : List.of();
+        if (!loadedShowDates.isEmpty()) {
+            start.setValue(loadedShowDates.get(0).getStartTime());
+            end.setValue(loadedShowDates.get(0).getEndTime());
+        }
+        description.setValue(ev.description() != null ? ev.description() : "");
+        renderStatus(ev.status());
+    }
+
+    private void renderStatus(EventStatus status) {
+        statusSlot.removeAll();
+        if (status == null) {
+            return;
+        }
+        statusSlot.add(new LkBadge(status.name().replace('_', ' '), toneFor(status)).small());
+    }
+
+    private static LkBadge.Tone toneFor(EventStatus status) {
+        return switch (status) {
+            case ON_SALE -> LkBadge.Tone.success;
+            case SCHEDULED, SOLD_OUT -> LkBadge.Tone.warn;
+            case CANCELED -> LkBadge.Tone.error;
+            case DRAFT, COMPLETED -> LkBadge.Tone.muted;
+        };
+    }
 
     private void saveEvent() {
-    if ("new".equals(eventId) || eventId == null) {
-        Toasts.warn("Create-event flow (addEvent) — pending full form wiring.");
-        return;
+        if ("new".equals(eventId) || eventId == null) {
+            Toasts.warn("Creating a new event is a separate flow.");
+            return;
+        }
+        switch (presenter.save(AuthSession.token(),
+                new EventUpdateDTO(
+                    eventId,
+                    blankToNull(title.getValue()),
+                    blankToNull(description.getValue()),
+                    category.getValue(),                 // null = leave category alone
+                    buildLocation(),                     // null = leave location alone
+                    buildShowDates()                     // null = leave schedule alone
+                ))) {
+            case EventManagementPresenter.SaveOutcome.Success ignored ->
+                Toasts.success("Event details saved.");
+            case EventManagementPresenter.SaveOutcome.NotAuthenticated ignored ->
+                Toasts.failure("Your session has expired — please sign in again.");
+            case EventManagementPresenter.SaveOutcome.Failure fail ->
+                Toasts.failure("Could not save event: " + fail.reason());
+        }
     }
-    switch (presenter.save(AuthSession.token(),
-            new EventUpdateDTO(
-                eventId,
-                title.getValue().isBlank()    ? null : title.getValue().trim(),
-                null,
-                category.getValue().isBlank() ? null : category.getValue().trim(),
-                null,
-                null
-            ))) {
-        case EventManagementPresenter.SaveOutcome.Success ignored ->
-            Toasts.success("Event details saved.");
-        case EventManagementPresenter.SaveOutcome.NotAuthenticated ignored ->
-            Toasts.failure("Your session has expired — please sign in again.");
-        case EventManagementPresenter.SaveOutcome.Failure fail ->
-            Toasts.failure("Could not save event: " + fail.reason());
+
+    /** Location is country+city in the domain; both are required, so only send it when both are present. */
+    private LocationDTO buildLocation() {
+        String co = country.getValue() == null ? "" : country.getValue().trim();
+        String ci = city.getValue() == null ? "" : city.getValue().trim();
+        if (co.isBlank() || ci.isBlank()) {
+            return null;
+        }
+        return new LocationDTO(co, ci);
     }
-}
-    
+
+    /**
+     * A non-null schedule replaces the whole list on save, so reconstruct it: the edited
+     * first show plus any additional shows the event already had (preserved untouched).
+     * Null when either picker is empty = "leave the schedule alone".
+     */
+    private List<ShowDateDTO> buildShowDates() {
+        if (start.getValue() == null || end.getValue() == null) {
+            return null;
+        }
+        List<ShowDateDTO> result = new ArrayList<>();
+        result.add(new ShowDateDTO(start.getValue(), end.getValue()));
+        for (int i = 1; i < loadedShowDates.size(); i++) {
+            result.add(new ShowDateDTO(loadedShowDates.get(i).getStartTime(),
+                                       loadedShowDates.get(i).getEndTime()));
+        }
+        return result;
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
+    }
+
     private Component buildSplit() {
         Div split = new Div();
         split.addClassName("ow-edit-split");
@@ -120,33 +193,19 @@ private final EventManagementPresenter presenter;
     private Component buildDetailsCard() {
         LkCard card = new LkCard("Event details").pad(20).flush();
 
-        title.setValue("Coldplay · Music of the Spheres");
         title.setRequired(true);
         title.setWidthFull();
 
-        category.setValue("Concert");
+        category.setLabel("Category");
+        category.setItems(Arrays.stream(EventCategory.values()).map(Enum::name).toList());
         category.setWidthFull();
 
-        start.setValue("Thu 26 Jun 2026 · 20:00");
-        start.setSuffixComponent(new LkIcon("calendar", 16));
-        start.setWidthFull();
-
-        end.setValue("Thu 26 Jun 2026 · 23:30");
-        end.setSuffixComponent(new LkIcon("calendar", 16));
-        end.setWidthFull();
-
-        venue.setValue("Park HaYarkon");
-        venue.setWidthFull();
-
-        city.setValue("Rokach Blvd, Tel Aviv");
+        country.setWidthFull();
         city.setWidthFull();
 
-        maxAttend.setValue(45000);
-        maxAttend.setStepButtonsVisible(true);
-        maxAttend.setMin(0);
-        maxAttend.setWidthFull();
+        start.setWidthFull();
+        end.setWidthFull();
 
-        description.setValue("Coldplay return to Tel Aviv on their record-breaking Music of the Spheres world tour…");
         description.setMinHeight("120px");
         description.setWidthFull();
 
@@ -155,7 +214,7 @@ private final EventManagementPresenter presenter;
                 .set("display", "grid")
                 .set("grid-template-columns", "repeat(auto-fit, minmax(min(100%, 220px), 1fr))")
                 .set("gap", "14px");
-        grid.add(title, category, start, end, venue, city, maxAttend);
+        grid.add(title, category, country, city, start, end);
 
         LkCol col = new LkCol().gap(14);
         col.add(grid, description);
@@ -178,11 +237,17 @@ private final EventManagementPresenter presenter;
         LkCard card = new LkCard("Linked editors").pad(14);
         LkCol col = new LkCol().gap(8);
         col.add(
-                linkRow("ticket", "Venue map + zones", () -> UI.getCurrent().navigate("owner/venue/coldplay")),
+                linkRow("ticket", "Venue map + zones", this::openVenueEditor),
                 linkRow("policy", "Purchase policies", () -> UI.getCurrent().navigate(PurchasePolicyEditorView.class)),
                 linkRow("chart", "Sales for this event", () -> UI.getCurrent().navigate(CompanySalesView.class)));
         card.add(col);
         return card;
+    }
+
+    private void openVenueEditor() {
+        if (eventId != null && !"new".equals(eventId)) {
+            UI.getCurrent().navigate("owner/venue/" + eventId);
+        }
     }
 
     private Div linkRow(String iconName, String label, Runnable r) {
@@ -199,47 +264,25 @@ private final EventManagementPresenter presenter;
 
     private Component buildStatusCard() {
         LkCard card = new LkCard("Status").pad(14);
-        LkRow badges = new LkRow().gap(8);
-        badges.getStyle().set("margin-bottom", "8px");
-        badges.add(new LkBadge("LIVE", LkBadge.Tone.success).small());
-        card.add(badges);
-
-        Span lbl = Lk.muted("Tickets sold");
-        lbl.getStyle().set("font-size", "13px").set("display", "block");
-        card.add(lbl);
-
-        Div range = new Div();
-        range.addClassName("bz-range");
-        range.getStyle().set("margin-top", "6px");
-        Span track = new Span();
-        track.addClassName("bz-range-track");
-        Span fill = new Span();
-        fill.addClassName("bz-range-fill");
-        fill.getStyle().set("width", "85%").set("left", "0").set("right", "auto");
-        track.add(fill);
-        range.add(track);
-        card.add(range);
-
-        Span counter = new Span();
-        counter.getElement().setProperty("innerHTML", "<b>38,420</b> / 45,000");
-        counter.getStyle().set("font-size", "13px").set("display", "block").set("margin-top", "8px");
-        card.add(counter);
+        card.add(statusSlot);
         return card;
     }
 
     private Component buildDangerCard() {
         LkCard card = new LkCard("Danger zone").pad(14).danger();
-        Span warn = Lk.muted("Cancelling refunds every ticket holder and notifies them.");
+        Span warn = new Span("Cancelling refunds every ticket holder and notifies them.");
         warn.getStyle().set("font-size", "13px").set("display", "block").set("margin-bottom", "10px");
         card.add(warn);
         card.add(new LkBtn("Cancel this event").variant(LkBtn.Variant.error).full()
-        .icon(new LkIcon("warning", 16))
-        .onClick(e -> cancelEvent()));
+                .icon(new LkIcon("warning", 16))
+                .onClick(e -> cancelEvent()));
         return card;
     }
 
     private void cancelEvent() {
-        if (eventId == null || "new".equals(eventId)) return;
+        if (eventId == null || "new".equals(eventId)) {
+            return;
+        }
         switch (presenter.cancel(AuthSession.token(), Integer.parseInt(eventId))) {
             case EventManagementPresenter.CancelOutcome.Success ignored -> {
                 Toasts.success("Event cancelled — all holders refunded.");
@@ -251,5 +294,4 @@ private final EventManagementPresenter presenter;
                 Toasts.failure("Could not cancel event: " + fail.reason());
         }
     }
-
 }
