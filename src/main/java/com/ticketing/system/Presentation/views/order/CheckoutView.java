@@ -14,6 +14,7 @@ import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
+import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.order.CheckoutPresenter;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
@@ -35,7 +36,7 @@ import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
-@Route(value = "checkout", layout = com.ticketing.system.Presentation.layouts.MainLayout.class)
+@Route(value = "checkout", layout = MainLayout.class)
 @PageTitle("Checkout · TicketHub")
 @AnonymousAllowed
 public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNavigationObserver {
@@ -86,15 +87,16 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
 
             @Override
             public void onExpired() {
+                UI currentUi;
                 synchronized (uiLock) {
-                    UI currentUi = ui;
-                    if (currentUi == null || !currentUi.isAttached()) return;
-                    currentUi.access(() -> {
-                        clearOrder();
-                        syncDynamicUI();
-                        Toasts.failure("Your reservation has expired. Please add tickets again.");
-                    });
+                    currentUi = ui;
                 }
+                if (currentUi == null || !currentUi.isAttached()) return;
+                currentUi.access(() -> {
+                    clearOrder();
+                    syncDynamicUI();
+                    Toasts.failure("Your reservation has expired. Please add tickets again.");
+                });
             }
         };
 
@@ -456,14 +458,16 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
         payButton.getElement().setEnabled(false);
 
         try {
+            String idempotencyKey = currentIdempotencyKey();
             CheckoutPresenter.PayOutcome outcome = isMember
-                ? presenter.payAsMember(memberToken, cardNumber.getValue())
+                ? presenter.payAsMember(memberToken, idempotencyKey, cardNumber.getValue())
                 : presenter.payAsGuest(sessionId, guestEmail.getValue().trim(),
-                                       guestAge.getValue(), cardNumber.getValue());
+                                       guestAge.getValue(), idempotencyKey, cardNumber.getValue());
 
             switch (outcome) {
                 case CheckoutPresenter.PayOutcome.Success ok -> {
                     presenter.setOrderSession(ok.result());
+                    clearIdempotencyKey();
                     Toasts.success("Payment successful — "
                             + formatCents(Money.toCents(ok.result().totalCharged()))
                             + " charged.");
@@ -489,6 +493,12 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
         }
     }
 
+    /**
+     * Stable idempotency key for this checkout, persisted in the {@link VaadinSession} so a
+     * retry after a network timeout / page refresh reuses it and {@code CheckoutService}'s
+     * idempotency cache de-dupes the charge instead of billing the buyer twice. Dropped on
+     * success by {@link #clearIdempotencyKey()}.
+     */
     private String currentIdempotencyKey() {
         VaadinSession session = VaadinSession.getCurrent();
         if (session == null) {
@@ -502,6 +512,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
         return key;
     }
 
+    /** Drop the key after a successful purchase so the buyer's next order gets a fresh one. */
     private void clearIdempotencyKey() {
         VaadinSession session = VaadinSession.getCurrent();
         if (session != null) {

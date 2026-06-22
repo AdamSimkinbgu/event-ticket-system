@@ -90,15 +90,15 @@ public class CheckoutPresenter {
 
     // ---- pay ------------------------------------------------------------
 
-    public PayOutcome payAsMember(String memberToken, String rawCardNumber) {
+        public PayOutcome payAsMember(String memberToken, String idempotencyKey, String rawCardNumber) {
         return runPay(() -> checkoutService.checkoutMember(
-            memberToken, newKey(), CURRENCY, paymentToken(rawCardNumber)));
+            memberToken, idempotencyKey, CURRENCY, paymentToken(rawCardNumber)));
     }
 
-    public PayOutcome payAsGuest(String sessionId, String guestEmail,
-                                 int guestAge, String rawCardNumber) {
+    public PayOutcome payAsGuest(String sessionId, String guestEmail, int guestAge,
+                                 String idempotencyKey, String rawCardNumber) {
         return runPay(() -> checkoutService.checkoutGuest(
-            sessionId, guestEmail, newKey(), CURRENCY, paymentToken(rawCardNumber), guestAge));
+            sessionId, guestEmail, idempotencyKey, CURRENCY, paymentToken(rawCardNumber), guestAge));
     }
 
     private interface Charge { CheckoutResultDTO run(); }
@@ -116,10 +116,6 @@ public class CheckoutPresenter {
             log.error("Checkout failed unexpectedly", e);
             return new PayOutcome.Failure(cause.getMessage());
         }
-    }
-
-    private static String newKey() {
-        return UUID.randomUUID().toString();
     }
 
     private static String paymentToken(String cardNumber) {

@@ -40,14 +40,25 @@ public class CartPresenter {
     }
 
     public RemoveOutcome removeLine(CartVM.LineVM line) {
+        if (line == null) {
+            return new RemoveOutcome.Failure("No line selected");
+        }
         String credential = identity.credential();
+        if (credential == null || credential.isBlank()) {
+            return new RemoveOutcome.Failure("Your session has expired");
+        }
         try {
             InventorySelectionDTO selection = (line.seatNumber() != null)
                 ? InventorySelectionDTO.seated(List.of(line.seatNumber()))
                 : InventorySelectionDTO.standing(1);
 
             reservationService.removeLine(credential, line.eventId(), line.zoneId(), selection);
+
             ActiveOrderDTO updated = reservationService.viewMyActiveOrder(credential);
+            if (updated == null || updated.lines().isEmpty()) {
+                // Removing the last line empties the order — return an empty cart, not an error.
+                return new RemoveOutcome.Removed(new CartVM(List.of(), 0L), 0L);
+            }
             return new RemoveOutcome.Removed(toVM(updated), subtotalCents(updated));
         } catch (RuntimeException e) {
             return new RemoveOutcome.Failure(e.getMessage());
