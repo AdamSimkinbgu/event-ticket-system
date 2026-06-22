@@ -44,7 +44,15 @@ public class NotificationDispatchService {
      * 4. Updates status to DELIVERED if push succeeds.
      */
     public void dispatch(Notification notification) {
-        log.info("Dispatching notification for userId={}, type={}", 
+        // Precondition: a freshly-built notification must be PENDING. Enforced before any
+        // persistence/push so we never store an unexpected status or have markDelivered() throw
+        // mid-flow (Notification.markDelivered() requires the current status to be PENDING).
+        if (!notification.isPending()) {
+            throw new IllegalArgumentException(
+                    "dispatch() requires a PENDING notification, but got status: " + notification.getStatus());
+        }
+
+        log.info("Dispatching notification for userId={}, type={}",
                 notification.getRecipientUserId(), notification.getType());
 
         // Step 1: Persist (UC-36 logic integrated)

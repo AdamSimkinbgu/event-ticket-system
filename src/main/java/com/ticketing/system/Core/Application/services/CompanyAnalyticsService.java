@@ -1,0 +1,84 @@
+package com.ticketing.system.Core.Application.services;
+
+import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import org.springframework.stereotype.Service;
+
+import lombok.extern.slf4j.Slf4j;
+
+import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
+import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.messaging.ConversationType;
+import com.ticketing.system.Core.Domain.messaging.IConversationRepository;
+import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
+import com.ticketing.system.Core.Domain.orders.OrderReceipt;
+import com.ticketing.system.Core.Domain.orders.ReceiptLine;
+
+/**
+ * Read-side aggregator for the owner-workspace dashboard counters (V2-WIRE-OWNER-DASH).
+ *
+ * <p>Pure query service: it takes an already-authorized {@code companyId} (the caller — the
+ * presenter — resolves the signed-in member's companies via
+ * {@code CompanyManagementService.findMyCompanies} first) and assembles the four dashboard
+ * figures from the event, order-receipt, and conversation repositories. Sales figures are the
+ * company's own share of each receipt (a receipt can mix events from several companies), over
+ * the trailing 30 days, excluding refunded receipts.
+ */
+@Service
+@Slf4j
+public class CompanyAnalyticsService {
+
+    private static final int WINDOW_DAYS = 30;
+
+    private final IEventRepository eventRepository;
+    private final IOrderReceiptRepository orderReceiptRepository;
+    private final IConversationRepository conversationRepository;
+
+    public CompanyAnalyticsService(
+            IEventRepository eventRepository,
+            IOrderReceiptRepository orderReceiptRepository,
+            IConversationRepository conversationRepository) {
+        this.eventRepository = eventRepository;
+        this.orderReceiptRepository = orderReceiptRepository;
+        this.conversationRepository = conversationRepository;
+    }
+
+    /** Live dashboard counters for one company. Returns zeros for a fresh company with no events. */
+    public CompanyDashboardDTO dashboard(int companyId) {
+        int activeEvents = eventRepository.findActiveByCompany(companyId).size();
+
+        int ticketsSold = 0;
+        double revenue = 0;
+        List<Integer> eventIds = eventRepository.findIdsByCompany(companyId);
+        if (!eventIds.isEmpty()) {
+            Set<Integer> companyEventIds = new HashSet<>(eventIds);
+            LocalDateTime cutoff = LocalDateTime.now().minusDays(WINDOW_DAYS);
+            for (OrderReceipt receipt : orderReceiptRepository.findByEventIds(eventIds)) {
+                if (receipt.wasRefunded()
+                        || receipt.getPurchaseTime() == null
+                        || receipt.getPurchaseTime().isBefore(cutoff)) {
+                    continue;
+                }
+                // Count only the lines that belong to this company's events — a receipt may
+                // span multiple companies' events.
+                for (ReceiptLine line : receipt.getReceiptLines()) {
+                    if (companyEventIds.contains(line.getEventId())) {
+                        ticketsSold++;
+                        revenue += line.getPriceAtReservation();
+                    }
+                }
+            }
+        }
+
+        int openInquiries = (int) conversationRepository.findByCompanyAsCounterparty(companyId).stream()
+                .filter(c -> c.getType() == ConversationType.INQUIRY && !c.isClosed())
+                .count();
+
+        log.debug("Dashboard for company {}: {} active events, {} tickets/30d, {} revenue/30d, {} open inquiries",
+                companyId, activeEvents, ticketsSold, revenue, openInquiries);
+        return new CompanyDashboardDTO(activeEvents, ticketsSold, revenue, openInquiries);
+    }
+}

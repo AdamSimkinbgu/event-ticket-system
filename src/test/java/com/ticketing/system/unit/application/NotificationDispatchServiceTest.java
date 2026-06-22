@@ -1,6 +1,7 @@
 package com.ticketing.system.unit.application;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -15,9 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import com.ticketing.system.Core.Application.dto.NotificationDTO;
 import com.ticketing.system.Core.Application.interfaces.IPushNotificationService;
@@ -62,7 +61,7 @@ class NotificationDispatchServiceTest {
         // Verify it was saved twice: once as PENDING, once as DELIVERED
         verify(mockRepo, times(2)).save(notification);
         verify(mockPushService, times(1)).send(eq(userId), any(Notification.class));
-        assert notification.getStatus() == NotificationStatus.DELIVERED;
+        assertEquals(NotificationStatus.DELIVERED, notification.getStatus());
     }
 
     @Test
@@ -83,7 +82,7 @@ class NotificationDispatchServiceTest {
 
         // Verify it was saved once (at the start of dispatch)
         verify(mockRepo, times(1)).save(notification);
-        assert notification.getStatus() == NotificationStatus.PENDING;
+        assertEquals(NotificationStatus.PENDING, notification.getStatus());
     }
 
     // UC-36: offline recipient → PENDING storage
@@ -149,9 +148,9 @@ class NotificationDispatchServiceTest {
         verify(mockRepo, times(1)).save(notif2);
 
         // Verify all returned DTOs have DELIVERED status
-        assert result.size() == 2;
-        assert result.get(0).status().equals("DELIVERED");
-        assert result.get(1).status().equals("DELIVERED");
+        assertEquals(2, result.size());
+        assertEquals("DELIVERED", result.get(0).status());
+        assertEquals("DELIVERED", result.get(1).status());
     }
 
     /* UC-37: no pending notifications is no-op */
@@ -176,6 +175,6 @@ class NotificationDispatchServiceTest {
         verify(mockRepo, never()).save(any());
 
         // Verify empty list is returned
-        assert result.isEmpty();
+        assertTrue(result.isEmpty());
     }
 }

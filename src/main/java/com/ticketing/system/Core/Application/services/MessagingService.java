@@ -33,25 +33,36 @@ public class MessagingService {
         this.authenticationService = authenticationService;
     }
 
+
+
+    
     // II.3.10 — Member starts an INQUIRY conversation with a Company (or any DIRECT thread).
     public ConversationDTO startConversation(String token, StartConversationRequestDTO request) {
         throw new UnsupportedOperationException("messaging (II.3.10): not implemented");
     }
+
+
 
     // Append a reply to an existing conversation. Sender must be a participant.
     public void sendMessage(String token, SendMessageRequestDTO request) {
         throw new UnsupportedOperationException("messaging: not implemented");
     }
 
+
+
     // II.3.3 — Member submits a COMPLAINT (counterparty = ADMIN_GROUP).
     public ConversationDTO submitComplaint(String token, SubmitComplaintRequestDTO request) {
         throw new UnsupportedOperationException("II.3.3 (complaint): not implemented");
     }
 
+
+
     // II.6.3.1 — admin responds to a complaint and may transition status.
     public void respondToComplaint(String token, RespondToComplaintRequestDTO request) {
         throw new UnsupportedOperationException("II.6.3.1: not implemented");
     }
+
+
 
     // II.6.3.2 — admin broadcasts to members. Returns the canonical Conversation
     // representation (semantics: one conversation w/ broadcast counterparty, or many
@@ -60,33 +71,52 @@ public class MessagingService {
         throw new UnsupportedOperationException("II.6.3.2: not implemented");
     }
 
+
+
+
     // Member-facing inbox view.
     public PageDTO<ConversationDTO> viewMyConversations(String token, int pageNumber, int pageSize) {
         throw new UnsupportedOperationException("messaging: not implemented");
     }
+
+
 
     // Open a single thread.
     public ConversationDTO viewConversation(String token, String conversationId) {
         throw new UnsupportedOperationException("messaging: not implemented");
     }
 
+
+
     // II.4.4 — company support inbox: all conversations where this company is counterparty.
     public PageDTO<ConversationDTO> viewCompanyInbox(String token, int companyId, int pageNumber, int pageSize) {
         throw new UnsupportedOperationException("II.4.4: not implemented");
     }
 
+
+
     // II.6.3.1 — admin queue of complaints with filters.
-    public PageDTO<ConversationDTO> viewAllComplaints(String token, ComplaintFilterDTO filters, int pageNumber, int pageSize) {
+    public PageDTO<ConversationDTO> viewAllComplaints(String token, ComplaintFilterDTO filters, int pageNumber,
+            int pageSize) {
         throw new UnsupportedOperationException("II.6.3.1: not implemented");
     }
+
+    
 
     // UI action — mark a single message as read by the viewer.
     public void markMessageAsRead(String token, String conversationId, String messageId) {
         throw new UnsupportedOperationException("messaging: not implemented");
     }
 
+
+
     // Terminal action — close a conversation (no further messages allowed).
     public void closeConversation(String token, String conversationId) {
         throw new UnsupportedOperationException("messaging: not implemented");
     }
+
+
+
+
+
 }

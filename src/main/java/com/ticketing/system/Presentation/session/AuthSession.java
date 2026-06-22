@@ -67,7 +67,9 @@ public final class AuthSession {
         s.setAttribute(EXPIRES_KEY, dto.expiresAtEpochMillis());
         s.setAttribute(NAME_KEY, dto.username());
         s.setAttribute(SIGNED_IN_KEY, Boolean.TRUE);
-        s.setAttribute(ADMIN_KEY, isAdminUsername(dto.username()));
+        // Admin-ness comes from the token the backend issued (admin sign-in sets it), not from a
+        // hardcoded username set — the dedicated /admin/sign-in flow is the only way to become admin.
+        s.setAttribute(ADMIN_KEY, dto.isAdmin());
     }
 
     // -- Dev-only flag toggles -------------------------------------------

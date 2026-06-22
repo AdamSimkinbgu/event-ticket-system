@@ -90,10 +90,9 @@ class TicketTest extends BaseDomainTest {
     }
 
     @Test
-    void GivenBlankSeatNumber_WhenCheckInvariants_ThenThrowsException() {
-        Ticket ticket = new Ticket(1, 10, 11, "   ", 75.0, 101, "barcode-Y");
-
-        assertThrows(IllegalStateException.class, ticket::checkInvariants);
+    void GivenBlankSeatNumber_WhenConstructed_ThenThrowsException() {
+        assertThrows(IllegalStateException.class,
+                () -> new Ticket(1, 10, 11, "   ", 75.0, 101, "barcode-Y"));
     }
 
 

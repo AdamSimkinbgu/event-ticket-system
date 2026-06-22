@@ -15,7 +15,14 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Core.Domain.exceptions.ActiveOrderExpiredException;
+import com.ticketing.system.Core.Domain.exceptions.ConcurrentReservationException;
+import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryException;
+import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
+import com.ticketing.system.Core.Domain.exceptions.PolicyViolationException;
+import com.ticketing.system.Core.Domain.exceptions.SessionExpiredException;
 import com.ticketing.system.Presentation.session.AuthSession;
+import java.util.UUID;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
@@ -37,7 +44,6 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 
-import java.util.UUID;
 
 /**
  * Checkout view — wired to real CheckoutService and ReservationService.
@@ -67,6 +73,7 @@ import java.util.UUID;
 public class CheckoutView extends LkPage implements BeforeEnterObserver {
 
     private static final long SERVICE_FEE_CENTS = 2400L;
+    private static final String IDEMPOTENCY_ATTR = "checkout.idempotencyKey";
 
     private final ReservationService reservationService;
     private final CheckoutService    checkoutService;
@@ -122,7 +129,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
         resolveIdentity();
-        refreshFromOrder(loadActiveOrder());
+        refreshFromOrder(renewAndLoadActiveOrder());
 
         if (getChildren().findAny().isEmpty()) {
             buildPage();
@@ -153,6 +160,35 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             session.setAttribute("guestSessionId", guestId);
         }
         return guestId;
+    }
+
+    /**
+     * Like {@link #loadActiveOrder()}, but resets every reserved ticket's 10-minute hold
+     * timer to a fresh full window. Used only on checkout-page entry ({@link #beforeEnter})
+     * so the buyer gets the maximum time to pay; the pre-pay refresh keeps using the plain
+     * {@link #loadActiveOrder()} so its "cart expired while you were typing" guard stays intact.
+     */
+    private ActiveOrderDTO renewAndLoadActiveOrder() {
+        if (isMember) {
+            try {
+                this.resolvedUserId = sessionManager.extractUserId(memberToken);
+                return reservationService.renewReservationsForMemberCheckout(resolvedUserId);
+            } catch (Exception e) {
+                log.warn("Failed to renew/load active order for member", e);
+                Toasts.warn("Could not load your cart — please try again.");
+                return null;
+            }
+        }
+
+        if (sessionId != null) {
+            try {
+                return reservationService.renewReservationsForGuestCheckout(sessionId);
+            } catch (Exception e) {
+                log.warn("Failed to renew/load active order for guest", e);
+                return null;
+            }
+        }
+        return null;
     }
 
     private ActiveOrderDTO loadActiveOrder() {
@@ -269,9 +305,10 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                     "function tick(){" +
                     "  const s=Math.max(0,Math.floor((end-Date.now())/1000));" +
                     "  t.textContent=pad(Math.floor(s/60))+':'+pad(s%60);" +
-                    "  if(s>0) setTimeout(tick,1000);" +
-                    "}" +
-                    "tick();",
+                               "  if (s > 0) { setTimeout(tick, 1000); }" +
+            "  else { document.querySelectorAll('vaadin-button.bz-pay-btn').forEach(b => b.setAttribute('disabled', '')); }" +
+            "}" +
+            "tick();",
                     endMs);
         }
     }
@@ -421,6 +458,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         col.add(Lk.divider());
 
         payButton = new Button("Pay " + formatCents(totalCents), e -> attemptPay());
+        payButton.addClassName("bz-pay-btn");
         payButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_LARGE);
         payButton.setWidthFull();
         payButton.addClickShortcut(Key.ENTER);
@@ -473,7 +511,10 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             return;
         }
 
-        String idempotencyKey = UUID.randomUUID().toString();
+        payButton.setEnabled(false);
+        payButton.setText("Processing…");
+
+        String idempotencyKey = currentIdempotencyKey();
         String paymentMethodToken = "tok_" + cardNumber.getValue().replaceAll("\\s+", "");
         String currency = "USD";
 
@@ -499,11 +540,73 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             Toasts.success("Payment successful — "
                     + formatCents(Math.round(result.totalCharged() * 100))
                     + " charged.");
+            clearIdempotencyKey();
             UI.getCurrent().navigate("order/" + result.orderReceiptId());
 
         } catch (RuntimeException e) {
             log.error("Checkout failed for {} user", isMember ? "member" : "guest", e);
-            Toasts.failure("Payment could not be completed. Please try again or contact support.");
+            handlePaymentError(e);
+        }
+    }
+
+    // Maps a checkout failure to a clear, actionable message + recovery navigation (SLR.3.2).
+    // CheckoutService re-wraps failures as RuntimeException(cause), so we unwrap one level.
+    // Today only PaymentGatewayException is surfaced as a distinct type; the PolicyViolation /
+    // InsufficientInventory / ConcurrentReservation / Session- & ActiveOrderExpired branches are
+    // forward-looking — they activate once checkout/domain throw those typed exceptions (until
+    // then those failures arrive as IllegalStateException and hit the generic branch below).
+    private void handlePaymentError(RuntimeException ex) {
+        Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+
+        if (cause instanceof PolicyViolationException pve) {
+            Toasts.failure("Purchase not allowed: " + pve.getMessage());
+        } else if (cause instanceof PaymentGatewayException) {
+            Toasts.failure("Payment declined. Please check your card details and try again.");
+        } else if (cause instanceof InsufficientInventoryException) {
+            Toasts.failure("Some tickets are no longer available. Please review your cart.");
+            UI.getCurrent().navigate("cart");
+            return;
+        } else if (cause instanceof ConcurrentReservationException) {
+            Toasts.warn("Your cart was modified by another session. Please review and try again.");
+        } else if (cause instanceof SessionExpiredException || cause instanceof ActiveOrderExpiredException) {
+            Toasts.failure("Your session expired. Please start a new order.");
+            UI.getCurrent().navigate("browse");
+            return;
+        } else {
+            Toasts.failure("Checkout couldn't be completed — no charge remains on your card. Please try again.");
+        }
+        resetPayButton();
+    }
+
+    private void resetPayButton() {
+        payButton.setEnabled(totalCents > 0);
+        payButton.setText("Pay " + formatCents(totalCents));
+    }
+
+    /**
+     * Stable idempotency key for this checkout, persisted in the {@link VaadinSession} so a
+     * retry after a network timeout / page refresh reuses it and {@code CheckoutService}'s
+     * idempotency cache de-dupes the charge instead of billing the buyer twice. Generated once
+     * (lazily) per checkout and dropped on success by {@link #clearIdempotencyKey()}.
+     */
+    private String currentIdempotencyKey() {
+        VaadinSession session = VaadinSession.getCurrent();
+        if (session == null) {
+            return UUID.randomUUID().toString();
+        }
+        String key = (String) session.getAttribute(IDEMPOTENCY_ATTR);
+        if (key == null) {
+            key = UUID.randomUUID().toString();
+            session.setAttribute(IDEMPOTENCY_ATTR, key);
+        }
+        return key;
+    }
+
+    /** Drop the key after a successful purchase so the buyer's next order gets a fresh one. */
+    private void clearIdempotencyKey() {
+        VaadinSession session = VaadinSession.getCurrent();
+        if (session != null) {
+            session.setAttribute(IDEMPOTENCY_ATTR, null);
         }
     }
 

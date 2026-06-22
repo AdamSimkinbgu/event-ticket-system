@@ -1,17 +1,21 @@
 package com.ticketing.system.Presentation.views.company;
 
-import com.ticketing.system.Core.Application.dto.UserCompanyDTO;
+import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
+import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import com.ticketing.system.Presentation.components.kit.Lk;
+import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
+import com.ticketing.system.Presentation.components.kit.LkSelect;
 import com.ticketing.system.Presentation.components.kit.LkStat;
 import com.ticketing.system.Presentation.components.kit.LkTile;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
-import com.ticketing.system.Presentation.presenters.company.MyCompaniesPresenter;
+import com.ticketing.system.Presentation.presenters.company.OwnerDashboardPresenter;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.admin.CompanySalesView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -20,43 +24,119 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 @Route(value = "owner", layout = WorkspaceLayout.class)
 @PageTitle("Workspace · TicketHub")
 @PermitAll
 @RequireCapability(Capability.OWNER_WORKSPACE)
 public class OwnerDashboardView extends LkPage {
 
-    public OwnerDashboardView(MyCompaniesPresenter membershipPresenter) {
-        UserCompanyDTO company = membershipPresenter.currentCompany();
+    private final OwnerDashboardPresenter presenter;
+
+    /** Stat tiles live in their own slot so the company selector can rebuild them in place. */
+    private final Div statsSlot = new Div();
+
+    public OwnerDashboardView(OwnerDashboardPresenter presenter) {
+        this.presenter = presenter;
 
         title("Workspace");
-        subtitle(company.name() + "  ·  you are the " + company.role());
-        actions(new LkBtn("New event")
-            .variant(LkBtn.Variant.primary)
-            .icon(new LkIcon("plus", 15))
-            .onClick(e -> UI.getCurrent().navigate(CompanyEventListView.class)));
-
-        add(buildStats(company));
+        add(statsSlot);
         add(Lk.h2("Manage"));
         add(buildTiles());
+        reload(null);
     }
 
-    private Component buildStats(UserCompanyDTO company) {
-        Div stats = new Div();
-        stats.addClassName("ow-stats");
-        boolean fresh = company.activeEvents() == 0;
-        stats.add(
-            new LkStat("Live events",           String.valueOf(company.activeEvents())),
-            fresh ? new LkStat("Tickets sold · 30d", "0") :
-                    new LkStat("Tickets sold · 30d", "14,208").delta("▲ 12%", LkStat.Tone.up),
-            fresh ? new LkStat("Revenue · 30d", "$0") :
-                    new LkStat("Revenue · 30d", "$1.92M").delta("▲ 8%", LkStat.Tone.up),
-            fresh ? new LkStat("Open inquiries", "0") :
-                    new LkStat("Open inquiries", "3").delta("needs reply", LkStat.Tone.warn)
+    /** (Re)loads the dashboard for the given company (null → the member's first company). */
+    private void reload(Integer companyId) {
+        switch (presenter.loadFor(AuthSession.token(), companyId)) {
+            case OwnerDashboardPresenter.Outcome.Success ok -> applySuccess(ok);
+            case OwnerDashboardPresenter.Outcome.NoCompany ignored -> showBanner(
+                "You don't belong to a production company yet. Register one to open its workspace.");
+            case OwnerDashboardPresenter.Outcome.NotAuthenticated ignored -> showBanner(
+                "Your session has expired — please sign in again.");
+            case OwnerDashboardPresenter.Outcome.Failure fail -> showBanner(
+                "Could not load your workspace: " + fail.reason());
+        }
+    }
+
+    private void applySuccess(OwnerDashboardPresenter.Outcome.Success ok) {
+        MyCompanyDTO selected = ok.selected();
+        subtitle(selected.name() + "  ·  you are the " + selected.role());
+        actions(buildActions(ok.companies(), selected));
+        statsSlot.removeAll();
+        statsSlot.add(buildStats(ok.stats()));
+    }
+
+    private void showBanner(String message) {
+        subtitle("");
+        actions();
+        statsSlot.removeAll();
+        statsSlot.add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 18), message));
+    }
+
+    /** Topbar actions: a company selector (only when the member has >1) plus "New event". */
+    private Component[] buildActions(List<MyCompanyDTO> companies, MyCompanyDTO selected) {
+        LkBtn newEvent = new LkBtn("New event")
+            .variant(LkBtn.Variant.primary)
+            .icon(new LkIcon("plus", 15))
+            .onClick(e -> UI.getCurrent().navigate(CompanyEventListView.class));
+
+        if (companies.size() <= 1) {
+            return new Component[] { newEvent };
+        }
+
+        // Two companies can share a display name, so key the selector on a label
+        // that maps unambiguously back to a single companyId (disambiguating
+        // collisions with the id) — otherwise switching could reload the wrong stats.
+        List<String> labels = new ArrayList<>();
+        Map<String, Integer> idByLabel = new LinkedHashMap<>();
+        String selectedLabel = selected.name();
+        for (MyCompanyDTO c : companies) {
+            String label = idByLabel.containsKey(c.name()) ? c.name() + " · #" + c.companyId() : c.name();
+            labels.add(label);
+            idByLabel.put(label, c.companyId());
+            if (c.companyId() == selected.companyId()) {
+                selectedLabel = label;
+            }
+        }
+        LkSelect selector = new LkSelect(selectedLabel, labels).label("Company");
+        selector.onChange(label -> {
+            Integer companyId = idByLabel.get(label);
+            if (companyId != null) {
+                reload(companyId);
+            }
+        });
+        return new Component[] { selector, newEvent };
+    }
+
+    private Component buildStats(CompanyDashboardDTO stats) {
+        Div row = new Div();
+        row.addClassName("ow-stats");
+
+        LkStat inquiries = new LkStat("Open inquiries", String.valueOf(stats.openInquiries()));
+        if (stats.openInquiries() > 0) {
+            inquiries.delta("needs reply", LkStat.Tone.warn);
+        }
+
+        row.add(
+            new LkStat("Live events",        String.valueOf(stats.activeEvents())),
+            new LkStat("Tickets sold · 30d",  String.format("%,d", stats.ticketsSold30d())),
+            new LkStat("Revenue · 30d",       "$" + String.format("%,.0f", stats.revenue30d())),
+            inquiries
         );
-        return stats;
+        return row;
     }
 
+    /**
+     * Build the tile grid, dropping any tile whose target view the user
+     * doesn't have access to. Without this filter, a manager clicking
+     * (say) "Managers" would just bounce off the capability gate and
+     * land back here — the dead-click UX problem.
+     */
     private Component buildTiles() {
         Div tiles = new Div();
         tiles.addClassName("ow-tiles");
@@ -91,6 +171,8 @@ public class OwnerDashboardView extends LkPage {
                 "Visual AND/OR builder for company- or event-level rules.",
                 PurchasePolicyEditorView.class));
 
+        // "Register new company" is universal — any signed-in user can start
+        // a new company and become its founder.
         if (Capabilities.has(Capability.REGISTER_COMPANY))
             tiles.add(tile("briefcase", "Register New Company",
                 "Found another production company. You become the founder.",
