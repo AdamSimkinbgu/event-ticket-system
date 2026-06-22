@@ -13,7 +13,6 @@ import com.ticketing.system.Presentation.presenters.company.CompanyRegistrationP
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.textfield.EmailField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
@@ -35,7 +34,6 @@ public class CompanyRegistrationView extends LkPage {
 
     private final TextField name = new TextField("Company name");
     private final TextArea description = new TextArea("Description");
-    private final EmailField email = new EmailField("Contact email");
 
     public CompanyRegistrationView(CompanyRegistrationPresenter presenter) {
         this.presenter = presenter;
@@ -58,12 +56,8 @@ public class CompanyRegistrationView extends LkPage {
         description.setMinHeight("120px");
         description.setWidthFull();
 
-        email.setPlaceholder("contact@company.com");
-        email.setRequired(true);
-        email.setWidthFull();
-
         LkCol col = new LkCol().gap(14);
-        col.add(name, description, email);
+        col.add(name, description);
         card.add(col);
 
         narrow.add(card);
@@ -82,8 +76,8 @@ public class CompanyRegistrationView extends LkPage {
     }
 
     private void attemptRegister() {
-        if (name.isEmpty()) {// mabey add email check
-            Toasts.failure("Please fill in company name and contact email.");
+        if (name.isEmpty()) {
+            Toasts.failure("Please fill in a company name.");
             return;
         }
 
