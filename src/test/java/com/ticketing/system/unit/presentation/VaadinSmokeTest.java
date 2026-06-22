@@ -6,8 +6,10 @@ import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkConfirm;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
+import com.ticketing.system.Presentation.components.venue.VkQuantitySelector;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
+import com.ticketing.system.Presentation.components.venue.VkSeatedZonePicker;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.layouts.MainLayout;
@@ -209,6 +211,22 @@ class VaadinSmokeTest {
         // Domain components used by the venue / seat picker views.
         assertDoesNotThrow(() -> new VkSeat(VkSeat.State.free, "1"), "VkSeat failed");
         assertDoesNotThrow(VkSeatLegend::new,             "VkSeatLegend failed");
+        assertDoesNotThrow(() -> {
+            VkSeat seat = new VkSeat(VkSeat.State.free, "1");
+            seat.setState(VkSeat.State.mine);
+            seat.setState(VkSeat.State.sold);
+            seat.setState(VkSeat.State.free);
+        }, "VkSeat.setState failed");
+        assertDoesNotThrow(() -> new VkSeatedZonePicker(List.of(), null),
+            "VkSeatedZonePicker (empty) failed");
+        assertDoesNotThrow(() -> new VkSeatedZonePicker(
+                List.of(new VkSeatedZonePicker.SeatModel("A1", 0, 0, VkSeat.State.free),
+                        new VkSeatedZonePicker.SeatModel("A2", 32, 0, VkSeat.State.held)),
+                null), "VkSeatedZonePicker (with seats) failed");
+        assertDoesNotThrow(() -> new VkQuantitySelector(100, 9000, null),
+            "VkQuantitySelector (positive available) failed");
+        assertDoesNotThrow(() -> new VkQuantitySelector(0, 9000, null),
+            "VkQuantitySelector (sold out) failed");
     }
 
     @Test
