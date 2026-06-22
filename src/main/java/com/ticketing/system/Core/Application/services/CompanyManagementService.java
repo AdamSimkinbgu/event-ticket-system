@@ -232,17 +232,6 @@ public class CompanyManagementService {
                 edit.companyId());
     }
 
-    public List<Permission> getManagerPermissions(String token, int companyId, int managerId) {
-        int requesterId = authenticate(token);
-        User requester = userRepository.getUserById(requesterId);
-        requester.requireOwnerInCompany(companyId);
-        User manager = userRepository.getUserById(managerId);
-        CompanyAppointment appt = manager.getActiveCompanyAppointment(companyId);
-        if (appt == null || appt.getRole() != CompanyRole.Manager) {
-            throw new RuntimeException("No active manager appointment found for user " + managerId);
-        }
-        return new ArrayList<>(appt.getPermissions());
-    }
 
 
 
