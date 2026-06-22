@@ -2,18 +2,20 @@ package com.ticketing.system.Presentation.dev;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.dto.BuyerContextDTO;
+import com.ticketing.system.Core.Application.dto.UserCompanyDTO;
 import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.ReservationService;
+import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.session.CompanyManagementBridge;
+import com.ticketing.system.Presentation.session.CurrentCompanies;
 import com.ticketing.system.Presentation.session.GuestSession;
-import com.ticketing.system.Presentation.session.MockCompanies;
 import com.ticketing.system.Presentation.session.MockPermissions;
-import com.ticketing.system.Presentation.session.MockSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
@@ -26,20 +28,9 @@ import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.textfield.TextField;
 
+import java.util.EnumSet;
 import java.util.List;
-import java.util.UUID;
 
-/**
- * Development-only session override widget. Renders as a floating
- * "BUG · DEV" pill in the bottom-right corner of every page; clicking
- * opens a dialog that lets us flip the current persona, edit the
- * user's identity, switch between companies, toggle manager grants,
- * and inspect the resulting capability set — all without touching
- * the actual sign-in forms.
- *
- * <p>Attached globally by {@link DevPanelInitializer} on every UI
- * init, so it shows up regardless of which layout is rendered.
- */
 public final class DevPanel {
 
     private static final String SECTION_LABEL_COLOR = "#475569";
@@ -48,22 +39,15 @@ public final class DevPanel {
 
     private static volatile ReservationService reservationService;
 
-    // Spring-managed beans bridged in by DevPanelInitializer at boot. The
-    // panel is a static helper (no Vaadin lifecycle of its own) so the
-    // beans live here as package-private statics. Never null in dev
-    // profile because the initializer constructor runs before any UI is
-    // created.
     static AuthenticationService AUTH;
     static SignOutFlow SIGN_OUT_FLOW;
 
     private DevPanel() { }
 
-    /** Called once by {@code DevPanelInitializer} at boot. */
     public static void init(ReservationService rs) {
         reservationService = rs;
     }
 
-    /** Called once by {@code DevPanelInitializer} at boot. */
     public static void bindBeans(AuthenticationService auth, SignOutFlow signOutFlow) {
         AUTH = auth;
         SIGN_OUT_FLOW = signOutFlow;
@@ -82,15 +66,6 @@ public final class DevPanel {
         } catch (Exception ignored) { }
     }
 
-    /**
-     * Real-login persona switch — used by every dev-panel control that
-     * needs to flip the currently signed-in user. If a session is already
-     * active we route through {@link SignOutFlow} first so the
-     * server-side {@code Session} row is killed and a fresh guest
-     * sessionId is minted (required by {@code AuthenticationService.login()}
-     * per spec D10a). Best-effort: dev-panel state mutations should
-     * never crash the panel.
-     */
     private static void signInAs(String username, String password) {
         try {
             if (AuthSession.isSignedIn()) {
@@ -104,11 +79,27 @@ public final class DevPanel {
             var dto = AUTH.login(new LoginRequestDTO(username, password, guestSid));
             AuthSession.storeAuth(dto.authToken());
         } catch (RuntimeException ignored) {
-            // Dev-panel best effort — surface the previous state on refresh.
         }
     }
 
-    /** Floating trigger pill in the bottom-right corner. */
+    private static List<UserCompanyDTO> listFromService() {
+        Integer userId = AuthSession.userId();
+        if (userId == null || CompanyManagementBridge.service() == null) return List.of();
+        return CompanyManagementBridge.service().listForUser(userId);
+    }
+
+    private static UserCompanyDTO currentCompanyFromService() {
+        List<UserCompanyDTO> all = listFromService();
+        if (all.isEmpty()) return null;
+        Integer currentId = CurrentCompanies.currentCompanyId();
+        if (currentId != null) {
+            for (UserCompanyDTO m : all) {
+                if (m.companyId() == currentId) return m;
+            }
+        }
+        return all.get(0);
+    }
+
     public static Button trigger() {
         Icon bug = new Icon(VaadinIcon.BUG);
         bug.getStyle().set("width", "14px").set("height", "14px");
@@ -133,7 +124,6 @@ public final class DevPanel {
         return b;
     }
 
-    /** Show the override dialog. */
     public static void show() {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("Dev panel — session override");
@@ -172,11 +162,6 @@ public final class DevPanel {
         dialog.open();
     }
 
-    // ---------------------------------------------------------------------
-    // Layout helpers
-    // ---------------------------------------------------------------------
-
-    /** Standard section: small uppercase label, optional muted subtitle, content. */
     private static Div section(String label, String subtitle, Component content) {
         Div sect = new Div();
         sect.getStyle()
@@ -241,22 +226,14 @@ public final class DevPanel {
         return b;
     }
 
-    // ---------------------------------------------------------------------
-    // Persona shortcuts — one row of buttons
-    // ---------------------------------------------------------------------
-
     private static Component buildPersonaRow(Dialog dialog) {
         return hrow(6,
-            personaToggle("Guest",    isGuestSelected(),    () -> togglePersona("Guest",    dialog)),
-            personaToggle("Member",   isMemberSelected(),   () -> togglePersona("Member",   dialog)),
-            personaToggle("Manager",  hasRole("Manager"),   () -> togglePersona("Manager",  dialog)),
-            personaToggle("Co-owner", hasRole("Co-owner"),  () -> togglePersona("Co-owner", dialog)),
-            personaToggle("Founder",  hasRole("Founder"),   () -> togglePersona("Founder",  dialog)),
-            personaToggle("Admin",    AuthSession.isAdmin(),   () -> togglePersona("Admin",    dialog))
+            personaToggle("Guest",  isGuestSelected(),    () -> togglePersona("Guest",  dialog)),
+            personaToggle("Member", isMemberSelected(),   () -> togglePersona("Member", dialog)),
+            personaToggle("Admin",  AuthSession.isAdmin(), () -> togglePersona("Admin",  dialog))
         );
     }
 
-    /** Pill button that swaps fill / outline based on {@code selected}. */
     private static Button personaToggle(String label, boolean selected, Runnable onClick) {
         Button b = new Button(label, e -> onClick.run());
         b.getStyle()
@@ -286,224 +263,122 @@ public final class DevPanel {
         return AuthSession.isSignedIn();
     }
 
-    private static boolean hasRole(String role) {
-        return MockCompanies.forCurrentUser().stream()
-            .anyMatch(c -> role.equals(c.role()));
-    }
-
-    private static boolean hasAnyCompanyRole() {
-        return !MockCompanies.forCurrentUser().isEmpty();
-    }
-
     private static void togglePersona(String name, Dialog dialog) {
         switch (name) {
             case "Guest" -> {
                 if (AuthSession.isSignedIn() || AuthSession.isAdmin()) {
                     abandonCurrentOrder();
                     SIGN_OUT_FLOW.execute();
-                    MockCompanies.clear();
-                    MockSession.clearCurrentCompany();
                 }
             }
             case "Member" -> {
                 if (!AuthSession.isSignedIn()) {
                     signInAs(DevUserSeeder.MEMBER_USERNAME, DevUserSeeder.SHARED_PASSWORD);
-                } else if (!hasAnyCompanyRole() && !AuthSession.isAdmin()) {
-                    // Plain member with nothing else attached → sign out
+                } else if (listFromService().isEmpty() && !AuthSession.isAdmin()) {
                     abandonCurrentOrder();
                     SIGN_OUT_FLOW.execute();
                 }
-                // else: signed in with companies/admin attached — can't unsign
-                // here; deselect those toggles first.
-            }
-            case "Manager", "Co-owner", "Founder" -> {
-                if (hasRole(name)) {
-                    String currentId = MockSession.currentCompanyId();
-                    MockCompanies.forCurrentUser().removeIf(c -> name.equals(c.role()));
-                    if (currentId != null
-                        && MockCompanies.forCurrentUser().stream().noneMatch(c -> currentId.equals(c.id()))) {
-                        MockSession.clearCurrentCompany();
-                    }
-                } else {
-                    if (!AuthSession.isSignedIn()) {
-                        signInAs(DevUserSeeder.MEMBER_USERNAME, DevUserSeeder.SHARED_PASSWORD);
-                    }
-                    String id = "demo-" + name.toLowerCase().replace("-", "");
-                    MockCompanies.add(new MockCompanies.Company(
-                        id, seededCompanyName(name),
-                        "Seeded by dev panel.", "demo@ticketing.test",
-                        name, "Active", "Founder".equals(name) ? 3 : 1, 5
-                    ));
-                    if ("Manager".equals(name)) {
-                        MockPermissions.setAll(id, java.util.EnumSet.of(
-                            Capability.VIEW_COMPANY_EVENTS,
-                            Capability.RESPOND_INQUIRIES));
-                    }
-                    if (MockSession.currentCompanyId() == null) {
-                        MockSession.setCurrentCompany(id);
-                    }
-                }
             }
             case "Admin" -> {
-                // Real-auth swap: one token at a time. Toggling admin on
-                // (re)logs in as dev.admin; toggling off demotes back to
-                // dev.member so the user stays in a signed-in state.
                 if (AuthSession.isAdmin()) {
                     signInAs(DevUserSeeder.MEMBER_USERNAME, DevUserSeeder.SHARED_PASSWORD);
                 } else {
                     signInAs(DevUserSeeder.ADMIN_USERNAME, DevUserSeeder.SHARED_PASSWORD);
-                    MockCompanies.clear();
-                    MockSession.clearCurrentCompany();
                 }
             }
         }
         refresh(dialog);
     }
 
-    private static String seededCompanyName(String role) {
-        return switch (role) {
-            case "Founder"  -> "Live Nation Israel";
-            case "Co-owner" -> "Coca-Cola Arena";
-            case "Manager"  -> "Shuni Productions";
-            default          -> role + " demo company";
-        };
-    }
-
-    // ---------------------------------------------------------------------
-    // Identity — name + signed-in + admin
-    // ---------------------------------------------------------------------
-
     private static Component buildIdentityRow(Dialog dialog) {
         TextField name = new TextField();
         name.setLabel("Display name");
         name.setValue(AuthSession.displayName() == null ? "" : AuthSession.displayName());
         name.setWidth("220px");
-        // Username is now the JWT subject — editing has no effect at this
-        // layer. Read-only keeps the field useful for "what am I signed
-        // in as?" at a glance without offering misleading affordance.
         name.setReadOnly(true);
 
         Checkbox signedIn = new Checkbox("Signed in", AuthSession.isSignedIn());
         Checkbox isAdmin  = new Checkbox("Admin pool", AuthSession.isAdmin());
 
-        // Route both checkboxes through togglePersona so the real-login
-        // flow runs exactly once and the dialog refreshes consistently.
         signedIn.addValueChangeListener(e -> togglePersona("Member", dialog));
         isAdmin.addValueChangeListener(e -> togglePersona("Admin", dialog));
 
         return hrow(16, name, signedIn, isAdmin);
     }
 
-    // ---------------------------------------------------------------------
-    // Companies — list, add by role, pick current
-    // ---------------------------------------------------------------------
-
     private static Component buildCompaniesBlock(Dialog dialog) {
         Div block = vcol(8);
 
-        List<MockCompanies.Company> all = MockCompanies.forCurrentUser();
+        List<UserCompanyDTO> all = listFromService();
         if (all.isEmpty()) {
-            Span hint = new Span("No companies. Use a button below to add one.");
+            Span hint = new Span("No companies for current user.");
             hint.getStyle().set("color", SECTION_SUB_COLOR).set("font-size", "13px");
             block.add(hint);
         } else {
-            String currentId = MockSession.currentCompanyId();
-            for (MockCompanies.Company c : all) {
-                boolean current = c.id().equals(currentId)
-                    || (currentId == null && all.get(0).id().equals(c.id()));
+            Integer currentId = CurrentCompanies.currentCompanyId();
+            for (UserCompanyDTO company : all) {
+                boolean current = Integer.valueOf(company.companyId()).equals(currentId)
+                    || (currentId == null && all.get(0).companyId() == company.companyId());
                 Span tag = new Span();
                 tag.getStyle().set("flex", "1").set("font-size", "13.5px")
                     .set("min-width", "180px");
                 tag.getElement().setProperty("innerHTML",
                     (current ? "<span style='color:#ca8a04'>★</span> " : "")
-                    + "<b>" + escape(c.name()) + "</b>"
-                    + " <span style='color:" + SECTION_SUB_COLOR + "'>· " + c.role() + "</span>");
-
+                    + "<b>" + escape(company.name()) + "</b>"
+                    + " <span style='color:" + SECTION_SUB_COLOR + "'>· " + company.role() + "</span>");
                 Button select = ghostBtn("Make current", () -> {
-                    MockSession.setCurrentCompany(c.id());
+                    CurrentCompanies.setCurrentCompany(company.companyId());
                     refresh(dialog);
                 });
-                Button remove = dangerBtn("Remove", () -> {
-                    MockCompanies.forCurrentUser().removeIf(x -> x.id().equals(c.id()));
-                    if (c.id().equals(MockSession.currentCompanyId()))
-                        MockSession.clearCurrentCompany();
-                    refresh(dialog);
-                });
-                block.add(hrow(8, tag, select, remove));
+                block.add(hrow(8, tag, select));
             }
         }
-
-        Div addRow = hrow(6,
-            addCompanyBtn("+ Founder",  "Founder",  dialog),
-            addCompanyBtn("+ Co-owner", "Co-owner", dialog),
-            addCompanyBtn("+ Manager",  "Manager",  dialog)
-        );
-        addRow.getStyle().set("margin-top", "4px");
-        block.add(addRow);
 
         return block;
     }
 
-    private static Button addCompanyBtn(String label, String role, Dialog dialog) {
-        return ghostBtn(label, () -> {
-            if (!AuthSession.isSignedIn()) {
-                signInAs(DevUserSeeder.MEMBER_USERNAME, DevUserSeeder.SHARED_PASSWORD);
-            }
-            String id = "dev-" + UUID.randomUUID().toString().substring(0, 8);
-            MockCompanies.add(new MockCompanies.Company(
-                id, role + " company",
-                "Added from dev panel.", "demo@ticketing.test",
-                role, "Active", 1, 0
-            ));
-            MockSession.setCurrentCompany(id);
-            if ("Manager".equals(role)) {
-                MockPermissions.setAll(id, java.util.EnumSet.of(
-                    Capability.VIEW_COMPANY_EVENTS,
-                    Capability.RESPOND_INQUIRIES));
-            }
-            refresh(dialog);
-        });
-    }
-
-    // ---------------------------------------------------------------------
-    // Manager permission grants
-    // ---------------------------------------------------------------------
-
     private static String currentManagerSubtitle() {
-        MockCompanies.Company current = MockSession.currentCompany();
+        UserCompanyDTO current = currentCompanyFromService();
         if (current == null) return "No current company — pick one above.";
         if (!"Manager".equals(current.role())) {
             return "Current role is " + current.role() + " — grants only apply to Managers.";
         }
-        return "Toggle to grant/revoke. Founders & Co-owners hold every grantable cap automatically.";
+        return "Current manager permissions (read-only — edit via the real UI).";
     }
 
     private static Component buildManagerPermsBlock() {
-        MockCompanies.Company current = MockSession.currentCompany();
+        UserCompanyDTO current = currentCompanyFromService();
         if (current == null || !"Manager".equals(current.role())) {
-            return new Span();   // empty placeholder; subtitle carries the message
+            return new Span();
         }
 
-        var held = MockPermissions.forCompany(current.id());
+        EnumSet<Permission> held = EnumSet.noneOf(Permission.class);
+        held.addAll(current.managerPermissions());
+
         Div grid = new Div();
         grid.getStyle().set("display", "grid")
             .set("grid-template-columns", "repeat(2, minmax(0, 1fr))")
             .set("gap", "4px 16px");
 
-        for (Capability c : MockPermissions.GRANTABLE) {
-            Checkbox cb = new Checkbox(prettify(c.name()), held.contains(c));
-            cb.addValueChangeListener(e -> {
-                if (e.getValue()) MockPermissions.grant(current.id(), c);
-                else              MockPermissions.revoke(current.id(), c);
-            });
+        for (Capability capability : MockPermissions.GRANTABLE) {
+            Permission permission = permissionForCapability(capability);
+            Checkbox cb = new Checkbox(prettify(capability.name()), held.contains(permission));
+            cb.setReadOnly(true);
             grid.add(cb);
         }
         return grid;
     }
 
-    // ---------------------------------------------------------------------
-    // Capability inspector — read-only badge cloud
-    // ---------------------------------------------------------------------
+    private static Permission permissionForCapability(Capability capability) {
+        return switch (capability) {
+            case VIEW_COMPANY_SALES -> Permission.VIEW_SALES;
+            case EDIT_PURCHASE_POLICIES -> Permission.EDIT_POLICIES;
+            case RESPOND_INQUIRIES -> Permission.RESPOND_TO_INQUIRIES;
+            case MANAGE_VENUE_MAPS -> Permission.CONFIGURE_VENUE;
+            case VIEW_COMPANY_EVENTS, EDIT_COMPANY_EVENTS -> Permission.MANAGE_INVENTORY;
+            default -> throw new IllegalArgumentException("Not a manager-grantable capability: " + capability);
+        };
+    }
 
     private static Component buildCapabilityCloud() {
         var caps = Capabilities.forCurrentUser();
@@ -522,17 +397,11 @@ public final class DevPanel {
         return cloud;
     }
 
-    // ---------------------------------------------------------------------
-    // Helpers
-    // ---------------------------------------------------------------------
-
-    /** Close and re-open the dialog so every section reflects the new state. */
     private static void refresh(Dialog dialog) {
         dialog.close();
         show();
     }
 
-    /** Title-case a SCREAMING_SNAKE_CASE name → "Screaming Snake Case". */
     private static String prettify(String snake) {
         String[] parts = snake.toLowerCase().split("_");
         StringBuilder sb = new StringBuilder();

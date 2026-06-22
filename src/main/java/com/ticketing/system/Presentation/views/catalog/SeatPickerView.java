@@ -1,7 +1,12 @@
 package com.ticketing.system.Presentation.views.catalog;
 
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
+import com.ticketing.system.Core.Application.dto.InventoryZoneDTO;
+import com.ticketing.system.Core.Application.dto.SeatDTO;
+import com.ticketing.system.Core.Application.dto.VenueMapDTO;
+import com.ticketing.system.Core.Application.services.CatalogService;
 import com.ticketing.system.Core.Application.services.ReservationService;
+import com.ticketing.system.Core.Domain.events.ZoneType;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
@@ -9,117 +14,145 @@ import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
-import com.ticketing.system.Presentation.components.kit.LkIconBtn;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
-import com.ticketing.system.Presentation.components.kit.LkStepper;
+import com.ticketing.system.Presentation.components.venue.VkQuantitySelector;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
+import com.ticketing.system.Presentation.components.venue.VkSeatedZonePicker;
 import com.ticketing.system.Presentation.components.venue.VkStandingZone;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Presentation.session.AuthSession;
-import com.ticketing.system.Presentation.session.GuestSession;
+import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.ticketing.system.Presentation.views.order.CartView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
-import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
-import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
-import com.ticketing.system.Presentation.session.SessionIdentity;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
-import java.util.UUID;
+import java.util.TreeMap;
 
 /**
- * Centerpiece seat picker (V2-CAT-03). Interactive seat grid with the
- * four race-condition states (free / mine / held / sold), live
- * selection rail with running total, plus a standing-zone variant and
- * a states reference card.
+ * Zone picker (V2-CAT-03 / V2-RES-01 / V2-RES-02). Loads the selected zone and
+ * renders the picker that matches its <b>type</b> — {@link VkSeatedZonePicker} for
+ * a SEATED zone, {@link VkQuantitySelector} for a STANDING zone — both fed with
+ * real {@code getEventVenueMap} data. New zone types are a compile error in
+ * {@link #buildBody} until handled (exhaustive switch on {@link ZoneType}).
  */
 @Route(value = "events/:eventId/seats/:zoneId", layout = MainLayout.class)
-@PageTitle("Pick seats · TicketHub")
+@PageTitle("Pick tickets · TicketHub")
 @AnonymousAllowed
 public class SeatPickerView extends LkPage implements BeforeEnterObserver {
 
-    /** {@code . = free, m = mine, h = held by another buyer, x = sold} */
-    private static final String[] LOWER_L_INITIAL = {
-        "xxx..hh...",
-        "xx...hh...",
-        "x..mm.....",
-        "....hh....",
-        "..........",
-        "...hh....."
-    };
+    private static final int SEAT_STEP = 34;
 
-    private static final int SEAT_PRICE_CENTS = 16000;
-
+    private final CatalogService catalogService;
     private final ReservationService reservationService;
     private final SessionIdentity identity;
 
     private int eventId;
     private int zoneId;
+    private InventoryZoneDTO zone;
+    private double zonePrice;
 
-    private char[][] seatStates;
-    private Div seatGridContainer;
+    private VkSeatedZonePicker seatPicker;
     private LkCol selectionListCol;
+    private VkQuantitySelector qtySelector;
+    private LkBtn holdButton;
+    private final Div bodyHolder = new Div();
 
-    public SeatPickerView(ReservationService reservationService,SessionIdentity identity) {
+    public SeatPickerView(CatalogService catalogService, ReservationService reservationService, SessionIdentity identity) {
+        this.catalogService = catalogService;
         this.reservationService = reservationService;
         this.identity = identity;
-        initSeatStates();
-        add(buildBreadcrumb());
-        add(buildSeatedSplit());
-        add(Lk.h2("Standing zone — quantity selection"));
-        add(buildStandingSplit());
+        add(bodyHolder);
     }
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
-        String eidStr = event.getRouteParameters().get("eventId").orElse("0");
-        String zidStr = event.getRouteParameters().get("zoneId").orElse("0");
-        try { this.eventId = Integer.parseInt(eidStr); } catch (NumberFormatException e) { this.eventId = 0; }
-        try { this.zoneId  = Integer.parseInt(zidStr); } catch (NumberFormatException e) { this.zoneId  = 0; }
+        this.eventId = parseId(event.getRouteParameters().get("eventId").orElse("0"));
+        this.zoneId = parseId(event.getRouteParameters().get("zoneId").orElse("0"));
+        loadAndBuild();
     }
 
-    private void initSeatStates() {
-        seatStates = new char[LOWER_L_INITIAL.length][];
-        for (int i = 0; i < LOWER_L_INITIAL.length; i++) {
-            seatStates[i] = LOWER_L_INITIAL[i].toCharArray();
+    private void loadAndBuild() {
+        bodyHolder.removeAll();
+        InventoryZoneDTO loaded;
+        try {
+            VenueMapDTO map = catalogService.getEventVenueMap(identity.credential(), eventId);
+            loaded = map.inventoryZones().stream()
+                    .filter(z -> z.getId() == zoneId).findFirst().orElse(null);
+        } catch (RuntimeException ex) {
+            bodyHolder.add(infoBanner("Could not load this zone: " + ex.getMessage()));
+            return;
         }
+        if (loaded == null) {
+            bodyHolder.add(infoBanner("That zone is no longer available."));
+            return;
+        }
+        this.zone = loaded;
+        this.zonePrice = loaded.getPrice();
+        bodyHolder.add(buildBody());
     }
 
-    // ---------- breadcrumb ----------
-
-    private Component buildBreadcrumb() {
-        Div crumb = new Div();
-        crumb.addClassName("vz-crumb");
-
-        Anchor back = new Anchor("javascript:void(0)", "← Coldplay · pick area");
-        back.addClassName("bz-link");
-        back.getElement().addEventListener("click", e ->
-            UI.getCurrent().navigate("events/coldplay"));
-
-        Span trail = Lk.muted("/ Lower L · seated · $160");
-        trail.getStyle().set("font-size", "13px");
-
-        crumb.add(back, trail);
-        return crumb;
+    private Component buildBody() {
+        return switch (ZoneType.valueOf(zone.getZoneType())) {
+            case SEATED -> buildSeatedPicker();
+            case STANDING -> buildStandingPicker();
+        };
     }
 
-    // ---------- seated split: canvas + rail ----------
+    private Component buildSeatedPicker() {
+        seatPicker = new VkSeatedZonePicker(buildSeatModels(), this::updateSelectionRail);
 
-    private Component buildSeatedSplit() {
+        Div wrap = new Div();
+        wrap.add(buildBreadcrumb(zone.getName() + " · seated"));
+
         Div split = new Div();
         split.addClassName("vz-split");
         split.add(buildSeatCanvas(), buildSelectionRail());
-        return split;
+        wrap.add(split);
+
+        Div ref = new Div();
+        ref.addClassName("vz-split2");
+        ref.add(buildLockingExplainerCard(), buildStatesReferenceCard());
+        wrap.add(ref);
+        return wrap;
+    }
+
+    private List<VkSeatedZonePicker.SeatModel> buildSeatModels() {
+        TreeMap<String, List<SeatDTO>> byRow = new TreeMap<>();
+        for (SeatDTO s : zone.getSeats()) {
+            byRow.computeIfAbsent(rowOf(s.label()), k -> new ArrayList<>()).add(s);
+        }
+        List<VkSeatedZonePicker.SeatModel> models = new ArrayList<>();
+        int rowIdx = 0;
+        for (List<SeatDTO> rowSeats : byRow.values()) {
+            rowSeats.sort(Comparator.comparingInt(s -> seatNumber(s.label())));
+            int colIdx = 0;
+            for (SeatDTO s : rowSeats) {
+                models.add(new VkSeatedZonePicker.SeatModel(
+                        s.label(), colIdx * SEAT_STEP, rowIdx * SEAT_STEP, stateFor(s.status())));
+                colIdx++;
+            }
+            rowIdx++;
+        }
+        return models;
+    }
+
+    private static VkSeat.State stateFor(String status) {
+        return switch (status) {
+            case "AVAILABLE" -> VkSeat.State.free;
+            case "SOLD" -> VkSeat.State.sold;
+            default -> VkSeat.State.held;
+        };
     }
 
     private Component buildSeatCanvas() {
@@ -127,24 +160,17 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
 
         Div header = new Div();
         header.addClassName("vz-canvas-h");
-        Div title = new Div();
-        Span boldName = new Span();
-        boldName.getElement().setProperty("innerHTML", "<b>Lower L</b>");
-        Span sub = Lk.muted(" · Row A–F · click to select");
+        Span name = new Span();
+        name.getElement().setProperty("innerHTML", "<b>" + escape(zone.getName()) + "</b>");
+        Span sub = Lk.muted(" · click a green seat to select");
         sub.getStyle().set("font-size", "13px");
-        title.add(boldName, sub);
-
-        LkRow zoom = new LkRow().gap(6);
-        zoom.add(new LkIconBtn(new LkIcon("minus", 16), "Zoom out"));
-        zoom.add(new LkIconBtn(new LkIcon("crosshair", 16), "Fit"));
-        zoom.add(new LkIconBtn(new LkIcon("plus", 16), "Zoom in"));
-
-        header.add(title, zoom);
+        Div title = new Div();
+        title.add(name, sub);
+        header.add(title);
         card.add(header);
 
         Div canvas = new Div();
         canvas.addClassName("vz-canvas");
-
         Div stageStrip = new Div();
         stageStrip.addClassName("vz-stage-strip");
         stageStrip.setText("◄ FACING STAGE ►");
@@ -152,9 +178,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
 
         Div seatScroll = new Div();
         seatScroll.addClassName("vz-seatscroll");
-        seatGridContainer = new Div();
-        renderSeatGrid();
-        seatScroll.add(seatGridContainer);
+        seatScroll.add(seatPicker);
         canvas.add(seatScroll);
 
         Div legendWrap = new Div();
@@ -166,189 +190,155 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         return card;
     }
 
-    private void renderSeatGrid() {
-        seatGridContainer.removeAll();
-        Div block = new Div();
-        block.addClassName("vk-seatblock");
-
-        for (int ri = 0; ri < seatStates.length; ri++) {
-            Div row = new Div();
-            row.addClassName("vk-seatrow");
-
-            Span label = new Span(String.valueOf((char) ('A' + ri)));
-            label.addClassName("vk-rowlabel");
-            row.add(label);
-
-            for (int ci = 0; ci < seatStates[ri].length; ci++) {
-                char c = seatStates[ri][ci];
-                VkSeat.State state = stateFor(c);
-                VkSeat seat = new VkSeat(state, String.valueOf(ci + 1));
-                if (state == VkSeat.State.free || state == VkSeat.State.mine) {
-                    final int rr = ri, cc = ci;
-                    seat.addClickListener(e -> handleSeatClick(rr, cc));
-                }
-                row.add(seat);
-            }
-            block.add(row);
-        }
-        seatGridContainer.add(block);
-    }
-
-    private static VkSeat.State stateFor(char c) {
-        return switch (c) {
-            case 'm' -> VkSeat.State.mine;
-            case 'h' -> VkSeat.State.held;
-            case 'x' -> VkSeat.State.sold;
-            default  -> VkSeat.State.free;
-        };
-    }
-
-    private void handleSeatClick(int row, int col) {
-        char current = seatStates[row][col];
-        if (current == 'h' || current == 'x') return;
-        seatStates[row][col] = (current == 'm') ? '.' : 'm';
-        renderSeatGrid();
-        updateSelectionRail();
-    }
-
-    // ---------- selection rail ----------
-
     private Component buildSelectionRail() {
         LkCol rail = new LkCol().gap(14);
-
-        rail.add(buildCountdownBanner());
-
         LkCard selection = new LkCard("Your selection").pad(16);
         selectionListCol = new LkCol().gap(10);
         selection.add(selectionListCol);
         rail.add(selection);
-
-        rail.add(buildLockingExplainerCard());
-
         updateSelectionRail();
         return rail;
     }
 
-    private Component buildCountdownBanner() {
-        LkBanner banner = new LkBanner();
-        banner.tone(LkBanner.Tone.warn);
-        banner.setIcon(new LkIcon("clock", 17));
-
-        Span timer = new Span("09:36");
-        timer.addClassName("lk-mono");
-        timer.getStyle().set("font-weight", "700");
-
-        Span body = new Span();
-        body.add(timer);
-        Span msg = new Span(" — your seats are locked while you decide");
-        msg.getStyle().set("font-size", "13px");
-        body.add(msg);
-        banner.setBody(body);
-        return banner;
-    }
-
     private void updateSelectionRail() {
-        if (selectionListCol == null) return;
+        if (selectionListCol == null) {
+            return;
+        }
         selectionListCol.removeAll();
-
-        List<int[]> mineSeats = collectMine();
-        if (mineSeats.isEmpty()) {
+        List<String> labels = seatPicker.hasSelection()
+                ? seatPicker.getSelection().getSeatNumbers() : List.of();
+        if (labels.isEmpty()) {
             Span hint = Lk.muted("Click a green seat above to select.");
             hint.getStyle().set("text-align", "center").set("display", "block").set("padding", "8px 0");
             selectionListCol.add(hint);
             return;
         }
-
-        for (int[] seat : mineSeats) {
-            String rowLabel = String.valueOf((char) ('A' + seat[0]));
-            int seatNum = seat[1] + 1;
-            selectionListCol.add(selectedSeatRow(rowLabel, seatNum, seat[0], seat[1]));
+        for (String label : labels) {
+            selectionListCol.add(selectedSeatRow(label));
         }
-
         selectionListCol.add(Lk.divider());
 
-        int totalCents = mineSeats.size() * SEAT_PRICE_CENTS;
+        double total = labels.size() * zonePrice;
         LkRow totalRow = new LkRow().justify("space-between");
-        totalRow.add(Lk.muted(mineSeats.size() + " seat" + (mineSeats.size() == 1 ? "" : "s")));
+        totalRow.add(Lk.muted(labels.size() + " seat" + (labels.size() == 1 ? "" : "s")));
         Span totalDisplay = new Span();
-        totalDisplay.getElement().setProperty("innerHTML",
-            "<b style='font-size:16px'>" + formatPrice(totalCents) + "</b>");
+        totalDisplay.getElement().setProperty("innerHTML", "<b style='font-size:16px'>" + money(total) + "</b>");
         totalRow.add(totalDisplay);
         selectionListCol.add(totalRow);
 
-        LkBtn addBtn = new LkBtn("Add to cart →")
-            .variant(LkBtn.Variant.primary)
-            .size(LkBtn.Size.l)
-            .full()
-            .onClick(e -> addSelectionToCart(mineSeats));
-        selectionListCol.add(addBtn);
+        selectionListCol.add(new LkBtn("Add to cart →")
+            .variant(LkBtn.Variant.primary).size(LkBtn.Size.l).full()
+            .onClick(e -> reserveSeated()));
     }
 
-    private Component selectedSeatRow(String rowLabel, int seatNum, int rIdx, int cIdx) {
+    private Component selectedSeatRow(String label) {
         Div row = new Div();
         row.addClassName("vz-selseat");
-
         Div info = new Div();
         Span name = new Span();
-        name.getElement().setProperty("innerHTML", "<b>Row " + rowLabel + " · Seat " + seatNum + "</b>");
-        Span subline = Lk.muted("Lower L · " + formatPrice(SEAT_PRICE_CENTS));
+        name.getElement().setProperty("innerHTML", "<b>Seat " + escape(label) + "</b>");
+        Span subline = Lk.muted(zone.getName() + " · " + money(zonePrice));
         subline.getStyle().set("font-size", "12.5px").set("display", "block");
         info.add(name, subline);
 
         Span remove = new Span();
         remove.addClassName("vz-selseat-x");
         remove.add(new LkIcon("close", 15));
-        remove.getElement().addEventListener("click", e -> {
-            seatStates[rIdx][cIdx] = '.';
-            renderSeatGrid();
-            updateSelectionRail();
-        });
-
+        remove.getElement().addEventListener("click", e -> seatPicker.deselect(label));
         row.add(info, remove);
         return row;
     }
 
-    private void addSelectionToCart(List<int[]> mineSeats) {
-        List<String> seatIds = new ArrayList<>();
-        for (int[] seat : mineSeats) {
-            String rowLabel = String.valueOf((char) ('A' + seat[0]));
-            int seatNum = seat[1] + 1;
-            seatIds.add("Row " + rowLabel + " Seat " + seatNum);
-            seatStates[seat[0]][seat[1]] = '.';
+    private void reserveSeated() {
+        InventorySelectionDTO selection = seatPicker.getSelection();
+        if (selection == null) {
+            return;
         }
+        int count = selection.getSeatNumbers().size();
         try {
-            InventorySelectionDTO selection = InventorySelectionDTO.seated(seatIds);
             callReserveService(selection);
-            renderSeatGrid();
-            updateSelectionRail();
-            Toasts.success(mineSeats.size() + " seat" + (mineSeats.size() == 1 ? "" : "s") + " reserved — continue to cart.");
+            seatPicker.clearSelection();
+            Toasts.success(count + " seat" + (count == 1 ? "" : "s") + " reserved — continue to cart.");
             UI.getCurrent().navigate(CartView.class);
         } catch (Exception ex) {
             Toasts.failure("Could not reserve seats: " + ex.getMessage());
         }
     }
 
-    private List<int[]> collectMine() {
-        List<int[]> mine = new ArrayList<>();
-        for (int r = 0; r < seatStates.length; r++) {
-            for (int c = 0; c < seatStates[r].length; c++) {
-                if (seatStates[r][c] == 'm') mine.add(new int[]{r, c});
-            }
-        }
-        return mine;
+    private Component buildStandingPicker() {
+        Div wrap = new Div();
+        wrap.add(buildBreadcrumb(zone.getName() + " · standing"));
+
+        LkCard card = new LkCard("General Admission · standing").pad(18);
+        LkCol col = new LkCol().gap(16);
+        col.add(new VkStandingZone(zone.getName(), zone.getSoldAmount(), zone.getCapacity(),
+                money(zonePrice) + " each"));
+
+        qtySelector = new VkQuantitySelector(
+                Math.max(0, zone.getAvailableAmount()),
+                (int) Math.round(zonePrice * 100),
+                this::updateHoldButton);
+        col.add(qtySelector);
+        col.add(Lk.divider());
+
+        holdButton = new LkBtn("Hold tickets →").variant(LkBtn.Variant.primary).full()
+                .onClick(e -> reserveStanding());
+        col.add(holdButton);
+        updateHoldButton();
+
+        card.add(col);
+        wrap.add(card);
+        return wrap;
     }
 
-    // ---------- "How locking works" card ----------
+    private void updateHoldButton() {
+        if (holdButton == null) {
+            return;
+        }
+        int q = qtySelector.getQuantity();
+        holdButton.setEnabled(qtySelector.hasSelection());
+        holdButton.setText(qtySelector.hasSelection()
+                ? "Hold " + q + " ticket" + (q == 1 ? "" : "s") + " →"
+                : "Sold out");
+    }
+
+    private void reserveStanding() {
+        InventorySelectionDTO selection = qtySelector.getSelection();
+        if (selection == null) {
+            Toasts.failure("No tickets available.");
+            return;
+        }
+        int q = qtySelector.getQuantity();
+        try {
+            callReserveService(selection);
+            Toasts.success(q + " ticket" + (q == 1 ? "" : "s") + " reserved — continue to cart.");
+            UI.getCurrent().navigate(CartView.class);
+        } catch (Exception ex) {
+            Toasts.failure("Could not reserve tickets: " + ex.getMessage());
+        }
+    }
+
+    private Component buildBreadcrumb(String trailText) {
+        Div crumb = new Div();
+        crumb.addClassName("vz-crumb");
+        Span back = new Span("← Back to areas");
+        back.addClassName("bz-link");
+        back.getElement().addEventListener("click", e -> UI.getCurrent().navigate("events/" + eventId));
+        Span trail = Lk.muted(" / " + trailText + " · " + money(zonePrice));
+        trail.getStyle().set("font-size", "13px");
+        crumb.add(back, trail);
+        return crumb;
+    }
 
     private Component buildLockingExplainerCard() {
         LkCard card = new LkCard("How locking works").pad(16);
         LkCol col = new LkCol().gap(9);
         col.add(lockLegendRow("mine", "<b>In your order</b> — held for you for 10 minutes."));
-        col.add(lockLegendRow("held", "<b>Locked by others</b> — another buyer is mid-purchase. Updates live."));
+        col.add(lockLegendRow("held", "<b>Locked by others</b> — another buyer is mid-purchase."));
         col.add(lockLegendRow("sold", "<b>Sold</b> — already purchased."));
-        Span finePrint = Lk.muted("Two buyers can never hold the same seat — first tap wins (optimistic lock).");
-        finePrint.getStyle().set("font-size", "12px").set("margin-top", "2px").set("display", "block");
-        col.add(finePrint);
+        Span fine = Lk.muted("Two buyers can never hold the same seat — first tap wins.");
+        fine.getStyle().set("font-size", "12px").set("margin-top", "2px").set("display", "block");
+        col.add(fine);
         card.add(col);
         return card;
     }
@@ -366,75 +356,17 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         return row;
     }
 
-    // ---------- standing zone + states reference ----------
-
-    private Component buildStandingSplit() {
-        Div split = new Div();
-        split.addClassName("vz-split2");
-        split.add(buildStandingCard(), buildStatesReferenceCard());
-        return split;
-    }
-
-    private Component buildStandingCard() {
-        LkCard card = new LkCard("General Admission · standing").pad(18);
-        LkCol col = new LkCol().gap(16);
-        col.add(new VkStandingZone("GA Floor", 7600, 9000, "$90 each"));
-
-        LkRow qtyRow = new LkRow().gap(14).align("flex-end");
-        LkStepper stepper = new LkStepper("2").label("Quantity").width("160px");
-        Span policy = Lk.muted("Max 4 per buyer (policy)");
-        policy.getStyle().set("font-size", "13px");
-        qtyRow.add(stepper, policy);
-        col.add(qtyRow);
-
-        col.add(Lk.divider());
-
-        LkRow priceRow = new LkRow().justify("space-between");
-        priceRow.add(Lk.muted("2 × $90"));
-        Span priceTotal = new Span();
-        priceTotal.getElement().setProperty("innerHTML", "<b style='font-size:16px'>$180.00</b>");
-        priceRow.add(priceTotal);
-        col.add(priceRow);
-
-        LkBtn hold = new LkBtn("Hold 2 tickets →")
-            .variant(LkBtn.Variant.primary)
-            .full()
-            .onClick(e -> {
-                try {
-                    InventorySelectionDTO selection = InventorySelectionDTO.standing(2);
-                    callReserveService(selection);
-                    Toasts.success("2 GA tickets reserved — continue to cart.");
-                    UI.getCurrent().navigate(CartView.class);
-                } catch (Exception ex) {
-                    Toasts.failure("Could not reserve tickets: " + ex.getMessage());
-                }
-            });
-        col.add(hold);
-
-        card.add(col);
-        return card;
-    }
-
     private Component buildStatesReferenceCard() {
         LkCard card = new LkCard("Race-condition states")
             .subtitle("What the seat colours mean under load")
             .pad(18);
-
         Div grid = new Div();
         grid.addClassName("vz-state-grid");
         grid.add(stateCell(VkSeat.State.free, "", "Available", "Tap to hold"));
-        grid.add(stateCell(VkSeat.State.mine, "14", "In your order", "Locked 10 min"));
-        grid.add(stateCell(VkSeat.State.held, "14", "Locked by others", "Live update"));
-        grid.add(stateCell(VkSeat.State.sold, "14", "Sold", "Unavailable"));
+        grid.add(stateCell(VkSeat.State.mine, "12", "In your order", "Locked 10 min"));
+        grid.add(stateCell(VkSeat.State.held, "12", "Locked by others", "Live update"));
+        grid.add(stateCell(VkSeat.State.sold, "12", "Sold", "Unavailable"));
         card.add(grid);
-
-        LkBanner info = new LkBanner();
-        info.tone(LkBanner.Tone.info);
-        info.setIcon(new LkIcon("info", 18));
-        info.setBody(new Span(
-            "On a sold-out event the system flips to a virtual queue; buyers get a waiting-room position before reaching this screen."));
-        card.add(info);
-
         return card;
     }
 
@@ -453,14 +385,54 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
     }
 
     private void callReserveService(InventorySelectionDTO selection) {
-    if (identity.isMember()) {
-        reservationService.reserveForMember(identity.memberToken(), eventId, zoneId, selection);
-    } else {
-        reservationService.reserveForGuest(identity.guestSessionId(), eventId, zoneId, selection);
+        if (identity.isMember()) {
+            reservationService.reserveForMember(identity.memberToken(), eventId, zoneId, selection);
+        } else {
+            reservationService.reserveForGuest(identity.guestSessionId(), eventId, zoneId, selection);
+        }
     }
-}
 
-    private static String formatPrice(int cents) {
-        return "$" + (cents / 100) + "." + String.format("%02d", cents % 100);
+    private Component infoBanner(String message) {
+        LkBanner banner = new LkBanner();
+        banner.tone(LkBanner.Tone.info);
+        banner.setIcon(new LkIcon("info", 18));
+        banner.setBody(new Span(message));
+        return banner;
+    }
+
+    private static String rowOf(String label) {
+        int i = 0;
+        while (i < label.length() && !Character.isDigit(label.charAt(i))) {
+            i++;
+        }
+        return i > 0 ? label.substring(0, i) : label;
+    }
+
+    private static int seatNumber(String label) {
+        int i = 0;
+        while (i < label.length() && !Character.isDigit(label.charAt(i))) {
+            i++;
+        }
+        try {
+            return Integer.parseInt(label.substring(i));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private static int parseId(String s) {
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private static String money(double v) {
+        return String.format(java.util.Locale.US, "$%,.2f", v);
+    }
+
+    private static String escape(String s) {
+        return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }

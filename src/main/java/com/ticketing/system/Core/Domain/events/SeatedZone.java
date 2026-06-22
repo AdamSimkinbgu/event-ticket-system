@@ -142,6 +142,7 @@ public class SeatedZone extends InventoryZone {
             for (String label : sorted) {
                 seats.get(label).markReservedBy(orderKey, reservedUntil);
             }
+            checkInvariants();
         } finally {
             for (ReentrantLock lock : acquired) {
                 lock.unlock();
@@ -151,7 +152,7 @@ public class SeatedZone extends InventoryZone {
 
         return true;
     }
-    
+
 
     /**
      * Release the given seats back to AVAILABLE. Same locking discipline as
@@ -200,6 +201,7 @@ public class SeatedZone extends InventoryZone {
                 seat.clearReservation();
                 seat.setStatus(SeatStatus.AVAILABLE);
             }
+            checkInvariants();
         } finally {
             for (ReentrantLock lock : acquired) {
                 lock.unlock();
@@ -258,6 +260,7 @@ public class SeatedZone extends InventoryZone {
                 seat.clearReservation();
                 seat.setStatus(SeatStatus.SOLD);
             }
+            checkInvariants();
         } finally {
             for (ReentrantLock lock : acquired) {
                 lock.unlock();
@@ -341,6 +344,7 @@ public class SeatedZone extends InventoryZone {
                 seats.put(seat.getLabel(), seat);
                 seatLocks.put(seat.getLabel(), new ReentrantLock());
             }
+            checkInvariants();
         } finally {
             layoutLock.writeLock().unlock();
         }
@@ -371,6 +375,7 @@ public class SeatedZone extends InventoryZone {
                 seats.remove(label);
                 seatLocks.remove(label);
             }
+            checkInvariants();
         } finally {
             layoutLock.writeLock().unlock();
         }

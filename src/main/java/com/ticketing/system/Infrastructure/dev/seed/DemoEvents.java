@@ -225,7 +225,7 @@ public final class DemoEvents {
             null, new Location("Israel", city), List.of(show), policy));
 
         eventService.configureVenueMap(token, company.companyId(),
-            new VenueMapConfigDTO(created.eventId(), city + " venue", zones));
+            new VenueMapConfigDTO(created.eventId(), city + " venue", 3, 3, zones));
 
         // configureVenueMap binds inventory and auto-advances DRAFT -> SCHEDULED,
         // so the event can now go ON_SALE through the legitimate domain transition.
@@ -253,11 +253,11 @@ public final class DemoEvents {
                 seats.add(new SeatConfigDTO(rowLetter + "-" + (c + 1), c * 60.0, r * 60.0));
             }
         }
-        return new ZoneConfigDTO(name, true, null, seats, price);
+        return new ZoneConfigDTO(name, true, null, seats, price, null);
     }
 
     private ZoneConfigDTO standingZone(String name, int capacity, double price) {
-        return new ZoneConfigDTO(name, false, capacity, null, price);
+        return new ZoneConfigDTO(name, false, capacity, null, price, null);
     }
 
     private static PurchasePolicyDTO nonePolicy() {

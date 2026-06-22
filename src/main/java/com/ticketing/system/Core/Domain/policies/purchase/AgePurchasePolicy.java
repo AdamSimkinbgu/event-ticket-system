@@ -27,7 +27,9 @@ public class AgePurchasePolicy implements PurchasePolicy, InvariantChecked {
         Integer buyerAge = context.getBuyerAge();
 
         if (buyerAge == null) {
-            return false;
+            // Age unknown (e.g. a guest at reserve time) — defer the check to checkout,
+            // where the age is collected; an unknown age at checkout still fails.
+            return context.getStage() == PurchaseStage.RESERVE;
         }
 
         return buyerAge >= minimumAge;

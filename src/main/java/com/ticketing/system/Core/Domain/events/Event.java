@@ -9,6 +9,7 @@ import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionExcepti
 
 import lombok.extern.slf4j.Slf4j;
 
+import com.ticketing.system.Core.Domain.policies.purchase.AndPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchaseContext;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
@@ -534,6 +535,25 @@ public class Event implements InvariantChecked {
         }
     }
 
+    /**
+     * Validate the effective purchase policy — the supplied company policy AND this
+     * event's policy, composed into one {@link AndPurchasePolicy} structure. Both must
+     * hold; the composite's merged failure message is thrown on rejection.
+     */
+    public void validateEffectivePolicy(PurchasePolicy companyPolicy, PurchaseContext context) {
+        if (context == null) {
+            throw new IllegalArgumentException("Purchase context cannot be null");
+        }
+        if (purchasePolicy == null) {
+            purchasePolicy = new NoPurchasePolicy();
+        }
+        PurchasePolicy company = companyPolicy == null ? new NoPurchasePolicy() : companyPolicy;
+        PurchasePolicy effective = new AndPurchasePolicy(company, purchasePolicy);
+        if (!effective.isSatisfiedBy(context)) {
+            throw new IllegalStateException(effective.getFailureMessage());
+        }
+    }
+
 
 
 
@@ -581,6 +601,12 @@ public class Event implements InvariantChecked {
         // venueMap may be null in DRAFT state (UC-19) before UC-20 binds it — don't enforce non-null.
         // If present, the VenueMap's own invariants apply (cascade-check when implemented).
     }
+
+
+
+
+
+
 
 
 

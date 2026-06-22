@@ -153,9 +153,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
             new LkMenu.Divider()
         );
 
-        // Conditional: owner workspace vs. become-an-organizer CTA.
-        // Capability-driven so swapping MockCompanies for a real service later is a
-        // one-file change in Capabilities, not 30 view edits.
+        // Capability-driven owner workspace vs become-an-organizer CTA.
         if (Capabilities.has(Capability.OWNER_WORKSPACE)) {
             menu.add(new LkMenu.Item("building", "Workspace")
                 .onClick(() -> UI.getCurrent().navigate(OwnerDashboardView.class)));

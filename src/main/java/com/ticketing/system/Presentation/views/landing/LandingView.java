@@ -1,11 +1,14 @@
 package com.ticketing.system.Presentation.views.landing;
 
+import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
+import com.ticketing.system.Core.Application.dto.ShowDateDTO;
 import com.ticketing.system.Presentation.components.buyer.BzPoster;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.presenters.landing.LandingPresenter;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -14,6 +17,13 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 
 /**
  * Site root — marketing landing. Hero CTA → Browse, category quick
@@ -25,14 +35,103 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 @AnonymousAllowed
 public class LandingView extends LkPage {
 
-    public LandingView() {
+    private static final DateTimeFormatter DATE_FMT =
+        DateTimeFormatter.ofPattern("d MMM · HH:mm", Locale.ENGLISH);
+
+    private final LandingPresenter presenter;
+
+    public LandingView(LandingPresenter presenter) {
+        this.presenter = presenter;
+
         add(buildHero());
         add(Lk.h2("Browse by category"));
         add(buildCategoryGrid());
-        add(Lk.h2("Featured this week"));
-        add(buildFeaturedPosters());
+        renderCatalogRows();
         add(Lk.h2("Why TicketHub"));
         add(buildFeatures());
+    }
+
+    // ---- data-backed catalog rows (V2-LANDING-01) ----
+
+    /** Renders the Featured + "On sale soon" rows from the presenter's outcome. */
+    private void renderCatalogRows() {
+        switch (presenter.load()) {
+            case LandingPresenter.Outcome.Success ok -> {
+                add(Lk.h2("Featured this week"));
+                add(ok.featured().isEmpty() ? emptyFeatured() : posterRow(ok.featured()));
+                // "On sale soon" is a teaser — show it only when there's something coming up.
+                if (!ok.upcoming().isEmpty()) {
+                    add(Lk.h2("On sale soon"));
+                    add(posterRow(ok.upcoming()));
+                }
+            }
+            // The public root degrades gracefully — an empty state, not an error banner.
+            case LandingPresenter.Outcome.Failure ignored -> {
+                add(Lk.h2("Featured this week"));
+                add(emptyFeatured());
+            }
+        }
+    }
+
+    private Component posterRow(List<EventSummaryDTO> events) {
+        Div grid = new Div();
+        grid.addClassName("bz-poster-grid");
+        events.forEach(e -> grid.add(poster(e)));
+        return grid;
+    }
+
+    private BzPoster poster(EventSummaryDTO e) {
+        return new BzPoster(posterCategory(e.category()), e.name(), meta(e), priceLabel(e))
+            .onClick(() -> UI.getCurrent().navigate("events/" + e.eventId()));
+    }
+
+    private Component emptyFeatured() {
+        Span empty = new Span("No featured events right now — check back soon.");
+        empty.getStyle()
+            .set("display", "block").set("padding", "32px").set("text-align", "center")
+            .set("color", "var(--muted)").set("background", "#fff")
+            .set("border", "1px dashed var(--border-strong)").set("border-radius", "12px");
+        return empty;
+    }
+
+    // ---- poster field mapping ----
+
+    /** Map the domain {@link com.ticketing.system.Core.Domain.events.EventCategory} name to a
+     *  BzPoster category key (drives its gradient + chip label). */
+    private static String posterCategory(String category) {
+        return switch (category == null ? "" : category.toUpperCase(Locale.ROOT)) {
+            case "MUSIC", "CONCERT", "FESTIVAL" -> "Concert";
+            case "SPORTS" -> "Sport";
+            case "THEATER", "COMEDY" -> "Theatre";
+            default -> humanize(category);
+        };
+    }
+
+    private static String humanize(String name) {
+        if (name == null || name.isBlank()) {
+            return "Event";
+        }
+        String lower = name.toLowerCase(Locale.ROOT);
+        return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
+    }
+
+    /** "Location · 26 Jun · 20:00" — location plus the earliest show date when present. */
+    private static String meta(EventSummaryDTO e) {
+        String location = e.location() == null ? "" : e.location();
+        LocalDateTime first = e.showDates() == null ? null : e.showDates().stream()
+            .map(ShowDateDTO::startsAt)
+            .filter(Objects::nonNull)
+            .min(Comparator.naturalOrder())
+            .orElse(null);
+        if (first == null) {
+            return location;
+        }
+        String when = DATE_FMT.format(first);
+        return location.isBlank() ? when : location + " · " + when;
+    }
+
+    private static String priceLabel(EventSummaryDTO e) {
+        return e.minPrice() > 0 ? "From $" + (long) e.minPrice() : "—";
     }
 
     // ---- hero ----
@@ -127,24 +226,6 @@ public class LandingView extends LkPage {
         card.getElement().addEventListener("click", e ->
             UI.getCurrent().navigate("browse?category=" + name));
         return card;
-    }
-
-    // ---- featured posters ----
-
-    private Component buildFeaturedPosters() {
-        Div grid = new Div();
-        grid.addClassName("bz-poster-grid");
-        grid.add(
-            new BzPoster("Concert",    "Coldplay Live in Tel Aviv",   "Park HaYarkon · 26 Jun · 20:00",  "From $250")
-                .onClick(() -> UI.getCurrent().navigate("events/coldplay")),
-            new BzPoster("Sport",      "Hapoel TLV vs Maccabi Haifa", "Bloomfield · 28 Jun · 21:00",     "From $80")
-                .onClick(() -> UI.getCurrent().navigate("events/hapoel-tlv")),
-            new BzPoster("Theatre",    "Othello at Habima",           "Habima Theatre · 30 Jun",         "From $120")
-                .onClick(() -> UI.getCurrent().navigate("events/othello")),
-            new BzPoster("Conference", "Spring AI Conference 2026",   "David InterContinental · 12 Jul", "From $400")
-                .onClick(() -> UI.getCurrent().navigate("events/spring-ai-2026"))
-        );
-        return grid;
     }
 
     // ---- "Why TicketHub" features ----

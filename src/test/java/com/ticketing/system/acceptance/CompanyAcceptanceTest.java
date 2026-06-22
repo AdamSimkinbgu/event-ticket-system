@@ -1,9 +1,12 @@
 package com.ticketing.system.acceptance;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,6 +32,7 @@ import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.dto.LocationDTO;
 import com.ticketing.system.Core.Application.dto.ShowDateDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
+import com.ticketing.system.Core.Application.dto.ZoneDetailDTO;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
@@ -40,7 +44,11 @@ import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.Location;
+import com.ticketing.system.Core.Domain.events.Seat;
+import com.ticketing.system.Core.Domain.events.SeatedZone;
 import com.ticketing.system.Core.Domain.events.ShowDate;
+import com.ticketing.system.Core.Domain.events.StandingZone;
+import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 
 import com.ticketing.system.Core.Domain.users.IUserRepository;
@@ -128,8 +136,9 @@ class CompanyAcceptanceTest {
                 eventManagementService.configureVenueMap(owner.token(), companyId, new VenueMapConfigDTO(
                                 event.eventId(),
                                 "Test Venue",
+                                3, 3,
                                 List.of(new VenueMapConfigDTO.ZoneConfigDTO("Standing Zone A", false, 100, null,
-                                                50.0))));
+                                                50.0, null))));
 
                 Event storedEvent = eventRepository.findById(Integer.parseInt(event.eventId()));
 
@@ -310,7 +319,8 @@ class CompanyAcceptanceTest {
                                 List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(4))),
                                 null));
 
-                EventDetailDTO result = eventManagementService.getEventDetail(owner.token(), created.eventId());
+                EventDetailDTO result = eventManagementService.getEventDetail(owner.token(),
+                                Integer.parseInt(created.eventId()));
 
                 assertEquals(created.eventId(), result.eventId());
                 assertEquals("Summer Festival", result.name());
@@ -339,7 +349,8 @@ class CompanyAcceptanceTest {
                                 List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
                                 null));
 
-                EventDetailDTO result = eventManagementService.getEventDetail(manager.token(), created.eventId());
+                EventDetailDTO result = eventManagementService.getEventDetail(manager.token(),
+                                Integer.parseInt(created.eventId()));
 
                 assertEquals(created.eventId(), result.eventId());
                 assertEquals("Manager View Event", result.name());
@@ -360,7 +371,8 @@ class CompanyAcceptanceTest {
                                 null));
 
                 assertThrows(RuntimeException.class,
-                                () -> eventManagementService.getEventDetail(outsider.token(), created.eventId()));
+                                () -> eventManagementService.getEventDetail(outsider.token(),
+                                                Integer.parseInt(created.eventId())));
         }
 
         // -------------------------------------------------------------------------
@@ -471,7 +483,8 @@ class CompanyAcceptanceTest {
                                 new LocationDTO("France", "Paris"),
                                 List.of(new ShowDateDTO(newStart, newStart.plusHours(2)))));
 
-                EventDetailDTO result = eventManagementService.getEventDetail(owner.token(), created.eventId());
+                EventDetailDTO result = eventManagementService.getEventDetail(owner.token(),
+                                Integer.parseInt(created.eventId()));
                 assertEquals("Full Edit Renamed", result.name());
                 assertEquals("updated desc", result.description());
                 assertEquals(EventCategory.THEATER, result.category());

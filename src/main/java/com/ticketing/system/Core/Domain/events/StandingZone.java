@@ -87,6 +87,7 @@ public class StandingZone extends InventoryZone {
             }
 
             reservedByOrderKey.merge(key, quantity, Integer::sum);
+            checkInvariants();
             return true;
         }
     }
@@ -114,6 +115,7 @@ public class StandingZone extends InventoryZone {
             } else {
                 reservedByOrderKey.put(key, currentlyReserved - quantity);
             }
+            checkInvariants();
             return true;
         }
     }
@@ -142,6 +144,7 @@ public class StandingZone extends InventoryZone {
                 reservedByOrderKey.put(key, currentlyReserved - quantity);
             }
             soldAmount += quantity;
+            checkInvariants();
             return true;
         }
     }
@@ -173,6 +176,7 @@ public class StandingZone extends InventoryZone {
         synchronized (inventoryLock) {
             validatePositiveQuantity(amountToAdd);
             this.capacity += amountToAdd;
+            checkInvariants();
         }
     }
 
@@ -190,6 +194,7 @@ public class StandingZone extends InventoryZone {
             }
 
             this.capacity -= amountToRemove;
+            checkInvariants();
         }
     }
 

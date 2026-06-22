@@ -20,6 +20,12 @@ import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
+import com.ticketing.system.Core.Domain.company.ProductionCompany;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
+import com.ticketing.system.Core.Domain.users.User;
+import com.ticketing.system.Core.Domain.policies.purchase.PurchaseContext;
+import com.ticketing.system.Core.Domain.policies.purchase.PurchaseStage;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 
 
@@ -30,6 +36,8 @@ public class ReservationService {
     private final IActiveOrderRepository activeOrderRepository;
     private final ISessionManager iSessionManager;
     private final INotificationService notificationService;
+    private final IProductionCompanyRepository companyRepository;
+    private final IUserRepository userRepository;
 
     @Value("${constants.ticket-reservation-duration}")
     private int reservationTimeoutMinutes;
@@ -38,12 +46,15 @@ public class ReservationService {
             IEventRepository eventRepository,
             IActiveOrderRepository activeOrderRepository,
             ISessionManager iSessionManager,
-            INotificationService notificationService) {
+            INotificationService notificationService,
+            IProductionCompanyRepository companyRepository,
+            IUserRepository userRepository) {
         this.eventRepository = eventRepository;
         this.activeOrderRepository = activeOrderRepository;
         this.iSessionManager = iSessionManager;
         this.notificationService = notificationService;
-
+        this.companyRepository = companyRepository;
+        this.userRepository = userRepository;
     }
 
     // ---------------------------------------------------------------------
@@ -118,6 +129,11 @@ public class ReservationService {
                         eventId, zoneId, buyer.isMember() ? buyer.userId() : null, buyer.isMember() ? null : buyer.sessionId());
                 throw new IllegalStateException("Cannot modify active order during checkout");
             }
+
+            // Effective purchase policy (company AND event) at the RESERVE stage: max + (member)
+            // age are enforced; minimum and unknown (guest) age are deferred to checkout. Quantity
+            // is the buyer's cart total for this event after this add, so MAX caps the whole order.
+            validateReservePurchasePolicy(buyer, event, selection, activeOrder);
 
             double pricePerTicket = zone.getprice();
 
@@ -400,6 +416,33 @@ public class ReservationService {
     }
 
     // Validation of the main input arguments for both reserve and remove flows. This method is called at the beginning of both flows to ensure that the input is valid before we do any work. This helps us fail fast on invalid input and avoid doing unnecessary work or creating entities that we will not use if the input is invalid. It also ensures that we do not attempt to reserve or remove inventory for an event or zone that does not exist, which keeps our data consistent and avoids having active orders that reflect reservations or removals for events or zones that do not actually exist.
+    private void validateReservePurchasePolicy(BuyerContextDTO buyer, Event event,
+            InventorySelection selection, ActiveOrder activeOrder) {
+        int eventId = event.getId();
+        var existingItems = activeOrder.getItems();
+        long existingForEvent = existingItems == null ? 0L
+                : existingItems.stream().filter(item -> item.geteventId() == eventId).count();
+        int totalQuantity = (int) existingForEvent + selection.getQuantity();
+
+        Integer buyerAge = buyer.isMember() ? resolveMemberAge(buyer.userId()) : null;
+        int buyerId = buyer.isMember() ? buyer.userId() : -1;
+
+        PurchaseContext context = new PurchaseContext(
+                buyerId, buyerAge, eventId, event.getCompanyId(), totalQuantity, PurchaseStage.RESERVE);
+
+        ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
+        event.validateEffectivePolicy(company == null ? null : company.getPurchasePolicy(), context);
+    }
+
+    private Integer resolveMemberAge(int userId) {
+        try {
+            User user = userRepository.getUserById(userId);
+            return user == null ? null : user.getAge();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
     private void validateReservationArguments(int eventId, int zoneId, InventorySelection selection) {
         if (eventId <= 0) {
             throw new IllegalArgumentException("eventId must be positive");
