@@ -1,4 +1,5 @@
 package com.ticketing.system.Presentation.views.order;
+
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
@@ -11,8 +12,6 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.order.CheckoutPresenter;
-import com.ticketing.system.Presentation.session.AuthSession;
-import com.ticketing.system.Presentation.session.GuestSession;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
@@ -30,13 +29,6 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
-/**
- * Checkout view — wired through {@link CheckoutPresenter} (MVP + Outcome).
- *
- * The view reads identity from session/UI helpers and paints outcomes; all
- * service calls, pricing, and the order-expiry subscription live in the
- * presenter. The view imports nothing from {@code Core} and holds no try/catch.
- */
 @Route(value = "checkout", layout = MainLayout.class)
 @PageTitle("Checkout · TicketHub")
 @AnonymousAllowed
@@ -73,7 +65,6 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     private Span  timerSpan;
     private LkBtn editCartBtn;
 
-    /** Vaadin-free expiry callback; the presenter invokes it, the view repaints. */
     private final CheckoutPresenter.ExpiryListener expiryListener =
         new CheckoutPresenter.ExpiryListener() {
             @Override
@@ -129,26 +120,13 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     }
 
     private void resolveIdentity() {
-        String token = AuthSession.token();
-        CheckoutPresenter.Identity id = presenter.resolveIdentity(token);
-        if (id.member()) {
-            this.memberToken    = token;
-            this.sessionId      = null;
-            this.isMember       = true;
-            this.resolvedUserId = id.userId() != null ? id.userId() : 0;
-        } else {
-            this.memberToken    = null;
-            this.sessionId      = resolveGuestSessionId();
-            this.isMember       = false;
-            this.resolvedUserId = 0;
-        }
+        CheckoutPresenter.Identity id = presenter.resolveIdentity();
+        this.isMember       = id.member();
+        this.memberToken    = id.memberToken();
+        this.sessionId      = id.guestSessionId();
+        this.resolvedUserId = id.userId();
     }
 
-  private String resolveGuestSessionId() {
-    return GuestSession.sessionId();
-}
-
-    /** Reload order + pricing into view state; returns the outcome for the caller to message on. */
     private CheckoutPresenter.LoadOutcome reload() {
         CheckoutPresenter.LoadOutcome outcome = presenter.loadOrder(memberToken, sessionId);
         switch (outcome) {
@@ -274,7 +252,6 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
         Div foot = new Div();
         foot.addClassName("bz-order-foot");
 
-        // Coupon is captured but not applied (no coupon backend yet) — left inline on purpose.
         coupon.setPlaceholder("Coupon code");
         coupon.getStyle().set("flex", "1 1 auto");
         LkBtn apply = new LkBtn("Apply")
@@ -405,7 +382,6 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     }
 
     private void attemptPay() {
-        // (a) instant, backend-free checks stay in the view
         if (totalCents == 0L) {
             Toasts.failure("Your cart is empty.");
             return;
@@ -427,7 +403,6 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             }
         }
 
-        // (b) re-check the reservation; distinct messages for expiry vs. load failure
         CheckoutPresenter.LoadOutcome reloaded = reload();
         syncDynamicUI();
         switch (reloaded) {
@@ -446,7 +421,6 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             }
         }
 
-        // (c) guard against double submission, then charge — no try/catch here
         if (paymentInProgress) {
             return;
         }
@@ -464,7 +438,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                         + formatCents(CheckoutPresenter.toCents(ok.result().totalCharged()))
                         + " charged.");
                 UI.getCurrent().navigate("order/" + ok.result().orderReceiptId());
-                return;   // navigating away — keep the button locked
+                return;
             }
             case CheckoutPresenter.PayOutcome.PaymentDeclined d ->
                 Toasts.failure("Payment declined: " + d.reason());
@@ -476,7 +450,6 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
                 Toasts.failure("Payment could not be completed. Please try again or contact support.");
         }
 
-        // reached only on a non-success outcome — allow another attempt
         paymentInProgress = false;
         payButton.getElement().setEnabled(totalCents > 0);
     }

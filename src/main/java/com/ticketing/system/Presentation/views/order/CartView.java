@@ -1,6 +1,5 @@
 package com.ticketing.system.Presentation.views.order;
 
-import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Presentation.components.Money;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
@@ -13,18 +12,13 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.order.CartPresenter;
-import com.ticketing.system.Presentation.session.AuthSession;
-import com.ticketing.system.Presentation.session.GuestSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.NativeButton;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
-import com.ticketing.system.Presentation.session.GuestSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
-
 
 @Route(value = "cart", layout = MainLayout.class)
 @PageTitle("Cart · TicketHub")
@@ -32,8 +26,7 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 public class CartView extends LkPage {
 
     private final CartPresenter presenter;
-    private final String credential;
-    private ActiveOrderDTO activeOrder;
+    private CartPresenter.CartVM activeOrder;
     private long subtotalCents;
 
     private LkCol linesCol;
@@ -42,35 +35,24 @@ public class CartView extends LkPage {
 
     public CartView(CartPresenter presenter) {
         this.presenter = presenter;
-        this.credential = resolveCredential();
 
-        switch (presenter.loadCart(credential)) {
+        switch (presenter.loadCart()) {
             case CartPresenter.LoadOutcome.Shown s -> {
-                this.activeOrder   = s.order();
+                this.activeOrder   = s.cart();
                 this.subtotalCents = s.subtotalCents();
             }
-            case CartPresenter.LoadOutcome.Empty e -> clearCart();
+            case CartPresenter.LoadOutcome.Empty e             -> clearCart();
             case CartPresenter.LoadOutcome.NotAuthenticated na -> clearCart();
             case CartPresenter.LoadOutcome.Failure f -> {
                 clearCart();
                 Toasts.failure("Could not load your cart: " + f.reason());
             }
-        }   // no default — a new variant forces an update here
+        }
 
         title("Your cart");
         renderHeaderSubtitle();
         add(buildSplit());
     }
-
-    /** Member token if signed in, otherwise the guest session id (same key SeatPicker/Checkout use). */
-    private String resolveCredential() {
-        String token = AuthSession.token();
-        return token != null ? token : guestSessionId();
-    }
-
-   private String guestSessionId() {
-    return GuestSession.sessionId();
-}
 
     private void clearCart() {
         this.activeOrder   = null;
@@ -97,13 +79,13 @@ public class CartView extends LkPage {
             linesCol.add(buildEmptyState());
         } else {
             linesCol.add(buildCountdownBanner(activeOrder.remainingSecondsBeforeExpiry()));
-            for (ActiveOrderDTO.CartLineDTO line : activeOrder.lines()) {
-                linesCol.add(cartLineFromDTO(line));
+            for (CartPresenter.CartVM.LineVM line : activeOrder.lines()) {
+                linesCol.add(cartLineFromVM(line));
             }
         }
     }
 
-    private Component cartLineFromDTO(ActiveOrderDTO.CartLineDTO line) {
+    private Component cartLineFromVM(CartPresenter.CartVM.LineVM line) {
         Div lineDiv = new Div();
         lineDiv.addClassName("bz-cartline");
 
@@ -117,25 +99,24 @@ public class CartView extends LkPage {
         seatLine.getStyle().set("font-size", "13.5px");
         info.add(titleSpan, seatLine);
 
-        NativeButton removeBtn = new NativeButton("Remove");
-        removeBtn.addClassName("bz-link");
-        removeBtn.getStyle()
-            .set("background", "none").set("border", "none").set("padding", "0").set("cursor", "pointer");
-
-        removeBtn.addClickListener(e -> {
-            switch (presenter.removeLine(credential, line)) {
-                case CartPresenter.RemoveOutcome.Removed r -> {
-                    this.activeOrder   = r.order();
-                    this.subtotalCents = r.subtotalCents();
-                    populateLines();
-                    renderHeaderSubtitle();
-                    renderTotals();
-                    Toasts.success("Removed from cart.");
+        LkBtn removeBtn = new LkBtn("Remove")
+            .variant(LkBtn.Variant.tertiary)
+            .size(LkBtn.Size.s)
+            .onClick(e -> {
+                switch (presenter.removeLine(line)) {
+                    case CartPresenter.RemoveOutcome.Removed r -> {
+                        this.activeOrder   = r.cart();
+                        this.subtotalCents = r.subtotalCents();
+                        populateLines();
+                        renderHeaderSubtitle();
+                        renderTotals();
+                        Toasts.success("Removed from cart.");
+                    }
+                    case CartPresenter.RemoveOutcome.Failure f ->
+                        Toasts.failure("Failed to remove item: " + f.reason());
                 }
-                case CartPresenter.RemoveOutcome.Failure f ->
-                    Toasts.failure("Failed to remove item: " + f.reason());
-            }
-        });
+            });
+
         info.add(removeBtn);
         lineDiv.add(info);
 

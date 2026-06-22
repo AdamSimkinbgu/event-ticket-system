@@ -31,6 +31,7 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
+import com.ticketing.system.Presentation.session.SessionIdentity;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,6 +61,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
     private static final int SEAT_PRICE_CENTS = 16000;
 
     private final ReservationService reservationService;
+    private final SessionIdentity identity;
 
     private int eventId;
     private int zoneId;
@@ -68,8 +70,9 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
     private Div seatGridContainer;
     private LkCol selectionListCol;
 
-    public SeatPickerView(ReservationService reservationService) {
+    public SeatPickerView(ReservationService reservationService,SessionIdentity identity) {
         this.reservationService = reservationService;
+        this.identity = identity;
         initSeatStates();
         add(buildBreadcrumb());
         add(buildSeatedSplit());
@@ -450,13 +453,12 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
     }
 
     private void callReserveService(InventorySelectionDTO selection) {
-        String token = AuthSession.token();
-        if (token != null) {
-            reservationService.reserveForMember(token, eventId, zoneId, selection);
-        } else {
-            reservationService.reserveForGuest(resolveGuestSessionId(), eventId, zoneId, selection);
-        }
+    if (identity.isMember()) {
+        reservationService.reserveForMember(identity.memberToken(), eventId, zoneId, selection);
+    } else {
+        reservationService.reserveForGuest(identity.guestSessionId(), eventId, zoneId, selection);
     }
+}
 
     private String resolveGuestSessionId() {
     return GuestSession.sessionId();

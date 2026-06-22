@@ -32,6 +32,7 @@ import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.router.AfterNavigationEvent;
 import com.vaadin.flow.router.AfterNavigationObserver;
 import com.vaadin.flow.server.VaadinSession;
+import com.ticketing.system.Presentation.session.SessionIdentity;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,10 +62,12 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
     private final ReservationService reservationService;
     private LkTopBar topBar;
     private final SignOutFlow signOutFlow;
+    private final SessionIdentity identity;
 
-    public MainLayout(ReservationService reservationService, SignOutFlow signOutFlow) {
+    public MainLayout(ReservationService reservationService, SignOutFlow signOutFlow, SessionIdentity identity) {
         this.reservationService = reservationService;
         this.signOutFlow = signOutFlow;
+        this.identity = identity;
         rebuildTopBar(null);
     }
 
@@ -83,19 +86,9 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         int cartSize = 0;
         Long cartDeadlineMs = null;
         try {
-            String token = AuthSession.token();
-            ActiveOrderDTO order = null;
-            if (token != null) {
-                order = reservationService.viewMyActiveOrder(token);
-            } else {
-                VaadinSession s = VaadinSession.getCurrent();
-                if (s != null) {
-                   String guestId = GuestSession.sessionId();
-                    if (guestId != null) {
-                        order = reservationService.viewMyActiveOrder(guestId);
-                    }
-                }
-            }
+                        String credential = identity.credential();
+            ActiveOrderDTO order = (credential != null)
+                    ? reservationService.viewMyActiveOrder(credential) : null;
             if (order != null && !order.lines().isEmpty()) {
                 cartSize = order.lines().size();
                 long remSec = order.remainingSecondsBeforeExpiry();

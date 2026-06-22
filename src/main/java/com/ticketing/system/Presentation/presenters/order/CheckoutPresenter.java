@@ -8,30 +8,22 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.events.OrderExpiredEvent;
-import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.CheckoutService;
 import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Core.Domain.exceptions.IdempotencyConflictException;
 import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryException;
 import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
-import com.ticketing.system.Presentation.components.Money;
-
-import lombok.extern.slf4j.Slf4j;
+import com.ticketing.system.Presentation.session.SessionIdentity;
 
 /**
- * MVP presenter for {@code CheckoutView}. No Vaadin imports.
- *
- * <p>It owns three things the view must not: (1) identity resolution via
- * {@link ISessionManager}; (2) the {@link OrderExpiredEvent} subscription,
- * re-dispatched to views through a Vaadin-free {@link ExpiryListener} so the
- * view never imports a Core type; (3) order pricing.
- *
- * <p>NOTE: {@code CheckoutService} wraps every failure in
- * {@code RuntimeException("Checkout failed…", cause)}, so {@link #runPay} unwraps
- * {@code getCause()} to recover the typed domain exception.
+ * MVP presenter for {@code CheckoutView}. No Vaadin imports. Identity is resolved
+ * through {@link SessionIdentity} (the single validated rule). CheckoutService wraps
+ * failures in a generic RuntimeException, so {@link #runPay} unwraps getCause().
  */
 @Component
 @Slf4j
@@ -41,40 +33,36 @@ public class CheckoutPresenter {
 
     private final ReservationService reservationService;
     private final CheckoutService    checkoutService;
-    private final ISessionManager    sessionManager;
+    private final SessionIdentity    identity;
 
-   
     private final Set<ExpiryListener> expiryListeners = ConcurrentHashMap.newKeySet();
 
     @Autowired
     public CheckoutPresenter(ReservationService reservationService,
                              CheckoutService    checkoutService,
-                             ISessionManager    sessionManager) {
+                             SessionIdentity    identity) {
         this.reservationService = reservationService;
         this.checkoutService    = checkoutService;
-        this.sessionManager     = sessionManager;
+        this.identity           = identity;
     }
 
-   
-     
-    public Identity resolveIdentity(String memberToken) {
-        try {
-            if (memberToken != null && sessionManager.validateToken(memberToken)) {
-                return new Identity(true, sessionManager.extractUserId(memberToken));
-            }
-        } catch (RuntimeException e) {
-            // not a valid member token — fall through to guest
+    // ---- identity -------------------------------------------------------
+
+    public Identity resolveIdentity() {
+        if (identity.isMember()) {
+            return new Identity(true, identity.memberToken(), null, identity.memberUserId());
         }
-        return new Identity(false, null);
+        return new Identity(false, null, identity.guestSessionId(), 0);
     }
 
-    public record Identity(boolean member, Integer userId) { }
+    public record Identity(boolean member, String memberToken, String guestSessionId, int userId) { }
+
+    // ---- load -----------------------------------------------------------
 
     public LoadOutcome loadOrder(String memberToken, String guestSessionId) {
         try {
-            if (memberToken != null && sessionManager.validateToken(memberToken)) {
-                int userId = sessionManager.extractUserId(memberToken);
-                return classify(reservationService.restoreActiveOrder(userId));
+            if (memberToken != null) {
+                return classify(reservationService.restoreActiveOrder(identity.memberUserId()));
             }
             if (guestSessionId != null) {
                 return classify(reservationService.restoreActiveOrderForGuest(guestSessionId));
@@ -92,9 +80,9 @@ public class CheckoutPresenter {
         return new LoadOutcome.Loaded(order, price(order));
     }
 
-           private Pricing price(ActiveOrderDTO order) {
+    private Pricing price(ActiveOrderDTO order) {
         long subtotal = order.lines().stream()
-                .mapToLong(l -> Money.toCents(l.pricePerTicket()))
+                .mapToLong(l -> toCents(l.pricePerTicket()))
                 .sum();
         return new Pricing(subtotal, subtotal);
     }
@@ -105,6 +93,7 @@ public class CheckoutPresenter {
         return Math.round(amount * 100);
     }
 
+    // ---- pay ------------------------------------------------------------
 
     public PayOutcome payAsMember(String memberToken, String rawCardNumber) {
         return runPay(() -> checkoutService.checkoutMember(
@@ -123,7 +112,6 @@ public class CheckoutPresenter {
         try {
             return new PayOutcome.Success(charge.run());
         } catch (RuntimeException e) {
-            // CheckoutService wraps everything in RuntimeException("Checkout failed…", cause).
             Throwable cause = (e.getCause() != null) ? e.getCause() : e;
             if (cause instanceof PaymentGatewayException)        return new PayOutcome.PaymentDeclined(cause.getMessage());
             if (cause instanceof InsufficientInventoryException) return new PayOutcome.SoldOut(cause.getMessage());
@@ -141,11 +129,10 @@ public class CheckoutPresenter {
         return "tok_" + cardNumber.replaceAll("\\s+", "");
     }
 
+    // ---- order-expiry push ---------------------------------------------
 
     public interface ExpiryListener {
-        /** True if this expiry event concerns the order this listener cares about. */
         boolean matches(int userId, String sessionId);
-        /** Invoked when a matching order expires (the View hops back onto the UI thread). */
         void onExpired();
     }
 

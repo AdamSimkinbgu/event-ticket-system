@@ -9,22 +9,22 @@ import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Presentation.components.Money;
+import com.ticketing.system.Presentation.session.SessionIdentity;
 
-/**
- * MVP presenter for {@code CartView}. No Vaadin imports — the outcome → UI
- * translation lives in the view; the service-call decision tree is unit-testable.
- */
 @Component
 public class CartPresenter {
 
     private final ReservationService reservationService;
+    private final SessionIdentity identity;
 
     @Autowired
-    public CartPresenter(ReservationService reservationService) {
+    public CartPresenter(ReservationService reservationService, SessionIdentity identity) {
         this.reservationService = reservationService;
+        this.identity = identity;
     }
 
-    public LoadOutcome loadCart(String credential) {
+    public LoadOutcome loadCart() {
+        String credential = identity.credential();
         if (credential == null || credential.isBlank()) {
             return new LoadOutcome.NotAuthenticated();
         }
@@ -33,13 +33,14 @@ public class CartPresenter {
             if (order == null || order.lines().isEmpty()) {
                 return new LoadOutcome.Empty();
             }
-            return new LoadOutcome.Shown(order, subtotalCents(order));
+            return new LoadOutcome.Shown(toVM(order), subtotalCents(order));
         } catch (RuntimeException e) {
             return new LoadOutcome.Failure(e.getMessage());
         }
     }
 
-    public RemoveOutcome removeLine(String credential, ActiveOrderDTO.CartLineDTO line) {
+    public RemoveOutcome removeLine(CartVM.LineVM line) {
+        String credential = identity.credential();
         try {
             InventorySelectionDTO selection = (line.seatNumber() != null)
                 ? InventorySelectionDTO.seated(List.of(line.seatNumber()))
@@ -47,10 +48,19 @@ public class CartPresenter {
 
             reservationService.removeLine(credential, line.eventId(), line.zoneId(), selection);
             ActiveOrderDTO updated = reservationService.viewMyActiveOrder(credential);
-            return new RemoveOutcome.Removed(updated, subtotalCents(updated));
+            return new RemoveOutcome.Removed(toVM(updated), subtotalCents(updated));
         } catch (RuntimeException e) {
             return new RemoveOutcome.Failure(e.getMessage());
         }
+    }
+
+    private CartVM toVM(ActiveOrderDTO order) {
+        List<CartVM.LineVM> lines = order.lines().stream()
+            .map(l -> new CartVM.LineVM(
+                l.eventName(), l.seatNumber(), l.pricePerTicket(),
+                l.eventId(), l.zoneId()))
+            .toList();
+        return new CartVM(lines, order.remainingSecondsBeforeExpiry());
     }
 
     private long subtotalCents(ActiveOrderDTO order) {
@@ -60,15 +70,25 @@ public class CartPresenter {
                 .sum();
     }
 
+    public record CartVM(List<LineVM> lines, long remainingSecondsBeforeExpiry) {
+        public record LineVM(
+            String eventName,
+            String seatNumber,
+            double pricePerTicket,
+            int eventId,
+            int zoneId
+        ) {}
+    }
+
     public sealed interface LoadOutcome {
-        record Shown(ActiveOrderDTO order, long subtotalCents) implements LoadOutcome { }
-        record Empty()                     implements LoadOutcome { }
-        record NotAuthenticated()          implements LoadOutcome { }
-        record Failure(String reason)      implements LoadOutcome { }
+        record Shown(CartVM cart, long subtotalCents)        implements LoadOutcome { }
+        record Empty()                                       implements LoadOutcome { }
+        record NotAuthenticated()                            implements LoadOutcome { }
+        record Failure(String reason)                        implements LoadOutcome { }
     }
 
     public sealed interface RemoveOutcome {
-        record Removed(ActiveOrderDTO order, long subtotalCents) implements RemoveOutcome { }
-        record Failure(String reason)        implements RemoveOutcome { }
+        record Removed(CartVM cart, long subtotalCents)      implements RemoveOutcome { }
+        record Failure(String reason)                        implements RemoveOutcome { }
     }
 }
