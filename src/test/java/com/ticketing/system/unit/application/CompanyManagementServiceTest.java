@@ -1300,5 +1300,63 @@ public class CompanyManagementServiceTest {
                 assertThrows(IllegalArgumentException.class,
                                 () -> companyService.resolveUserId("   "));
         }
+
+
+
+        /////////////////////////////Tests for getManagerPermissions
+
+        @Test
+        public void GivenActiveManagerWithPermissions_WhenGetManagerPermissions_ThenReturnsPermissionList() {
+        ProductionCompany company = new ProductionCompany(COMPANY_ID, OWNER_ID, COMPANY_1_NAME,
+                CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 4.5);
+        User ownerUser = new User(OWNER_ID, "ownerUser", "", "password", 22);
+        ownerUser.addFounderAppointment(COMPANY_ID);
+        User targetUser = new User(TARGET_USER_ID, "targetUser", "", "password", 20);
+        targetUser.receiveManagerAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
+        targetUser.acceptInvitation(COMPANY_ID);
+
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
+
+        List<Permission> result = companyService.getManagerPermissions(OWNER_TOKEN, COMPANY_ID, TARGET_USER_ID);
+
+        assertNotNull(result);
+        assertEquals(defaultPermissions.size(), result.size());
+        assertTrue(result.containsAll(defaultPermissions));
+        }
+
+        @Test
+        public void GivenInvalidToken_WhenGetManagerPermissions_ThenThrowsException() {
+        when(sessionManager.validateToken(INVALID_TOKEN)).thenReturn(false);
+
+        assertThrows(RuntimeException.class,
+                () -> companyService.getManagerPermissions(INVALID_TOKEN, COMPANY_ID, TARGET_USER_ID));
+        }
+
+        @Test
+        public void GivenUserWithNoPendingOrActiveAppointment_WhenGetManagerPermissions_ThenThrowsException() {
+        User targetUser = new User(TARGET_USER_ID, "targetUser", "", "password", 20);
+
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
+
+        assertThrows(RuntimeException.class,
+                () -> companyService.getManagerPermissions(OWNER_TOKEN, COMPANY_ID, TARGET_USER_ID));
+        }
+
+        @Test
+        public void GivenPendingButNotAcceptedInvitation_WhenGetManagerPermissions_ThenThrowsException() {
+        User targetUser = new User(TARGET_USER_ID, "targetUser", "", "password", 20);
+        targetUser.receiveManagerAppointment(COMPANY_ID, OWNER_ID, defaultPermissions);
+
+        when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
+        when(mockUserRepo.getUserById(TARGET_USER_ID)).thenReturn(targetUser);
+
+        assertThrows(RuntimeException.class,
+                () -> companyService.getManagerPermissions(OWNER_TOKEN, COMPANY_ID, TARGET_USER_ID));
+        }
 }
 

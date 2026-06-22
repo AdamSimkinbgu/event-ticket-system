@@ -1452,4 +1452,34 @@ class CompanyAcceptanceTest {
                 assertThrows(IllegalArgumentException.class,
                                 () -> companyService.resolveUserId(""));
         }
+
+
+        /////////////////////////////////Test for GetManagerPermissions
+        @Test
+        void GivenOwnerEditsManagerPermissions_WhenGetManagerPermissions_ThenReturnsUpdatedList() {
+        AuthTokenDTO owner = registerAndLoginMember("permOwner1");
+        AuthTokenDTO manager = registerAndLoginMember("permManager1");
+
+        int companyId = companyService.registerCompany(
+                owner.token(),
+                new CompanyRegistrationDTO("permCompany1", "desc")).companyId();
+
+        companyService.appointManager(owner.token(), new ManagerAppointmentRequestDTO(
+                companyId,
+                manager.userId(),
+                List.of(Permission.MANAGE_INVENTORY, Permission.CONFIGURE_VENUE)));
+
+        companyService.respondToAppointment(manager.token(), new AppointmentResponseDTO(companyId, true));
+
+        List<Permission> updated = List.of(Permission.EDIT_POLICIES, Permission.VIEW_SALES);
+
+        companyService.editManagerPermissions(owner.token(),
+                new PermissionEditDTO(companyId, manager.userId(), updated));
+
+        List<Permission> result = companyService.getManagerPermissions(owner.token(), companyId, manager.userId());
+
+        assertNotNull(result);
+        assertEquals(2, result.size());
+        assertTrue(result.containsAll(updated));
+        }
 }
