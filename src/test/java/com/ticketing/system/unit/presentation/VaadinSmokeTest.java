@@ -30,6 +30,7 @@ import com.ticketing.system.Presentation.views.landing.LandingView;
 import com.ticketing.system.Presentation.views.messaging.SubmitComplaintView;
 import com.ticketing.system.Presentation.presenters.company.ManagerListPresenter;
 import com.ticketing.system.Presentation.presenters.company.OwnerDashboardPresenter;
+import com.ticketing.system.Presentation.presenters.messaging.AdminComplaintQueuePresenter;
 import com.ticketing.system.Presentation.presenters.messaging.CompanyInquiryInboxPresenter;
 import com.ticketing.system.Presentation.presenters.account.MyInvitationsPresenter;
 import com.ticketing.system.Presentation.presenters.landing.LandingPresenter;
@@ -145,7 +146,6 @@ class VaadinSmokeTest {
         // (which is exercised by the buyer-side construction path).
         assertDoesNotThrow(AdminDashboardView::new,      "AdminDashboardView failed to construct");
         assertDoesNotThrow(AdminAnnouncementsView::new,  "AdminAnnouncementsView failed to construct");
-        assertDoesNotThrow(AdminComplaintQueueView::new, "AdminComplaintQueueView failed to construct");
         assertDoesNotThrow(OrganizationalTreeView::new,  "OrganizationalTreeView failed to construct");
     }
 
@@ -241,6 +241,24 @@ class VaadinSmokeTest {
             new CompanyInquiryInboxPresenter.Outcome.Success(List.of(company), company, List.of(conv)));
         assertDoesNotThrow(() -> new CompanyInquiryInboxView(presenter),
             "CompanyInquiryInboxView failed to construct");
+    }
+
+    @Test
+    void adminComplaintQueueViewInstantiates() {
+        // Admin complaint queue wired to a presenter (#269). A mock presenter returning one
+        // complaint with one message exercises the status-filter + master-list + thread +
+        // reply-bar build path without a UI context. (The view now takes a presenter, so it
+        // moved out of the no-arg platformAdminViewsInstantiate group.)
+        AdminComplaintQueuePresenter presenter = mock(AdminComplaintQueuePresenter.class);
+        ConversationDTO conv = new ConversationDTO(
+            "conv-1", "COMPLAINT", "OPEN", 1, "MEMBER", 0, "ADMIN_GROUP",
+            "Charged twice", LocalDateTime.now(), LocalDateTime.now(), 0,
+            List.of(new MessageDTO("m-1", 1, "MEMBER", "My card was charged twice.",
+                LocalDateTime.now(), false)));
+        when(presenter.load(any(), any())).thenReturn(
+            new AdminComplaintQueuePresenter.Outcome.Success(List.of(conv)));
+        assertDoesNotThrow(() -> new AdminComplaintQueueView(presenter),
+            "AdminComplaintQueueView failed to construct");
     }
 
     @Test
