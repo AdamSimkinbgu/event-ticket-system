@@ -781,7 +781,7 @@ void GivenOwnerAndEventWithoutVenueMap_WhenGetEvent_ThenLocationIsNull() {
             null,
             event.getShowDates(),
             null,
-            null
+            new DiscountPolicy(0)
     );
 
     when(sessionManager.validateToken(OWNER_TOKEN)).thenReturn(true);
@@ -879,7 +879,8 @@ void GivenEventWithoutVenueMap_WhenGetEventZones_ThenReturnsEmptyList() {
             null,
             event.getShowDates(),
             null,
-            null
+            new DiscountPolicy(0)
+
     );
 
     when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
@@ -909,7 +910,7 @@ void GivenEventWithEmptyVenueMap_WhenGetEventZones_ThenReturnsEmptyList() {
             emptyVenueMap,
             event.getShowDates(),
             null,
-            null
+            new DiscountPolicy(0)               
     );
 
     when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
@@ -952,7 +953,8 @@ void GivenSeatedZoneWithSeats_WhenGetEventZones_ThenReturnsRowsAndSeatsPerRow() 
             seatedVenueMap,
             event.getShowDates(),
             null,
-            null
+            new DiscountPolicy(0)
+
     );
 
     when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
@@ -999,7 +1001,7 @@ void GivenSeatedZoneWithoutSeats_WhenGetEventZones_ThenRowsAndSeatsPerRowAreZero
             seatedVenueMap,
             event.getShowDates(),
             null,
-            null
+            new DiscountPolicy(0)
     );
 
     when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
@@ -1056,7 +1058,8 @@ void GivenMixedStandingAndSeatedZones_WhenGetEventZones_ThenReturnsAllZones() {
             mixedVenueMap,
             event.getShowDates(),
             null,
-            null
+            new DiscountPolicy(0)
+
     );
 
     when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
@@ -1238,7 +1241,8 @@ void GivenSeatedZoneWithUnevenRows_WhenGetEventZones_ThenUsesIntegerDivisionForS
             seatedVenueMap,
             event.getShowDates(),
             null,
-            null
+            new DiscountPolicy(0)
+
     );
 
     when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
