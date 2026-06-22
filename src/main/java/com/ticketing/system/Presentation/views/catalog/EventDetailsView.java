@@ -15,7 +15,7 @@ import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
 import com.ticketing.system.Presentation.components.venue.VkVenueMap;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -24,7 +24,6 @@ import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
-import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
 import java.util.ArrayList;
@@ -37,6 +36,7 @@ import java.util.Locale;
 public class EventDetailsView extends LkPage implements BeforeEnterObserver {
 
     private final CatalogService catalogService;
+    private final SessionIdentity sessionIdentity;
 
     private int eventId;
     private List<InventoryZoneDTO> zones = List.of();
@@ -48,8 +48,9 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
     private final Div zonesCardHolder = new Div();
     private Span selectedLine;
 
-    public EventDetailsView(CatalogService catalogService) {
+    public EventDetailsView(CatalogService catalogService, SessionIdentity sessionIdentity) {
         this.catalogService = catalogService;
+        this.sessionIdentity = sessionIdentity;
         add(buildHero());
         add(buildSplit());
     }
@@ -67,7 +68,7 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
             return;
         }
         try {
-            VenueMapDTO map = catalogService.getEventVenueMap(credential(), eventId);
+            VenueMapDTO map = catalogService.getEventVenueMap(sessionIdentity.credential(), eventId);
             this.zones = map.inventoryZones();
             this.gridRows = map.gridRows();
             this.gridCols = map.gridCols();
@@ -82,16 +83,6 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
             refreshZonesCard();
             updateSelectedLine();
         }
-    }
-
-    private String credential() {
-        String token = AuthSession.token();
-        if (token != null) {
-            return token;
-        }
-        VaadinSession s = VaadinSession.getCurrent();
-        Object g = s == null ? null : s.getAttribute("guestSessionId");
-        return g == null ? "" : g.toString();
     }
 
     // -------- hero (event metadata — static placeholder; no public single-event read exists yet) --------
