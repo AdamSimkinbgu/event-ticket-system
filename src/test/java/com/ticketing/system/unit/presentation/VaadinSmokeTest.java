@@ -21,6 +21,7 @@ import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.ticketing.system.Presentation.presenters.admin.GlobalHistoryPresenter;
 import com.ticketing.system.Presentation.presenters.catalog.BrowseEventsPresenter;
+import com.ticketing.system.Presentation.views.company.CompanyInquiryInboxView;
 import com.ticketing.system.Presentation.views.company.ManagerListView;
 import com.ticketing.system.Presentation.views.company.OwnerDashboardView;
 import com.ticketing.system.Presentation.views.account.MyInvitationsView;
@@ -29,6 +30,7 @@ import com.ticketing.system.Presentation.views.landing.LandingView;
 import com.ticketing.system.Presentation.views.messaging.SubmitComplaintView;
 import com.ticketing.system.Presentation.presenters.company.ManagerListPresenter;
 import com.ticketing.system.Presentation.presenters.company.OwnerDashboardPresenter;
+import com.ticketing.system.Presentation.presenters.messaging.CompanyInquiryInboxPresenter;
 import com.ticketing.system.Presentation.presenters.account.MyInvitationsPresenter;
 import com.ticketing.system.Presentation.presenters.landing.LandingPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.SubmitComplaintPresenter;
@@ -221,6 +223,24 @@ class VaadinSmokeTest {
             new SupportInboxPresenter.Outcome.Success(List.of(conv)));
         assertDoesNotThrow(() -> new SupportInboxView(presenter),
             "SupportInboxView failed to construct");
+    }
+
+    @Test
+    void companyInquiryInboxViewInstantiates() {
+        // Company member-inquiry inbox wired to a presenter (#268). A mock presenter returning
+        // one company + one inquiry with one message exercises the status-filter + master-list +
+        // thread + reply-bar build path without a UI context.
+        CompanyInquiryInboxPresenter presenter = mock(CompanyInquiryInboxPresenter.class);
+        MyCompanyDTO company = new MyCompanyDTO(7, "Acme", "Founder");
+        ConversationDTO conv = new ConversationDTO(
+            "conv-1", "INQUIRY", "OPEN", 1, "MEMBER", 7, "COMPANY",
+            "Wheelchair access", LocalDateTime.now(), LocalDateTime.now(), 0,
+            List.of(new MessageDTO("m-1", 1, "MEMBER", "Is there step-free access?",
+                LocalDateTime.now(), false)));
+        when(presenter.loadFor(any(), any())).thenReturn(
+            new CompanyInquiryInboxPresenter.Outcome.Success(List.of(company), company, List.of(conv)));
+        assertDoesNotThrow(() -> new CompanyInquiryInboxView(presenter),
+            "CompanyInquiryInboxView failed to construct");
     }
 
     @Test
