@@ -1,6 +1,8 @@
 package com.ticketing.system.Core.Domain.policies.purchase;
 
-public class PurchaseContext {
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
+public class PurchaseContext implements InvariantChecked {
 
     private final int buyerId;
     private final Integer buyerAge;
@@ -31,6 +33,14 @@ public class PurchaseContext {
 
     public PurchaseStage getStage() {
         return stage;
+        checkInvariants();
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (quantity <= 0) {
+            throw new IllegalStateException("PurchaseContext invariant violated: quantity must be positive (was " + quantity + ")");
+        }
     }
 
     public int getBuyerId() {

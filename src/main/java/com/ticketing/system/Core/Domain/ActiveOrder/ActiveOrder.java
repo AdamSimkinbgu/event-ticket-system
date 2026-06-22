@@ -48,14 +48,12 @@ public class ActiveOrder implements InvariantChecked {
     private final String orderKey = UUID.randomUUID().toString();
 
     public ActiveOrder(Integer userId, String sessionId) {
-        if (userId == null && sessionId == null) {
-            throw new IllegalArgumentException("ActiveOrder must have at least a userId or a sessionId");
-        }
         this.userId = userId;
         this.sessionId = sessionId;
         this.status = ActiveOrderStatus.PRE_CHECKOUT;
         this.items = new ArrayList<>();
         this.createdAt = LocalDateTime.now();
+        checkInvariants();
     }
 
 
@@ -485,6 +483,16 @@ public class ActiveOrder implements InvariantChecked {
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    /** Resets every line item's hold timer to a fresh full window starting at {@code now}. */
+    public void renewReservationTimers(LocalDateTime now) {
+        synchronized (itemsLock) {
+            ensureModifiable();              // refuses while CHECKOUT_IN_PROGRESS (existing guard)
+            for (CartLineItem item : items) {
+                item.renew(now);
+            }
+        }
     }
 
     // returns the minimum remaining time among the items in the active order, which represents the time until the next item expires. If there are no items, returns Duration.ZERO.

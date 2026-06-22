@@ -56,6 +56,7 @@ public class Notification implements InvariantChecked {
         this.message = message;
         this.createdAt = createdAt;
         this.data = data == null ? new HashMap<>() : new HashMap<>(data);
+        checkInvariants();
     }
 
     public String getId() {
@@ -98,6 +99,7 @@ public class Notification implements InvariantChecked {
                     "Cannot mark as delivered a notification that is not PENDING. Current status: " + status);
         }
         this.status = NotificationStatus.DELIVERED;
+        checkInvariants();
     }
 
     public void markPending() {
@@ -106,6 +108,7 @@ public class Notification implements InvariantChecked {
                     "Cannot mark as pending a notification that is not DELIVERED. Current status: " + status);
         }
         this.status = NotificationStatus.PENDING;
+        checkInvariants();
     }
 
     // Lifecycle transition: invoked when the user opens the notification in the UI.

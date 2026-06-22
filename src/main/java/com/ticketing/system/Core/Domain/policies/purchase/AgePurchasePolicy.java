@@ -1,15 +1,21 @@
 package com.ticketing.system.Core.Domain.policies.purchase;
 
-public class AgePurchasePolicy implements PurchasePolicy {
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
+public class AgePurchasePolicy implements PurchasePolicy, InvariantChecked {
 
     private final int minimumAge;
 
     public AgePurchasePolicy(int minimumAge) {
-        if (minimumAge < 0) {
-            throw new IllegalArgumentException("Minimum age cannot be negative");
-        }
-
         this.minimumAge = minimumAge;
+        checkInvariants();
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (minimumAge < 0) {
+            throw new IllegalStateException("AgePurchasePolicy invariant violated: minimumAge cannot be negative (was " + minimumAge + ")");
+        }
     }
 
     @Override

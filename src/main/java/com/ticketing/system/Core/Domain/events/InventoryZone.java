@@ -32,13 +32,10 @@ public abstract class InventoryZone implements InvariantChecked {
     protected double price;
 
     protected InventoryZone(int id, String name, double price) {
-        if (price < 0) {
-            throw new IllegalArgumentException("Price cannot be negative");
-        }
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("Zone name must be non-blank");
-        }
-
+        // Invariants (name non-blank, price >= 0) are enforced by the concrete
+        // subclass's checkInvariants(), invoked at the end of its constructor.
+        // Calling the overridable checkInvariants() here would run before the
+        // subclass's own fields are initialized.
         this.id = id;
         this.name = name;
         this.price = price;

@@ -20,6 +20,7 @@ public class ReceiptLine implements InvariantChecked {
         this.zoneId = zoneId;
         this.seatNumber = seatNumber;
         this.addedAt = addedAt;
+        checkInvariants();
     }
 
     public boolean isExpired() {

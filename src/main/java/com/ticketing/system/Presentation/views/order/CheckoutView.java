@@ -129,7 +129,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
         resolveIdentity();
-        refreshFromOrder(loadActiveOrder());
+        refreshFromOrder(renewAndLoadActiveOrder());
 
         if (getChildren().findAny().isEmpty()) {
             buildPage();
@@ -160,6 +160,35 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver {
             session.setAttribute("guestSessionId", guestId);
         }
         return guestId;
+    }
+
+    /**
+     * Like {@link #loadActiveOrder()}, but resets every reserved ticket's 10-minute hold
+     * timer to a fresh full window. Used only on checkout-page entry ({@link #beforeEnter})
+     * so the buyer gets the maximum time to pay; the pre-pay refresh keeps using the plain
+     * {@link #loadActiveOrder()} so its "cart expired while you were typing" guard stays intact.
+     */
+    private ActiveOrderDTO renewAndLoadActiveOrder() {
+        if (isMember) {
+            try {
+                this.resolvedUserId = sessionManager.extractUserId(memberToken);
+                return reservationService.renewReservationsForMemberCheckout(resolvedUserId);
+            } catch (Exception e) {
+                log.warn("Failed to renew/load active order for member", e);
+                Toasts.warn("Could not load your cart — please try again.");
+                return null;
+            }
+        }
+
+        if (sessionId != null) {
+            try {
+                return reservationService.renewReservationsForGuestCheckout(sessionId);
+            } catch (Exception e) {
+                log.warn("Failed to renew/load active order for guest", e);
+                return null;
+            }
+        }
+        return null;
     }
 
     private ActiveOrderDTO loadActiveOrder() {

@@ -244,7 +244,51 @@ class ActiveOrderTest extends BaseDomainTest {
                 order.getItems().stream().map(CartLineItem::getSeatNumber).toList());
     }
 
+    @Test
+    void GivenItemsNearExpiry_WhenRenewReservationTimers_ThenAllTimersResetToFullWindow() {
+        ActiveOrder order = track(new ActiveOrder(USER_ID));
 
+        // Added 9 minutes ago -> ~1 minute left on the 10-minute window.
+        LocalDateTime nineMinutesAgo = LocalDateTime.now().minusMinutes(9);
+        order.addStandingReservation(EVENT_ID, ZONE_ID, 2, 50.0, nineMinutesAgo);
+        order.addSeatedReservation(EVENT_ID, ZONE_ID + 1, List.of("A1"), 120.0, nineMinutesAgo);
 
+        assertTrue(order.getRemainingTime().getSeconds() < 120,
+                "precondition: cart should be near expiry before renewal");
+
+        order.renewReservationTimers(LocalDateTime.now());
+
+        // Every line item now has a fresh ~10-minute window.
+        assertTrue(order.getRemainingTime().getSeconds() > 590,
+                "all timers should be reset close to the full 10-minute window");
+        for (CartLineItem item : order.getItems()) {
+            assertTrue(item.getRemainingTime().getSeconds() > 590);
+            assertFalse(item.isExpired());
+        }
+    }
+
+    @Test
+    void GivenCheckoutInProgress_WhenRenewReservationTimers_ThenThrows() {
+        ActiveOrder order = track(new ActiveOrder(USER_ID));
+        order.addStandingReservation(EVENT_ID, ZONE_ID, 1, 50.0, LocalDateTime.now());
+        order.markCheckoutInProgress();
+
+        assertThrows(IllegalStateException.class,
+                () -> order.renewReservationTimers(LocalDateTime.now()));
+    }
+
+    @Test
+    void GivenLineItem_WhenRenew_ThenAddedAtUpdatedAndTimerFresh() {
+        LocalDateTime nineMinutesAgo = LocalDateTime.now().minusMinutes(9);
+        CartLineItem item = new CartLineItem(EVENT_ID, ZONE_ID, "A7", 120.0, nineMinutesAgo);
+
+        assertTrue(item.getRemainingTime().getSeconds() < 120);
+
+        LocalDateTime now = LocalDateTime.now();
+        item.renew(now);
+
+        assertEquals(now, item.getAddedAt());
+        assertTrue(item.getRemainingTime().getSeconds() > 590);
+    }
 
 }

@@ -2,15 +2,34 @@ package com.ticketing.system.Core.Domain.events;
 
 import java.time.LocalDateTime;
 
-public class ShowDate {
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
+public class ShowDate implements InvariantChecked {
     private LocalDateTime startTime;
     private LocalDateTime endTime;
 
     public ShowDate(LocalDateTime startTime, LocalDateTime endTime) {
+        // validateTimes enforces the construction-time "must be future-dated" precondition,
+        // which is NOT a perpetual invariant (a past show is still structurally valid later).
         validateTimes(startTime, endTime);
 
         this.startTime = startTime;
         this.endTime = endTime;
+        checkInvariants();
+    }
+
+    /** Perpetual structural invariants (non-null, ordering) — distinct from the future-dated precondition. */
+    @Override
+    public void checkInvariants() {
+        if (startTime == null) {
+            throw new IllegalStateException("ShowDate invariant violated: startTime must not be null");
+        }
+        if (endTime == null) {
+            throw new IllegalStateException("ShowDate invariant violated: endTime must not be null");
+        }
+        if (!endTime.isAfter(startTime)) {
+            throw new IllegalStateException("ShowDate invariant violated: endTime must be after startTime");
+        }
     }
 
     public LocalDateTime getStartTime() {
