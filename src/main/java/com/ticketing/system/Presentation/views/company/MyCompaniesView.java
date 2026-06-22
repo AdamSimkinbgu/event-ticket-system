@@ -1,5 +1,6 @@
 package com.ticketing.system.Presentation.views.company;
 
+import com.ticketing.system.Core.Application.dto.UserCompanyDTO;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
@@ -9,7 +10,8 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStatusDot;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Presentation.session.MockCompanies;
+import com.ticketing.system.Presentation.presenters.company.MyCompaniesPresenter;
+
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -27,7 +29,7 @@ import java.util.Map;
 @PermitAll
 public class MyCompaniesView extends LkPage {
 
-    public MyCompaniesView() {
+    public MyCompaniesView(MyCompaniesPresenter membershipPresenter) {
         title("My companies");
         subtitle("Companies where you are a founder, owner, or manager.");
         actions(new LkBtn("Register a company")
@@ -35,11 +37,11 @@ public class MyCompaniesView extends LkPage {
             .icon(new LkIcon("plus", 15))
             .onClick(e -> UI.getCurrent().navigate(CompanyRegistrationView.class)));
 
-        List<MockCompanies.Company> companies = MockCompanies.forCurrentUser();
+        List<UserCompanyDTO> companies = membershipPresenter.listForCurrentUser();
         if (companies.isEmpty()) {
             add(buildEmptyState());
         } else {
-            add(buildGridCard(companies));
+            add(buildGridCard(companies, membershipPresenter));
         }
     }
 
@@ -82,7 +84,9 @@ public class MyCompaniesView extends LkPage {
         return empty;
     }
 
-    private Component buildGridCard(List<MockCompanies.Company> companies) {
+    private Component buildGridCard(
+            List<UserCompanyDTO> companies,
+            MyCompaniesPresenter membershipPresenter) {
         LkCard card = new LkCard().pad(0);
         LkGrid grid = new LkGrid()
             .col("Company",       "company")
@@ -92,22 +96,28 @@ public class MyCompaniesView extends LkPage {
             .col("Active events", "events",  LkGrid.Align.RIGHT)
             .col("",              "act",     LkGrid.Align.RIGHT);
 
-        for (MockCompanies.Company c : companies) {
+        for (UserCompanyDTO company : companies) {
             Map<String, Object> row = new LinkedHashMap<>();
             Span name = new Span();
-            name.getElement().setProperty("innerHTML", "<b>" + escape(c.name()) + "</b>");
+            name.getElement().setProperty("innerHTML", "<b>" + escape(company.name()) + "</b>");
             row.put("company", name);
-            row.put("role", new LkBadge(c.role(), toneFor(c.role())).small());
-            row.put("status", new LkStatusDot(LkStatusDot.Tone.ok, c.status()));
-            row.put("members", c.members());
-            row.put("events", c.activeEvents());
+            row.put("role", new LkBadge(company.role(), toneFor(company.role())).small());
+            row.put("status", new LkStatusDot(LkStatusDot.Tone.ok, company.status()));
+            row.put("members", company.members());
+            row.put("events", company.activeEvents());
 
             LkRow actions = new LkRow().gap(6).noWrap();
             actions.add(
                 new LkBtn("Open").variant(LkBtn.Variant.secondary).size(LkBtn.Size.s)
-                    .onClick(e -> UI.getCurrent().navigate(OwnerDashboardView.class)),
+                    .onClick(e -> {
+                        membershipPresenter.selectCompany(company.companyId());
+                        UI.getCurrent().navigate(OwnerDashboardView.class);
+                    }),
                 new LkBtn("Events").variant(LkBtn.Variant.tertiary).size(LkBtn.Size.s)
-                    .onClick(e -> UI.getCurrent().navigate(CompanyEventListView.class))
+                    .onClick(e -> {
+                        membershipPresenter.selectCompany(company.companyId());
+                        UI.getCurrent().navigate(CompanyEventListView.class);
+                    })
             );
             row.put("act", actions);
             grid.row(row);
