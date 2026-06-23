@@ -1,5 +1,6 @@
 package com.ticketing.system.Presentation.views.catalog;
 
+import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
 import com.ticketing.system.Presentation.components.buyer.BzPoster;
 import com.ticketing.system.Presentation.components.kit.Lk;
@@ -16,6 +17,7 @@ import com.ticketing.system.Presentation.components.kit.LkSelect;
 import com.ticketing.system.Presentation.components.kit.LkStatusDot;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.catalog.BrowseEventsPresenter;
+import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -29,8 +31,11 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,15 +48,16 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
 
     // ---- data model ----
 
-    private record EventRow(String name, String category, String venue, String region,
-            String date, int dayOfYear, int priceCents,
+    private record EventRow(String name, String category, String venue,
+            String date, LocalDateTime startsAt, int priceCents,
             LkStatusDot.Tone tone, String status, String id) {
     }
 
-    // Real catalog (ON_SALE events from active companies), loaded once at construction
-    // via BrowseEventsPresenter and mapped to EventRow. All filtering/sorting below is
-    // client-side over this list.
-    private final List<EventRow> allEvents;
+    /** A resolved from/to date range for a date-range preset; either bound may be null (unbounded). */
+    record DateWindow(LocalDate from, LocalDate to) { }
+
+    private final BrowseEventsPresenter presenter;
+    private final SessionIdentity identity;
 
     private static final String CAT_ALL = "All categories";
     private static final String REGION_ALL = "All regions";
@@ -83,26 +89,29 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     private Div gridSlot;
     private Span resultsCountSpan;
 
-    public BrowseEventsView(BrowseEventsPresenter presenter) {
-        this.allEvents = presenter.loadCatalog().stream()
-                .map(BrowseEventsView::toRow)
-                .toList();
+    public BrowseEventsView(BrowseEventsPresenter presenter, SessionIdentity identity) {
+        this.presenter = presenter;
+        this.identity = identity;
+
+        // One unfiltered server query seeds the "Featured this week" strip + the first grid render.
+        List<EventRow> featured = presenter.search(identity.credential(), CatalogSearchFiltersDTO.empty())
+                .stream().map(BrowseEventsView::toRow).toList();
 
         add(buildHero());
         add(buildCategoryChips());
-        if (!allEvents.isEmpty()) {
+        if (!featured.isEmpty()) {
             add(Lk.h2("Featured this week"));
-            add(buildPosterGrid());
+            add(buildPosterGrid(featured));
         }
         add(buildAllEventsHeader());
         add(buildBrowseSplit());
-        renderGrid();
+        renderGrid(featured.stream().sorted(comparatorFor(filterSort)).toList());
     }
 
     /**
-     * Apply a {@code ?category=...} query parameter (e.g. when arriving
-     * from a category card on the landing page) by pre-selecting the
-     * matching chip + sidebar Category select, and filtering the grid.
+     * Apply a {@code ?category=...} query parameter (e.g. when arriving from a category card on the
+     * landing page) by pre-selecting the matching chip + sidebar Category select, which re-runs the
+     * server-side filtered query.
      */
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
@@ -164,15 +173,15 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         chipToCategory.forEach((chip, cat) -> chip.active(cat.equals(category)));
         if (categorySelect != null)
             categorySelect.setValue(category);
-        renderGrid();
+        runSearch();
     }
 
     // ---- featured posters ----
 
-    private Component buildPosterGrid() {
+    private Component buildPosterGrid(List<EventRow> featured) {
         Div grid = new Div();
         grid.addClassName("bz-poster-grid");
-        allEvents.stream().limit(4).forEach(ev ->
+        featured.stream().limit(4).forEach(ev ->
                 grid.add(new BzPoster(ev.category, ev.name, ev.venue + " · " + ev.date,
                         "From $" + (ev.priceCents / 100))
                         .onClick(() -> UI.getCurrent().navigate("events/" + ev.id))));
@@ -213,19 +222,19 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         dateRangeField = new LkDateRangeField().label("Date range");
         dateRangeField.onChange(v -> {
             filterDateRange = v;
-            renderGrid();
+            runSearch();
         });
 
         regionSelect = new LkSelect(REGION_ALL, REGIONS).label("Region");
         regionSelect.onChange(v -> {
             filterRegion = v;
-            renderGrid();
+            runSearch();
         });
 
         sortSelect = new LkSelect(SORTS.get(0), SORTS).label("Sort by");
         sortSelect.onChange(v -> {
             filterSort = v;
-            renderGrid();
+            runSearch();
         });
 
         LkCol col = new LkCol().gap(16);
@@ -251,7 +260,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         priceMin.getStyle().set("flex", "1 1 0");
         priceMin.addValueChangeListener(e -> {
             filterPriceMin = e.getValue();
-            renderGrid();
+            runSearch();
         });
 
         priceMax = new IntegerField();
@@ -264,7 +273,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         priceMax.getStyle().set("flex", "1 1 0");
         priceMax.addValueChangeListener(e -> {
             filterPriceMax = e.getValue();
-            renderGrid();
+            runSearch();
         });
 
         LkRow row = new LkRow().gap(8);
@@ -296,76 +305,75 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         dateRangeField.setValue(DATE_ANY);
         priceMin.clear();
         priceMax.clear();
-        renderGrid();
+        runSearch();
     }
 
-    // ---- filter + render ----
+    // ---- server-side search + render ----
 
-    private List<EventRow> applyFilters() {
-        return allEvents.stream()
-                .filter(this::matchesCategory)
-                .filter(this::matchesRegion)
-                .filter(this::matchesDateRange)
-                .filter(this::matchesPrice)
+    /** Build the filter DTO from current chip/select state, query the server, sort, render. */
+    private void runSearch() {
+        List<EventRow> rows = presenter.search(identity.credential(), currentFilters()).stream()
+                .map(BrowseEventsView::toRow)
                 .sorted(comparatorFor(filterSort))
                 .toList();
+        renderGrid(rows);
     }
 
-    private boolean matchesCategory(EventRow e) {
-        return CAT_ALL.equals(filterCategory) || filterCategory.equals(e.category);
+    private CatalogSearchFiltersDTO currentFilters() {
+        DateWindow dw = dateWindow(filterDateRange, LocalDate.now());
+        return new CatalogSearchFiltersDTO(
+                null,                                       // eventName
+                null,                                       // artistName
+                categoryFilterValue(filterCategory),        // category (enum name, or null = all)
+                null,                                       // keywords
+                filterPriceMin == null ? null : filterPriceMin.doubleValue(),
+                filterPriceMax == null ? null : filterPriceMax.doubleValue(),
+                dw.from(),
+                dw.to(),
+                REGION_ALL.equals(filterRegion) ? null : filterRegion,   // location (city/country substring)
+                null, null, null, null);                    // event/company rating filters unused here
     }
 
-    private boolean matchesRegion(EventRow e) {
-        return REGION_ALL.equals(filterRegion)
-                || (e.region != null && e.region.toLowerCase().contains(filterRegion.toLowerCase()));
-    }
-
-    private boolean matchesDateRange(EventRow e) {
-        // Mock semantics — "today" anchored to day 177 (first event in the dataset)
-        // so each preset actually changes the visible set.
-        return switch (filterDateRange) {
-            case "Today" -> e.dayOfYear == 177;
-            case "This weekend" -> e.dayOfYear == 179 || e.dayOfYear == 180;
-            case "Next 7 days" -> e.dayOfYear <= 183;
-            case "Next 30 days" -> e.dayOfYear <= 206;
-            case "This month" -> e.dayOfYear <= 181;
-            case "Next 3 months" -> true;
-            default -> true; // Any time
+    /** UI category label → EventCategory enum name for the server filter (null = no category filter). */
+    static String categoryFilterValue(String label) {
+        if (label == null) return null;
+        return switch (label) {
+            case "Concerts"  -> "CONCERT";   // seed concerts use CONCERT (enum also has the unused MUSIC)
+            case "Sports"    -> "SPORTS";
+            case "Theatre"   -> "THEATER";
+            case "Festivals" -> "FESTIVAL";
+            case "Comedy"    -> "COMEDY";
+            default          -> null;        // "All categories" / unknown
         };
     }
 
-    private boolean matchesPrice(EventRow e) {
-        int dollars = e.priceCents / 100;
-        if (filterPriceMin != null && dollars < filterPriceMin)
-            return false;
-        if (filterPriceMax != null && dollars > filterPriceMax)
-            return false;
-        return true;
-    }
-
-    private static Comparator<EventRow> comparatorFor(String sort) {
-        return switch (sort) {
-            case "Date · latest" -> Comparator.comparingInt(EventRow::dayOfYear).reversed();
-            case "Price · low to high" -> Comparator.comparingInt(EventRow::priceCents);
-            case "Price · high to low" -> Comparator.comparingInt(EventRow::priceCents).reversed();
-            case "Popularity" -> Comparator.comparing(EventRow::id);
-            default -> Comparator.comparingInt(EventRow::dayOfYear); // soonest
+    /** Date-range preset → concrete [from, to] window relative to {@code today} (null bounds = open). */
+    static DateWindow dateWindow(String preset, LocalDate today) {
+        if (preset == null) return new DateWindow(null, null);
+        return switch (preset) {
+            case "Today" -> new DateWindow(today, today);
+            case "This weekend" -> {
+                LocalDate sat = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY));
+                yield new DateWindow(sat, sat.plusDays(1));
+            }
+            case "Next 7 days" -> new DateWindow(today, today.plusDays(7));
+            case "Next 30 days" -> new DateWindow(today, today.plusDays(30));
+            case "This month" -> new DateWindow(today, today.with(TemporalAdjusters.lastDayOfMonth()));
+            case "Next 3 months" -> new DateWindow(today, today.plusMonths(3));
+            default -> new DateWindow(null, null);   // "Any time"
         };
     }
 
-    private void renderGrid() {
-        List<EventRow> visible = applyFilters();
+    private void renderGrid(List<EventRow> rows) {
         gridSlot.removeAll();
-
         if (resultsCountSpan != null) {
-            resultsCountSpan.setText(formatResultLine(visible.size()));
+            resultsCountSpan.setText(formatResultLine(rows.size()));
         }
-
-        if (visible.isEmpty()) {
+        if (rows.isEmpty()) {
             gridSlot.add(buildEmptyState());
             return;
         }
-        gridSlot.add(buildGrid(visible));
+        gridSlot.add(buildGrid(rows));
     }
 
     private String formatResultLine(int n) {
@@ -428,7 +436,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         return empty;
     }
 
-    // ---- DTO → row mapping ----
+    // ---- DTO → row mapping + sort ----
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("d MMM");
 
@@ -436,13 +444,23 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         LocalDateTime start = (dto.showDates() == null || dto.showDates().isEmpty())
                 ? null : dto.showDates().get(0).startsAt();
         String date = start == null ? "TBA" : start.format(DATE_FMT);
-        int dayOfYear = start == null ? 0 : start.getDayOfYear();
         int priceCents = (int) Math.round(dto.minPrice() * 100);
         LkStatusDot.Tone tone = dto.soldOut() ? LkStatusDot.Tone.muted : LkStatusDot.Tone.ok;
         String status = dto.soldOut() ? "Sold out" : "On sale";
         return new EventRow(dto.name(), prettyCategory(dto.category()), dto.location(),
-                dto.location(), date, dayOfYear, priceCents, tone, status,
-                String.valueOf(dto.eventId()));
+                date, start, priceCents, tone, status, String.valueOf(dto.eventId()));
+    }
+
+    private static Comparator<EventRow> comparatorFor(String sort) {
+        Comparator<EventRow> bySoonest = Comparator.comparing(EventRow::startsAt,
+                Comparator.nullsLast(Comparator.naturalOrder()));
+        return switch (sort) {
+            case "Date · latest" -> bySoonest.reversed();
+            case "Price · low to high" -> Comparator.comparingInt(EventRow::priceCents);
+            case "Price · high to low" -> Comparator.comparingInt(EventRow::priceCents).reversed();
+            case "Popularity" -> Comparator.comparing(EventRow::id);
+            default -> bySoonest; // soonest
+        };
     }
 
     private static String prettyCategory(String enumName) {

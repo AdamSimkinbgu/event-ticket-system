@@ -144,7 +144,8 @@ class VaadinSmokeTest {
         // cheap canary for kit-API breakage. Both now take an injected
         // presenter, so resolve it from the Spring context.
         assertDoesNotThrow(
-            () -> new BrowseEventsView(context.getBean(BrowseEventsPresenter.class)),
+            () -> new BrowseEventsView(context.getBean(BrowseEventsPresenter.class),
+                context.getBean(SessionIdentity.class)),
             "BrowseEventsView (root route) failed to construct");
         assertDoesNotThrow(
             () -> new GlobalHistoryView(context.getBean(GlobalHistoryPresenter.class)),
