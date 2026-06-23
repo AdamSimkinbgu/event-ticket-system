@@ -251,7 +251,9 @@ public final class DemoEvents {
         for (int r = 0; r < rows; r++) {
             String rowLetter = SeatLabels.rowLabel(r);
             for (int c = 0; c < cols; c++) {
-                seats.add(new SeatConfigDTO(rowLetter + "-" + (c + 1), c * 60.0, r * 60.0));
+                // Canonical "<row><num>" label (e.g. "A1") — matches generateSeats() and the
+                // leading-non-digit-run parsing in EventManagementService/SeatPickerPresenter.
+                seats.add(new SeatConfigDTO(rowLetter + "" + (c + 1), c * 60.0, r * 60.0));
             }
         }
         return new ZoneConfigDTO(name, true, null, seats, price, null);
