@@ -437,9 +437,7 @@ public class CompanyManagementService {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
 
-        if (user == null) {
-            throw new InvalidTokenException("User not found for token: " + token);
-        }
+     
 
         // CompanyRegistrationDTO is a class with get* accessors, not a record.
         if (request.getName() == null || request.getName().trim().isEmpty() ||
