@@ -4,6 +4,8 @@ import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.PurchaseRecordDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.TicketRecordDTO;
 import com.ticketing.system.Core.Domain.Tickets.TicketStatus;
+import com.ticketing.system.Presentation.components.Toasts;
+import com.ticketing.system.Presentation.components.buyer.BzRefundDialog;
 import com.ticketing.system.Presentation.components.buyer.BzTicketDialog;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkCard;
@@ -14,7 +16,9 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkStatusDot;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.account.MyAccountPresenter;
+import com.ticketing.system.Presentation.presenters.account.RefundPresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -40,9 +44,14 @@ public class MyAccountView extends LkPage {
     private static final DateTimeFormatter DATETIME_FMT = DateTimeFormatter.ofPattern("EEE d MMM yyyy · HH:mm");
 
     private final PurchaseHistoryDTO history;
+    private final RefundPresenter refundPresenter;
+    private final SessionIdentity sessionIdentity;
 
-    public MyAccountView(MyAccountPresenter presenter) {
+    public MyAccountView(MyAccountPresenter presenter, RefundPresenter refundPresenter,
+                         SessionIdentity sessionIdentity) {
         this.history = presenter.loadHistory();
+        this.refundPresenter = refundPresenter;
+        this.sessionIdentity = sessionIdentity;
 
         add(buildHero());
         add(Lk.h2("My orders"));
@@ -131,8 +140,42 @@ public class MyAccountView extends LkPage {
         view.addClassName("bz-link");
         view.getStyle().set("background", "none").set("border", "none").set("padding", "0").set("cursor", "pointer");
         view.addClickListener(e -> UI.getCurrent().navigate("receipt/" + r.orderReceiptId()));
-        row.put("receipt", view);
+
+        if (refundEligible(r)) {
+            NativeButton refund = new NativeButton("Request refund");
+            refund.addClassName("bz-link");
+            refund.getStyle().set("background", "none").set("border", "none").set("padding", "0")
+                .set("cursor", "pointer").set("margin-left", "14px");
+            refund.addClickListener(e -> BzRefundDialog.open("#" + r.orderReceiptId(), r.totalPaid(),
+                reason -> handleRefund(r.orderReceiptId(), reason)));
+            Div cell = new Div(view, refund);
+            row.put("receipt", cell);
+        } else {
+            row.put("receipt", view);
+        }
         grid.row(row);
+    }
+
+    private static boolean refundEligible(PurchaseRecordDTO r) {
+        if (r.refunded() || r.buyerUserId() == null) {
+            return false;   // already refunded, or a guest order (member-only flow)
+        }
+        return r.tickets().stream().anyMatch(t ->
+            t.currentStatus() == TicketStatus.PAID || t.currentStatus() == TicketStatus.ISSUED);
+    }
+
+    private void handleRefund(int orderId, String reason) {
+        switch (refundPresenter.requestRefund(sessionIdentity.memberToken(), orderId, reason)) {
+            case RefundPresenter.Outcome.Success s -> {
+                Toasts.success("Refund requested — reference " + s.reference()
+                    + ". Processed in 3–5 business days.");
+                UI.getCurrent().getPage().reload();   // refresh orders + tickets
+            }
+            case RefundPresenter.Outcome.NotEligible n -> Toasts.warn(n.message());
+            case RefundPresenter.Outcome.NotFound n    -> Toasts.failure(n.message());
+            case RefundPresenter.Outcome.Forbidden f   -> Toasts.failure(f.message());
+            case RefundPresenter.Outcome.Failure f     -> Toasts.failure(f.message());
+        }
     }
 
     private Component buildTicketsCard() {

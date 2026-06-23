@@ -3,7 +3,9 @@ package com.ticketing.system.Presentation.views.account;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.PurchaseRecordDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.TicketRecordDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.TransactionRecordDTO;
+import com.ticketing.system.Core.Domain.Tickets.TicketStatus;
 import com.ticketing.system.Presentation.components.Toasts;
+import com.ticketing.system.Presentation.components.buyer.BzRefundDialog;
 import com.ticketing.system.Presentation.components.buyer.BzTicketDialog;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
@@ -17,6 +19,7 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.account.ReceiptPresenter;
+import com.ticketing.system.Presentation.presenters.account.RefundPresenter;
 import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -47,13 +50,16 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
     private static final DateTimeFormatter EVENT_FMT = DateTimeFormatter.ofPattern("EEE d MMM yyyy · HH:mm");
 
     private final ReceiptPresenter presenter;
+    private final RefundPresenter refundPresenter;
     private final SessionIdentity sessionIdentity;
 
     private final Div bodyHolder = new Div();
     private int receiptId;
 
-    public ReceiptView(ReceiptPresenter presenter, SessionIdentity sessionIdentity) {
+    public ReceiptView(ReceiptPresenter presenter, RefundPresenter refundPresenter,
+                       SessionIdentity sessionIdentity) {
         this.presenter = presenter;
+        this.refundPresenter = refundPresenter;
         this.sessionIdentity = sessionIdentity;
         add(bodyHolder);
     }
@@ -88,9 +94,12 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
     private void renderReceipt(PurchaseRecordDTO receipt) {
         title("Receipt #" + receipt.orderReceiptId());
         subtitle(headerSubtitle(receipt));
-        actions(buildHeaderActions());
+        actions(buildHeaderActions(receipt));
 
         bodyHolder.add(buildStatusCard(receipt));
+        if (receipt.refunded()) {
+            bodyHolder.add(buildRefundTimeline(receipt));
+        }
         bodyHolder.add(Lk.h2("Items"));
         bodyHolder.add(buildItemsCard(receipt));
         bodyHolder.add(Lk.h2("Payment"));
@@ -107,8 +116,13 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
         return charge == null ? when : when + "  ·  Transaction " + charge.externalTransactionId();
     }
 
-    private Component buildHeaderActions() {
+    private Component buildHeaderActions(PurchaseRecordDTO receipt) {
         LkRow actions = new LkRow().gap(8);
+        if (refundEligible(receipt)) {
+            actions.add(new LkBtn("Request refund").variant(LkBtn.Variant.primary)
+                .icon(new LkIcon("card", 15))
+                .onClick(e -> openRefund(receipt)));
+        }
         actions.add(
             new LkBtn("Print").variant(LkBtn.Variant.secondary)
                 .icon(new LkIcon("copy", 15))
@@ -117,6 +131,60 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
                 .onClick(e -> Toasts.success("Receipt resent to your account email (mock)."))
         );
         return actions;
+    }
+
+    // ---- refund (#284): order-level, member-initiated ----
+
+    private static boolean refundEligible(PurchaseRecordDTO r) {
+        if (r.refunded() || r.buyerUserId() == null) {
+            return false;   // already refunded, or a guest order (member-only flow)
+        }
+        return r.tickets().stream().anyMatch(t ->
+            t.currentStatus() == TicketStatus.PAID || t.currentStatus() == TicketStatus.ISSUED);
+    }
+
+    private void openRefund(PurchaseRecordDTO receipt) {
+        BzRefundDialog.open("#" + receipt.orderReceiptId(), receipt.totalPaid(),
+            reason -> handleRefund(receipt.orderReceiptId(), reason));
+    }
+
+    private void handleRefund(int orderId, String reason) {
+        switch (refundPresenter.requestRefund(sessionIdentity.memberToken(), orderId, reason)) {
+            case RefundPresenter.Outcome.Success s -> {
+                Toasts.success("Refund requested — reference " + s.reference()
+                    + ". Processed in 3–5 business days.");
+                loadAndBuild();   // re-render: the order now shows as refunded
+            }
+            case RefundPresenter.Outcome.NotEligible n -> Toasts.warn(n.message());
+            case RefundPresenter.Outcome.NotFound n    -> Toasts.failure(n.message());
+            case RefundPresenter.Outcome.Forbidden f   -> Toasts.failure(f.message());
+            case RefundPresenter.Outcome.Failure f     -> Toasts.failure(f.message());
+        }
+    }
+
+    private Component buildRefundTimeline(PurchaseRecordDTO receipt) {
+        LkCard card = new LkCard().pad(18);
+        LkCol col = new LkCol().gap(10);
+        Span heading = new Span("Refund status");
+        heading.getStyle().set("font-weight", "700").set("color", "#0f172a");
+        col.add(heading);
+
+        LkRow steps = new LkRow().gap(8);
+        steps.add(
+            new LkBadge("✓ Requested", LkBadge.Tone.success).small(),
+            new LkBadge("✓ Processing", LkBadge.Tone.success).small(),
+            new LkBadge("✓ Refunded", LkBadge.Tone.success).small());
+        col.add(steps);
+
+        TransactionRecordDTO refundTx = refundTransaction(receipt);
+        if (refundTx != null) {
+            Span note = Lk.muted("Refunded " + money(refundTx.amount())
+                + (refundTx.timestamp() == null ? "" : " on " + refundTx.timestamp().format(DATE_FMT)));
+            note.getStyle().set("font-size", "12.5px").set("display", "block");
+            col.add(note);
+        }
+        card.add(col);
+        return card;
     }
 
     // ---- status / summary header ----
@@ -212,6 +280,12 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
             method.getStyle().set("font-size", "12.5px").set("display", "block").set("margin-top", "4px");
             col.add(method);
         }
+
+        TransactionRecordDTO refundTx = refundTransaction(receipt);
+        if (refundTx != null) {
+            col.add(Lk.divider());
+            col.add(paymentRow("Refund issued", "-" + money(refundTx.amount()), false));
+        }
         card.add(col);
         return card;
     }
@@ -304,6 +378,13 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
     private static TransactionRecordDTO paymentCharge(PurchaseRecordDTO receipt) {
         return receipt.transactions().stream()
             .filter(tx -> "PAYMENT_CHARGE".equals(tx.type()))
+            .findFirst()
+            .orElse(null);
+    }
+
+    private static TransactionRecordDTO refundTransaction(PurchaseRecordDTO receipt) {
+        return receipt.transactions().stream()
+            .filter(tx -> "REFUND".equals(tx.type()))
             .findFirst()
             .orElse(null);
     }

@@ -27,10 +27,13 @@ import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.ticketing.system.Presentation.views.company.CompanyInquiryInboxView;
 import com.ticketing.system.Presentation.views.company.ManagerListView;
 import com.ticketing.system.Presentation.views.company.OwnerDashboardView;
+import com.ticketing.system.Presentation.views.account.MyAccountView;
 import com.ticketing.system.Presentation.views.account.MyInvitationsView;
 import com.ticketing.system.Presentation.views.account.ReceiptView;
 import com.ticketing.system.Presentation.views.account.SupportInboxView;
+import com.ticketing.system.Presentation.presenters.account.MyAccountPresenter;
 import com.ticketing.system.Presentation.presenters.account.ReceiptPresenter;
+import com.ticketing.system.Presentation.presenters.account.RefundPresenter;
 import com.ticketing.system.Presentation.views.landing.LandingView;
 import com.ticketing.system.Presentation.views.messaging.SubmitComplaintView;
 import com.ticketing.system.Presentation.presenters.company.ManagerListPresenter;
@@ -43,6 +46,7 @@ import com.ticketing.system.Presentation.presenters.landing.LandingPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.SubmitComplaintPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.SupportInboxPresenter;
 import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
+import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dto.ConversationDTO;
 import com.ticketing.system.Core.Application.dto.MessageDTO;
 import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
@@ -159,13 +163,26 @@ class VaadinSmokeTest {
 
     @Test
     void receiptViewInstantiates() {
-        // Member receipt page wired to a presenter (#276). The constructor only adds the
-        // bodyHolder shell — load + render happen in beforeEnter — so bare mocks exercise the
+        // Member receipt page wired to presenters (#276 + refund #284). The constructor only adds
+        // the bodyHolder shell — load + render happen in beforeEnter — so bare mocks exercise the
         // construction path.
         ReceiptPresenter presenter = mock(ReceiptPresenter.class);
+        RefundPresenter refundPresenter = mock(RefundPresenter.class);
         SessionIdentity sessionIdentity = mock(SessionIdentity.class);
-        assertDoesNotThrow(() -> new ReceiptView(presenter, sessionIdentity),
+        assertDoesNotThrow(() -> new ReceiptView(presenter, refundPresenter, sessionIdentity),
             "ReceiptView failed to construct");
+    }
+
+    @Test
+    void myAccountViewInstantiates() {
+        // Member account page (#284 refund affordance). It builds in the constructor, so the
+        // presenter must return a (here empty) history; bare mocks for the rest.
+        MyAccountPresenter presenter = mock(MyAccountPresenter.class);
+        when(presenter.loadHistory()).thenReturn(new PurchaseHistoryDTO(List.of()));
+        RefundPresenter refundPresenter = mock(RefundPresenter.class);
+        SessionIdentity sessionIdentity = mock(SessionIdentity.class);
+        assertDoesNotThrow(() -> new MyAccountView(presenter, refundPresenter, sessionIdentity),
+            "MyAccountView failed to construct");
     }
 
     @Test
