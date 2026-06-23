@@ -28,7 +28,9 @@ import com.ticketing.system.Presentation.views.company.CompanyInquiryInboxView;
 import com.ticketing.system.Presentation.views.company.ManagerListView;
 import com.ticketing.system.Presentation.views.company.OwnerDashboardView;
 import com.ticketing.system.Presentation.views.account.MyInvitationsView;
+import com.ticketing.system.Presentation.views.account.ReceiptView;
 import com.ticketing.system.Presentation.views.account.SupportInboxView;
+import com.ticketing.system.Presentation.presenters.account.ReceiptPresenter;
 import com.ticketing.system.Presentation.views.landing.LandingView;
 import com.ticketing.system.Presentation.views.messaging.SubmitComplaintView;
 import com.ticketing.system.Presentation.presenters.company.ManagerListPresenter;
@@ -153,6 +155,17 @@ class VaadinSmokeTest {
         SessionIdentity sessionIdentity = mock(SessionIdentity.class);
         assertDoesNotThrow(() -> new EventDetailsView(presenter, sessionIdentity),
             "EventDetailsView failed to construct");
+    }
+
+    @Test
+    void receiptViewInstantiates() {
+        // Member receipt page wired to a presenter (#276). The constructor only adds the
+        // bodyHolder shell — load + render happen in beforeEnter — so bare mocks exercise the
+        // construction path.
+        ReceiptPresenter presenter = mock(ReceiptPresenter.class);
+        SessionIdentity sessionIdentity = mock(SessionIdentity.class);
+        assertDoesNotThrow(() -> new ReceiptView(presenter, sessionIdentity),
+            "ReceiptView failed to construct");
     }
 
     @Test

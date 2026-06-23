@@ -1,10 +1,13 @@
 package com.ticketing.system.Presentation.views.account;
 
+import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.PurchaseRecordDTO;
+import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.TicketRecordDTO;
+import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.TransactionRecordDTO;
 import com.ticketing.system.Presentation.components.Toasts;
-import com.ticketing.system.Presentation.components.buyer.BzRefundDialog;
 import com.ticketing.system.Presentation.components.buyer.BzTicketDialog;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
+import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkCol;
@@ -13,7 +16,10 @@ import com.ticketing.system.Presentation.components.kit.LkIconBtn;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.presenters.account.ReceiptPresenter;
+import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.router.BeforeEnterEvent;
@@ -22,110 +28,100 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
-import java.util.LinkedHashMap;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Full-page receipt view for a past order. Reached by clicking "View"
- * on the {@code MyAccountView} orders grid. Looks up the receipt by
- * route parameter; each row's per-ticket action buttons open the same
- * {@code BzTicketDialog} and {@code BzRefundDialog} the account screen
- * uses.
+ * Full-page receipt for one member-owned order (#276). Reached by clicking "View" on the
+ * {@code MyAccountView} orders grid ({@code receipt/{orderReceiptId}}). Loads the real receipt
+ * through {@link ReceiptPresenter}; the view never calls the service directly nor uses
+ * {@code try/catch} — it switches on the presenter's sealed {@code Outcome}. A receipt that isn't
+ * the signed-in member's renders a 403 banner.
  */
 @Route(value = "receipt/:receiptId", layout = MainLayout.class)
 @PageTitle("Receipt · TicketHub")
 @PermitAll
 public class ReceiptView extends LkPage implements BeforeEnterObserver {
 
-    private record OrderLine(String label, int priceCents) { }
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm");
+    private static final DateTimeFormatter EVENT_FMT = DateTimeFormatter.ofPattern("EEE d MMM yyyy · HH:mm");
 
-    private record ReceiptData(
-        String id, String transactionId, String date, String status, boolean refunded,
-        int subtotalCents, int feeCents, int totalCents, String paymentMethod,
-        List<OrderLine> lines, List<BzTicketDialog.TicketInfo> tickets
-    ) { }
+    private final ReceiptPresenter presenter;
+    private final SessionIdentity sessionIdentity;
 
-    private static final Map<String, ReceiptData> RECEIPTS = new LinkedHashMap<>();
-    static {
-        RECEIPTS.put("TKT-20847", new ReceiptData(
-            "TKT-20847", "4c1f-9a2d", "26 Jun 2026 · 14:08", "Paid", false,
-            48000, 2400, 50400, "Visa •••• 4242",
-            List.of(
-                new OrderLine("Coldplay · MOTS · Lower L · Row C · Seat 14", 16000),
-                new OrderLine("Coldplay · MOTS · Lower L · Row C · Seat 15", 16000),
-                new OrderLine("Hapoel TLV · 2 × General Admission",          16000)),
-            List.of(
-                new BzTicketDialog.TicketInfo("Coldplay · Music of the Spheres", "Concert",
-                    "Thu 26 Jun 2026 · 20:00", "Park HaYarkon, Tel Aviv",
-                    "Lower L", "Row C · Seat 14", "$160.00", "7B2K-4Q", "TKT-20847"),
-                new BzTicketDialog.TicketInfo("Coldplay · Music of the Spheres", "Concert",
-                    "Thu 26 Jun 2026 · 20:00", "Park HaYarkon, Tel Aviv",
-                    "Lower L", "Row C · Seat 15", "$160.00", "7B2K-4R", "TKT-20847"),
-                new BzTicketDialog.TicketInfo("Hapoel TLV vs Maccabi Haifa", "Sport",
-                    "Sat 28 Jun 2026 · 21:00", "Bloomfield Stadium, Tel Aviv",
-                    "General Admission", "—", "$80.00", "9F1A-2M", "TKT-20847"),
-                new BzTicketDialog.TicketInfo("Hapoel TLV vs Maccabi Haifa", "Sport",
-                    "Sat 28 Jun 2026 · 21:00", "Bloomfield Stadium, Tel Aviv",
-                    "General Admission", "—", "$80.00", "9F1A-2N", "TKT-20847"))));
+    private final Div bodyHolder = new Div();
+    private int receiptId;
 
-        RECEIPTS.put("TKT-20713", new ReceiptData(
-            "TKT-20713", "9b3d-1f4c", "20 Jun 2026 · 11:22", "Paid", false,
-            16000, 0, 16000, "Mastercard •••• 8721",
-            List.of(new OrderLine("Hapoel TLV vs Maccabi Haifa · 2 × GA", 16000)),
-            List.of(
-                new BzTicketDialog.TicketInfo("Hapoel TLV vs Maccabi Haifa", "Sport",
-                    "Sat 28 Jun 2026 · 21:00", "Bloomfield Stadium, Tel Aviv",
-                    "General Admission", "—", "$80.00", "9F1A-2M", "TKT-20713"),
-                new BzTicketDialog.TicketInfo("Hapoel TLV vs Maccabi Haifa", "Sport",
-                    "Sat 28 Jun 2026 · 21:00", "Bloomfield Stadium, Tel Aviv",
-                    "General Admission", "—", "$80.00", "9F1A-2N", "TKT-20713"))));
-
-        RECEIPTS.put("TKT-20566", new ReceiptData(
-            "TKT-20566", "2a5e-0c91", "12 May 2026 · 19:47", "Refunded", true,
-            12000, 0, 12000, "Visa •••• 4242",
-            List.of(new OrderLine("Othello at Habima · Stalls · Seat 18", 12000)),
-            List.of(
-                new BzTicketDialog.TicketInfo("Othello at Habima", "Theatre",
-                    "Mon 30 May 2026 · 20:30", "Habima National Theatre, Tel Aviv",
-                    "Stalls", "Row F · Seat 18", "$120.00", "3M4Q-7P", "TKT-20566"))));
+    public ReceiptView(ReceiptPresenter presenter, SessionIdentity sessionIdentity) {
+        this.presenter = presenter;
+        this.sessionIdentity = sessionIdentity;
+        add(bodyHolder);
     }
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
-        String id = event.getRouteParameters().get("receiptId").orElse("TKT-20847");
-        ReceiptData receipt = RECEIPTS.getOrDefault(id, RECEIPTS.get("TKT-20847"));
-
-        title("Receipt #" + receipt.id);
-        subtitle(receipt.date + "  ·  Transaction " + receipt.transactionId);
-        actions(buildHeaderActions());
-
-        add(buildStatusCard(receipt));
-        add(Lk.h2("Items"));
-        add(buildItemsCard(receipt));
-        add(Lk.h2("Payment"));
-        add(buildPaymentCard(receipt));
-        add(Lk.h2("Tickets"));
-        add(buildTicketsCard(receipt));
+        this.receiptId = event.getRouteParameters().get("receiptId")
+                .map(s -> { try { return Integer.parseInt(s); } catch (NumberFormatException e) { return 0; } })
+                .orElse(0);
+        loadAndBuild();
     }
 
-    // ---- header actions ----
+    private void loadAndBuild() {
+        bodyHolder.removeAll();
+        title("Receipt");
+        subtitle(null);
+        actions();
+
+        if (receiptId <= 0) {
+            bodyHolder.add(infoBanner("We couldn't find that receipt."));
+            return;
+        }
+
+        switch (presenter.load(sessionIdentity.memberToken(), receiptId)) {
+            case ReceiptPresenter.Outcome.Success s   -> renderReceipt(s.receipt());
+            case ReceiptPresenter.Outcome.NotFound nf -> bodyHolder.add(infoBanner(nf.message()));
+            case ReceiptPresenter.Outcome.Forbidden f -> bodyHolder.add(infoBanner(f.message()));
+            case ReceiptPresenter.Outcome.Failure f   -> bodyHolder.add(infoBanner(f.message()));
+        }
+    }
+
+    private void renderReceipt(PurchaseRecordDTO receipt) {
+        title("Receipt #" + receipt.orderReceiptId());
+        subtitle(headerSubtitle(receipt));
+        actions(buildHeaderActions());
+
+        bodyHolder.add(buildStatusCard(receipt));
+        bodyHolder.add(Lk.h2("Items"));
+        bodyHolder.add(buildItemsCard(receipt));
+        bodyHolder.add(Lk.h2("Payment"));
+        bodyHolder.add(buildPaymentCard(receipt));
+        bodyHolder.add(Lk.h2("Tickets"));
+        bodyHolder.add(buildTicketsCard(receipt));
+    }
+
+    // ---- header ----
+
+    private String headerSubtitle(PurchaseRecordDTO receipt) {
+        String when = receipt.purchasedAt() == null ? "—" : receipt.purchasedAt().format(DATE_FMT);
+        TransactionRecordDTO charge = paymentCharge(receipt);
+        return charge == null ? when : when + "  ·  Transaction " + charge.externalTransactionId();
+    }
 
     private Component buildHeaderActions() {
         LkRow actions = new LkRow().gap(8);
         actions.add(
-            new LkBtn("Download PDF").variant(LkBtn.Variant.secondary)
+            new LkBtn("Print").variant(LkBtn.Variant.secondary)
                 .icon(new LkIcon("copy", 15))
-                .onClick(e -> Toasts.success("Receipt PDF queued for download (mock).")),
+                .onClick(e -> UI.getCurrent().getPage().executeJs("window.print()")),
             new LkBtn("Email receipt").variant(LkBtn.Variant.tertiary)
-                .onClick(e -> Toasts.success("Receipt resent to alex.morgan@email.com."))
+                .onClick(e -> Toasts.success("Receipt resent to your account email (mock)."))
         );
         return actions;
     }
 
     // ---- status / summary header ----
 
-    private Component buildStatusCard(ReceiptData receipt) {
+    private Component buildStatusCard(PurchaseRecordDTO receipt) {
         LkCard card = new LkCard().pad(18);
         Div row = new Div();
         row.getStyle()
@@ -133,17 +129,19 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
             .set("grid-template-columns", "repeat(auto-fit, minmax(140px, 1fr))")
             .set("gap", "18px");
 
-        LkBadge statusBadge = new LkBadge(receipt.status,
-            receipt.refunded ? LkBadge.Tone.muted : LkBadge.Tone.success).small();
+        LkBadge statusBadge = new LkBadge(receipt.refunded() ? "Refunded" : "Paid",
+            receipt.refunded() ? LkBadge.Tone.muted : LkBadge.Tone.success).small();
 
         Span totalSpan = new Span();
         totalSpan.getElement().setProperty("innerHTML",
-            "<b style='font-size:1.1rem;color:#0f172a'>" + formatPrice(receipt.totalCents) + "</b>");
+            "<b style='font-size:1.1rem;color:#0f172a'>" + money(receipt.totalPaid()) + "</b>");
+
+        int ticketCount = receipt.tickets().size();
 
         row.add(
             statBlock("Status", statusBadge),
-            statBlock("Date",   new Span(receipt.date)),
-            statBlock("Items",  new Span(receipt.lines.size() + " line" + (receipt.lines.size() == 1 ? "" : "s"))),
+            statBlock("Date",   new Span(receipt.purchasedAt() == null ? "—" : receipt.purchasedAt().format(DATE_FMT))),
+            statBlock("Items",  new Span(ticketCount + " ticket" + (ticketCount == 1 ? "" : "s"))),
             statBlock("Total",  totalSpan)
         );
         card.add(row);
@@ -160,18 +158,22 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
         return block;
     }
 
-    // ---- items ----
+    // ---- items (one line per ticket) ----
 
-    private Component buildItemsCard(ReceiptData receipt) {
+    private Component buildItemsCard(PurchaseRecordDTO receipt) {
         LkCard card = new LkCard().pad(0);
+        if (receipt.tickets().isEmpty()) {
+            card.pad(18).add(Lk.muted("No line items on this order."));
+            return card;
+        }
         Div lines = new Div();
         lines.addClassName("bz-order-lines");
-        for (OrderLine line : receipt.lines) {
+        for (TicketRecordDTO t : receipt.tickets()) {
             Div row = new Div();
             row.addClassName("bz-order-line");
-            row.add(new Span(line.label));
+            row.add(new Span(itemLabel(t)));
             Span price = new Span();
-            price.getElement().setProperty("innerHTML", "<b>" + formatPrice(line.priceCents) + "</b>");
+            price.getElement().setProperty("innerHTML", "<b>" + money(t.pricePaid()) + "</b>");
             row.add(price);
             lines.add(row);
         }
@@ -179,19 +181,37 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
         return card;
     }
 
+    private static String itemLabel(TicketRecordDTO t) {
+        String evt = orElse(t.eventName(), "Event #" + t.eventId());
+        String zone = orElse(t.zoneName(), "Zone #" + t.zoneId());
+        String seat = orElse(t.seatNumber(), null);
+        return seat == null ? evt + " · " + zone : evt + " · " + zone + " · " + seat;
+    }
+
     // ---- payment ----
 
-    private Component buildPaymentCard(ReceiptData receipt) {
+    private Component buildPaymentCard(PurchaseRecordDTO receipt) {
         LkCard card = new LkCard().pad(18);
         LkCol col = new LkCol().gap(8);
-        col.add(paymentRow("Subtotal",       formatPrice(receipt.subtotalCents), false));
-        col.add(paymentRow("Service fee",    formatPrice(receipt.feeCents),      false));
+
+        double subtotal = receipt.tickets().stream().mapToDouble(TicketRecordDTO::pricePaid).sum();
+        double fee = Math.max(0, receipt.totalPaid() - subtotal);
+
+        col.add(paymentRow("Subtotal", money(subtotal), false));
+        if (fee > 0.0001) {
+            col.add(paymentRow("Service fee", money(fee), false));
+        }
         col.add(Lk.divider());
-        col.add(paymentRow(receipt.refunded ? "Total refunded" : "Total paid",
-                           formatPrice(receipt.totalCents), true));
-        Span method = Lk.muted("Paid with " + receipt.paymentMethod);
-        method.getStyle().set("font-size", "12.5px").set("display", "block").set("margin-top", "4px");
-        col.add(method);
+        col.add(paymentRow(receipt.refunded() ? "Total refunded" : "Total paid",
+                           money(receipt.totalPaid()), true));
+
+        TransactionRecordDTO charge = paymentCharge(receipt);
+        if (charge != null) {
+            Span method = Lk.muted("Paid with " + charge.providerName()
+                + (charge.currency() == null || charge.currency().isBlank() ? "" : " (" + charge.currency() + ")"));
+            method.getStyle().set("font-size", "12.5px").set("display", "block").set("margin-top", "4px");
+            col.add(method);
+        }
         card.add(col);
         return card;
     }
@@ -212,15 +232,19 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
 
     // ---- tickets list ----
 
-    private Component buildTicketsCard(ReceiptData receipt) {
+    private Component buildTicketsCard(PurchaseRecordDTO receipt) {
         LkCard card = new LkCard().pad(0);
-        for (BzTicketDialog.TicketInfo ticket : receipt.tickets) {
-            card.add(buildTicketRow(ticket, receipt.refunded));
+        if (receipt.tickets().isEmpty()) {
+            card.pad(18).add(Lk.muted("No tickets on this order."));
+            return card;
+        }
+        for (TicketRecordDTO t : receipt.tickets()) {
+            card.add(buildTicketRow(t));
         }
         return card;
     }
 
-    private Div buildTicketRow(BzTicketDialog.TicketInfo t, boolean refunded) {
+    private Div buildTicketRow(TicketRecordDTO t) {
         Div row = new Div();
         row.getStyle()
             .set("display", "flex").set("align-items", "center").set("gap", "16px")
@@ -236,44 +260,78 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
         Div info = new Div();
         info.getStyle().set("flex", "1 1 auto").set("min-width", "0");
         Span title = new Span();
-        title.getElement().setProperty("innerHTML", "<b>" + escape(t.event()) + "</b>");
+        title.getElement().setProperty("innerHTML", "<b>" + escape(orElse(t.eventName(), "Event #" + t.eventId())) + "</b>");
         title.getStyle().set("display", "block").set("color", "#0f172a");
-        Span meta = Lk.muted(t.date() + "  ·  " + t.zone() + "  ·  " + t.seat());
+        Span meta = Lk.muted(ticketMeta(t));
         meta.getStyle().set("font-size", "13px").set("display", "block").set("margin-top", "2px");
         info.add(title, meta);
 
-        Span code = new Span(t.barcode());
+        Span code = new Span(orElse(t.barcode(), "Not yet issued"));
         code.addClassName("lk-mono");
         code.getStyle()
             .set("font-size", "0.78rem").set("color", "var(--muted)").set("letter-spacing", "0.06em");
 
         LkIconBtn viewBtn = new LkIconBtn(new LkIcon("eye", 15), "View ticket");
-        viewBtn.addClickListener(e -> BzTicketDialog.show(t));
+        viewBtn.addClickListener(e -> BzTicketDialog.show(toTicketInfo(t)));
 
         LkRow actions = new LkRow().gap(4).noWrap();
         actions.add(viewBtn);
-        if (!refunded) {
-            LkIconBtn refundBtn = new LkIconBtn(new LkIcon("card", 15), "Request refund");
-            refundBtn.addClickListener(e -> BzRefundDialog.show(t));
-            actions.add(refundBtn);
-        }
 
         row.add(swatch, info, code, actions);
         return row;
     }
 
+    private static String ticketMeta(TicketRecordDTO t) {
+        String when = t.eventStartsAt() == null ? "—" : t.eventStartsAt().format(EVENT_FMT);
+        return when + "  ·  " + orElse(t.zoneName(), "Zone #" + t.zoneId()) + "  ·  " + orElse(t.seatNumber(), "—");
+    }
+
+    private static BzTicketDialog.TicketInfo toTicketInfo(TicketRecordDTO t) {
+        return new BzTicketDialog.TicketInfo(
+            orElse(t.eventName(), "Event #" + t.eventId()),
+            orElse(t.category(), "—"),
+            t.eventStartsAt() == null ? "—" : t.eventStartsAt().format(EVENT_FMT),
+            orElse(t.venue(), "—"),
+            orElse(t.zoneName(), "Zone #" + t.zoneId()),
+            orElse(t.seatNumber(), "—"),
+            money(t.pricePaid()),
+            orElse(t.barcode(), "Not yet issued"),
+            "#" + t.orderReceiptId());
+    }
+
+    // ---- helpers ----
+
+    private static TransactionRecordDTO paymentCharge(PurchaseRecordDTO receipt) {
+        return receipt.transactions().stream()
+            .filter(tx -> "PAYMENT_CHARGE".equals(tx.type()))
+            .findFirst()
+            .orElse(null);
+    }
+
+    private Component infoBanner(String message) {
+        LkBanner banner = new LkBanner();
+        banner.tone(LkBanner.Tone.info);
+        banner.setIcon(new LkIcon("info", 18));
+        banner.setBody(new Span(message));
+        return banner;
+    }
+
     private static String[] gradientFor(String cat) {
         return switch (cat == null ? "" : cat.toLowerCase()) {
-            case "concert"    -> new String[]{"#8b5cf6", "#ec4899"};
-            case "sport"      -> new String[]{"#0ea5e9", "#10b981"};
-            case "theatre"    -> new String[]{"#dc2626", "#f59e0b"};
-            case "conference" -> new String[]{"#0d9488", "#1d4ed8"};
-            default           -> new String[]{"#475569", "#1a5490"};
+            case "concert", "music" -> new String[]{"#8b5cf6", "#ec4899"};
+            case "sport", "sports"  -> new String[]{"#0ea5e9", "#10b981"};
+            case "theatre", "theater" -> new String[]{"#dc2626", "#f59e0b"};
+            case "conference"       -> new String[]{"#0d9488", "#1d4ed8"};
+            default                 -> new String[]{"#475569", "#1a5490"};
         };
     }
 
-    private static String formatPrice(int cents) {
-        return "$" + (cents / 100) + "." + String.format("%02d", cents % 100);
+    private static String money(double amount) {
+        return String.format("$%,.2f", amount);
+    }
+
+    private static String orElse(String value, String fallback) {
+        return (value == null || value.isBlank()) ? fallback : value;
     }
 
     private static String escape(String s) {
