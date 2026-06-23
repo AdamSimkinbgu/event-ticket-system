@@ -171,11 +171,14 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
             case LoadOutcome.Success s -> {
                 PurchasePolicyDTO dto = s.policy();
                 if (dto != null && !"NONE".equals(dto.type())) {
+                    Node loaded = dtoToNode(dto);
                     root.children.clear();
-                    root.op = Op.valueOf(dto.type());
-                    if (dto.children() != null) {
-                        for (PurchasePolicyDTO child : dto.children())
-                            root.children.add(dtoToNode(child));
+                    if (loaded instanceof Composite c) {
+                        root.op = c.op;
+                        root.children.addAll(c.children);
+                    } else {
+                        root.op = Op.AND;
+                        root.children.add(loaded);
                     }
                 }
             }
