@@ -40,6 +40,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Route(value = "browse", layout = MainLayout.class)
 @PageTitle("Browse Events · TicketHub")
@@ -221,18 +222,21 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
 
         dateRangeField = new LkDateRangeField().label("Date range");
         dateRangeField.onChange(v -> {
+            if (Objects.equals(filterDateRange, v)) return;   // skip redundant re-query (e.g. clearFilters sync)
             filterDateRange = v;
             runSearch();
         });
 
         regionSelect = new LkSelect(REGION_ALL, REGIONS).label("Region");
         regionSelect.onChange(v -> {
+            if (Objects.equals(filterRegion, v)) return;
             filterRegion = v;
             runSearch();
         });
 
         sortSelect = new LkSelect(SORTS.get(0), SORTS).label("Sort by");
         sortSelect.onChange(v -> {
+            if (Objects.equals(filterSort, v)) return;
             filterSort = v;
             runSearch();
         });
@@ -259,6 +263,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         priceMin.setValueChangeMode(ValueChangeMode.LAZY);
         priceMin.getStyle().set("flex", "1 1 0");
         priceMin.addValueChangeListener(e -> {
+            if (Objects.equals(filterPriceMin, e.getValue())) return;
             filterPriceMin = e.getValue();
             runSearch();
         });
@@ -272,6 +277,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         priceMax.setValueChangeMode(ValueChangeMode.LAZY);
         priceMax.getStyle().set("flex", "1 1 0");
         priceMax.addValueChangeListener(e -> {
+            if (Objects.equals(filterPriceMax, e.getValue())) return;
             filterPriceMax = e.getValue();
             runSearch();
         });

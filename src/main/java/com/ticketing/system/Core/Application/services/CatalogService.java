@@ -221,18 +221,24 @@ public class CatalogService {
         Set<String> seenVenues = new LinkedHashSet<>();
 
         for (Event event : eventRepository.findByStatus(EventStatus.ON_SALE)) {
+            if (events.size() >= limit && artists.size() >= limit && venues.size() >= limit) {
+                break; // every bucket is full — nothing more can surface
+            }
             ProductionCompany company = activeCompanyOrNull(event.getCompanyId());
             if (company == null) {
                 continue; // closed / unknown company — not publicly visible
             }
 
             String eventName = event.getName();
-            if (eventName != null && eventName.toLowerCase().contains(q)) {
+            if (events.size() < limit && eventName != null && eventName.toLowerCase().contains(q)) {
                 events.add(new SearchResultDTO("EVENT", eventName, company.getName(), event.getId()));
             }
 
-            if (event.getArtistsNames() != null) {
+            if (artists.size() < limit && event.getArtistsNames() != null) {
                 for (String artist : event.getArtistsNames()) {
+                    if (artists.size() >= limit) {
+                        break;
+                    }
                     if (artist != null && artist.toLowerCase().contains(q)
                             && seenArtists.add(artist.toLowerCase())) {
                         artists.add(new SearchResultDTO("ARTIST", artist, "Artist · " + eventName, event.getId()));
@@ -241,7 +247,8 @@ public class CatalogService {
             }
 
             String venue = venueLabel(event);
-            if (venue != null && venue.toLowerCase().contains(q) && seenVenues.add(venue.toLowerCase())) {
+            if (venues.size() < limit && venue != null && venue.toLowerCase().contains(q)
+                    && seenVenues.add(venue.toLowerCase())) {
                 venues.add(new SearchResultDTO("VENUE", venue, "Venue · " + eventName, event.getId()));
             }
         }

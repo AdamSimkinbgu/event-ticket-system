@@ -64,7 +64,9 @@ public class RefundService {
      * @throws RefundFailedException          the gateway refund failed / no original charge
      */
     public RefundResultDTO requestRefund(String token, int orderId, String reason) {
-        log.info("Member refund requested for order {} (reason: {})", orderId, reason);
+        // Don't log the raw reason — it's user free-text and may carry sensitive data; length only.
+        log.info("Member refund requested for order {} (reason length: {})",
+                orderId, reason == null ? 0 : reason.length());
         if (!authenticationService.validateToken(token)) {
             throw new InvalidTokenException();
         }
