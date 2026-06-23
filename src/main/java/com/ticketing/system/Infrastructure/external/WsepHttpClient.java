@@ -53,6 +53,11 @@ public class WsepHttpClient {
             return this;
         }
 
+        /** Read-only copy of the fields — lets adapters/tests inspect the request without re-encoding. */
+        public Map<String, String> fields() {
+            return Map.copyOf(fields);
+        }
+
         private String encoded() {
             return fields.entrySet().stream()
                     .map(e -> enc(e.getKey()) + "=" + enc(e.getValue()))
