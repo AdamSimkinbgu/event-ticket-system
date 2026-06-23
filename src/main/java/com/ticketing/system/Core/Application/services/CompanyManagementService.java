@@ -47,7 +47,6 @@ import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
 import com.ticketing.system.Core.Application.dto.ManagerAppointmentRequestDTO;
 
-import java.util.regex.Pattern;
 import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
@@ -83,10 +82,6 @@ public class CompanyManagementService {
         this.notificationService = notificationService;
     }
 
-
-
-
-
     // UC-23 — Owner appoints another Member as co-Owner (PENDING).
     public void appointOwner(String token, OwnerAppointmentRequestDTO request) {
         if (request.companyId() <= 0 || request.targetUserId() <= 0) {
@@ -94,7 +89,7 @@ public class CompanyManagementService {
             throw new IllegalArgumentException("companyId and targetUserId must be positive integers");
         }
         int appointerId = authenticate(token);
-        
+
         User appointer = null;
         User targetUser = null;
         try {
@@ -104,18 +99,19 @@ public class CompanyManagementService {
             log.warn("User appointer/appointee not found during appointment: {}", e.getMessage());
             throw new RuntimeException("User not found");
         }
-        
 
         appointer.requireOwnerInCompany(request.companyId()); // check if appointer has permissions
         targetUser.receiveOwnerAppointment(request.companyId(), appointerId); // target user receives pending owner
-                                                                              // appointment, here we'll do logic checks.
+                                                                              // appointment, here we'll do logic
+                                                                              // checks.
 
         userRepository.updateUser(targetUser); // update target user with new appointment
-        
+
         // Notify target user
         try {
             ProductionCompany company = companyRepository.getCompanyById(request.companyId());
-            notificationService.notifyOwnerAppointmentPending(request.targetUserId(), request.companyId(), company.getName());
+            notificationService.notifyOwnerAppointmentPending(request.targetUserId(), request.companyId(),
+                    company.getName());
         } catch (Exception e) {
             log.warn("Owner appointment created but notification failed for userId={}", request.targetUserId(), e);
         }
@@ -123,10 +119,6 @@ public class CompanyManagementService {
         log.info("Owner appointment created successfully: appointerId={}, targetUserId={}, companyId={}",
                 appointerId, request.targetUserId(), request.companyId());
     }
-
-
-
-
 
     // UC-24 — Owner appoints a Manager with explicit granular permissions.
     public void appointManager(String token, ManagerAppointmentRequestDTO request) {
@@ -145,7 +137,8 @@ public class CompanyManagementService {
         // Notify target user
         try {
             ProductionCompany company = companyRepository.getCompanyById(request.companyId());
-            notificationService.notifyRoleChanged(request.targetUserId(), request.companyId(), company.getName(), "MANAGER");
+            notificationService.notifyRoleChanged(request.targetUserId(), request.companyId(), company.getName(),
+                    "MANAGER");
         } catch (Exception e) {
             log.warn("Manager appointment created but notification failed for userId={}", request.targetUserId(), e);
         }
@@ -154,11 +147,8 @@ public class CompanyManagementService {
                 ownerId, request.targetUserId(), request.companyId(), request.permissions());
     }
 
-
-
-
-
-    // UC-23 / UC-24 — target accepts or rejects a pending owner/manager appointment.
+    // UC-23 / UC-24 — target accepts or rejects a pending owner/manager
+    // appointment.
     public void respondToAppointment(String token, AppointmentResponseDTO response) {
         if (response.companyId() <= 0) {
             log.warn("Invalid appointment response: companyId must be a positive integer");
@@ -172,7 +162,8 @@ public class CompanyManagementService {
         CompanyAppointment appointment;
 
         if (response.accept()) {
-            appointment = user.acceptInvitation(response.companyId());  // transitions the pending appointment to accepted state
+            appointment = user.acceptInvitation(response.companyId()); // transitions the pending appointment to
+                                                                       // accepted state
             if (appointment.getRole() == CompanyRole.Owner) {
                 company.addOwner(appointment.getInviterId(), userId);
             } else if (appointment.getRole() == CompanyRole.Manager) {
@@ -182,27 +173,24 @@ public class CompanyManagementService {
 
             // Notify of role change to final role
             try {
-                notificationService.notifyRoleChanged(userId, response.companyId(), company.getName(), appointment.getRole().name());
+                notificationService.notifyRoleChanged(userId, response.companyId(), company.getName(),
+                        appointment.getRole().name());
             } catch (Exception e) {
                 log.warn("Appointment accepted but notification failed for userId={}", userId, e);
             }
         } else {
-            user.rejectInvitation(response.companyId()); // transitions the pending appointment to rejected state, status-based lookups will no longer return it.
+            user.rejectInvitation(response.companyId()); // transitions the pending appointment to rejected state,
+                                                         // status-based lookups will no longer return it.
             log.info("Appointment rejected: userId={}, companyId={}", userId, response.companyId());
         }
         userRepository.updateUser(user);
         companyRepository.updateCompany(company);
     }
 
-
-
-
-
-
     // UC-24 — edit a Manager's permission set (only by the original appointer).
     public void editManagerPermissions(String token, PermissionEditDTO edit) {
         int ownerId = authenticate(token);
-        
+
         User manager = null;
         try {
             manager = userRepository.getUserById(edit.targetUserId());
@@ -210,20 +198,21 @@ public class CompanyManagementService {
             log.warn("Manager not found during permission edit: {}", e.getMessage());
             throw new RuntimeException("Manager not found");
         }
-        
+
         if (edit.newPermissions() == null || edit.newPermissions().isEmpty()) {
             log.warn("Invalid permission edit: newPermissions list cannot be null or empty");
             throw new IllegalArgumentException("Manager role must have at least one permission");
         }
 
-        manager.ModifyManagerPermissions(edit.companyId(), ownerId, edit.newPermissions());  // checks done in here.
+        manager.ModifyManagerPermissions(edit.companyId(), ownerId, edit.newPermissions()); // checks done in here.
 
         userRepository.updateUser(manager);
 
         // Notify manager of permission change
         try {
             ProductionCompany company = companyRepository.getCompanyById(edit.companyId());
-            notificationService.notifyRoleChanged(edit.targetUserId(), edit.companyId(), company.getName(), "MANAGER (permissions updated)");
+            notificationService.notifyRoleChanged(edit.targetUserId(), edit.companyId(), company.getName(),
+                    "MANAGER (permissions updated)");
         } catch (Exception e) {
             log.warn("Manager permissions updated but notification failed for userId={}", edit.targetUserId(), e);
         }
@@ -231,11 +220,6 @@ public class CompanyManagementService {
         log.info("Manager permissions updated successfully for user {} in company {}", edit.targetUserId(),
                 edit.companyId());
     }
-
-
-
-
-
 
     public void RevokeAppointment(String token, AppointmentRevokeDTO revokeRequest) {
         int ownerId = authenticate(token);
@@ -248,7 +232,7 @@ public class CompanyManagementService {
             throw new RuntimeException("Cannot revoke appointment of the founder");
         }
 
-        targetUser.revokeAppointment(revokeRequest.companyId(), ownerId);  // checks done in here.
+        targetUser.revokeAppointment(revokeRequest.companyId(), ownerId); // checks done in here.
         company.RevokeAppointment(revokeRequest.targetUserId());
 
         userRepository.updateUser(targetUser);
@@ -256,7 +240,8 @@ public class CompanyManagementService {
 
         // Notify user of revocation
         try {
-            notificationService.notifyManagerRevoked(revokeRequest.targetUserId(), revokeRequest.companyId(), company.getName());
+            notificationService.notifyManagerRevoked(revokeRequest.targetUserId(), revokeRequest.companyId(),
+                    company.getName());
         } catch (Exception e) {
             log.warn("Role revoked but notification failed for userId={}", revokeRequest.targetUserId(), e);
         }
@@ -264,22 +249,22 @@ public class CompanyManagementService {
         log.info("Manager revoked successfully");
     }
 
-
     // Resolves a username-or-email string to a userId — used by the invite flow.
     public int resolveUserId(String identifier) {
         if (identifier == null || identifier.isBlank())
             throw new IllegalArgumentException("Identifier must not be blank");
 
         Optional<User> byName = userRepository.findByUsername(identifier.trim());
-        if (byName.isPresent()) return byName.get().getUserId();
+        if (byName.isPresent())
+            return byName.get().getUserId();
 
         Optional<User> byEmail = userRepository.findByEmail(identifier.trim());
-        if (byEmail.isPresent()) return byEmail.get().getUserId();
+        if (byEmail.isPresent())
+            return byEmail.get().getUserId();
 
         throw new UserNotFoundException(identifier);
     }
 
-    
     // ---------------------------------------------------------------------------
     // Read-side roster queries (#264 — wire ManagerListView).
     // ---------------------------------------------------------------------------
@@ -330,7 +315,8 @@ public class CompanyManagementService {
     }
 
     // Companies where the authenticated user holds an ACTIVE Owner appointment.
-    // Bridges token -> companyId for the owner workspace until a real current-company
+    // Bridges token -> companyId for the owner workspace until a real
+    // current-company
     // selector lands (V2-CADMIN-05).
     public List<ProductionCompanyDTO> findOwnedCompanies(String token) {
         int userId = authenticate(token);
@@ -354,10 +340,14 @@ public class CompanyManagementService {
         return owned;
     }
 
-    // Every company the authenticated member belongs to via an ACTIVE appointment (Owner OR
-    // Manager), with the viewer's display role resolved ("Founder"/"Co-owner"/"Manager").
-    // Feeds the owner-workspace company selector + name/role subtitle (V2-WIRE-OWNER-DASH);
-    // unlike findOwnedCompanies it keeps managers, since /owner is reachable by them too.
+    // Every company the authenticated member belongs to via an ACTIVE appointment
+    // (Owner OR
+    // Manager), with the viewer's display role resolved
+    // ("Founder"/"Co-owner"/"Manager").
+    // Feeds the owner-workspace company selector + name/role subtitle
+    // (V2-WIRE-OWNER-DASH);
+    // unlike findOwnedCompanies it keeps managers, since /owner is reachable by
+    // them too.
     public List<MyCompanyDTO> findMyCompanies(String token) {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
@@ -383,9 +373,12 @@ public class CompanyManagementService {
         return companies;
     }
 
-    // II.4.7.3 / II.4.8.2 — the signed-in member's own invitation records (every status),
-    // keyed on the inviter. The presenter splits PENDING (the pending list) from the
-    // resolved ACTIVE/REJECTED/REVOKED rows (history). Names are resolved per row, mirroring
+    // II.4.7.3 / II.4.8.2 — the signed-in member's own invitation records (every
+    // status),
+    // keyed on the inviter. The presenter splits PENDING (the pending list) from
+    // the
+    // resolved ACTIVE/REJECTED/REVOKED rows (history). Names are resolved per row,
+    // mirroring
     // listPendingInvitations.
     public List<InvitationDTO> listMyInvitations(String token) {
         int userId = authenticate(token);
@@ -473,36 +466,29 @@ public class CompanyManagementService {
         }
     }
 
-
-
-
-
-
-
-
-
-
-
-    public void setCompanyPolicies( String token, CompanyPolicyConfigDTO config) {
-    if (config == null) {
-        throw new IllegalArgumentException("Company policy config cannot be null");
+    public void setCompanyPolicies(String token, CompanyPolicyConfigDTO config) {
+        if (config == null) {
+            throw new IllegalArgumentException("Company policy config cannot be null");
+        }
+        int userId = authenticate(token);
+        ProductionCompany company = companyRepository.getCompanyById(config.companyId());
+        if (company == null) {
+            throw new CompanyNotFoundException(config.companyId());
+        }
+        company.checkowner(userId);
+        PurchasePolicy policy = buildPurchasePolicyFromDTO(config.defaultPurchasePolicy());
+        company.setPurchasePolicy(policy);
+        companyRepository.save(company);
+        log.info("Purchase policy updated for company {} by user {}", config.companyId(), userId);
     }
-    int userId = authenticate(token);
-    ProductionCompany company = companyRepository.getCompanyById(config.companyId());
-    if (company == null) {
-        throw new CompanyNotFoundException(config.companyId());
-    }
-    company.checkowner(userId);
-    PurchasePolicy policy = buildPurchasePolicyFromDTO(config.defaultPurchasePolicy());
-    company.setPurchasePolicy(policy);
-    companyRepository.save(company);
-    log.info("Purchase policy updated for company {} by user {}", config.companyId(), userId);
-}
 
     // UC-22 — Owner-side flat list of company sales.
-    // this function returns a list of PurchaseHistoryDTO, each containing a single PurchaseRecordDTO, which represents a single OrderReceipt that has 
-    // at least one ticket for an event of this company. The PurchaseRecordDTO contains a list of TicketRecordDTOs, but only those that are 
-    // for events of this company (the rest are filtered out). This way we return the full receipt details for each relevant purchase, but only 
+    // this function returns a list of PurchaseHistoryDTO, each containing a single
+    // PurchaseRecordDTO, which represents a single OrderReceipt that has
+    // at least one ticket for an event of this company. The PurchaseRecordDTO
+    // contains a list of TicketRecordDTOs, but only those that are
+    // for events of this company (the rest are filtered out). This way we return
+    // the full receipt details for each relevant purchase, but only
     // include the tickets that are relevant to this company's sales history.
     public List<PurchaseHistoryDTO> viewSalesHistory(String token, int companyId) {
         log.info("Attempting to view sales history for company {}", companyId);
@@ -533,7 +519,8 @@ public class CompanyManagementService {
         Set<Integer> companyEventIdSet = Set.copyOf(companyEventIds);
         OrderReceiptMapper mapper = new OrderReceiptMapper();
 
-        // The repository method finds all receipts that have at least one ticket for the company's events.
+        // The repository method finds all receipts that have at least one ticket for
+        // the company's events.
         List<PurchaseHistoryDTO> salesHistory = this.orderReceiptRepository.findByEventIds(companyEventIds).stream()
                 .map(receipt -> {
                     List<Ticket> companyTickets = ticketRepository.findByOrderReceiptId(receipt.getId()).stream()
@@ -542,7 +529,8 @@ public class CompanyManagementService {
 
                     return new PurchaseHistoryDTO(List.of(mapper.toPurchaseRecordDTO(
                             receipt, companyTickets, eventRepository, companyRepository, userRepository)));
-                    // use overloaded mapper to pass the filtered list of tickets for richer DTO construction without bloating service logic
+                    // use overloaded mapper to pass the filtered list of tickets for richer DTO
+                    // construction without bloating service logic
                 }).toList();
 
         // This is the correct responsibility split.
@@ -553,17 +541,6 @@ public class CompanyManagementService {
         log.info("Successfully retrieved sales history for company {}", companyId);
         return salesHistory;
     }
-    
-
-
-
-
-
-
-
-
-
-
 
     // UC-25 — recursive organizational tree (Owners only per II.4.15).
     public OrganizationalTreeNodeDTO viewOrganizationalTree(String token, int companyId) {
@@ -582,17 +559,17 @@ public class CompanyManagementService {
             throw new RuntimeException("User not found");
         }
         if (!currUser.isOwnerInCompany(companyId)) {
-            log.warn("User {} does not have permission to view organizational tree for company {}, he's not an owner", requesterId,
+            log.warn("User {} does not have permission to view organizational tree for company {}, he's not an owner",
+                    requesterId,
                     companyId);
             throw new RuntimeException("Insufficient permissions");
         }
 
         log.info("Successfully retrieved organizational tree for company {}", companyId);
-        // using the helper method to build the tree starting from the founder (root of the tree)
+        // using the helper method to build the tree starting from the founder (root of
+        // the tree)
         return buildOrganizationalTree(companyId, company.getFounderId());
     }
-
-
 
     // *HELPER METHOD* — BFS build of the organizational tree for UC-25
     // (viewOrganizationalTree).
@@ -640,14 +617,6 @@ public class CompanyManagementService {
         return userIdToNodeMap.get(founderId);
     }
 
-
-
-
-
-
-
-
-
     public List<UserCompanyDTO> listForUser(int userId) {
         User user = userRepository.getUserById(userId);
         List<UserCompanyDTO> memberships = new ArrayList<>();
@@ -690,9 +659,12 @@ public class CompanyManagementService {
     }
 
     private static String displayRole(int userId, CompanyAppointment appointment, ProductionCompany company) {
-        if (company.getFounderId() == userId) return "Founder";
-        if (appointment.getRole() == CompanyRole.Owner) return "Co-owner";
-        if (appointment.getRole() == CompanyRole.Manager) return "Manager";
+        if (company.getFounderId() == userId)
+            return "Founder";
+        if (appointment.getRole() == CompanyRole.Owner)
+            return "Co-owner";
+        if (appointment.getRole() == CompanyRole.Manager)
+            return "Manager";
         return appointment.getRole().name();
     }
 
@@ -713,64 +685,70 @@ public class CompanyManagementService {
         }
         return sessionManager.extractUserId(token);
     }
-private PurchasePolicy buildPurchasePolicyFromDTO(PurchasePolicyDTO dto) {
-    if (dto == null) return new NoPurchasePolicy();
-    if (dto.type() == null || dto.type().isBlank())
-        throw new IllegalArgumentException("Purchase policy type is required");
-    switch (dto.type().trim().toUpperCase()) {
-        case "AGE":
-            if (dto.minimumAge() == null) throw new IllegalArgumentException("minimumAge is required");
-            return new AgePurchasePolicy(dto.minimumAge());
-        case "MIN_TICKETS":
-            if (dto.minimumTickets() == null) throw new IllegalArgumentException("minimumTickets is required");
-            return new MinTicketsPurchasePolicy(dto.minimumTickets());
-        case "MAX_TICKETS":
-            if (dto.maximumTickets() == null) throw new IllegalArgumentException("maximumTickets is required");
-            return new MaxTicketsPurchasePolicy(dto.maximumTickets());
-        case "AND":
-            if (dto.children() == null || dto.children().size() < 2)
-                throw new IllegalArgumentException("AND policy must have at least two children");
-            PurchasePolicy andResult = buildPurchasePolicyFromDTO(dto.children().get(0));
-            for (int i = 1; i < dto.children().size(); i++)
-                andResult = new AndPurchasePolicy(andResult, buildPurchasePolicyFromDTO(dto.children().get(i)));
-            return andResult;
-        case "OR":
-            if (dto.children() == null || dto.children().size() < 2)
-                throw new IllegalArgumentException("OR policy must have at least two children");
-            PurchasePolicy orResult = buildPurchasePolicyFromDTO(dto.children().get(0));
-            for (int i = 1; i < dto.children().size(); i++)
-                orResult = new OrPurchasePolicy(orResult, buildPurchasePolicyFromDTO(dto.children().get(i)));
-            return orResult;
-        case "NONE":
+
+    private PurchasePolicy buildPurchasePolicyFromDTO(PurchasePolicyDTO dto) {
+        if (dto == null)
             return new NoPurchasePolicy();
-        default:
-            throw new IllegalArgumentException("Unknown purchase policy type: " + dto.type());
+        if (dto.type() == null || dto.type().isBlank())
+            throw new IllegalArgumentException("Purchase policy type is required");
+        switch (dto.type().trim().toUpperCase()) {
+            case "AGE":
+                if (dto.minimumAge() == null)
+                    throw new IllegalArgumentException("minimumAge is required");
+                return new AgePurchasePolicy(dto.minimumAge());
+            case "MIN_TICKETS":
+                if (dto.minimumTickets() == null)
+                    throw new IllegalArgumentException("minimumTickets is required");
+                return new MinTicketsPurchasePolicy(dto.minimumTickets());
+            case "MAX_TICKETS":
+                if (dto.maximumTickets() == null)
+                    throw new IllegalArgumentException("maximumTickets is required");
+                return new MaxTicketsPurchasePolicy(dto.maximumTickets());
+            case "AND":
+                if (dto.children() == null || dto.children().size() < 2)
+                    throw new IllegalArgumentException("AND policy must have at least two children");
+                PurchasePolicy andResult = buildPurchasePolicyFromDTO(dto.children().get(0));
+                for (int i = 1; i < dto.children().size(); i++)
+                    andResult = new AndPurchasePolicy(andResult, buildPurchasePolicyFromDTO(dto.children().get(i)));
+                return andResult;
+            case "OR":
+                if (dto.children() == null || dto.children().size() < 2)
+                    throw new IllegalArgumentException("OR policy must have at least two children");
+                PurchasePolicy orResult = buildPurchasePolicyFromDTO(dto.children().get(0));
+                for (int i = 1; i < dto.children().size(); i++)
+                    orResult = new OrPurchasePolicy(orResult, buildPurchasePolicyFromDTO(dto.children().get(i)));
+                return orResult;
+            case "NONE":
+                return new NoPurchasePolicy();
+            default:
+                throw new IllegalArgumentException("Unknown purchase policy type: " + dto.type());
+        }
     }
-}
-public PurchasePolicyDTO getCompanyPurchasePolicy(String token, int companyId) {
-    int userId = authenticate(token);
-    ProductionCompany company = companyRepository.getCompanyById(companyId);
-    if (company == null) throw new RuntimeException("Company not found");
-    company.checkowner(userId);
-    return policyToDTO(company.getPurchasePolicy());
-}
 
+    public PurchasePolicyDTO getCompanyPurchasePolicy(String token, int companyId) {
+        int userId = authenticate(token);
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null)
+            throw new RuntimeException("Company not found");
+        company.checkowner(userId);
+        return policyToDTO(company.getPurchasePolicy());
+    }
 
-private PurchasePolicyDTO policyToDTO(PurchasePolicy policy) {
-    if (policy == null || policy instanceof NoPurchasePolicy)
+    private PurchasePolicyDTO policyToDTO(PurchasePolicy policy) {
+        if (policy == null || policy instanceof NoPurchasePolicy)
+            return new PurchasePolicyDTO("NONE", null, null, null, null);
+        if (policy instanceof AgePurchasePolicy a)
+            return new PurchasePolicyDTO("AGE", a.getMinimumAge(), null, null, null);
+        if (policy instanceof MinTicketsPurchasePolicy m)
+            return new PurchasePolicyDTO("MIN_TICKETS", null, m.getMinimumTickets(), null, null);
+        if (policy instanceof MaxTicketsPurchasePolicy m)
+            return new PurchasePolicyDTO("MAX_TICKETS", null, null, m.getMaximumTickets(), null);
+        if (policy instanceof AndPurchasePolicy a)
+            return new PurchasePolicyDTO("AND", null, null, null,
+                    List.of(policyToDTO(a.getLeftPolicy()), policyToDTO(a.getRightPolicy())));
+        if (policy instanceof OrPurchasePolicy o)
+            return new PurchasePolicyDTO("OR", null, null, null,
+                    List.of(policyToDTO(o.getLeftPolicy()), policyToDTO(o.getRightPolicy())));
         return new PurchasePolicyDTO("NONE", null, null, null, null);
-    if (policy instanceof AgePurchasePolicy a)
-        return new PurchasePolicyDTO("AGE", a.getMinimumAge(), null, null, null);
-    if (policy instanceof MinTicketsPurchasePolicy m)
-        return new PurchasePolicyDTO("MIN_TICKETS", null, m.getMinimumTickets(), null, null);
-    if (policy instanceof MaxTicketsPurchasePolicy m)
-        return new PurchasePolicyDTO("MAX_TICKETS", null, null, m.getMaximumTickets(), null);
-    if (policy instanceof AndPurchasePolicy a)
-        return new PurchasePolicyDTO("AND", null, null, null,
-            List.of(policyToDTO(a.getLeftPolicy()), policyToDTO(a.getRightPolicy())));
-    if (policy instanceof OrPurchasePolicy o)
-        return new PurchasePolicyDTO("OR", null, null, null,
-            List.of(policyToDTO(o.getLeftPolicy()), policyToDTO(o.getRightPolicy())));
-    return new PurchasePolicyDTO("NONE", null, null, null, null);
-}
+    }
 }
