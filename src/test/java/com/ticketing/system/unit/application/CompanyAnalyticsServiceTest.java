@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
 import com.ticketing.system.Core.Application.services.CompanyAnalyticsService;
+import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
+import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.messaging.Conversation;
@@ -20,6 +22,7 @@ import com.ticketing.system.Core.Domain.messaging.IConversationRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
 
 class CompanyAnalyticsServiceTest {
 
@@ -32,6 +35,9 @@ class CompanyAnalyticsServiceTest {
     private IEventRepository eventRepository;
     private IOrderReceiptRepository orderReceiptRepository;
     private IConversationRepository conversationRepository;
+    private  ITicketRepository ticketRepository;
+    private  IProductionCompanyRepository companyRepository;
+    private  IUserRepository userRepository;
     private CompanyAnalyticsService service;
 
     @BeforeEach
@@ -39,7 +45,10 @@ class CompanyAnalyticsServiceTest {
         eventRepository = mock(IEventRepository.class);
         orderReceiptRepository = mock(IOrderReceiptRepository.class);
         conversationRepository = mock(IConversationRepository.class);
-        service = new CompanyAnalyticsService(eventRepository, orderReceiptRepository, conversationRepository);
+        ticketRepository = mock(ITicketRepository.class);
+        companyRepository = mock(IProductionCompanyRepository.class);
+        userRepository = mock(IUserRepository.class);
+        service = new CompanyAnalyticsService(eventRepository, orderReceiptRepository, conversationRepository, ticketRepository, companyRepository, userRepository);
     }
 
     private static ReceiptLine line(int ticketId, double price, int eventId) {
