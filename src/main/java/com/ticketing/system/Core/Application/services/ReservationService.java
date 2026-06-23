@@ -261,6 +261,16 @@ public class ReservationService {
             removedPricePerTicket = zone.getprice();
             activeOrder = getActiveOrderOrThrow(buyer);
 
+            // CheckoutService marks orders CHECKOUT_IN_PROGRESS and releases the order lock during Phase 2.
+            // Reject remove attempts in that state so a concurrent removal can't mutate the cart snapshot
+            // checkout is pricing/charging against. Fails fast here (before releasing inventory) instead of
+            // letting the domain throw mid-flow and forcing a rollback — mirrors the guard in reserve(...).
+            if (activeOrder.isCheckoutInProgress()) {
+                log.warn("Request rejected: cannot modify active order during checkout. eventId={}, zoneId={}, userId={}, sessionId={}",
+                        eventId, zoneId, buyer.isMember() ? buyer.userId() : null, buyer.isMember() ? null : buyer.sessionId());
+                throw new IllegalStateException("Cannot modify active order during checkout");
+            }
+
             // Validate first so we do not release inventory for tickets that are not in the active order.
             activeOrder.validateContainsReservation(eventId, zoneId, selection);
             // Bind the selection to this order's key so the zone can verify ownership when releasing.

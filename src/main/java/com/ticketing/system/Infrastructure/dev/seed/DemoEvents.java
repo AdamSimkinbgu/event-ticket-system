@@ -12,6 +12,7 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.Location;
+import com.ticketing.system.Core.Domain.events.SeatLabels;
 import com.ticketing.system.Core.Domain.events.ShowDate;
 
 import java.time.LocalDateTime;
@@ -248,7 +249,7 @@ public final class DemoEvents {
     private ZoneConfigDTO seatedZone(String name, int rows, int cols, double price) {
         List<SeatConfigDTO> seats = new ArrayList<>(rows * cols);
         for (int r = 0; r < rows; r++) {
-            char rowLetter = (char) ('A' + r);
+            String rowLetter = SeatLabels.rowLabel(r);
             for (int c = 0; c < cols; c++) {
                 seats.add(new SeatConfigDTO(rowLetter + "-" + (c + 1), c * 60.0, r * 60.0));
             }
