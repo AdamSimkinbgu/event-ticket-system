@@ -145,8 +145,9 @@ public class AdminAnnouncementsView extends LkPage {
         for (SentAnnouncement a : announcements) {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("sent", a.sentAt() == null ? "—" : a.sentAt().format(SENT_FMT));
-            Span subj = new Span();
-            subj.getElement().setProperty("innerHTML", "<b>" + escape(a.subject()) + "</b>");
+            // Plain-text Span (Vaadin escapes it) styled bold — never set innerHTML with user content.
+            Span subj = new Span(a.subject() == null ? "" : a.subject());
+            subj.getStyle().set("font-weight", "600");
             row.put("subj", subj);
             row.put("aud", a.audienceLabel());
             row.put("rec", String.format("%,d", a.recipientCount()));
@@ -161,9 +162,5 @@ public class AdminAnnouncementsView extends LkPage {
 
     private Component banner(String message) {
         return new LkBanner(LkBanner.Tone.info, new LkIcon("info", 18), message);
-    }
-
-    private static String escape(String s) {
-        return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }

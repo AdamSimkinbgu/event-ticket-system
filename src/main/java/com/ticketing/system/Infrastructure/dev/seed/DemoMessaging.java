@@ -1,12 +1,11 @@
 package com.ticketing.system.Infrastructure.dev.seed;
 
 import com.ticketing.system.Core.Application.dto.AnnouncementRequestDTO;
-import com.ticketing.system.Core.Application.dto.GuestSessionDTO;
-import com.ticketing.system.Core.Application.dto.LoginDTO;
-import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
+import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.dto.StartConversationRequestDTO;
 import com.ticketing.system.Core.Application.dto.SubmitComplaintRequestDTO;
+import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.MessagingService;
 import com.ticketing.system.Core.Domain.Admin.Admin;
@@ -34,6 +33,7 @@ public final class DemoMessaging {
     private final MessagingService messaging;
     private final IUserRepository userRepository;
     private final IAdminRepository adminRepository;
+    private final IPasswordHasher passwordHasher;
     private final Map<String, SeededUser> users;
     private final Map<String, ProductionCompanyDTO> companies;
 
@@ -41,12 +41,14 @@ public final class DemoMessaging {
                          MessagingService messaging,
                          IUserRepository userRepository,
                          IAdminRepository adminRepository,
+                         IPasswordHasher passwordHasher,
                          Map<String, SeededUser> users,
                          Map<String, ProductionCompanyDTO> companies) {
         this.auth = auth;
         this.messaging = messaging;
         this.userRepository = userRepository;
         this.adminRepository = adminRepository;
+        this.passwordHasher = passwordHasher;
         this.users = users;
         this.companies = companies;
     }
@@ -90,19 +92,18 @@ public final class DemoMessaging {
             .orElseThrow(() -> new IllegalStateException(
                 "dev.admin not present — DevUserSeeder must run before DemoDataSeeder"));
 
-        // dev.admin is created only as a User (admin status is a Presentation-layer routing
-        // concern). Messaging gates announce() on a real domain Admin, so register one here
-        // keyed by the same id the token resolves to.
+        // dev.admin is created only as a member User (admin status is a Presentation-layer routing
+        // concern). Messaging now gates announce() on an ADMIN-role token, so register a real domain
+        // Admin keyed by the same id — with a properly hashed password — then sign in via the admin
+        // pool so the token carries the ADMIN claim the gate requires.
         if (adminRepository.findById(adminUser.getUserId()) == null) {
             adminRepository.save(new Admin(
-                adminUser.getUserId(), "dev.admin", "dev-seed-admin", false));
+                adminUser.getUserId(), "dev.admin", passwordHasher.hash(DemoUsers.PASSWORD), false));
         }
 
-        GuestSessionDTO guest = auth.startGuestSession();
-        LoginDTO login = auth.login(new LoginRequestDTO(
-            "dev.admin", DemoUsers.PASSWORD, guest.sessionId()));
+        AuthTokenDTO admin = auth.signInAsAdmin("dev.admin", DemoUsers.PASSWORD);
 
-        messaging.announce(login.authToken().token(), new AnnouncementRequestDTO(
+        messaging.announce(admin.token(), new AnnouncementRequestDTO(
             adminUser.getUserId(),
             "Reduced support hours during the holidays",
             "Heads up — customer support will run reduced hours from Dec 23 to Jan 2. Refunds may take an extra business day during this window.",

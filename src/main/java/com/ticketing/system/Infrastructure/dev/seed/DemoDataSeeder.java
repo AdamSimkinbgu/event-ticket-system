@@ -8,6 +8,7 @@ import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Application.services.MessagingService;
 import com.ticketing.system.Core.Application.services.ReservationService;
+import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.notifications.INotificationRepository;
@@ -68,6 +69,7 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final MessagingService messagingService;
     private final IUserRepository userRepository;
     private final IAdminRepository adminRepository;
+    private final IPasswordHasher passwordHasher;
     private final IEventRepository eventRepository;
     private final INotificationRepository notificationRepository;
     private final MemoryRepoCleaner memoryRepoCleaner;
@@ -84,6 +86,7 @@ public class DemoDataSeeder implements ApplicationRunner {
             MessagingService messagingService,
             IUserRepository userRepository,
             IAdminRepository adminRepository,
+            IPasswordHasher passwordHasher,
             IEventRepository eventRepository,
             INotificationRepository notificationRepository,
             MemoryRepoCleaner memoryRepoCleaner,
@@ -98,6 +101,7 @@ public class DemoDataSeeder implements ApplicationRunner {
         this.messagingService = messagingService;
         this.userRepository = userRepository;
         this.adminRepository = adminRepository;
+        this.passwordHasher = passwordHasher;
         this.eventRepository = eventRepository;
         this.notificationRepository = notificationRepository;
         this.memoryRepoCleaner = memoryRepoCleaner;
@@ -163,7 +167,7 @@ public class DemoDataSeeder implements ApplicationRunner {
             new DemoOrders(reservationService, checkoutService, users, events).seed());
         runTolerant("messaging", () ->
             new DemoMessaging(authenticationService, messagingService, userRepository, adminRepository,
-                users, companies).seed());
+                passwordHasher, users, companies).seed());
         runTolerant("notifications", () ->
             new DemoNotifications(notificationRepository, users, demoClock).seed());
     }

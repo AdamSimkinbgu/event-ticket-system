@@ -79,6 +79,9 @@ class MessagingServiceTest {
         stubToken(OWNER_TOKEN, OWNER_ID);
         stubToken(OUTSIDER_TOKEN, OUTSIDER_ID);
         stubToken(ADMIN_TOKEN, ADMIN_ID);
+        // Only the admin token carries the ADMIN role claim; member tokens default to false, which is
+        // what the admin gate (requireSystemAdmin / resolveCallerSide) now also checks.
+        when(sessionManager.isAdminToken(ADMIN_TOKEN)).thenReturn(true);
 
         when(adminRepository.findById(ADMIN_ID)).thenReturn(admin());
         when(adminRepository.findAll()).thenReturn(List.of(admin()));
@@ -254,6 +257,22 @@ class MessagingServiceTest {
     void viewSentAnnouncements_byNonAdmin_rejected() {
         assertThrows(UnauthorizedActionException.class,
                 () -> service.viewSentAnnouncements(MEMBER_TOKEN));
+    }
+
+    @Test
+    void adminOperation_byMemberTokenWhoseIdCollidesWithAnAdmin_rejected() {
+        // Member and admin id pools overlap: a member token whose userId happens to equal an admin's
+        // id must NOT pass the admin gate, because it lacks the ADMIN role claim (isAdminToken=false).
+        String collidingToken = "colliding-member-tok";
+        when(sessionManager.validateToken(collidingToken)).thenReturn(true);
+        when(sessionManager.extractUserId(collidingToken)).thenReturn(ADMIN_ID); // collides with admin
+        // isAdminToken(collidingToken) defaults to false — the member never signed in via the admin pool.
+
+        assertThrows(UnauthorizedActionException.class,
+                () -> service.viewAllComplaints(collidingToken, null));
+        assertThrows(UnauthorizedActionException.class,
+                () -> service.announce(collidingToken, new AnnouncementRequestDTO(
+                        ADMIN_ID, "x", "y", "ALL_MEMBERS", List.of(), List.of())));
     }
 
     // --- views ---

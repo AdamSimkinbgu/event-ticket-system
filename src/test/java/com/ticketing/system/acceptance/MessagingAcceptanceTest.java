@@ -22,6 +22,7 @@ import com.ticketing.system.Core.Application.dto.RespondToComplaintRequestDTO;
 import com.ticketing.system.Core.Application.dto.SendMessageRequestDTO;
 import com.ticketing.system.Core.Application.dto.StartConversationRequestDTO;
 import com.ticketing.system.Core.Application.dto.SubmitComplaintRequestDTO;
+import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.MessagingService;
@@ -51,6 +52,7 @@ class MessagingAcceptanceTest {
     @Autowired private CompanyManagementService companyService;
     @Autowired private MessagingService messagingService;
     @Autowired private IAdminRepository adminRepository;
+    @Autowired private IPasswordHasher passwordHasher;
 
     // II.3.10 — Member contacts Company
     @Test
@@ -242,11 +244,14 @@ class MessagingAcceptanceTest {
         return authService.login(new LoginRequestDTO(name, "Password1", sid)).authToken();
     }
 
-    // Registers a member and promotes them to a system Admin (mirrors the dev-seed promotion).
+    // Registers a member, promotes them to a real system Admin (hashed password), then signs in via
+    // the admin pool so the returned token carries the ADMIN role claim the messaging gate requires
+    // (mirrors the dev-seed promotion). A plain member token would now be rejected — the very
+    // shared-id-space gap this exercises.
     private AuthTokenDTO registerAdmin(String name) {
-        AuthTokenDTO token = registerMember(name);
-        adminRepository.save(new Admin(token.userId(), name, "test-admin-hash", false));
-        return token;
+        AuthTokenDTO member = registerMember(name);
+        adminRepository.save(new Admin(member.userId(), name, passwordHasher.hash("Password1"), false));
+        return authService.signInAsAdmin(name, "Password1");
     }
 
     private int registerCompany(String ownerName, String companyName) {

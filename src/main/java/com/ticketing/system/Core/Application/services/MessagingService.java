@@ -109,7 +109,7 @@ public class MessagingService {
 
     // Append a reply to an existing conversation. Sender must be a participant.
     public void sendMessage(String token, SendMessageRequestDTO request) {
-        int callerId = authenticate(token);
+        Caller caller = authenticateCaller(token);
         String conversationId = request.conversationId();
 
         Conversation conversation;
@@ -117,7 +117,7 @@ public class MessagingService {
         conversationRepository.lockForUpdate(conversationId);
         try {
             conversation = loadConversation(conversationId);
-            sender = resolveCallerSide(callerId, conversation);
+            sender = resolveCallerSide(caller, conversation);
             conversation.addMessage(sender.id(), sender.type(), request.body());
             conversationRepository.save(conversation);
         } finally {
@@ -224,11 +224,11 @@ public class MessagingService {
 
     // UI action — mark a single message as read by the viewer.
     public void markMessageAsRead(String token, String conversationId, String messageId) {
-        int callerId = authenticate(token);
+        Caller caller = authenticateCaller(token);
         conversationRepository.lockForUpdate(conversationId);
         try {
             Conversation conversation = loadConversation(conversationId);
-            CallerSide reader = resolveCallerSide(callerId, conversation);
+            CallerSide reader = resolveCallerSide(caller, conversation);
             conversation.markMessageRead(messageId, reader.id());
             conversationRepository.save(conversation);
         } finally {
@@ -240,11 +240,11 @@ public class MessagingService {
 
     // Terminal action — close a conversation (no further messages allowed).
     public void closeConversation(String token, String conversationId) {
-        int callerId = authenticate(token);
+        Caller caller = authenticateCaller(token);
         conversationRepository.lockForUpdate(conversationId);
         try {
             Conversation conversation = loadConversation(conversationId);
-            resolveCallerSide(callerId, conversation); // authorize: caller must be a participant
+            resolveCallerSide(caller, conversation); // authorize: caller must be a participant
             conversation.transitionToClosed();
             conversationRepository.save(conversation);
         } finally {
@@ -268,9 +268,9 @@ public class MessagingService {
 
     // Open a single thread. Caller must be a participant.
     public ConversationDTO viewConversation(String token, String conversationId) {
-        int callerId = authenticate(token);
+        Caller caller = authenticateCaller(token);
         Conversation conversation = loadConversation(conversationId);
-        CallerSide side = resolveCallerSide(callerId, conversation); // throws if not a participant
+        CallerSide side = resolveCallerSide(caller, conversation); // throws if not a participant
         return new ConversationMapper().toDTO(conversation, side.id());
     }
 
@@ -326,9 +326,20 @@ public class MessagingService {
         return sessionManager.extractUserId(token);
     }
 
+    // The authenticated caller: their id plus whether their token carries the ADMIN role claim.
+    // The claim — not adminRepository membership — is the authoritative admin signal (see isAdmin).
+    private Caller authenticateCaller(String token) {
+        return new Caller(authenticate(token), sessionManager.isAdminToken(token));
+    }
+
+    private record Caller(int id, boolean adminToken) {}
+
     private int requireSystemAdmin(String token) {
         int callerId = authenticate(token);
-        if (!isAdmin(callerId)) {
+        // Require the ADMIN role claim, not just adminRepository membership: member and admin id
+        // pools overlap, so a member token whose id collides with an admin's would otherwise pass
+        // this gate (mirrors SystemAdminService.requireSystemAdmin).
+        if (!sessionManager.isAdminToken(token) || !isAdmin(callerId)) {
             throw new UnauthorizedActionException("messaging admin operation", callerId);
         }
         return callerId;
@@ -340,9 +351,12 @@ public class MessagingService {
 
     // Resolves which side of the conversation the caller represents — the single source of
     // truth for authorization, sender-stamping, and read-tracking.
-    private CallerSide resolveCallerSide(int callerId, Conversation conversation) {
+    private CallerSide resolveCallerSide(Caller caller, Conversation conversation) {
+        int callerId = caller.id();
         // 1. Admin acting within an admin-involved thread (complaint queue or admin-authored).
-        if (isAdmin(callerId) && involvesAdmin(conversation, callerId)) {
+        //    Requires an ADMIN-role token, not just adminRepository membership: the member/admin id
+        //    pools overlap, so a colliding member token must not be treated as ADMIN here.
+        if (caller.adminToken() && isAdmin(callerId) && involvesAdmin(conversation, callerId)) {
             return new CallerSide(callerId, ParticipantType.ADMIN);
         }
         // 2. Member acting as themselves.
