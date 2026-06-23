@@ -660,6 +660,9 @@ public class CompanyManagementService {
 
     public boolean isOwnerOf(int userId, int companyId) {
         User user = userRepository.getUserById(userId);
+        if (user == null) {
+            throw new UserNotFoundException(userId);
+        }
         CompanyAppointment appointment = user.getActiveCompanyAppointment(companyId);
         return appointment != null && appointment.getRole() == CompanyRole.Owner;
     }
