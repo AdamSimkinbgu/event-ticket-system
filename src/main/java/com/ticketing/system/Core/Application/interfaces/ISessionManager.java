@@ -25,6 +25,16 @@ public interface ISessionManager {
     String generateTokenForSession(Session session, String username);
 
     /**
+     * Admin sign-in (#290): issue a JWT for an admin that carries the ADMIN role claim, so the
+     * admin-authorization gate cannot be satisfied by a member token even when admin ids and
+     * member ids share an id space.
+     */
+    String generateAdminToken(int adminId, String username);
+
+    /** True iff the (valid) token carries the ADMIN role claim. Never throws. */
+    boolean isAdminToken(String token);
+
+    /**
      * Validates a token's signature and expiry. UC-12.
      *
      * @return {@code true} for a well-formed, signed, unexpired token; {@code false}

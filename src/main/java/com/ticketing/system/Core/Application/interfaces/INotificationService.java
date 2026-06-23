@@ -2,20 +2,12 @@ package com.ticketing.system.Core.Application.interfaces;
 
 import java.util.List;
 
-import com.ticketing.system.Core.Domain.notifications.Notification;
-
-// Port for the live push channel (WebSocket / SSE / email — V2/V3 decision).
-// V1 implementation is InMemoryNotificationService for test assertions.
-// Used by NotificationDispatchService for online-recipient delivery (UC-35).
+// High-level, application-facing notification facade. Each notifyXxx method translates a
+// business event into a Notification domain object and delegates to NotificationDispatchService,
+// which persists it and routes delivery. The low-level push channel (WebSocket / SSE / email)
+// is a separate port, IPushNotificationService.
+// V1 implementation is NotificationService.
 public interface INotificationService {
-
-    // UC-35 — push a notification to an online recipient.
-    // Returns true if the push was acknowledged (or queued successfully).
-    boolean send(int recipientUserId, Notification notification);
-
-    // Used by the dispatcher when the recipient's reachability isn't already known
-    // from ISessionManager (e.g. multi-device scenarios where session-online != channel-reachable).
-    boolean isReachable(int recipientUserId);
 
     void notifyPurchaseCompleted(int userId, double totalPrice, List<Integer> list);
 
@@ -28,4 +20,21 @@ public interface INotificationService {
     void notifyRemoveTicketReservationFailure(int userId, int eventId, int zoneId, String string);
 
     void notifyRemoveTicketReservationSuccess(int userId, int eventId, int zoneId, int i);
+
+    void notifyEventCancelled(int userId, int eventId, String eventName);
+
+    void notifyManagerRevoked(int userId, int companyId, String companyName);
+
+    void notifyOwnerAppointmentPending(int userId, int companyId, String companyName);
+
+    void notifyRoleChanged(int userId, int companyId, String companyName, String newRole);
+
+    /**
+     * Messaging → notification bridge. Fired when a new message/inquiry arrives for a
+     * recipient (member or company owner) so they get a real-time DIRECT_MESSAGE notification.
+     * {@code conversationId} lets the UI deep-link to the thread; {@code senderLabel} is a
+     * human-readable origin (e.g. "a system admin", "a production company").
+     */
+    void notifyNewMessage(int recipientUserId, String conversationId, String senderLabel,
+            String subject, String snippet);
 }

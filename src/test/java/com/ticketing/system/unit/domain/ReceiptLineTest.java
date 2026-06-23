@@ -72,17 +72,15 @@ class ReceiptLineTest extends BaseDomainTest {
     }
 
     @Test
-    void GivenBlankSeatNumber_WhenCheckInvariants_ThenThrowsException() {
-        ReceiptLine line = new ReceiptLine(
+    void GivenBlankSeatNumber_WhenConstructed_ThenThrowsException() {
+        assertThrows(IllegalStateException.class, () -> new ReceiptLine(
                 101,
                 120.0,
                 10,
                 7,
                 "   ",
                 LocalDateTime.now()
-        );
-
-        assertThrows(IllegalStateException.class, line::checkInvariants);
+        ));
     }
 
 

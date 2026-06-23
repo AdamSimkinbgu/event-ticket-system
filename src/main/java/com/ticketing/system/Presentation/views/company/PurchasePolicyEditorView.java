@@ -1,5 +1,16 @@
 package com.ticketing.system.Presentation.views.company;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
+import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter;
+import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter.LoadOutcome;
+import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter.SaveOutcome;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
@@ -20,34 +31,28 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.router.RouteParameters;
+
 import jakarta.annotation.security.PermitAll;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-@Route(value = "owner/policies", layout = WorkspaceLayout.class)
+@Route(value = "owner/policies/:companyId/:eventId", layout = WorkspaceLayout.class)
 @PageTitle("Purchase policies · TicketHub")
 @PermitAll
 @RequireCapability(Capability.EDIT_PURCHASE_POLICIES)
-public class PurchasePolicyEditorView extends LkPage {
+public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObserver {
 
     // ---------------------------------------------------------------------
-    // Built-in rule registry — single source of truth for rule types.
+    // Rule types — one per Domain policy class
     // ---------------------------------------------------------------------
 
     private enum RuleType {
-        AgeAtLeast        ("years",      true),
-        AgeAtMost         ("years",      true),
-        QuantityAtLeast   ("tickets",    true),
-        QuantityAtMost    ("tickets",    true),
-        MembershipRequired("",           false),
-        PurchaseLimit     ("per buyer",  true),
-        DateWindow        ("",           false);
+        AgeAtLeast      ("years",   true),
+        QuantityAtLeast ("tickets", true),
+        QuantityAtMost  ("tickets", true);
 
         final String unit;
         final boolean hasValue;
@@ -56,22 +61,18 @@ public class PurchasePolicyEditorView extends LkPage {
 
         String prettyEnglish(String value) {
             return switch (this) {
-                case AgeAtLeast        -> "Age at least " + value + " years";
-                case AgeAtMost         -> "Age at most "  + value + " years";
-                case QuantityAtLeast   -> "Quantity at least " + value + " tickets";
-                case QuantityAtMost    -> "Quantity at most "  + value + " tickets";
-                case MembershipRequired -> "Membership required";
-                case PurchaseLimit     -> "Purchase limit " + value + " per buyer";
-                case DateWindow        -> "Within configured date window";
+                case AgeAtLeast      -> "Age at least " + value + " years";
+                case QuantityAtLeast -> "Quantity at least " + value + " tickets";
+                case QuantityAtMost  -> "Quantity at most "  + value + " tickets";
             };
         }
     }
 
     // ---------------------------------------------------------------------
-    // Mock policy model.
+    // Policy model
     // ---------------------------------------------------------------------
 
-    private enum Op { AND, OR, NOT }
+    private enum Op { AND, OR }
 
     private sealed interface Node permits Composite, Rule {
         String id();
@@ -94,27 +95,58 @@ public class PurchasePolicyEditorView extends LkPage {
     }
 
     // ---------------------------------------------------------------------
-    // View state
+    // Services & state
     // ---------------------------------------------------------------------
 
+    private final PurchasePolicyEditorPresenter presenter;
+
     private final Composite root = seedSamplePolicy();
-    private final Map<String, Node> nodeMap = new HashMap<>();
+    private final Map<String, Node>      nodeMap   = new HashMap<>();
     private final Map<String, Composite> parentMap = new HashMap<>();
 
-    private Span plainEnglishText;
+    private Span          plainEnglishText;
     private PolicyTreeMap mapPanel;
+    private final Div     loadErrorSlot = new Div();
+    private int     companyId    = -1;
+    private int     eventId      = -1;
+    private boolean isEventLevel = true;
 
-    public PurchasePolicyEditorView() {
+    // ---------------------------------------------------------------------
+    // Constructor
+    // ---------------------------------------------------------------------
+
+    public PurchasePolicyEditorView(PurchasePolicyEditorPresenter presenter) {
+        this.presenter = presenter;
+    }
+
+    // ---------------------------------------------------------------------
+    // BeforeEnterObserver
+    // ---------------------------------------------------------------------
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        RouteParameters params = event.getRouteParameters();
+        params.get("companyId").ifPresent(id -> {
+            try { this.companyId = Integer.parseInt(id); }
+            catch (NumberFormatException ignored) { }
+        });
+        params.get("eventId").ifPresent(id -> {
+            try { this.eventId = Integer.parseInt(id); }
+            catch (NumberFormatException ignored) { }
+        });
+
         title("Purchase policies");
         subtitle("Click a node to edit it · drag the canvas to pan · scroll to zoom.");
 
         add(buildScopeToolbar());
+        add(loadErrorSlot);
         add(buildPlainEnglishBanner());
         add(buildCanvas());
         add(buildActionBar());
         add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 18),
             "Validation rejects empty groups and circular nesting before a policy can be saved."));
 
+        loadExistingPolicy();
         rebuildTree();
     }
 
@@ -129,7 +161,59 @@ public class PurchasePolicyEditorView extends LkPage {
     }
 
     // ---------------------------------------------------------------------
-    // Scope toolbar (unchanged)
+    // Load existing policy from backend
+    // ---------------------------------------------------------------------
+
+    private void loadExistingPolicy() {
+        loadErrorSlot.removeAll();
+        if (companyId <= 0) return;
+        switch (presenter.load(AuthSession.token(), companyId, eventId, isEventLevel)) {
+            case LoadOutcome.Success s -> {
+                PurchasePolicyDTO dto = s.policy();
+                if (dto != null && !"NONE".equals(dto.type())) {
+                    Node loaded = dtoToNode(dto);
+                    root.children.clear();
+                    if (loaded instanceof Composite c) {
+                        root.op = c.op;
+                        root.children.addAll(c.children);
+                    } else {
+                        root.op = Op.AND;
+                        root.children.add(loaded);
+                    }
+                }
+            }
+            case LoadOutcome.NotAuthenticated na -> { }
+            case LoadOutcome.Failure f -> {
+                LkBanner err = new LkBanner(LkBanner.Tone.error,
+                    new LkIcon("alert-circle", 16),
+                    "Could not load existing policy: " + f.reason());
+                LkBtn retry = new LkBtn("Retry").variant(LkBtn.Variant.secondary);
+                retry.addClickListener(ev -> { loadExistingPolicy(); rebuildTree(); });
+                err.setAction(retry);
+                loadErrorSlot.add(err);
+            }
+        }
+    }
+
+    private Node dtoToNode(PurchasePolicyDTO dto) {
+        return switch (dto.type()) {
+            case "AGE"         -> new Rule(RuleType.AgeAtLeast,      String.valueOf(dto.minimumAge()));
+            case "MIN_TICKETS" -> new Rule(RuleType.QuantityAtLeast, String.valueOf(dto.minimumTickets()));
+            case "MAX_TICKETS" -> new Rule(RuleType.QuantityAtMost,  String.valueOf(dto.maximumTickets()));
+            case "AND", "OR"   -> {
+                Composite c = new Composite(Op.valueOf(dto.type()));
+                if (dto.children() != null) {
+                    for (PurchasePolicyDTO child : dto.children())
+                        c.children.add(dtoToNode(child));
+                }
+                yield c;
+            }
+            default -> new Rule(RuleType.AgeAtLeast, "0");
+        };
+    }
+
+    // ---------------------------------------------------------------------
+    // Scope toolbar
     // ---------------------------------------------------------------------
 
     private Component buildScopeToolbar() {
@@ -144,11 +228,29 @@ public class PurchasePolicyEditorView extends LkPage {
 
         Div seg = new Div();
         seg.addClassName("pe-seg");
+
         NativeButton companyBtn = new NativeButton("Company-level");
         companyBtn.addClassName("pe-seg-opt");
+
         NativeButton eventBtn = new NativeButton("Event-level");
         eventBtn.addClassName("pe-seg-opt");
         eventBtn.addClassName("on");
+
+        companyBtn.addClickListener(e -> {
+            isEventLevel = false;
+            companyBtn.addClassName("on");
+            eventBtn.removeClassName("on");
+            loadExistingPolicy();
+            rebuildTree();
+        });
+        eventBtn.addClickListener(e -> {
+            isEventLevel = true;
+            eventBtn.addClassName("on");
+            companyBtn.removeClassName("on");
+            loadExistingPolicy();
+            rebuildTree();
+        });
+
         seg.add(companyBtn, eventBtn);
         scope.add(seg);
 
@@ -208,9 +310,6 @@ public class PurchasePolicyEditorView extends LkPage {
         if (c.children.isEmpty()) {
             return "<i>(empty " + c.op + " group)</i>";
         }
-        if (c.op == Op.NOT) {
-            return "NOT (" + joinChildren(c.children, "OR") + ")";
-        }
         String joiner = c.op == Op.AND ? "AND" : "OR";
         return joinChildren(c.children, joiner);
     }
@@ -268,24 +367,12 @@ public class PurchasePolicyEditorView extends LkPage {
             if (i > 0) children.append(",");
             children.append(treeToJson(c.children.get(i)));
         }
-        String desc = switch (c.op) {
-            case AND -> "all of these";
-            case OR  -> "any of these";
-            case NOT -> "none of these";
-        };
-        String label = c.op + " · " + desc;
+        String desc = c.op == Op.AND ? "all of these" : "any of these";
         return "{\"id\":\"" + c.id() + "\",\"kind\":\"comp\",\"op\":\""
-             + c.op + "\",\"label\":\"" + escapeJson(label)
+             + c.op + "\",\"label\":\"" + escapeJson(c.op + " · " + desc)
              + "\",\"children\":[" + children + "]}";
     }
 
-    /**
-     * Three actions come back from the D3 layer:
-     * {@code "click"} → open the appropriate edit dialog;
-     * {@code "addRule"} / {@code "addGroup"} → fired by the inline +R / +G
-     * pills next to each composite. The pills mutate the tree directly,
-     * no dialog needed for the common case.
-     */
     private void handleNodeAction(String nodeId, String action) {
         Node n = nodeMap.get(nodeId);
         if (n == null) return;
@@ -303,7 +390,7 @@ public class PurchasePolicyEditorView extends LkPage {
             }
             case "addGroup" -> {
                 if (n instanceof Composite c) {
-                    c.children.add(new Composite(nextOp(c.op)));
+                    c.children.add(new Composite(Op.AND));
                     rebuildTree();
                     Toasts.success("Group added — click it to add children.");
                 }
@@ -353,28 +440,19 @@ public class PurchasePolicyEditorView extends LkPage {
         Button cancel = new Button("Cancel", e -> d.close());
         cancel.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
         Button save = new Button("Save", e -> {
-            RuleType chosen = typeSelect.getValue();
-            r.type = chosen;
-            if (chosen.hasValue && !valueField.getValue().isBlank()) {
-                r.value = valueField.getValue().trim();
-            } else if (!chosen.hasValue) {
-                r.value = "";
-            }
+            r.type  = typeSelect.getValue();
+            r.value = valueField.getValue().trim();
             d.close();
             rebuildTree();
             Toasts.success("Rule updated.");
         });
         save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         d.getFooter().add(cancel, save);
-
         d.open();
     }
 
     private void applyValueFieldState(TextField field, RuleType t) {
-        field.setEnabled(t.hasValue);
-        field.setHelperText(t.hasValue
-            ? "Numeric value · unit = " + t.unit
-            : "This rule has no value to configure.");
+        field.setHelperText("Numeric value · unit = " + t.unit);
     }
 
     // ---------------------------------------------------------------------
@@ -388,11 +466,10 @@ public class PurchasePolicyEditorView extends LkPage {
 
         RadioButtonGroup<Op> opGroup = new RadioButtonGroup<>();
         opGroup.setLabel("Operator");
-        opGroup.setItems(Op.AND, Op.OR, Op.NOT);
+        opGroup.setItems(Op.AND, Op.OR);
         opGroup.setItemLabelGenerator(op -> switch (op) {
             case AND -> "AND · all children must be true";
             case OR  -> "OR · any child can be true";
-            case NOT -> "NOT · none of the children can be true";
         });
         opGroup.setValue(c.op);
 
@@ -405,7 +482,7 @@ public class PurchasePolicyEditorView extends LkPage {
         addRule.addThemeVariants(ButtonVariant.LUMO_SUCCESS, ButtonVariant.LUMO_TERTIARY);
 
         Button addGroup = new Button("+ Add group", e -> {
-            c.children.add(new Composite(nextOp(c.op)));
+            c.children.add(new Composite(Op.AND));
             d.close();
             rebuildTree();
             Toasts.success("Group added — click it to add children.");
@@ -442,16 +519,7 @@ public class PurchasePolicyEditorView extends LkPage {
         });
         save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         d.getFooter().add(cancel, save);
-
         d.open();
-    }
-
-    private static Op nextOp(Op current) {
-        return switch (current) {
-            case AND -> Op.OR;
-            case OR  -> Op.NOT;
-            case NOT -> Op.AND;
-        };
     }
 
     // ---------------------------------------------------------------------
@@ -475,7 +543,7 @@ public class PurchasePolicyEditorView extends LkPage {
                 .icon(new LkIcon("flask", 16))
                 .onClick(e -> Toasts.warn("Test-against-a-buyer dialog (V2-PEDIT-02).")),
             new LkBtn("Save policy").variant(LkBtn.Variant.primary)
-                .onClick(e -> Toasts.success("Policy saved."))
+                .onClick(e -> savePolicy())
         );
 
         bar.add(left, right);
@@ -483,8 +551,50 @@ public class PurchasePolicyEditorView extends LkPage {
     }
 
     // ---------------------------------------------------------------------
-    // Helpers
+    // Save
     // ---------------------------------------------------------------------
+
+    private void savePolicy() {
+        if (companyId <= 0) {
+            Toasts.failure("No company selected.");
+            return;
+        }
+        if (isEventLevel && eventId <= 0) {
+            Toasts.failure("No event selected.");
+            return;
+        }
+        switch (presenter.save(AuthSession.token(), companyId, eventId, isEventLevel, nodeToDTO(root))) {
+            case SaveOutcome.Success s -> Toasts.success("Policy saved.");
+            case SaveOutcome.NotAuthenticated na -> Toasts.failure("Not authenticated.");
+            case SaveOutcome.Failure f -> Toasts.failure("Failed to save: " + f.reason());
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Node → PurchasePolicyDTO
+    // ---------------------------------------------------------------------
+
+    private PurchasePolicyDTO nodeToDTO(Node node) {
+        if (node instanceof Rule r) {
+            int val;
+            try {
+                val = Integer.parseInt(r.value);
+            } catch (NumberFormatException | NullPointerException e) {
+                return new PurchasePolicyDTO("NONE", null, null, null, null);
+            }
+            return switch (r.type) {
+                case AgeAtLeast      -> new PurchasePolicyDTO("AGE",         val,  null, null, null);
+                case QuantityAtLeast -> new PurchasePolicyDTO("MIN_TICKETS", null, val,  null, null);
+                case QuantityAtMost  -> new PurchasePolicyDTO("MAX_TICKETS", null, null, val,  null);
+            };
+        }
+        Composite c = (Composite) node;
+        List<PurchasePolicyDTO> children = c.children.stream()
+                .map(this::nodeToDTO)
+                .toList();
+        String type = c.op == Op.AND ? "AND" : "OR";
+        return new PurchasePolicyDTO(type, null, null, null, children);
+    }
 
     private static String escape(String s) {
         return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");

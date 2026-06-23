@@ -1,5 +1,6 @@
 package com.ticketing.system.Presentation.views.order;
 
+import com.ticketing.system.Presentation.components.Money;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
@@ -10,11 +11,10 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Presentation.session.MockCart;
+import com.ticketing.system.Presentation.presenters.order.CartPresenter;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.NativeButton;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
@@ -25,16 +25,38 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 @AnonymousAllowed
 public class CartView extends LkPage {
 
-    private static final int SERVICE_FEE_CENTS = 2400;
+    private final CartPresenter presenter;
+    private CartPresenter.CartVM activeOrder;
+    private long subtotalCents;
 
     private LkCol linesCol;
     private Span sub, total, subText;
     private LkBtn proceedBtn;
 
-    public CartView() {
+    public CartView(CartPresenter presenter) {
+        this.presenter = presenter;
+
+        switch (presenter.loadCart()) {
+            case CartPresenter.LoadOutcome.Shown s -> {
+                this.activeOrder   = s.cart();
+                this.subtotalCents = s.subtotalCents();
+            }
+            case CartPresenter.LoadOutcome.Empty e             -> clearCart();
+            case CartPresenter.LoadOutcome.NotAuthenticated na -> clearCart();
+            case CartPresenter.LoadOutcome.Failure f -> {
+                clearCart();
+                Toasts.failure("Could not load your cart: " + f.reason());
+            }
+        }
+
         title("Your cart");
         renderHeaderSubtitle();
         add(buildSplit());
+    }
+
+    private void clearCart() {
+        this.activeOrder   = null;
+        this.subtotalCents = 0L;
     }
 
     private Component buildSplit() {
@@ -46,98 +68,94 @@ public class CartView extends LkPage {
 
     private Component buildLineColumn() {
         linesCol = new LkCol().gap(12);
-        for (MockCart.Item item : MockCart.getItems()) {
-            linesCol.add(cartLine(item));
-        }
-        if (MockCart.getItems().isEmpty()) linesCol.add(buildEmptyState());
-        LkBanner heldBanner = new LkBanner(LkBanner.Tone.info, new LkIcon("lock", 17),
-            "Tickets are held just for you. They release automatically when a timer runs out.");
-        linesCol.add(heldBanner);
+        populateLines();
         return linesCol;
     }
 
-    private Component cartLine(MockCart.Item item) {
-        Div line = new Div();
-        line.addClassName("bz-cartline");
+    private void populateLines() {
+        linesCol.removeAll();
 
-        Div thumb = new Div();
-        thumb.addClassName("bz-cartline-thumb");
-        thumb.getStyle().set("background", item.gradient());
-        line.add(thumb);
+        if (activeOrder == null || activeOrder.lines().isEmpty()) {
+            linesCol.add(buildEmptyState());
+        } else {
+            linesCol.add(buildCountdownBanner(activeOrder.remainingSecondsBeforeExpiry()));
+            for (CartPresenter.CartVM.LineVM line : activeOrder.lines()) {
+                linesCol.add(cartLineFromVM(line));
+            }
+        }
+    }
+
+    private Component cartLineFromVM(CartPresenter.CartVM.LineVM line) {
+        Div lineDiv = new Div();
+        lineDiv.addClassName("bz-cartline");
 
         Div info = new Div();
         info.addClassName("bz-cartline-info");
+
         Span titleSpan = new Span();
-        titleSpan.getElement().setProperty("innerHTML", "<b>" + escape(item.title()) + "</b>");
-        Span seatLine = Lk.muted(item.seat());
+        titleSpan.getElement().setProperty("innerHTML", "<b>" + escape(line.eventName()) + "</b>");
+
+        Span seatLine = Lk.muted(line.seatNumber() != null ? line.seatNumber() : "General Admission");
         seatLine.getStyle().set("font-size", "13.5px");
         info.add(titleSpan, seatLine);
 
-        LkRow controls = new LkRow().gap(10);
-        controls.getStyle().set("margin-top", "4px");
+        LkBtn removeBtn = new LkBtn("Remove")
+            .variant(LkBtn.Variant.tertiary)
+            .size(LkBtn.Size.s)
+            .onClick(e -> {
+                switch (presenter.removeLine(line)) {
+                    case CartPresenter.RemoveOutcome.Removed r -> {
+                        this.activeOrder   = r.cart();
+                        this.subtotalCents = r.subtotalCents();
+                        populateLines();
+                        renderHeaderSubtitle();
+                        renderTotals();
+                        Toasts.success("Removed from cart.");
+                    }
+                    case CartPresenter.RemoveOutcome.Failure f ->
+                        Toasts.failure("Failed to remove item: " + f.reason());
+                }
+            });
 
-        controls.add(buildLiveTimerChip(item));
-
-        NativeButton remove = new NativeButton("Remove");
-        remove.addClassName("bz-link");
-        remove.getStyle()
-            .set("background", "none").set("border", "none").set("padding", "0").set("cursor", "pointer");
-        remove.addClickListener(e -> removeItem(item, line));
-        controls.add(remove);
-
-        info.add(controls);
-        line.add(info);
+        info.add(removeBtn);
+        lineDiv.add(info);
 
         Div priceTag = new Div();
         priceTag.addClassName("bz-cartline-price");
-        priceTag.setText(formatPrice(item.priceCents()));
-        line.add(priceTag);
-        return line;
+        priceTag.setText(Money.format(Money.toCents(line.pricePerTicket())));
+        lineDiv.add(priceTag);
+
+        return lineDiv;
     }
 
-    /**
-     * Live-ticking countdown chip. The text node's {@code innerText} is
-     * updated entirely client-side (one {@code setTimeout} chain per chip)
-     * so the server doesn't have to push every second. Adds the
-     * {@code .urgent} class on the {@code .bz-timer} wrapper once the
-     * remaining time falls below 3 minutes.
-     */
-    private Component buildLiveTimerChip(MockCart.Item item) {
-        Span chip = new Span();
-        chip.addClassName("bz-timer");
-        chip.add(new LkIcon("clock", 13));
-        Span text = new Span(" --:--");
-        chip.add(text);
+    private Component buildCountdownBanner(long remainingSeconds) {
+        LkBanner banner = new LkBanner();
+        banner.setIcon(new LkIcon("clock", 17));
 
-        // Vaadin's executeJs doesn't accept Long parameters — cast to double.
-        double endMs = (double) item.heldUntil().toEpochMilli();
-        if (endMs <= System.currentTimeMillis()) chip.addClassName("urgent");
+        Span timer = new Span();
+        timer.getStyle().set("font-size", "16px").set("font-weight", "700");
 
-        text.getElement().executeJs(
-            "const text = this;" +
-            "const chip = text.closest('.bz-timer');" +
-            "const end  = $0;" +
-            "function pad(n){return String(n).padStart(2,'0');}" +
+        timer.getElement().executeJs(
+            "if (window.cartTimerId) { clearTimeout(window.cartTimerId); }" +
+            "const t=this; let s=$0;" +
             "function tick(){" +
-            "  const s = Math.max(0, Math.floor((end - Date.now())/1000));" +
-            "  text.textContent = ' ' + pad(Math.floor(s/60)) + ':' + pad(s%60);" +
-            "  if (s <= 180 && chip) chip.classList.add('urgent');" +
-            "  if (s > 0) setTimeout(tick, 1000);" +
+            "  if(s<=0) return;" +
+            "  const m=Math.floor(s/60); const sec=s%60;" +
+            "  t.textContent='Time left: '+m+':' + (sec<10?'0'+sec:sec);" +
+            "  s--; " +
+            "  window.cartTimerId = setTimeout(tick,1000);" +
             "}" +
-            "tick();",
-            endMs);
-        return chip;
-    }
+            "tick();", remainingSeconds);
 
-    private void removeItem(MockCart.Item item, Component lineElement) {
-        MockCart.remove(item);
-        linesCol.remove(lineElement);
-        if (MockCart.getItems().isEmpty()) {
-            linesCol.getElement().insertChild(0, buildEmptyState().getElement());
-        }
-        renderHeaderSubtitle();
-        renderTotals();
-        Toasts.success("Removed from cart.");
+        timer.addDetachListener(ev ->
+            timer.getElement().executeJs("if(window.cartTimerId) { clearTimeout(window.cartTimerId); }"));
+
+        LkBanner heldBanner = new LkBanner(LkBanner.Tone.info, new LkIcon("lock", 17),
+            "Tickets are held just for you. They release automatically when the timer runs out.");
+
+        banner.setBody(timer);
+        linesCol.add(heldBanner);
+        return banner;
     }
 
     private Component buildEmptyState() {
@@ -150,13 +168,11 @@ public class CartView extends LkPage {
     }
 
     private void renderHeaderSubtitle() {
-        int n = MockCart.size();
+        int n = (activeOrder != null) ? activeOrder.lines().size() : 0;
         subtitle(n == 0
             ? "No reservations held"
-            : n + " reservation" + (n == 1 ? "" : "s") + " held · each line expires individually");
+            : n + " reservation" + (n == 1 ? "" : "s") + " held · global timer active");
     }
-
-    // -------- summary card --------
 
     private Component buildSummaryCard() {
         LkCard card = new LkCard("Summary").pad(18);
@@ -170,7 +186,6 @@ public class CartView extends LkPage {
         renderTotals();
 
         col.add(summaryRow("Subtotal", sub));
-        col.add(summaryRow("Service fee", new Span(formatPrice(SERVICE_FEE_CENTS))));
         col.add(Lk.divider());
         col.add(totalRow("Total", total));
 
@@ -179,25 +194,24 @@ public class CartView extends LkPage {
             .size(LkBtn.Size.l)
             .full()
             .onClick(e -> UI.getCurrent().navigate(CheckoutView.class));
+
         col.add(proceedBtn);
-
         col.add(subText);
-
         card.add(col);
         return card;
     }
 
     private void renderTotals() {
-        int subtotal   = MockCart.subtotalCents();
-        boolean empty  = MockCart.getItems().isEmpty();
-        int totalCents = empty ? 0 : subtotal + SERVICE_FEE_CENTS;
-        if (sub != null)   sub.setText(formatPrice(subtotal));
+        boolean empty = activeOrder == null || activeOrder.lines().isEmpty();
+        long shownTotal = empty ? 0L : subtotalCents;
+
+        if (sub != null)   sub.setText(Money.format(shownTotal));
         if (total != null) total.getElement().setProperty("innerHTML",
-            "<b style='font-size:17px'>" + formatPrice(totalCents) + "</b>");
+            "<b style='font-size:17px'>" + Money.format(shownTotal) + "</b>");
         if (subText != null) {
             subText.setText(empty
                 ? "Add tickets from Browse to start an order."
-                : "One 10-min timer covers the whole order at checkout");
+                : "One global timer covers the whole order");
             subText.getStyle()
                 .set("text-align", "center").set("font-size", "12.5px")
                 .set("color", "var(--muted)").set("display", "block");
@@ -216,13 +230,10 @@ public class CartView extends LkPage {
 
     private Component totalRow(String label, Component value) {
         LkRow r = new LkRow().justify("space-between");
-        Span l = new Span(); l.getElement().setProperty("innerHTML", "<b style='font-size:17px'>" + label + "</b>");
+        Span l = new Span();
+        l.getElement().setProperty("innerHTML", "<b style='font-size:17px'>" + label + "</b>");
         r.add(l, value);
         return r;
-    }
-
-    private static String formatPrice(int cents) {
-        return "$" + (cents / 100) + "." + String.format("%02d", cents % 100);
     }
 
     private static String escape(String s) {

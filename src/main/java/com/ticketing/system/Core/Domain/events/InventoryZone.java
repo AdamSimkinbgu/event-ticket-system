@@ -31,14 +31,20 @@ public abstract class InventoryZone implements InvariantChecked {
     protected final String name;
     protected double price;
 
-    protected InventoryZone(int id, String name, double price) {
-        if (price < 0) {
-            throw new IllegalArgumentException("Price cannot be negative");
-        }
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("Zone name must be non-blank");
-        }
+    // Grid placement on the VenueMap canvas: 1-based start cell + cell spans.
+    // gridRowSpan == 0 means "not explicitly placed" → the preview falls back to
+    // auto-layout. Bounds against the grid size and non-overlap with other zones
+    // are enforced by VenueMap.placeZoneOnGrid (which holds the whole map).
+    private int gridRow;
+    private int gridCol;
+    private int gridRowSpan;
+    private int gridColSpan;
 
+    protected InventoryZone(int id, String name, double price) {
+        // Invariants (name non-blank, price >= 0) are enforced by the concrete
+        // subclass's checkInvariants(), invoked at the end of its constructor.
+        // Calling the overridable checkInvariants() here would run before the
+        // subclass's own fields are initialized.
         this.id = id;
         this.name = name;
         this.price = price;
@@ -81,5 +87,44 @@ public abstract class InventoryZone implements InvariantChecked {
     public boolean isSeated() {
         return getZoneType() == ZoneType.SEATED;
     }
-    
+
+    /**
+     * Places this zone on the venue grid. Coordinates are 1-based and spans are
+     * cell counts (&gt;= 1). Bounds against the actual grid size and non-overlap
+     * with sibling zones are validated by {@link VenueMap#placeZoneOnGrid}.
+     */
+    public void placeOnGrid(int row, int col, int rowSpan, int colSpan) {
+        if (row < 1 || col < 1) {
+            throw new IllegalArgumentException("Grid row/col are 1-based and must be >= 1");
+        }
+        if (rowSpan < 1 || colSpan < 1) {
+            throw new IllegalArgumentException("Grid spans must be >= 1");
+        }
+        this.gridRow = row;
+        this.gridCol = col;
+        this.gridRowSpan = rowSpan;
+        this.gridColSpan = colSpan;
+    }
+
+    /** True once the zone has an explicit grid placement (vs. the auto-layout fallback). */
+    public boolean hasGridPlacement() {
+        return gridRowSpan > 0 && gridColSpan > 0;
+    }
+
+    public int getGridRow() {
+        return gridRow;
+    }
+
+    public int getGridCol() {
+        return gridCol;
+    }
+
+    public int getGridRowSpan() {
+        return gridRowSpan;
+    }
+
+    public int getGridColSpan() {
+        return gridColSpan;
+    }
+
 }

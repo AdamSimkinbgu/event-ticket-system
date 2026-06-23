@@ -1,5 +1,6 @@
 package com.ticketing.system.Core.Application.dtoMappers;
 
+import com.ticketing.system.Core.Application.dto.GridPlacementDTO;
 import com.ticketing.system.Core.Application.dto.InventoryZoneDTO;
 import com.ticketing.system.Core.Application.dto.LocationDTO;
 import com.ticketing.system.Core.Application.dto.SeatDTO;
@@ -9,8 +10,6 @@ import com.ticketing.system.Core.Domain.events.SeatedZone;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 public class VenueMapMapper {
 
@@ -20,13 +19,18 @@ public class VenueMapMapper {
                 .map(this::toInventoryZoneDTO)
                 .toList();
         LocationDTO location = new LocationDTO(venueMap.getLocation().country(), venueMap.getLocation().city());
-        return new VenueMapDTO(venueMap.getId(), location, inventoryZoneDTOs);
+        return new VenueMapDTO(venueMap.getId(), location,
+                venueMap.getGridRows(), venueMap.getGridCols(), inventoryZoneDTOs);
     }
-    
 
+    private static GridPlacementDTO placementOf(InventoryZone zone) {
+        if (!zone.hasGridPlacement()) {
+            return null;
+        }
+        return new GridPlacementDTO(zone.getGridRow(), zone.getGridCol(),
+                zone.getGridRowSpan(), zone.getGridColSpan());
+    }
 
-
-    
     private InventoryZoneDTO toInventoryZoneDTO(InventoryZone zone) {
         List<SeatDTO> seats = List.of();
         int soldAmount = zone.getSoldAmount();
@@ -37,8 +41,7 @@ public class VenueMapMapper {
                             seat.getLabel(),
                             seat.getX(),
                             seat.getY(),
-                            seat.getStatus().name()
-                    ))
+                            seat.getStatus().name()))
                     .toList();
 
             soldAmount = seatedZone.getSoldAmount();
@@ -53,8 +56,8 @@ public class VenueMapMapper {
                 zone.getReservedAmount(),
                 soldAmount,
                 zone.getprice(),
-                seats
-        );
+                seats,
+                placementOf(zone));
     }
 
 }

@@ -25,10 +25,17 @@ session:
   member-ttl-minutes: ${SESSION_MEMBER_TTL_MINUTES:1440}
   guest-idle-timeout-minutes: ${SESSION_GUEST_IDLE_TIMEOUT_MINUTES:30}
 
+# Brute-force lock-after-N policy (SLR.2 #148) for member + admin sign-in.
+# max-attempts: 0 disables the lockout entirely.
+auth:
+  lockout:
+    max-attempts: ${AUTH_LOCKOUT_MAX_ATTEMPTS:5}
+    lock-minutes: ${AUTH_LOCKOUT_LOCK_MINUTES:15}
+
 
 constants:
   # System-wide constant
-  ticket-reservation-duration: ${TICKET_RESERVATION_DURATION:15}
+  ticket-reservation-duration: ${TICKET_RESERVATION_DURATION:10}
   order-expiration-duration: ${ORDER_EXPIRATION_DURATION:60}
 
 
@@ -52,3 +59,10 @@ management:
 vaadin:
   launch-browser: false
   allowed-packages: com.ticketing.system.Presentation
+
+# Default System Admin (UC-1 / I.1.4) — auto-created at initialization when none exists.
+# Defaults live here only; override in production via env, and never ship the default password.
+platform:
+  admin:
+    username: ${PLATFORM_ADMIN_USERNAME:admin}
+    password: ${PLATFORM_ADMIN_PASSWORD:admin}

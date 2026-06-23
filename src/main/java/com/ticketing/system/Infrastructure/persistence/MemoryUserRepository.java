@@ -1,5 +1,6 @@
 package com.ticketing.system.Infrastructure.persistence;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,6 +33,11 @@ public class MemoryUserRepository implements IUserRepository {
     public void unlock(Integer id) { locks.unlock(id); }
 
     @Override
+    public List<User> findAll() {
+        return new java.util.ArrayList<>(usersById.values());
+    }
+
+    @Override
     public int nextId() {
         return idSequence.getAndIncrement();
     }
@@ -60,6 +66,13 @@ public class MemoryUserRepository implements IUserRepository {
         return usersById.values().stream()
                 .filter(u -> username.equals(u.getUsername()))
                 .findFirst();
+    }
+
+    @Override
+    public List<User> findUsersWithPendingAppointmentForCompany(int companyId) {
+        return usersById.values().stream()
+                .filter(u -> u.getPendingCompanyAppointment(companyId) != null)
+                .toList();
     }
 
     @Override

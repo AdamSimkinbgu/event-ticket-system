@@ -1,15 +1,21 @@
 package com.ticketing.system.Core.Domain.policies.purchase;
 
-public class AgePurchasePolicy implements PurchasePolicy {
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
+public class AgePurchasePolicy implements PurchasePolicy, InvariantChecked {
 
     private final int minimumAge;
 
     public AgePurchasePolicy(int minimumAge) {
-        if (minimumAge < 0) {
-            throw new IllegalArgumentException("Minimum age cannot be negative");
-        }
-
         this.minimumAge = minimumAge;
+        checkInvariants();
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (minimumAge < 0) {
+            throw new IllegalStateException("AgePurchasePolicy invariant violated: minimumAge cannot be negative (was " + minimumAge + ")");
+        }
     }
 
     @Override
@@ -21,7 +27,9 @@ public class AgePurchasePolicy implements PurchasePolicy {
         Integer buyerAge = context.getBuyerAge();
 
         if (buyerAge == null) {
-            return false;
+            // Age unknown (e.g. a guest at reserve time) — defer the check to checkout,
+            // where the age is collected; an unknown age at checkout still fails.
+            return context.getStage() == PurchaseStage.RESERVE;
         }
 
         return buyerAge >= minimumAge;
@@ -31,4 +39,5 @@ public class AgePurchasePolicy implements PurchasePolicy {
     public String getFailureMessage() {
         return "You must be at least " + minimumAge + " years old to buy tickets";
     }
+    public int getMinimumAge() { return minimumAge; }
 }

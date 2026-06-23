@@ -42,13 +42,22 @@ public class ProductionCompany implements InvariantChecked {
         this.discountPolicies = new ArrayList<>();
         this.purchasePolicy = new NoPurchasePolicy();
         this.managers = new ArrayList<>();
+        checkInvariants();
     }
 
     public void addManager(int targetId) {
         if (managers.contains(targetId)) {
             throw new RuntimeException("The target user is already a manager of this company");
         }
+        // Validate-before-commit: roll back the add if the target cannot be a manager
+        // (e.g. they are already an owner), so a rejected call leaves managers unchanged.
         managers.add(targetId);
+        try {
+            checkInvariants();
+        } catch (RuntimeException ex) {
+            managers.remove(Integer.valueOf(targetId));
+            throw ex;
+        }
     }
 
 
@@ -71,6 +80,7 @@ public class ProductionCompany implements InvariantChecked {
             managers.remove(Integer.valueOf(newOwnerId));
         }
         this.ownerIds.add(newOwnerId);
+        checkInvariants();
     }
 
     /**
@@ -91,6 +101,7 @@ public class ProductionCompany implements InvariantChecked {
             throw new IllegalStateException("User is not an owner of this company");
         }
         this.ownerIds.remove(Integer.valueOf(targetId));
+        checkInvariants();
     }
 
     /**
@@ -106,6 +117,7 @@ public class ProductionCompany implements InvariantChecked {
             throw new IllegalStateException("User is not an owner of this company");
         }
         this.ownerIds.remove(Integer.valueOf(userId));
+        checkInvariants();
     }
 
 
@@ -121,13 +133,16 @@ public class ProductionCompany implements InvariantChecked {
         } else {
             throw new RuntimeException("User is not a manager or owner, cannot revoke appointment");
         }
+        checkInvariants();
     }
 
     // ---------------------------------------------------------------------------
     // Skeleton additions — CompanyStatus lifecycle + cycle check + getters.
     // ---------------------------------------------------------------------------
     public List<Integer> getManagers() {
-        return this.managers;
+        // Defensive copy — external callers must not be able to mutate the internal
+        // managers list (which would let them violate the owner/manager-overlap invariant).
+        return new ArrayList<>(this.managers);
     }
 
     /**
@@ -140,7 +155,8 @@ public class ProductionCompany implements InvariantChecked {
     }
 
     public List<Integer> getOwnersIds() {
-        return this.ownerIds;
+        // Defensive copy — see getOwnerIds() for the canonical snapshot accessor.
+        return new ArrayList<>(this.ownerIds);
     }
 
     /** Snapshot of all current owners (includes the founder). */
@@ -183,7 +199,16 @@ public class ProductionCompany implements InvariantChecked {
     }
 
     public void setName(String name) {
+        // Validate-before-commit: roll back if the new name is blank/null, so a rejected
+        // call never leaves the company with a corrupted name.
+        String previous = this.name;
         this.name = name;
+        try {
+            checkInvariants();
+        } catch (RuntimeException ex) {
+            this.name = previous;
+            throw ex;
+        }
     }
 
     public String getDescription() {
@@ -192,6 +217,7 @@ public class ProductionCompany implements InvariantChecked {
 
     public void setDescription(String description) {
         this.description = description;
+        checkInvariants();
     }
 
     public Double getRating() {
@@ -200,6 +226,7 @@ public class ProductionCompany implements InvariantChecked {
 
     public void setRating(Double rating) {
         this.rating = rating;
+        checkInvariants();
     }
 
     // UC-18 — Founder is the original creator, immutable for the lifetime of the
@@ -281,6 +308,7 @@ public void setPurchasePolicy(PurchasePolicy purchasePolicy) {
     }
 
     this.purchasePolicy = purchasePolicy;
+    checkInvariants();
 }
 
 public void extendPurchasePolicy(PurchasePolicy additionalPolicy) {
@@ -296,5 +324,7 @@ public void extendPurchasePolicy(PurchasePolicy additionalPolicy) {
             this.purchasePolicy,
             additionalPolicy
     );
+    checkInvariants();
 }
+
 }

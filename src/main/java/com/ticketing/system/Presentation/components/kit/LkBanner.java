@@ -12,7 +12,7 @@ import com.vaadin.flow.component.html.Span;
 public class LkBanner extends Div {
 
     public enum Tone {
-        warn, info;
+        warn, info, error;
 
         public String cls() {
             return "lk-banner-" + name();

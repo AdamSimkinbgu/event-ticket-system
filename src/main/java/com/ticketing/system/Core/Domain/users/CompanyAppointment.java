@@ -5,10 +5,11 @@ import java.util.EnumSet;
 import java.util.Set;
 
 import com.ticketing.system.Core.Domain.exceptions.InvalidPermissionException;
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 import java.util.List;
 
-public class CompanyAppointment {
+public class CompanyAppointment implements InvariantChecked {
     private final int appointmentId; // Unique identifier for the appointment (could be UUID or int)
     private final int companyId; // ID of the company this appointment belongs to
     private final int targetId; // ID of the user being appointed
@@ -26,23 +27,41 @@ public class CompanyAppointment {
             CompanyRole role,
             AppointmentStatus status,
             List<Permission> permissions) {
-        if (role == CompanyRole.Manager && (permissions == null || permissions.isEmpty())) {
-            throw new IllegalArgumentException("Manager role must have at least one permission.");
-        }
-        if (role == CompanyRole.Owner && permissions != null && !permissions.isEmpty()) {
-            throw new IllegalArgumentException("Owner role should not have explicit permissions.");
-        }
-
         this.appointmentId = appointmentId;
         this.companyId = companyId;
         this.targetId = targetId;
         this.inviterId = inviterId;
         this.role = role;
         this.status = status;
-        this.permissions = permissions != null
-                ? EnumSet.copyOf(permissions)
-                : EnumSet.noneOf(Permission.class);
+        // Empty/null-safe: EnumSet.copyOf throws on an empty non-EnumSet collection, and would
+        // run before checkInvariants(). The Manager/Owner permission rules are enforced below.
+        this.permissions = (permissions == null || permissions.isEmpty())
+                ? EnumSet.noneOf(Permission.class)
+                : EnumSet.copyOf(permissions);
         this.createdAt = LocalDateTime.now();
+        checkInvariants();
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (role == null) {
+            throw new IllegalStateException("CompanyAppointment invariant violated: role must not be null");
+        }
+        if (status == null) {
+            throw new IllegalStateException("CompanyAppointment invariant violated: status must not be null");
+        }
+        if (permissions == null) {
+            throw new IllegalStateException("CompanyAppointment invariant violated: permissions must not be null");
+        }
+        if (role == CompanyRole.Manager && permissions.isEmpty()) {
+            throw new IllegalStateException("CompanyAppointment invariant violated: Manager role must have at least one permission");
+        }
+        if (role == CompanyRole.Owner && !permissions.isEmpty()) {
+            throw new IllegalStateException("CompanyAppointment invariant violated: Owner role must not have explicit permissions");
+        }
+        if (createdAt == null) {
+            throw new IllegalStateException("CompanyAppointment invariant violated: createdAt must not be null");
+        }
     }
 
     // this constructor is specifically for the creation of the company founder
@@ -95,7 +114,17 @@ public class CompanyAppointment {
     }
 
     public void setPermissions(EnumSet<Permission> newPermissions) {
+        // Validate-before-commit: roll back to the previous permission set if the new one
+        // would violate an invariant (e.g. emptying a Manager's permissions), so a rejected
+        // call never leaves the appointment corrupted. checkInvariants stays the sole validator.
+        EnumSet<Permission> previous = this.permissions;
         this.permissions = newPermissions;
+        try {
+            checkInvariants();
+        } catch (RuntimeException ex) {
+            this.permissions = previous;
+            throw ex;
+        }
     }
 
     // ---------------------------------------------------------------------------
@@ -108,6 +137,7 @@ public class CompanyAppointment {
             throw new IllegalStateException("Only pending appointments can be accepted.");
         }
         this.status = AppointmentStatus.ACTIVE;
+        checkInvariants();
     }
 
     // UC-23 / UC-24 — PENDING -> REJECTED on target rejection.
@@ -116,6 +146,7 @@ public class CompanyAppointment {
             throw new IllegalStateException("Only pending appointments can be rejected.");
         }
         this.status = AppointmentStatus.REJECTED;
+        checkInvariants();
     }
 
     // UC-24 — ACTIVE -> REVOKED. Owner appointments do NOT support revoke (II.4.9 Cancelled in v0).
@@ -134,6 +165,7 @@ public class CompanyAppointment {
             }
         }
         this.status = AppointmentStatus.REVOKED;
+        checkInvariants();
     }
 
     // UC-24 — replace permission set with validation (existing setPermissions does
@@ -149,6 +181,7 @@ public class CompanyAppointment {
             throw new IllegalArgumentException("Manager role must have at least one permission.");
         }
         this.permissions = EnumSet.copyOf(newPermissions);
+        checkInvariants();
     }
 
     public boolean hasPermission(Permission permission) {

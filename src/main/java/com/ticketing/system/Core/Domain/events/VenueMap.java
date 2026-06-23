@@ -4,26 +4,58 @@ import java.util.List;
 
 import java.util.ArrayList;
 
-public class VenueMap {
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
+public class VenueMap implements InvariantChecked {
+
+    /** Default venue canvas grid when none is specified. */
+    public static final int DEFAULT_GRID_ROWS = 3;
+    public static final int DEFAULT_GRID_COLS = 3;
+
     private int id;
     private Location location;
     private final List<InventoryZone> inventoryZones;
     private int nextZoneId;
+    // Venue canvas grid: zones snap to cells of this gridRows × gridCols layout.
+    private int gridRows;
+    private int gridCols;
 
     public VenueMap(int id, Location location, List<InventoryZone> inventoryZones) {
+        this(id, location, inventoryZones, DEFAULT_GRID_ROWS, DEFAULT_GRID_COLS);
+    }
+
+    public VenueMap(int id, Location location, List<InventoryZone> inventoryZones, int gridRows, int gridCols) {
+        // Null-guarded here because the list is copied before checkInvariants() runs;
+        // a null input would otherwise NPE in the copy rather than fail cleanly.
         if (inventoryZones == null) {
             throw new IllegalArgumentException("Inventory zones cannot be null");
+        }
+        if (gridRows < 1 || gridCols < 1) {
+            throw new IllegalArgumentException("Venue grid must be at least 1x1");
         }
 
         this.id = id;
         this.location = location;
         this.inventoryZones = new ArrayList<>(inventoryZones);
+        this.gridRows = gridRows;
+        this.gridCols = gridCols;
         // initialize nextZoneId to one greater than the max existing zone ID, or 1 if there are no zones.
         // This is for convenience when adding new zones to the venue map.
         this.nextZoneId = this.inventoryZones.stream()
                 .mapToInt(InventoryZone::getId)
                 .max()
                 .orElse(0) + 1;
+        checkInvariants();
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (inventoryZones == null) {
+            throw new IllegalStateException("VenueMap invariant violated: inventoryZones must not be null");
+        }
+        if (nextZoneId < 1) {
+            throw new IllegalStateException("VenueMap invariant violated: nextZoneId must be >= 1 (was " + nextZoneId + ")");
+        }
     }
 
     public int getId() {
@@ -32,6 +64,7 @@ public class VenueMap {
 
     public void setId(int id) {
         this.id = id;
+        checkInvariants();
     }
 
       public List<InventoryZone> getInventoryZones() {
@@ -46,6 +79,50 @@ public class VenueMap {
 
     public void setLocation(Location location) {
         this.location = location;
+        checkInvariants();
+    }
+
+    public int getGridRows() {
+        return gridRows;
+    }
+
+    public int getGridCols() {
+        return gridCols;
+    }
+
+    /**
+     * Places a zone on the venue grid, validating it stays within the
+     * gridRows × gridCols bounds and does not overlap an already-placed zone.
+     */
+    public void placeZoneOnGrid(int zoneId, int row, int col, int rowSpan, int colSpan) {
+        InventoryZone zone = getZone(zoneId);
+        if (row < 1 || col < 1 || rowSpan < 1 || colSpan < 1) {
+            throw new IllegalArgumentException("Grid placement must be 1-based with spans >= 1");
+        }
+        if (row + rowSpan - 1 > gridRows || col + colSpan - 1 > gridCols) {
+            throw new IllegalArgumentException(
+                "Zone placement exceeds the " + gridRows + "x" + gridCols + " venue grid");
+        }
+        for (InventoryZone other : inventoryZones) {
+            if (other.getId() == zoneId || !other.hasGridPlacement()) {
+                continue;
+            }
+            if (rectsOverlap(row, col, rowSpan, colSpan,
+                    other.getGridRow(), other.getGridCol(),
+                    other.getGridRowSpan(), other.getGridColSpan())) {
+                throw new IllegalStateException(
+                    "Zone placement overlaps zone '" + other.getName() + "'");
+            }
+        }
+        zone.placeOnGrid(row, col, rowSpan, colSpan);
+        checkInvariants();
+    }
+
+    private static boolean rectsOverlap(int r1, int c1, int rs1, int cs1,
+                                        int r2, int c2, int rs2, int cs2) {
+        boolean rowsDisjoint = r1 + rs1 <= r2 || r2 + rs2 <= r1;
+        boolean colsDisjoint = c1 + cs1 <= c2 || c2 + cs2 <= c1;
+        return !(rowsDisjoint || colsDisjoint);
     }
 
     public InventoryZone getZone(int zoneId) {
@@ -60,6 +137,11 @@ public class VenueMap {
     public boolean checkAvailability(int zoneId, int quantity) {
         InventoryZone zone = getZone(zoneId);
         return zone.checkAvailability(quantity);
+    }
+
+    // True if any zone still has at least one AVAILABLE place/seat across the venue.
+    public boolean hasAvailableInventory() {
+        return inventoryZones.stream().anyMatch(zone -> zone.getAvailableAmount() > 0);
     }
 
 
@@ -107,6 +189,7 @@ public class VenueMap {
         if (zone.getId() >= nextZoneId) {
             nextZoneId = zone.getId() + 1;
         }
+        checkInvariants();
     }
 
 
@@ -118,6 +201,7 @@ public class VenueMap {
         }
 
         inventoryZones.remove(zone);
+        checkInvariants();
         return zone;
     }
 

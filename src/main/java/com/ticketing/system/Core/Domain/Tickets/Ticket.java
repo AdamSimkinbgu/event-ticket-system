@@ -32,13 +32,11 @@ public class Ticket implements InvariantChecked {
         this.seatNumber = seatLabel;    // nullable for standing zones, non-null for seated zones
         this.price = price;
         this.ticketId = ticketId;
-        if (orderReceiptId <= 0) {
-            throw new IllegalArgumentException("orderReceiptId must be positive");
-        }
         this.orderReceiptId = orderReceiptId;
         this.barcodeValue = barcodeValue;
         this.status = TicketStatus.PAID; // Default initial status, because tickets are created at payment time in the current design. Adjust as needed if creation timing changes.
         this.holderUserId = null;
+        checkInvariants();
     }
 
 
@@ -64,6 +62,7 @@ public class Ticket implements InvariantChecked {
             throw new IllegalArgumentException("orderReceiptId must be positive");
         }
         this.orderReceiptId = orderReceiptId;
+        checkInvariants();
     }
 
     // ---------------------------------------------------------------------------
@@ -82,37 +81,44 @@ public class Ticket implements InvariantChecked {
         }
         this.holderUserId = holderUserId;
         this.status = TicketStatus.RESERVED;
+        checkInvariants();
     }
 
     // UC-10 — RESERVED -> PAID after successful charge.
     public void markPaid() {
         this.status = TicketStatus.PAID;
+        checkInvariants();
     }
 
     // UC-10 / UC-34 — PAID -> ISSUED after successful external issuance, stores barcode locally.
     public void markIssued(String barcodeValue) {
         this.barcodeValue = barcodeValue;
         this.status = TicketStatus.ISSUED;
+        checkInvariants();
     }
 
     // ISSUED -> USED at venue gate scan (no UC in v0; defined for completeness).
     public void markUsed() {
         this.status = TicketStatus.USED;
+        checkInvariants();
     }
 
     // UC-4 — PAID/ISSUED -> REFUNDED via auto-refund pipeline.
     public void markRefunded() {
         this.status = TicketStatus.REFUNDED;
+        checkInvariants();
     }
 
     // Admin / ops action — any state -> VOIDED.
     public void markVoided() {
         this.status = TicketStatus.VOIDED;
+        checkInvariants();
     }
 
     // UC-2 — RESERVED -> AVAILABLE on cart expiration. Releases the lock.
     public void release() {
         this.status = TicketStatus.AVAILABLE;
+        checkInvariants();
     }
 
     // State checks.
@@ -163,6 +169,7 @@ public class Ticket implements InvariantChecked {
             throw new IllegalArgumentException("holderUserId must be positive when set");
         }
         this.holderUserId = userId;
+        checkInvariants();
     }
 
     public String getBarcode() {
@@ -171,6 +178,7 @@ public class Ticket implements InvariantChecked {
 
     public void setBarcodeValue(String barcodeValue) {
        this.barcodeValue=barcodeValue;
+       checkInvariants();
     }
 
     public TicketStatus getStatus() {
@@ -178,8 +186,16 @@ public class Ticket implements InvariantChecked {
     }
 
     public void setTicketId(int ticketId) {
+        // Validate-before-commit: roll back if the new id is non-positive, so a rejected
+        // call never leaves the ticket with a corrupted id.
+        int previous = this.ticketId;
         this.ticketId = ticketId;
-
+        try {
+            checkInvariants();
+        } catch (RuntimeException ex) {
+            this.ticketId = previous;
+            throw ex;
+        }
     }
     
 

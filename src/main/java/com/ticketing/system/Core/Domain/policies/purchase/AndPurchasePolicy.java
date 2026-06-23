@@ -1,17 +1,23 @@
 package com.ticketing.system.Core.Domain.policies.purchase;
 
-public class AndPurchasePolicy implements PurchasePolicy {
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
+
+public class AndPurchasePolicy implements PurchasePolicy, InvariantChecked {
 
     private final PurchasePolicy leftPolicy;
     private final PurchasePolicy rightPolicy;
 
     public AndPurchasePolicy(PurchasePolicy leftPolicy, PurchasePolicy rightPolicy) {
-        if (leftPolicy == null || rightPolicy == null) {
-            throw new IllegalArgumentException("Purchase policies cannot be null");
-        }
-
         this.leftPolicy = leftPolicy;
         this.rightPolicy = rightPolicy;
+        checkInvariants();
+    }
+
+    @Override
+    public void checkInvariants() {
+        if (leftPolicy == null || rightPolicy == null) {
+            throw new IllegalStateException("AndPurchasePolicy invariant violated: both policies must be non-null");
+        }
     }
 
     @Override
@@ -33,5 +39,6 @@ public class AndPurchasePolicy implements PurchasePolicy {
 
         return left + " AND " + right;
     }
-    
+    public PurchasePolicy getLeftPolicy()  { return leftPolicy; }
+    public PurchasePolicy getRightPolicy() { return rightPolicy; }
 }

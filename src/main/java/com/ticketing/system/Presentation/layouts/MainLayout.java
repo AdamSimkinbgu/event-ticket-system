@@ -1,5 +1,7 @@
 package com.ticketing.system.Presentation.layouts;
 
+import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
+import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
@@ -7,7 +9,7 @@ import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.ticketing.system.Presentation.session.AuthSession;
-import com.ticketing.system.Presentation.session.MockCart;
+import com.ticketing.system.Presentation.session.GuestSession;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.company.CompanyRegistrationView;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
@@ -29,14 +31,12 @@ import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.router.AfterNavigationEvent;
 import com.vaadin.flow.router.AfterNavigationObserver;
+import com.vaadin.flow.server.VaadinSession;
+import com.ticketing.system.Presentation.session.SessionIdentity;
 
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Stream;
 
 /**
  * Buyer-facing shell — composes {@link LkTopBar} with the tickethub
@@ -59,11 +59,15 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         OrderConfirmationView.class, "My Tickets"
     );
 
+    private final ReservationService reservationService;
     private LkTopBar topBar;
     private final SignOutFlow signOutFlow;
+    private final SessionIdentity identity;
 
-    public MainLayout(SignOutFlow signOutFlow) {
+    public MainLayout(ReservationService reservationService, SignOutFlow signOutFlow, SessionIdentity identity) {
+        this.reservationService = reservationService;
         this.signOutFlow = signOutFlow;
+        this.identity = identity;
         rebuildTopBar(null);
     }
 
@@ -72,38 +76,75 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         rebuildTopBar(findActiveLabel(event));
     }
 
-    private void rebuildTopBar(String activeLabel) {
-        if (topBar != null) topBar.getElement().removeFromParent();
+   private void rebuildTopBar(String activeLabel) {
+    if (topBar != null) topBar.getElement().removeFromParent();
 
-        boolean signedIn = AuthSession.isSignedIn();
-        String name = signedIn ? AuthSession.displayName() : "Guest";
+    boolean signedIn = AuthSession.isSignedIn();
+    String name = signedIn ? AuthSession.displayName() : "Guest";
 
-        List<LkTopBar.NavItem> nav = new ArrayList<>();
-        nav.add(new LkTopBar.NavItem("Browse",     BrowseEventsView.class));
-        nav.add(new LkTopBar.NavItem("My Tickets", MyAccountView.class));
-        // An admin who is also browsing as a member gets a fast-jump tab into
-        // the platform shell. Driven by Capabilities so a dev-panel toggle
-        // flips it on without rewiring routes.
-        if (Capabilities.has(Capability.ADMIN_WORKSPACE)) {
-            nav.add(new LkTopBar.NavItem("Admin", AdminDashboardView.class));
+    int cartSize = 0;
+    Long cartDeadlineMs = null;
+
+    VaadinSession session = VaadinSession.getCurrent();
+    if (session != null) {
+        session.lock();
+        try {
+            long now = System.currentTimeMillis();
+            Long lastFetchMs = (Long) session.getAttribute("cart.fetch.time");
+            Integer cachedSize = (Integer) session.getAttribute("cart.size");
+            Long cachedDeadlineMs = (Long) session.getAttribute("cart.deadline");
+
+            if (lastFetchMs != null && (now - lastFetchMs) < 10_000 && cachedSize != null) {
+                cartSize = cachedSize;
+                cartDeadlineMs = cachedDeadlineMs;
+            } else {
+                try {
+                    String credential = identity.credential();
+                    ActiveOrderDTO order = (credential != null)
+                            ? reservationService.viewMyActiveOrder(credential) : null;
+                    if (order != null && !order.lines().isEmpty()) {
+                        cartSize = order.lines().size();
+                        long remSec = order.remainingSecondsBeforeExpiry();
+                        if (remSec > 0) {
+                            cartDeadlineMs = now + remSec * 1000L;
+                        }
+                    }
+                } catch (Exception e) {
+                    // Log but don't fail topbar render
+                }
+                session.setAttribute("cart.size", cartSize);
+                session.setAttribute("cart.deadline", cartDeadlineMs);
+                session.setAttribute("cart.fetch.time", now);
+            }
+        } finally {
+            session.unlock();
         }
-
-        LkTopBar bar = new LkTopBar(LkTopBar.Variant.MAIN)
-            .brand("TicketHub", LandingView.class)
-            .nav(nav, activeLabel)
-            .searchDefault()
-            .cart(CartView.class, MockCart.size(), shortestCartDeadlineMs())
-            .bellDefault(false);
-
-        if (signedIn) {
-            bar.account(initials(name), name, buildMemberMenu(name));
-        } else {
-            bar.guestActions(LoginView.class, RegisterView.class);
-        }
-
-        topBar = bar;
-        addToNavbar(topBar);
     }
+
+    List<LkTopBar.NavItem> nav = new ArrayList<>();
+    nav.add(new LkTopBar.NavItem("Browse",     BrowseEventsView.class));
+    nav.add(new LkTopBar.NavItem("My Tickets", MyAccountView.class));
+
+    if (Capabilities.has(Capability.ADMIN_WORKSPACE)) {
+        nav.add(new LkTopBar.NavItem("Admin", AdminDashboardView.class));
+    }
+
+    LkTopBar bar = new LkTopBar(LkTopBar.Variant.MAIN)
+        .brand("TicketHub", LandingView.class)
+        .nav(nav, activeLabel)
+        .searchDefault()
+        .cart(CartView.class, cartSize, cartDeadlineMs)
+        .bellDefault(false);
+
+    if (signedIn) {
+        bar.account(initials(name), name, buildMemberMenu(name));
+    } else {
+        bar.guestActions(LoginView.class, RegisterView.class);
+    }
+
+    topBar = bar;
+    addToNavbar(topBar);
+}
 
     /** Member-persona account menu — wired to {@link AuthSession} + view routes. */
     private LkAccountMenu buildMemberMenu(String name) {
@@ -116,9 +157,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
             new LkMenu.Divider()
         );
 
-        // Conditional: owner workspace vs. become-an-organizer CTA.
-        // Capability-driven so swapping MockCompanies for a real service later is a
-        // one-file change in Capabilities, not 30 view edits.
+        // Capability-driven owner workspace vs become-an-organizer CTA.
         if (Capabilities.has(Capability.OWNER_WORKSPACE)) {
             menu.add(new LkMenu.Item("building", "Workspace")
                 .onClick(() -> UI.getCurrent().navigate(OwnerDashboardView.class)));
@@ -138,25 +177,6 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         return new LkAccountMenu(initials(name), name, "Signed in member · V2-AUTH-02 stub", menu, null, null);
     }
 
-    /**
-     * Earliest still-future deadline across the cart, in epoch millis —
-     * the union of every line's {@code heldUntil} and the global checkout
-     * deadline (set on entry to {@code CheckoutView}). The minimum wins,
-     * so the navbar always reflects whichever timer expires first at this
-     * moment. {@code null} when the cart is empty / every timer expired.
-     */
-    private static Long shortestCartDeadlineMs() {
-        Instant now = Instant.now();
-        return Stream.concat(
-                MockCart.getItems().stream().map(MockCart.Item::heldUntil),
-                Stream.of(MockCart.getCheckoutDeadline()))
-            .filter(Objects::nonNull)
-            .filter(t -> t.isAfter(now))
-            .min(Comparator.naturalOrder())
-            .map(Instant::toEpochMilli)
-            .orElse(null);
-    }
-
     private static String findActiveLabel(AfterNavigationEvent event) {
         for (HasElement el : event.getActiveChain()) {
             String label = NAV_LABELS.get(el.getClass());
@@ -164,6 +184,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         }
         return null;
     }
+    
 
     private static String initials(String name) {
         if (name == null || name.isBlank()) return "??";
