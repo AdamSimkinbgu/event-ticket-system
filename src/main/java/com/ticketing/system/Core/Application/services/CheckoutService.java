@@ -41,6 +41,7 @@ import com.ticketing.system.Core.Domain.exceptions.IdempotencyConflictException;
 import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.exceptions.MarketNotOpenException;
 import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
 import com.ticketing.system.Core.Domain.exceptions.SessionExpiredException;
 import com.ticketing.system.Core.Domain.exceptions.TicketIssuanceFailedException;
@@ -70,6 +71,7 @@ public class CheckoutService {
     private final ISessionManager sessionManager;
     private final IUserRepository userRepository;
     private final IProductionCompanyRepository companyRepository;
+    private final SystemAdminService systemAdminService;
 
     // In-memory cache for completed checkouts to handle idempotency. Keyed by a
     // combination of buyer identity and idempotency key, since the same idempotency
@@ -97,7 +99,8 @@ public class CheckoutService {
             INotificationService notificationService,
             ISessionManager sessionManager,
             IUserRepository userRepository,
-            IProductionCompanyRepository companyRepository) {
+            IProductionCompanyRepository companyRepository,
+            SystemAdminService systemAdminService) {
         this.activeOrderRepository = activeOrderRepository;
         this.eventRepository = eventRepository;
         this.ticketRepository = ticketRepository;
@@ -108,6 +111,18 @@ public class CheckoutService {
         this.sessionManager = sessionManager;
         this.userRepository = userRepository;
         this.companyRepository = companyRepository;
+        this.systemAdminService = systemAdminService;
+    }
+
+    // UC-32 / I.2.1 — no money moves while the trading market is closed. This is a
+    // platform-wide gate, orthogonal to the per-event ON_SALE check enforced later
+    // in Phase 3 (validateEventsStillOnSale). Called as a guard clause before the
+    // checkout try-block so it propagates cleanly instead of being wrapped as a
+    // generic checkout failure.
+    private void requireMarketOpen() {
+        if (!systemAdminService.isMarketOpen()) {
+            throw new MarketNotOpenException();
+        }
     }
 
     // The checkoutMember and checkoutGuest methods follow a similar flow but have
@@ -129,6 +144,7 @@ public class CheckoutService {
     // confirm inventory sale, persist, mark bought.
     public CheckoutResultDTO checkoutMember(String token, String idempotencyKey, String currency,
             String paymentMethodToken) {
+        requireMarketOpen();
         int userId = -1;
         ActiveOrder order = null;
         PaymentResultDTO paymentResult = null;
@@ -291,6 +307,7 @@ public class CheckoutService {
     // See checkoutMember for the 3-phase description.
     public CheckoutResultDTO checkoutGuest(String guestSessionId, String guestEmail, String idempotencyKey,
             String currency, String paymentMethodToken, int buyerAge) {
+        requireMarketOpen();
         ActiveOrder order = null;
         PaymentResultDTO paymentResult = null;
         double totalPrice = 0.0;

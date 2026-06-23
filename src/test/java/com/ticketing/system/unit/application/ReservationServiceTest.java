@@ -4,6 +4,7 @@ import com.ticketing.system.Core.Application.dto.ReservationResultDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.ReservationService;
+import com.ticketing.system.Core.Application.services.SystemAdminService;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
@@ -80,13 +81,17 @@ public class ReservationServiceTest {
         zone = mock(InventoryZone.class);
         activeOrder = mock(ActiveOrder.class);
 
+        SystemAdminService systemAdminService = mock(SystemAdminService.class);
+        when(systemAdminService.isMarketOpen()).thenReturn(true);
+
         reservationService = new ReservationService(
                 eventRepository,
                 activeOrderRepository,
                 sessionManager,
                 notificationService,
                 mock(IProductionCompanyRepository.class),
-                mock(IUserRepository.class)
+                mock(IUserRepository.class),
+                systemAdminService
         );
     }
 

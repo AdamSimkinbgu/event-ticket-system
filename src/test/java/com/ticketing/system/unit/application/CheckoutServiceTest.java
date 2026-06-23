@@ -38,6 +38,7 @@ import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
 import com.ticketing.system.Core.Application.services.CheckoutService;
+import com.ticketing.system.Core.Application.services.SystemAdminService;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
@@ -134,6 +135,9 @@ class CheckoutServiceTest {
           when(mockUserRepository.getUserById(USER_ID)).thenReturn(mockUser); 
         
 
+        SystemAdminService mockSystemAdminService = mock(SystemAdminService.class);
+        when(mockSystemAdminService.isMarketOpen()).thenReturn(true);
+
         checkoutService = new CheckoutService(
                 mockActiveOrderRepo,
                 mockEventRepo,
@@ -144,7 +148,8 @@ class CheckoutServiceTest {
                 mockNotificationService,
                 mockiSessionManager,
                 mockUserRepository,
-                mock(IProductionCompanyRepository.class)
+                mock(IProductionCompanyRepository.class),
+                mockSystemAdminService
         );
 
         mockOrder = mock(ActiveOrder.class);
