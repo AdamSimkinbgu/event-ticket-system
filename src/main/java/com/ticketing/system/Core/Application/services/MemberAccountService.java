@@ -7,6 +7,9 @@ import com.ticketing.system.Core.Application.dtoMappers.OrderReceiptMapper;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.exceptions.EntityNotFoundException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 
@@ -76,6 +79,31 @@ public class MemberAccountService {
                     authenticationService.extractUserId(authToken.token()), e.getMessage(), e);
         }
         return new PurchaseHistoryDTO(new ArrayList<>()); // Return empty history on failure.
+    }
+
+    // UC-16 (single receipt): one member-owned order, enriched for the receipt page (#276).
+    // Unlike viewMyHistory (which degrades to an empty list), this THROWS so the presenter can
+    // tell apart auth failure, a missing receipt, and a receipt that isn't the caller's (403).
+    public PurchaseRecordDTO viewMyReceipt(String token, int receiptId) {
+        log.info("Received request to view receipt {} for the authenticated member", receiptId);
+        if (!authenticationService.validateToken(token)) {
+            throw new InvalidTokenException();
+        }
+        int userId = authenticationService.extractUserId(token);
+
+        OrderReceipt receipt = orderReceiptRepository.findByOrderReceiptId(receiptId)
+                .orElseThrow(() -> new EntityNotFoundException("OrderReceipt", receiptId));
+
+        // Authorization is a domain concern: a member may only view their own receipt.
+        Integer holderUserId = receipt.getHolderUserId();
+        if (holderUserId == null || holderUserId != userId) {
+            throw new UnauthorizedActionException("view receipt " + receiptId, userId);
+        }
+
+        // Buyer is the member themselves and company isn't shown on the receipt, so pass null for
+        // those repos (the mapper yields null for the unresolved names — see OrderReceiptMapper).
+        return new OrderReceiptMapper().toPurchaseRecordDTO(
+                receipt, ticketRepository, eventRepository, null, null);
     }
 
 

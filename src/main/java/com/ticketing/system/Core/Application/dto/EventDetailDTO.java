@@ -20,5 +20,6 @@ public record EventDetailDTO(
     String companyId,
     String companyName,
     EventStatus status,                     // EventStatus value as string
-    List<ShowDate> showDates
+    List<ShowDate> showDates,
+    List<String> artistsNames               // lineup (Event.getArtistsNames())
 ) {}

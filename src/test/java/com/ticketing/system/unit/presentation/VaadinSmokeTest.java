@@ -6,6 +6,7 @@ import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkConfirm;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
+import com.ticketing.system.Presentation.components.kit.LkSearchPanel;
 import com.ticketing.system.Presentation.components.venue.VkQuantitySelector;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
@@ -19,13 +20,21 @@ import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
+import com.ticketing.system.Presentation.views.catalog.EventDetailsView;
 import com.ticketing.system.Presentation.presenters.admin.GlobalHistoryPresenter;
 import com.ticketing.system.Presentation.presenters.catalog.BrowseEventsPresenter;
+import com.ticketing.system.Presentation.presenters.catalog.EventDetailsPresenter;
+import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.ticketing.system.Presentation.views.company.CompanyInquiryInboxView;
 import com.ticketing.system.Presentation.views.company.ManagerListView;
 import com.ticketing.system.Presentation.views.company.OwnerDashboardView;
+import com.ticketing.system.Presentation.views.account.MyAccountView;
 import com.ticketing.system.Presentation.views.account.MyInvitationsView;
+import com.ticketing.system.Presentation.views.account.ReceiptView;
 import com.ticketing.system.Presentation.views.account.SupportInboxView;
+import com.ticketing.system.Presentation.presenters.account.MyAccountPresenter;
+import com.ticketing.system.Presentation.presenters.account.ReceiptPresenter;
+import com.ticketing.system.Presentation.presenters.account.RefundPresenter;
 import com.ticketing.system.Presentation.views.landing.LandingView;
 import com.ticketing.system.Presentation.views.messaging.SubmitComplaintView;
 import com.ticketing.system.Presentation.presenters.company.ManagerListPresenter;
@@ -38,6 +47,7 @@ import com.ticketing.system.Presentation.presenters.landing.LandingPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.SubmitComplaintPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.SupportInboxPresenter;
 import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
+import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dto.ConversationDTO;
 import com.ticketing.system.Core.Application.dto.MessageDTO;
 import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
@@ -134,11 +144,47 @@ class VaadinSmokeTest {
         // cheap canary for kit-API breakage. Both now take an injected
         // presenter, so resolve it from the Spring context.
         assertDoesNotThrow(
-            () -> new BrowseEventsView(context.getBean(BrowseEventsPresenter.class)),
+            () -> new BrowseEventsView(context.getBean(BrowseEventsPresenter.class),
+                context.getBean(SessionIdentity.class)),
             "BrowseEventsView (root route) failed to construct");
         assertDoesNotThrow(
             () -> new GlobalHistoryView(context.getBean(GlobalHistoryPresenter.class)),
             "GlobalHistoryView (admin route) failed to construct");
+    }
+
+    @Test
+    void eventDetailsViewInstantiates() {
+        // Buyer event page wired to a presenter (#272). The constructor only builds the
+        // bodyHolder shell — load + page build happen in beforeEnter — so bare mocks exercise
+        // the construction path (a canary for kit-API breakage at wiring time).
+        EventDetailsPresenter presenter = mock(EventDetailsPresenter.class);
+        SessionIdentity sessionIdentity = mock(SessionIdentity.class);
+        assertDoesNotThrow(() -> new EventDetailsView(presenter, sessionIdentity),
+            "EventDetailsView failed to construct");
+    }
+
+    @Test
+    void receiptViewInstantiates() {
+        // Member receipt page wired to presenters (#276 + refund #284). The constructor only adds
+        // the bodyHolder shell — load + render happen in beforeEnter — so bare mocks exercise the
+        // construction path.
+        ReceiptPresenter presenter = mock(ReceiptPresenter.class);
+        RefundPresenter refundPresenter = mock(RefundPresenter.class);
+        SessionIdentity sessionIdentity = mock(SessionIdentity.class);
+        assertDoesNotThrow(() -> new ReceiptView(presenter, refundPresenter, sessionIdentity),
+            "ReceiptView failed to construct");
+    }
+
+    @Test
+    void myAccountViewInstantiates() {
+        // Member account page (#284 refund affordance). It builds in the constructor, so the
+        // presenter must return a (here empty) history; bare mocks for the rest.
+        MyAccountPresenter presenter = mock(MyAccountPresenter.class);
+        when(presenter.loadHistory()).thenReturn(new PurchaseHistoryDTO(List.of()));
+        RefundPresenter refundPresenter = mock(RefundPresenter.class);
+        SessionIdentity sessionIdentity = mock(SessionIdentity.class);
+        assertDoesNotThrow(() -> new MyAccountView(presenter, refundPresenter, sessionIdentity),
+            "MyAccountView failed to construct");
     }
 
     @Test
@@ -294,6 +340,9 @@ class VaadinSmokeTest {
         assertDoesNotThrow(() -> new LkBtn("Sign in"),    "LkBtn failed");
         assertDoesNotThrow(() -> new LkCard("Card"),      "LkCard failed");
         assertDoesNotThrow(() -> new LkBadge("OK"),       "LkBadge failed");
+        // Live top-bar search panel (#281) — debounced input + search-fn callback, no DI needed.
+        assertDoesNotThrow(() -> new LkSearchPanel(List.of("Coldplay"), q -> List.of()),
+            "live LkSearchPanel failed");
         // Domain components used by the venue / seat picker views.
         assertDoesNotThrow(() -> new VkSeat(VkSeat.State.free, "1"), "VkSeat failed");
         assertDoesNotThrow(VkSeatLegend::new,             "VkSeatLegend failed");

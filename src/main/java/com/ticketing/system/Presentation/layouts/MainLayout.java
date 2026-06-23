@@ -4,7 +4,9 @@ import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
+import com.ticketing.system.Presentation.components.kit.LkSearchPanel;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
+import com.ticketing.system.Presentation.presenters.catalog.SearchPresenter;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.SignOutFlow;
@@ -63,11 +65,14 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
     private LkTopBar topBar;
     private final SignOutFlow signOutFlow;
     private final SessionIdentity identity;
+    private final SearchPresenter searchPresenter;
 
-    public MainLayout(ReservationService reservationService, SignOutFlow signOutFlow, SessionIdentity identity) {
+    public MainLayout(ReservationService reservationService, SignOutFlow signOutFlow,
+                      SessionIdentity identity, SearchPresenter searchPresenter) {
         this.reservationService = reservationService;
         this.signOutFlow = signOutFlow;
         this.identity = identity;
+        this.searchPresenter = searchPresenter;
         rebuildTopBar(null);
     }
 
@@ -132,7 +137,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
     LkTopBar bar = new LkTopBar(LkTopBar.Variant.MAIN)
         .brand("TicketHub", LandingView.class)
         .nav(nav, activeLabel)
-        .searchDefault()
+        .search(buildSearchPanel())
         .cart(CartView.class, cartSize, cartDeadlineMs)
         .bellDefault(false);
 
@@ -145,6 +150,22 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
     topBar = bar;
     addToNavbar(topBar);
 }
+
+    /**
+     * Live top-bar search panel (#281). Backs the kit {@link LkSearchPanel} with
+     * {@link SearchPresenter}: the debounced input runs a catalog search via the current
+     * credential, each row records the query as a recent search and opens the event's detail page.
+     */
+    private LkSearchPanel buildSearchPanel() {
+        return new LkSearchPanel(
+            searchPresenter.recents(),
+            query -> searchPresenter.search(identity.credential(), query).stream()
+                .map(r -> new LkSearchPanel.Row(r.type(), r.title(), r.subtitle(), () -> {
+                    searchPresenter.record(query);
+                    UI.getCurrent().navigate("events/" + r.eventId());
+                }))
+                .toList());
+    }
 
     /** Member-persona account menu — wired to {@link AuthSession} + view routes. */
     private LkAccountMenu buildMemberMenu(String name) {
