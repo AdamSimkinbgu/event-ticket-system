@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
+import com.ticketing.system.Core.Domain.exceptions.CompanyNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
@@ -178,8 +179,17 @@ public class EventManagementService {
     public List<EventDetailDTO> listEventsForCompany(String token, int companyId) {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
-        user.requirePermissionInCompany(companyId, Permission.MANAGE_INVENTORY);
+        if (user == null) {
+            throw new InvalidTokenException("User not found for token: " + token);
+        }
+
         ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null) {
+            throw new CompanyNotFoundException("Company not found for ID: " + companyId);
+        }
+        
+        user.requirePermissionInCompany(companyId, Permission.MANAGE_INVENTORY);
+        
 
         return eventRepository.findByCompanyId(companyId).stream()
                 .map(e -> new EventDetailDTO(
@@ -201,7 +211,13 @@ public class EventManagementService {
     public VenueLayoutDTO getEventZones(String token, int eventId) {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
+        if (user == null) {
+            throw new InvalidTokenException("User not found for token: " + token);
+        }
         Event event = eventRepository.findById(eventId);
+        if (event == null) {
+            throw new EventNotFoundException("Event not found for ID: " + eventId);
+        }
         user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
 
         VenueMap map = event.getVenueMap();
