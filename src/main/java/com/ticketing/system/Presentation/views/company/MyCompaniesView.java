@@ -43,7 +43,7 @@ public class MyCompaniesView extends LkPage {
             case Outcome.Success s                              -> add(buildGridCard(s.companies(), membershipPresenter));
             case Outcome.NotAuthenticated na                    -> add(buildEmptyState());
             case Outcome.Failure f -> {
-                Span msg = new Span("Could not load your companies: " + f.reason());
+                Span msg = new Span(f.error().message());
                 msg.getStyle().set("display", "block").set("margin-bottom", "12px").set("color", "#b91c1c");
                 add(msg);
                 add(buildEmptyState());

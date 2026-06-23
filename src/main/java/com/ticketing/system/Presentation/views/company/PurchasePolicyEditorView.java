@@ -186,7 +186,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
             case LoadOutcome.Failure f -> {
                 LkBanner err = new LkBanner(LkBanner.Tone.error,
                     new LkIcon("alert-circle", 16),
-                    "Could not load existing policy: " + f.reason());
+                    f.error().message());
                 LkBtn retry = new LkBtn("Retry").variant(LkBtn.Variant.secondary);
                 retry.addClickListener(ev -> { loadExistingPolicy(); rebuildTree(); });
                 err.setAction(retry);
@@ -566,7 +566,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
         switch (presenter.save(AuthSession.token(), companyId, eventId, isEventLevel, nodeToDTO(root))) {
             case SaveOutcome.Success s -> Toasts.success("Policy saved.");
             case SaveOutcome.NotAuthenticated na -> Toasts.failure("Not authenticated.");
-            case SaveOutcome.Failure f -> Toasts.failure("Failed to save: " + f.reason());
+            case SaveOutcome.Failure f -> Toasts.failure(f.error());
         }
     }
 

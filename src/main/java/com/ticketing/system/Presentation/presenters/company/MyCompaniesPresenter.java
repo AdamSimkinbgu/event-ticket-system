@@ -6,6 +6,8 @@ import org.springframework.stereotype.Component;
 
 import com.ticketing.system.Core.Application.dto.UserCompanyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.CurrentCompanies;
 
@@ -24,14 +26,14 @@ public class MyCompaniesPresenter {
         try {
             return new Outcome.Success(companyManagementService.listForUser(userId));
         } catch (RuntimeException e) {
-            return new Outcome.Failure(e.getMessage());
+            return new Outcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
     public sealed interface Outcome {
         record Success(List<UserCompanyDTO> companies) implements Outcome { }
         record NotAuthenticated() implements Outcome { }
-        record Failure(String reason) implements Outcome { }
+        record Failure(ErrorPayload error) implements Outcome { }
     }
 
     public UserCompanyDTO currentCompany() {
