@@ -6,14 +6,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-
-import com.ticketing.system.Core.Application.dto.CompanyPolicyConfigDTO;
-import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
-import com.ticketing.system.Core.Application.services.CompanyManagementService;
-import com.ticketing.system.Core.Application.services.EventManagementService;
+import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter;
+import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter.LoadOutcome;
+import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter.SaveOutcome;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
@@ -101,8 +98,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
     // Services & state
     // ---------------------------------------------------------------------
 
-    private final EventManagementService   eventManagementService;
-    private final CompanyManagementService companyManagementService;
+    private final PurchasePolicyEditorPresenter presenter;
 
     private final Composite root = seedSamplePolicy();
     private final Map<String, Node>      nodeMap   = new HashMap<>();
@@ -119,10 +115,8 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
     // Constructor
     // ---------------------------------------------------------------------
 
-    public PurchasePolicyEditorView(EventManagementService   eventManagementService,
-                                    CompanyManagementService companyManagementService) {
-        this.eventManagementService   = eventManagementService;
-        this.companyManagementService = companyManagementService;
+    public PurchasePolicyEditorView(PurchasePolicyEditorPresenter presenter) {
+        this.presenter = presenter;
     }
 
     // ---------------------------------------------------------------------
@@ -172,28 +166,29 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
 
     private void loadExistingPolicy() {
         loadErrorSlot.removeAll();
-        try {
-            String token = resolveToken();
-            if (token == null || companyId <= 0) return;
-            PurchasePolicyDTO dto = isEventLevel && eventId > 0
-                ? eventManagementService.getEventPurchasePolicy(token, companyId, eventId)
-                : companyManagementService.getCompanyPurchasePolicy(token, companyId);
-            if (dto != null && !"NONE".equals(dto.type())) {
-                root.children.clear();
-                root.op = Op.valueOf(dto.type());
-                if (dto.children() != null) {
-                    for (PurchasePolicyDTO child : dto.children())
-                        root.children.add(dtoToNode(child));
+        if (companyId <= 0) return;
+        switch (presenter.load(AuthSession.token(), companyId, eventId, isEventLevel)) {
+            case LoadOutcome.Success s -> {
+                PurchasePolicyDTO dto = s.policy();
+                if (dto != null && !"NONE".equals(dto.type())) {
+                    root.children.clear();
+                    root.op = Op.valueOf(dto.type());
+                    if (dto.children() != null) {
+                        for (PurchasePolicyDTO child : dto.children())
+                            root.children.add(dtoToNode(child));
+                    }
                 }
             }
-        } catch (Exception e) {
-            LkBanner err = new LkBanner(LkBanner.Tone.error,
-                new LkIcon("alert-circle", 16),
-                "Could not load existing policy: " + e.getMessage());
-            LkBtn retry = new LkBtn("Retry").variant(LkBtn.Variant.secondary);
-            retry.addClickListener(ev -> { loadExistingPolicy(); rebuildTree(); });
-            err.setAction(retry);
-            loadErrorSlot.add(err);
+            case LoadOutcome.NotAuthenticated na -> { }
+            case LoadOutcome.Failure f -> {
+                LkBanner err = new LkBanner(LkBanner.Tone.error,
+                    new LkIcon("alert-circle", 16),
+                    "Could not load existing policy: " + f.reason());
+                LkBtn retry = new LkBtn("Retry").variant(LkBtn.Variant.secondary);
+                retry.addClickListener(ev -> { loadExistingPolicy(); rebuildTree(); });
+                err.setAction(retry);
+                loadErrorSlot.add(err);
+            }
         }
     }
 
@@ -557,35 +552,18 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
     // ---------------------------------------------------------------------
 
     private void savePolicy() {
-        try {
-            String token = resolveToken();
-            if (token == null) {
-                Toasts.failure("Not authenticated.");
-                return;
-            }
-            if (companyId <= 0) {
-                Toasts.failure("No company selected.");
-                return;
-            }
-
-            PurchasePolicyDTO dto = nodeToDTO(root);
-
-            if (isEventLevel) {
-                if (eventId <= 0) {
-                    Toasts.failure("No event selected.");
-                    return;
-                }
-                eventManagementService.setEventPolicies(token,
-                        new EventPolicyConfigDTO(companyId, eventId, dto));
-            } else {
-                companyManagementService.setCompanyPolicies(token,
-                        new CompanyPolicyConfigDTO(companyId, dto, List.of()));
-            }
-
-            Toasts.success("Policy saved.");
-
-        } catch (Exception ex) {
-            Toasts.failure("Failed to save: " + ex.getMessage());
+        if (companyId <= 0) {
+            Toasts.failure("No company selected.");
+            return;
+        }
+        if (isEventLevel && eventId <= 0) {
+            Toasts.failure("No event selected.");
+            return;
+        }
+        switch (presenter.save(AuthSession.token(), companyId, eventId, isEventLevel, nodeToDTO(root))) {
+            case SaveOutcome.Success s -> Toasts.success("Policy saved.");
+            case SaveOutcome.NotAuthenticated na -> Toasts.failure("Not authenticated.");
+            case SaveOutcome.Failure f -> Toasts.failure("Failed to save: " + f.reason());
         }
     }
 
@@ -614,21 +592,6 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
         String type = c.op == Op.AND ? "AND" : "OR";
         return new PurchasePolicyDTO(type, null, null, null, children);
     }
-
-    // ---------------------------------------------------------------------
-    // Auth token
-    // ---------------------------------------------------------------------
-
-    private String resolveToken() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated()) return null;
-        Object credentials = auth.getCredentials();
-        if (credentials instanceof String s && !s.isBlank()) return s;
-        Object principal = auth.getPrincipal();
-        if (principal instanceof String s && !s.isBlank() && !s.equals("anonymousUser")) return s;
-        return null;
-    }
-
 
     private static String escape(String s) {
         return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
