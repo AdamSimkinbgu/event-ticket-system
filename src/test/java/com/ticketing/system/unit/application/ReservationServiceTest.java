@@ -29,6 +29,7 @@ import static org.mockito.Mockito.*;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.mockito.ArgumentCaptor;
@@ -612,6 +613,209 @@ void GivenManyMembersReserveSameZoneConcurrently_WhenreserveStandingTicketsForMe
         assertEquals(0, realActiveOrder.countTickets(EVENT_ID, ZONE_ID));
         assertEquals(0, realZone.getReservedAmount());
         assertEquals(capacity, realZone.getAvailableAmount());
+    }
+
+
+    // ---- Seated-zone concurrency ----------------------------------------
+    // These isolate SeatedZone's per-seat ReentrantLock (the real guarantee against
+    // double-booking) by reserving against a real SeatedZone while the event is a deep-stub
+    // whose reserveInventory delegates to the zone — same approach as the standing tests above.
+
+    @Test
+    void GivenManyMembersSelectSameSeatConcurrently_WhenReserveSeatsForMember_ThenOnlyOneSucceeds()
+            throws InterruptedException {
+
+        int numberOfThreads = 20;
+        String contestedSeat = "A1";
+
+        SeatedZone realZone = new SeatedZone(
+                ZONE_ID, "Orchestra", 120.0,
+                List.of(new Seat("A1", 0, 0), new Seat("A2", 1, 0), new Seat("A3", 2, 0)));
+
+        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(event.getVenueMap().getZone(ZONE_ID)).thenReturn(realZone);
+        doAnswer(inv -> {
+            InventorySelection selection = inv.getArgument(1);
+            realZone.reserve(selection);
+            return null;
+        }).when(event).reserveInventory(eq(ZONE_ID), any(InventorySelection.class));
+
+        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
+        CountDownLatch readyLatch = new CountDownLatch(numberOfThreads);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(numberOfThreads);
+
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger failureCount = new AtomicInteger(0);
+
+        for (int i = 0; i < numberOfThreads; i = i + 1) {
+            final String token = "valid-token-" + i;
+            final int userId = i + 1;
+
+            when(sessionManager.validateToken(token)).thenReturn(true);
+            when(sessionManager.extractUserId(token)).thenReturn(userId);
+            when(activeOrderRepository.getByUserId(userId)).thenReturn(null);
+
+            executorService.submit(() -> {
+                try {
+                    readyLatch.countDown();
+                    startLatch.await();
+
+                    reservationService.reserveForMember(token, EVENT_ID, ZONE_ID, InventorySelectionDTO.seated(List.of(contestedSeat)));
+
+                    successCount.incrementAndGet();
+
+                } catch (Exception e) {
+                    failureCount.incrementAndGet();
+
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        readyLatch.await();
+        startLatch.countDown();
+
+        boolean finished = doneLatch.await(5, TimeUnit.SECONDS);
+        executorService.shutdown();
+
+        assertEquals(true, finished);
+        assertEquals(1, successCount.get());
+        assertEquals(numberOfThreads - 1, failureCount.get());
+        assertEquals(SeatStatus.RESERVED, realZone.getSeatStatus(contestedSeat));
+        assertEquals(1, realZone.getReservedAmount());
+    }
+
+    @Test
+    void GivenManyGuestsSelectSameSeatConcurrently_WhenReserveSeatsForGuest_ThenOnlyOneSucceeds()
+            throws InterruptedException {
+
+        int numberOfThreads = 20;
+        String contestedSeat = "A1";
+
+        SeatedZone realZone = new SeatedZone(
+                ZONE_ID, "Orchestra", 120.0,
+                List.of(new Seat("A1", 0, 0), new Seat("A2", 1, 0), new Seat("A3", 2, 0)));
+
+        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(event.getVenueMap().getZone(ZONE_ID)).thenReturn(realZone);
+        doAnswer(inv -> {
+            InventorySelection selection = inv.getArgument(1);
+            realZone.reserve(selection);
+            return null;
+        }).when(event).reserveInventory(eq(ZONE_ID), any(InventorySelection.class));
+
+        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
+        CountDownLatch readyLatch = new CountDownLatch(numberOfThreads);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(numberOfThreads);
+
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger failureCount = new AtomicInteger(0);
+
+        for (int i = 0; i < numberOfThreads; i = i + 1) {
+            final String sessionId = "guest-session-" + i;
+
+            when(activeOrderRepository.getBySessionId(sessionId)).thenReturn(Optional.empty());
+
+            executorService.submit(() -> {
+                try {
+                    readyLatch.countDown();
+                    startLatch.await();
+
+                    reservationService.reserveForGuest(sessionId, EVENT_ID, ZONE_ID, InventorySelectionDTO.seated(List.of(contestedSeat)));
+
+                    successCount.incrementAndGet();
+
+                } catch (Exception e) {
+                    failureCount.incrementAndGet();
+
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        readyLatch.await();
+        startLatch.countDown();
+
+        boolean finished = doneLatch.await(5, TimeUnit.SECONDS);
+        executorService.shutdown();
+
+        assertEquals(true, finished);
+        assertEquals(1, successCount.get());
+        assertEquals(numberOfThreads - 1, failureCount.get());
+        assertEquals(SeatStatus.RESERVED, realZone.getSeatStatus(contestedSeat));
+        assertEquals(1, realZone.getReservedAmount());
+    }
+
+    @Test
+    void GivenManyThreadsReserveDistinctSeatsConcurrently_WhenReserveSeatsForMember_ThenAllSucceed()
+            throws InterruptedException {
+
+        int numberOfThreads = 20;
+
+        List<Seat> seats = new ArrayList<>();
+        for (int i = 0; i < numberOfThreads; i = i + 1) {
+            seats.add(new Seat("A" + (i + 1), i, 0));
+        }
+        SeatedZone realZone = new SeatedZone(ZONE_ID, "Orchestra", 120.0, seats);
+
+        when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(event.getVenueMap().getZone(ZONE_ID)).thenReturn(realZone);
+        doAnswer(inv -> {
+            InventorySelection selection = inv.getArgument(1);
+            realZone.reserve(selection);
+            return null;
+        }).when(event).reserveInventory(eq(ZONE_ID), any(InventorySelection.class));
+
+        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
+        CountDownLatch readyLatch = new CountDownLatch(numberOfThreads);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(numberOfThreads);
+
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger failureCount = new AtomicInteger(0);
+
+        for (int i = 0; i < numberOfThreads; i = i + 1) {
+            final String token = "valid-token-" + i;
+            final int userId = i + 1;
+            final String seatLabel = "A" + (i + 1);
+
+            when(sessionManager.validateToken(token)).thenReturn(true);
+            when(sessionManager.extractUserId(token)).thenReturn(userId);
+            when(activeOrderRepository.getByUserId(userId)).thenReturn(null);
+
+            executorService.submit(() -> {
+                try {
+                    readyLatch.countDown();
+                    startLatch.await();
+
+                    reservationService.reserveForMember(token, EVENT_ID, ZONE_ID, InventorySelectionDTO.seated(List.of(seatLabel)));
+
+                    successCount.incrementAndGet();
+
+                } catch (Exception e) {
+                    failureCount.incrementAndGet();
+
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        readyLatch.await();
+        startLatch.countDown();
+
+        boolean finished = doneLatch.await(5, TimeUnit.SECONDS);
+        executorService.shutdown();
+
+        assertEquals(true, finished);
+        assertEquals(numberOfThreads, successCount.get());
+        assertEquals(0, failureCount.get());
+        assertEquals(numberOfThreads, realZone.getReservedAmount());
+        assertEquals(0, realZone.getAvailableAmount());
     }
 
 

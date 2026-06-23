@@ -1,5 +1,6 @@
 package com.ticketing.system.Presentation.components.venue;
 
+import com.ticketing.system.Core.Domain.events.SeatLabels;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
 
@@ -27,7 +28,7 @@ public class VkSeatBlock extends Div {
         for (int ri = 0; ri < rows.length; ri++) {
             Div row = new Div();
             row.addClassName("vk-seatrow");
-            Span rl = new Span(String.valueOf((char) (startRowChar + ri)));
+            Span rl = new Span(SeatLabels.rowLabel((startRowChar - 'A') + ri));
             rl.addClassName("vk-rowlabel");
             row.add(rl);
             String r = rows[ri];
