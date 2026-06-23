@@ -1,11 +1,6 @@
 package com.ticketing.system.Core.Application.dto;
 
 import java.util.List;
-/*  TODO: determend if notifications should be included in the LoginDTO or not.
-    the function deliverPending() is calling the send function of the notification service,
-    which is responsible for sending the notifications to the user, 
-    and not for returning them to the client.
-*/
 
 /*
 LoginDTO is the response from LoginService.login() (UC-1). It includes:

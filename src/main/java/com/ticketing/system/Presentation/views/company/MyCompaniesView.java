@@ -1,6 +1,7 @@
 package com.ticketing.system.Presentation.views.company;
 
 import com.ticketing.system.Core.Application.dto.UserCompanyDTO;
+import com.ticketing.system.Presentation.presenters.company.MyCompaniesPresenter.Outcome;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
@@ -37,11 +38,16 @@ public class MyCompaniesView extends LkPage {
             .icon(new LkIcon("plus", 15))
             .onClick(e -> UI.getCurrent().navigate(CompanyRegistrationView.class)));
 
-        List<UserCompanyDTO> companies = membershipPresenter.listForCurrentUser();
-        if (companies.isEmpty()) {
-            add(buildEmptyState());
-        } else {
-            add(buildGridCard(companies, membershipPresenter));
+        switch (membershipPresenter.load()) {
+            case Outcome.Success s when s.companies().isEmpty() -> add(buildEmptyState());
+            case Outcome.Success s                              -> add(buildGridCard(s.companies(), membershipPresenter));
+            case Outcome.NotAuthenticated na                    -> add(buildEmptyState());
+            case Outcome.Failure f -> {
+                Span msg = new Span("Could not load your companies: " + f.reason());
+                msg.getStyle().set("display", "block").set("margin-bottom", "12px").set("color", "#b91c1c");
+                add(msg);
+                add(buildEmptyState());
+            }
         }
     }
 
