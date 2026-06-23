@@ -11,6 +11,8 @@ import com.ticketing.system.Core.Application.dto.SendMessageRequestDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.MessagingService;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 
 /**
  * MVP presenter for {@code CompanyInquiryInboxView} (#268). Holds no Vaadin imports so the
@@ -65,7 +67,7 @@ public class CompanyInquiryInboxPresenter {
         } catch (InvalidTokenException e) {
             return new Outcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new Outcome.Failure(e.getMessage());
+            return new Outcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -83,7 +85,7 @@ public class CompanyInquiryInboxPresenter {
         } catch (InvalidTokenException e) {
             return new ActionOutcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new ActionOutcome.Failure(e.getMessage());
+            return new ActionOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -102,7 +104,7 @@ public class CompanyInquiryInboxPresenter {
         } catch (InvalidTokenException e) {
             return new ActionOutcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new ActionOutcome.Failure(e.getMessage());
+            return new ActionOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -112,13 +114,13 @@ public class CompanyInquiryInboxPresenter {
                        List<ConversationDTO> conversations) implements Outcome { }
         record NotAuthenticated() implements Outcome { }
         record NoCompany() implements Outcome { }
-        record Failure(String reason) implements Outcome { }
+        record Failure(ErrorPayload error) implements Outcome { }
     }
 
     /** Result of a reply / close the view reacts to. */
     public sealed interface ActionOutcome {
         record Success() implements ActionOutcome { }
         record NotAuthenticated() implements ActionOutcome { }
-        record Failure(String reason) implements ActionOutcome { }
+        record Failure(ErrorPayload error) implements ActionOutcome { }
     }
 }

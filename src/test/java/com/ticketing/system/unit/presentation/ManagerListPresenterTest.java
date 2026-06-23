@@ -90,7 +90,7 @@ class ManagerListPresenterTest {
 
         ManagerListPresenter.Outcome.Failure fail =
             assertInstanceOf(ManagerListPresenter.Outcome.Failure.class, outcome);
-        assertEquals("backend down", fail.reason());
+        assertEquals("backend down", fail.error().message());
     }
 
     // -- editPermissions ------------------------------------------------------
@@ -128,7 +128,7 @@ class ManagerListPresenterTest {
 
         ManagerListPresenter.ActionOutcome.Failure fail =
             assertInstanceOf(ManagerListPresenter.ActionOutcome.Failure.class, outcome);
-        assertEquals("only the appointer may edit", fail.reason());
+        assertEquals("only the appointer may edit", fail.error().message());
     }
 
     @Test
@@ -174,7 +174,7 @@ class ManagerListPresenterTest {
 
         ManagerListPresenter.ActionOutcome.Failure fail =
             assertInstanceOf(ManagerListPresenter.ActionOutcome.Failure.class, outcome);
-        assertEquals("Cannot revoke appointment of the founder", fail.reason());
+        assertEquals("Cannot revoke appointment of the founder", fail.error().message());
     }
 
     @Test

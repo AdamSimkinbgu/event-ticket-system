@@ -106,7 +106,7 @@ public class AdminAnnouncementsView extends LkPage {
             case AdminAnnouncementsPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case AdminAnnouncementsPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not send the announcement: " + fail.reason());
+                Toasts.failure(fail.error());
         }
     }
 
@@ -124,7 +124,7 @@ public class AdminAnnouncementsView extends LkPage {
             case AdminAnnouncementsPresenter.Outcome.NotAuthenticated ignored -> historySlot.add(
                 banner("Your session has expired — please sign in again."));
             case AdminAnnouncementsPresenter.Outcome.Failure fail -> historySlot.add(
-                banner("Could not load announcement history: " + fail.reason()));
+                banner(fail.error().message()));
         }
     }
 

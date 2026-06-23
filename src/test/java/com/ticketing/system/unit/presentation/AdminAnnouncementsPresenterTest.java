@@ -119,7 +119,7 @@ class AdminAnnouncementsPresenterTest {
 
         AdminAnnouncementsPresenter.Outcome.Failure fail =
             assertInstanceOf(AdminAnnouncementsPresenter.Outcome.Failure.class, outcome);
-        assertEquals("history down", fail.reason());
+        assertEquals("history down", fail.error().message());
     }
 
     // -- send -----------------------------------------------------------------
@@ -162,7 +162,7 @@ class AdminAnnouncementsPresenterTest {
 
         AdminAnnouncementsPresenter.ActionOutcome.Failure fail =
             assertInstanceOf(AdminAnnouncementsPresenter.ActionOutcome.Failure.class, outcome);
-        assertEquals("Announcement matched no recipients", fail.reason());
+        assertEquals("Announcement matched no recipients", fail.error().message());
     }
 
     @Test

@@ -67,6 +67,6 @@ class UsernameAvailabilityPresenterTest {
         when(memberQueryService.usernameExists("anyone")).thenThrow(new IllegalStateException("db down"));
 
         Outcome.Failure failure = assertInstanceOf(Outcome.Failure.class, presenter.check("anyone"));
-        assertEquals("db down", failure.reason());
+        assertEquals("db down", failure.error().message());
     }
 }

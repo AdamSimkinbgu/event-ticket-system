@@ -7,6 +7,8 @@ import com.ticketing.system.Core.Application.dto.ConversationDTO;
 import com.ticketing.system.Core.Application.dto.SubmitComplaintRequestDTO;
 import com.ticketing.system.Core.Application.services.MessagingService;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 
 /**
  * MVP presenter for {@code SubmitComplaintView} (#267). Holds no Vaadin imports so
@@ -45,7 +47,7 @@ public class SubmitComplaintPresenter {
         } catch (InvalidTokenException e) {
             return new Outcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new Outcome.Failure(e.getMessage());
+            return new Outcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -53,6 +55,6 @@ public class SubmitComplaintPresenter {
     public sealed interface Outcome {
         record Success(String conversationId) implements Outcome { }
         record NotAuthenticated() implements Outcome { }
-        record Failure(String reason) implements Outcome { }
+        record Failure(ErrorPayload error) implements Outcome { }
     }
 }

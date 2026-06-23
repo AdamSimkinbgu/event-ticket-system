@@ -125,7 +125,7 @@ class CompanyInquiryInboxPresenterTest {
 
         CompanyInquiryInboxPresenter.Outcome.Failure fail =
             assertInstanceOf(CompanyInquiryInboxPresenter.Outcome.Failure.class, outcome);
-        assertEquals("inbox down", fail.reason());
+        assertEquals("inbox down", fail.error().message());
     }
 
     // -- reply ----------------------------------------------------------------
@@ -160,7 +160,7 @@ class CompanyInquiryInboxPresenterTest {
 
         CompanyInquiryInboxPresenter.ActionOutcome.Failure fail =
             assertInstanceOf(CompanyInquiryInboxPresenter.ActionOutcome.Failure.class, outcome);
-        assertEquals("conversation closed", fail.reason());
+        assertEquals("conversation closed", fail.error().message());
     }
 
     @Test
@@ -200,7 +200,7 @@ class CompanyInquiryInboxPresenterTest {
 
         CompanyInquiryInboxPresenter.ActionOutcome.Failure fail =
             assertInstanceOf(CompanyInquiryInboxPresenter.ActionOutcome.Failure.class, outcome);
-        assertEquals("already closed", fail.reason());
+        assertEquals("already closed", fail.error().message());
     }
 
     @Test

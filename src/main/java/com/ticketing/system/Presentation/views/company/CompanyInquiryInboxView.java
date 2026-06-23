@@ -88,7 +88,7 @@ public class CompanyInquiryInboxView extends LkPage {
             case CompanyInquiryInboxPresenter.Outcome.NotAuthenticated ignored -> showBanner(
                 "Your session has expired — please sign in again.");
             case CompanyInquiryInboxPresenter.Outcome.Failure fail -> showBanner(
-                "Could not load inquiries: " + fail.reason());
+                fail.error().message());
         }
     }
 
@@ -210,7 +210,7 @@ public class CompanyInquiryInboxView extends LkPage {
             case CompanyInquiryInboxPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case CompanyInquiryInboxPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not send your reply: " + fail.reason());
+                Toasts.failure(fail.error());
         }
     }
 
@@ -223,7 +223,7 @@ public class CompanyInquiryInboxView extends LkPage {
             case CompanyInquiryInboxPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case CompanyInquiryInboxPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not close the inquiry: " + fail.reason());
+                Toasts.failure(fail.error());
         }
     }
 

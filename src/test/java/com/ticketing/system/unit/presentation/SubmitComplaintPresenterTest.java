@@ -83,7 +83,7 @@ class SubmitComplaintPresenterTest {
 
         SubmitComplaintPresenter.Outcome.Failure fail =
             assertInstanceOf(SubmitComplaintPresenter.Outcome.Failure.class, outcome);
-        assertEquals("backend down", fail.reason());
+        assertEquals("backend down", fail.error().message());
     }
 
     @Test

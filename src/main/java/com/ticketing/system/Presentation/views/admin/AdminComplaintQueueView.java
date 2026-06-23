@@ -79,7 +79,7 @@ public class AdminComplaintQueueView extends LkPage {
             case AdminComplaintQueuePresenter.Outcome.NotAuthenticated ignored -> showBanner(
                 "Your session has expired — please sign in again.");
             case AdminComplaintQueuePresenter.Outcome.Failure fail -> showBanner(
-                "Could not load the complaint queue: " + fail.reason());
+                fail.error().message());
         }
     }
 
@@ -182,7 +182,7 @@ public class AdminComplaintQueueView extends LkPage {
             case AdminComplaintQueuePresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case AdminComplaintQueuePresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not send your reply: " + fail.reason());
+                Toasts.failure(fail.error());
         }
     }
 
@@ -195,7 +195,7 @@ public class AdminComplaintQueueView extends LkPage {
             case AdminComplaintQueuePresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case AdminComplaintQueuePresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not resolve the complaint: " + fail.reason());
+                Toasts.failure(fail.error());
         }
     }
 

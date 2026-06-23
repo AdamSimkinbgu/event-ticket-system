@@ -76,7 +76,7 @@ class MyInvitationsPresenterTest {
 
         MyInvitationsPresenter.Outcome.Failure fail =
             assertInstanceOf(MyInvitationsPresenter.Outcome.Failure.class, outcome);
-        assertEquals("backend down", fail.reason());
+        assertEquals("backend down", fail.error().message());
     }
 
     @Test
@@ -131,7 +131,7 @@ class MyInvitationsPresenterTest {
 
         MyInvitationsPresenter.ActionOutcome.Failure fail =
             assertInstanceOf(MyInvitationsPresenter.ActionOutcome.Failure.class, outcome);
-        assertEquals("no pending appointment", fail.reason());
+        assertEquals("no pending appointment", fail.error().message());
     }
 
     @Test

@@ -107,6 +107,6 @@ class OwnerDashboardPresenterTest {
 
         OwnerDashboardPresenter.Outcome.Failure fail =
             assertInstanceOf(OwnerDashboardPresenter.Outcome.Failure.class, outcome);
-        assertEquals("backend down", fail.reason());
+        assertEquals("backend down", fail.error().message());
     }
 }

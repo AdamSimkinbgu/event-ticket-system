@@ -80,7 +80,7 @@ class SupportInboxPresenterTest {
 
         SupportInboxPresenter.Outcome.Failure fail =
             assertInstanceOf(SupportInboxPresenter.Outcome.Failure.class, outcome);
-        assertEquals("backend down", fail.reason());
+        assertEquals("backend down", fail.error().message());
     }
 
     @Test
@@ -124,7 +124,7 @@ class SupportInboxPresenterTest {
 
         SupportInboxPresenter.ActionOutcome.Failure fail =
             assertInstanceOf(SupportInboxPresenter.ActionOutcome.Failure.class, outcome);
-        assertEquals("conversation closed", fail.reason());
+        assertEquals("conversation closed", fail.error().message());
     }
 
     @Test

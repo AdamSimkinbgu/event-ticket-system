@@ -141,6 +141,6 @@ class RegisterPresenterTest {
 
         RegisterPresenter.Outcome.Failure fail =
             assertInstanceOf(RegisterPresenter.Outcome.Failure.class, outcome);
-        assertEquals("database down", fail.reason());
+        assertEquals("database down", fail.error().message());
     }
 }

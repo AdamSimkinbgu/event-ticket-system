@@ -120,7 +120,7 @@ class AdminComplaintQueuePresenterTest {
 
         AdminComplaintQueuePresenter.Outcome.Failure fail =
             assertInstanceOf(AdminComplaintQueuePresenter.Outcome.Failure.class, outcome);
-        assertEquals("not an admin", fail.reason());
+        assertEquals("not an admin", fail.error().message());
     }
 
     // -- reply ----------------------------------------------------------------
@@ -156,7 +156,7 @@ class AdminComplaintQueuePresenterTest {
 
         AdminComplaintQueuePresenter.ActionOutcome.Failure fail =
             assertInstanceOf(AdminComplaintQueuePresenter.ActionOutcome.Failure.class, outcome);
-        assertEquals("conversation closed", fail.reason());
+        assertEquals("conversation closed", fail.error().message());
     }
 
     @Test
@@ -203,7 +203,7 @@ class AdminComplaintQueuePresenterTest {
 
         AdminComplaintQueuePresenter.ActionOutcome.Failure fail =
             assertInstanceOf(AdminComplaintQueuePresenter.ActionOutcome.Failure.class, outcome);
-        assertEquals("already resolved", fail.reason());
+        assertEquals("already resolved", fail.error().message());
     }
 
     @Test

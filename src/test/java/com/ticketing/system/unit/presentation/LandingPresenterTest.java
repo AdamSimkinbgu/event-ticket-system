@@ -57,6 +57,6 @@ class LandingPresenterTest {
 
         LandingPresenter.Outcome.Failure fail =
             assertInstanceOf(LandingPresenter.Outcome.Failure.class, outcome);
-        assertEquals("catalog down", fail.reason());
+        assertEquals("catalog down", fail.error().message());
     }
 }

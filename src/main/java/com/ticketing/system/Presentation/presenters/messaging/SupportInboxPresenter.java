@@ -9,6 +9,8 @@ import com.ticketing.system.Core.Application.dto.ConversationDTO;
 import com.ticketing.system.Core.Application.dto.SendMessageRequestDTO;
 import com.ticketing.system.Core.Application.services.MessagingService;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 
 /**
  * MVP presenter for {@code SupportInboxView} (#277). Holds no Vaadin imports so the
@@ -46,7 +48,7 @@ public class SupportInboxPresenter {
         } catch (InvalidTokenException e) {
             return new Outcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new Outcome.Failure(e.getMessage());
+            return new Outcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -64,7 +66,7 @@ public class SupportInboxPresenter {
         } catch (InvalidTokenException e) {
             return new ActionOutcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new ActionOutcome.Failure(e.getMessage());
+            return new ActionOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -72,13 +74,13 @@ public class SupportInboxPresenter {
     public sealed interface Outcome {
         record Success(List<ConversationDTO> conversations) implements Outcome { }
         record NotAuthenticated() implements Outcome { }
-        record Failure(String reason) implements Outcome { }
+        record Failure(ErrorPayload error) implements Outcome { }
     }
 
     /** Result of a reply the view reacts to. */
     public sealed interface ActionOutcome {
         record Success() implements ActionOutcome { }
         record NotAuthenticated() implements ActionOutcome { }
-        record Failure(String reason) implements ActionOutcome { }
+        record Failure(ErrorPayload error) implements ActionOutcome { }
     }
 }

@@ -92,6 +92,6 @@ class LoginPresenterTest {
 
         LoginPresenter.Outcome.Failure fail =
             assertInstanceOf(LoginPresenter.Outcome.Failure.class, outcome);
-        assertEquals("database down", fail.reason());
+        assertEquals("database down", fail.error().message());
     }
 }

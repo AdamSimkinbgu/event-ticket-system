@@ -10,6 +10,8 @@ import com.ticketing.system.Core.Application.dto.ConversationDTO;
 import com.ticketing.system.Core.Application.dto.RespondToComplaintRequestDTO;
 import com.ticketing.system.Core.Application.services.MessagingService;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 
 /**
  * MVP presenter for {@code AdminComplaintQueueView} (#269). Holds no Vaadin imports so the
@@ -51,7 +53,7 @@ public class AdminComplaintQueuePresenter {
         } catch (InvalidTokenException e) {
             return new Outcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new Outcome.Failure(e.getMessage());
+            return new Outcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -69,7 +71,7 @@ public class AdminComplaintQueuePresenter {
         } catch (InvalidTokenException e) {
             return new ActionOutcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new ActionOutcome.Failure(e.getMessage());
+            return new ActionOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -88,7 +90,7 @@ public class AdminComplaintQueuePresenter {
         } catch (InvalidTokenException e) {
             return new ActionOutcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new ActionOutcome.Failure(e.getMessage());
+            return new ActionOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -96,13 +98,13 @@ public class AdminComplaintQueuePresenter {
     public sealed interface Outcome {
         record Success(List<ConversationDTO> complaints) implements Outcome { }
         record NotAuthenticated() implements Outcome { }
-        record Failure(String reason) implements Outcome { }
+        record Failure(ErrorPayload error) implements Outcome { }
     }
 
     /** Result of a reply / resolve the view reacts to. */
     public sealed interface ActionOutcome {
         record Success() implements ActionOutcome { }
         record NotAuthenticated() implements ActionOutcome { }
-        record Failure(String reason) implements ActionOutcome { }
+        record Failure(ErrorPayload error) implements ActionOutcome { }
     }
 }

@@ -96,7 +96,7 @@ public class SubmitComplaintView extends LkPage {
             case SubmitComplaintPresenter.Outcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case SubmitComplaintPresenter.Outcome.Failure fail ->
-                Toasts.failure("Could not submit complaint: " + fail.reason());
+                Toasts.failure(fail.error());
         }
     }
 }
