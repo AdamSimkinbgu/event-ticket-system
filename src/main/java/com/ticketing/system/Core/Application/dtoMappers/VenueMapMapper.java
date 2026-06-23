@@ -10,8 +10,6 @@ import com.ticketing.system.Core.Domain.events.SeatedZone;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 public class VenueMapMapper {
 
@@ -32,11 +30,7 @@ public class VenueMapMapper {
         return new GridPlacementDTO(zone.getGridRow(), zone.getGridCol(),
                 zone.getGridRowSpan(), zone.getGridColSpan());
     }
-    
 
-
-
-    
     private InventoryZoneDTO toInventoryZoneDTO(InventoryZone zone) {
         List<SeatDTO> seats = List.of();
         int soldAmount = zone.getSoldAmount();
@@ -47,8 +41,7 @@ public class VenueMapMapper {
                             seat.getLabel(),
                             seat.getX(),
                             seat.getY(),
-                            seat.getStatus().name()
-                    ))
+                            seat.getStatus().name()))
                     .toList();
 
             soldAmount = seatedZone.getSoldAmount();
@@ -64,8 +57,7 @@ public class VenueMapMapper {
                 soldAmount,
                 zone.getprice(),
                 seats,
-                placementOf(zone)
-        );
+                placementOf(zone));
     }
 
 }
