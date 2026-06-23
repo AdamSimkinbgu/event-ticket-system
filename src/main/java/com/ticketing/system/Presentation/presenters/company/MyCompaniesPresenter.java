@@ -18,10 +18,20 @@ public class MyCompaniesPresenter {
         this.companyManagementService = companyManagementService;
     }
 
-    public List<UserCompanyDTO> listForCurrentUser() {
+    public Outcome load() {
         Integer userId = AuthSession.userId();
-        if (userId == null) return List.of();
-        return companyManagementService.listForUser(userId);
+        if (userId == null) return new Outcome.NotAuthenticated();
+        try {
+            return new Outcome.Success(companyManagementService.listForUser(userId));
+        } catch (RuntimeException e) {
+            return new Outcome.Failure(e.getMessage());
+        }
+    }
+
+    public sealed interface Outcome {
+        record Success(List<UserCompanyDTO> companies) implements Outcome { }
+        record NotAuthenticated() implements Outcome { }
+        record Failure(String reason) implements Outcome { }
     }
 
     public UserCompanyDTO currentCompany() {
@@ -36,10 +46,6 @@ public class MyCompaniesPresenter {
             }
         }
         return memberships.get(0);
-    }
-
-    public boolean hasAnyMembership() {
-        return !listForCurrentUser().isEmpty();
     }
 
     public boolean isOwnerOf(int companyId) {
