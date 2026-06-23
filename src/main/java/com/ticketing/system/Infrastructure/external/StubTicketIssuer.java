@@ -6,6 +6,7 @@ import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
 import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
 import com.ticketing.system.Core.Domain.exceptions.TicketIssuanceFailedException;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -14,7 +15,10 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+// Default in-process ticket issuer. Selected unless external.ticket-issuer=wsep,
+// which activates WsepTicketIssuer instead.
 @Component
+@ConditionalOnProperty(name = "external.ticket-issuer", havingValue = "stub", matchIfMissing = true)
 public class StubTicketIssuer implements ITicketIssuer {
     //* can change to be however wanted, this is a stub so we can do what we need with it */
     private static final String ISSUER_ID = "stub-ticket-issuer";
