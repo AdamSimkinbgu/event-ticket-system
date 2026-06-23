@@ -59,13 +59,10 @@ public class CheckoutPresenter {
 
     public LoadOutcome loadOrder(int userId, String memberToken, String guestSessionId) {
         try {
-            if (memberToken != null && userId > 0) {
-                return classify(reservationService.restoreActiveOrder(userId));
-            }
-            if (guestSessionId != null) {
-                return classify(reservationService.restoreActiveOrderForGuest(guestSessionId));
-            }
-            return new LoadOutcome.NotAuthenticated();
+            // Use the cart's exact lookup: viewMyActiveOrder tries the member key (token -> userId) and
+            // FALLS BACK to the guest key, so a cart stored under userId (with sessionId null) is still
+            // found. The old two-branch version committed to one key with no fallback -> empty checkout.
+            return classify(reservationService.viewMyActiveOrder(identity.credential()));
         } catch (RuntimeException e) {
             return new LoadOutcome.Failure(e.getMessage());
         }
