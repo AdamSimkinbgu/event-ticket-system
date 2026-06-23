@@ -23,7 +23,7 @@ public final class BzRefundDialog {
      */
     public static void open(String orderLabel, double amount, Consumer<String> onConfirm) {
         TextArea reason = new TextArea("Reason for refund");
-        reason.setPlaceholder("Optional — tell us why (helps the organizer).");
+        reason.setPlaceholder("Optional — for your records.");
         reason.setMinHeight("80px");
         reason.setWidthFull();
 
@@ -34,10 +34,10 @@ public final class BzRefundDialog {
             .confirmText("Request refund")
             .addToBody(reason,
                 new LkBanner(LkBanner.Tone.info, new LkIcon("info", 17),
-                    "The event organizer is notified of your request."))
+                    "Refunds are returned to your original payment method."))
             .prompt()
             .thenAccept(ok -> {
-                if (Boolean.TRUE.equals(ok)) {
+                if (Boolean.TRUE.equals(ok) && onConfirm != null) {
                     onConfirm.accept(reason.getValue());
                 }
             });

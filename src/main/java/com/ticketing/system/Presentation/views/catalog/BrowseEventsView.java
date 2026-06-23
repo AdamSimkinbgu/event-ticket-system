@@ -458,10 +458,14 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     }
 
     private static Comparator<EventRow> comparatorFor(String sort) {
+        // Undated (TBA) events sort last in BOTH date views — so reverse the value order, not the
+        // whole comparator (bySoonest.reversed() would flip nullsLast and float TBA events to the top).
         Comparator<EventRow> bySoonest = Comparator.comparing(EventRow::startsAt,
                 Comparator.nullsLast(Comparator.naturalOrder()));
+        Comparator<EventRow> byLatest = Comparator.comparing(EventRow::startsAt,
+                Comparator.nullsLast(Comparator.reverseOrder()));
         return switch (sort) {
-            case "Date · latest" -> bySoonest.reversed();
+            case "Date · latest" -> byLatest;
             case "Price · low to high" -> Comparator.comparingInt(EventRow::priceCents);
             case "Price · high to low" -> Comparator.comparingInt(EventRow::priceCents).reversed();
             case "Popularity" -> Comparator.comparing(EventRow::id);
