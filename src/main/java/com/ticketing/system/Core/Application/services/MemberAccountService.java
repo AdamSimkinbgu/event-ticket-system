@@ -50,12 +50,12 @@ public class MemberAccountService {
     // user.
     public PurchaseHistoryDTO viewMyHistory(AuthTokenDTO authToken) {
         try {
-            log.info("Received request to view purchase history with authToken: {}", authToken.token());
+            log.debug("Received request to view purchase history.");
             if (!authenticationService.validateToken(authToken.token())) {
                 throw new SecurityException("Invalid auth token");
             }
             int userId = authenticationService.extractUserId(authToken.token());
-            System.out.println("User " + userId + " requested purchase history.");
+            log.debug("User {} requested purchase history.", userId);
             List<OrderReceipt> receipts = orderReceiptRepository.findByHolderUserId(userId);
             List<PurchaseRecordDTO> purchaseRecords = new ArrayList<>();
 

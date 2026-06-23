@@ -4,6 +4,8 @@ import com.ticketing.system.Core.Application.dto.ReservationResultDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.ReservationService;
+import com.ticketing.system.Core.Application.services.SystemAdminService;
+import com.ticketing.system.Core.Domain.exceptions.MarketNotOpenException;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
@@ -57,6 +59,7 @@ public class ReservationServiceTest {
     private IActiveOrderRepository activeOrderRepository;
     private ISessionManager sessionManager;
     private INotificationService notificationService;
+    private SystemAdminService systemAdminService;
 
     private ReservationService reservationService;
 
@@ -81,14 +84,31 @@ public class ReservationServiceTest {
         zone = mock(InventoryZone.class);
         activeOrder = mock(ActiveOrder.class);
 
+        systemAdminService = mock(SystemAdminService.class);
+        when(systemAdminService.isMarketOpen()).thenReturn(true);
+
         reservationService = new ReservationService(
                 eventRepository,
                 activeOrderRepository,
                 sessionManager,
                 notificationService,
                 mock(IProductionCompanyRepository.class),
-                mock(IUserRepository.class)
+                mock(IUserRepository.class),
+                systemAdminService
         );
+    }
+
+    // --- UC-32 / I.2.1: holding tickets gated on an OPEN market ---
+
+    @Test
+    void GivenMarketClosed_WhenReserveForMember_ThenThrows() {
+        when(sessionManager.validateToken(VALID_TOKEN)).thenReturn(true);
+        when(sessionManager.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        when(systemAdminService.isMarketOpen()).thenReturn(false);
+
+        assertThrows(MarketNotOpenException.class, () ->
+                reservationService.reserveForMember(VALID_TOKEN, EVENT_ID, ZONE_ID,
+                        InventorySelectionDTO.standing(QUANTITY)));
     }
 
     
