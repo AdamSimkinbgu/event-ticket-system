@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import com.ticketing.system.Core.Application.dto.BarcodeDTO;
+import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
@@ -108,7 +109,8 @@ class CheckoutServiceTest {
 
     private final String IDEMPOTENCY_KEY = "idem-key-1";
     private final String CURRENCY = "ILS";
-    private final String PAYMENT_METHOD_TOKEN = "payment-token";
+    private final CardDetailsDTO PAYMENT_METHOD_TOKEN =
+            new CardDetailsDTO("4111111111111234", "123", 12, 2030, "Test Holder");
 
     private ActiveOrder mockOrder;
     private CartLineItem itemEvent1Zone1;

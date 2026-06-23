@@ -129,8 +129,8 @@ public class StubPaymentGateway implements IPaymentGateway {
             throw new PaymentGatewayException("currency is required");
         }
 
-        if (request.paymentMethodToken() == null || request.paymentMethodToken().isBlank()) {
-            throw new PaymentGatewayException("payment method token is required");
+        if (request.card() == null || request.card().cardNumber() == null || request.card().cardNumber().isBlank()) {
+            throw new PaymentGatewayException("card details are required");
         }
 
         boolean memberBuyer = request.buyerUserId() != null;
@@ -150,7 +150,7 @@ public class StubPaymentGateway implements IPaymentGateway {
     private boolean samePaymentRequest(PaymentRequestDTO a, PaymentRequestDTO b) {
         return Double.compare(a.amount(), b.amount()) == 0
                 && Objects.equals(a.currency(), b.currency())
-                && Objects.equals(a.paymentMethodToken(), b.paymentMethodToken())
+                && Objects.equals(a.card(), b.card())
                 && Objects.equals(a.buyerUserId(), b.buyerUserId())
                 && Objects.equals(a.buyerEmail(), b.buyerEmail());
     }

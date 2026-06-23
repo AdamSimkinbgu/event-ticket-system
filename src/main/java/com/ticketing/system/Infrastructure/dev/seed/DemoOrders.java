@@ -1,5 +1,6 @@
 package com.ticketing.system.Infrastructure.dev.seed;
 
+import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.services.CheckoutService;
@@ -85,7 +86,8 @@ public final class DemoOrders {
             InventorySelectionDTO.standing(quantity));
 
         String idem = "demo-" + buyerKey + "-" + eventName.hashCode();
-        checkoutService.checkoutMember(token, idem, "ILS", "demo-card-" + buyerKey);
+        checkoutService.checkoutMember(token, idem, "ILS",
+            new CardDetailsDTO("4111111111111111", "123", 12, 2030, "Demo " + buyerKey));
     }
 
     private void reservePending(String buyerKey, String eventName, int zoneId, int quantity) {

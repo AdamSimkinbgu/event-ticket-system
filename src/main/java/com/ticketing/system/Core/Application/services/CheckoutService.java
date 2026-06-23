@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
@@ -143,7 +144,7 @@ public class CheckoutService {
     // order,
     // confirm inventory sale, persist, mark bought.
     public CheckoutResultDTO checkoutMember(String token, String idempotencyKey, String currency,
-            String paymentMethodToken) {
+            CardDetailsDTO card) {
         requireMarketOpen();
         int userId = -1;
         ActiveOrder order = null;
@@ -163,7 +164,7 @@ public class CheckoutService {
 
         try {
             userId = authenticateAndGetUserId(token);
-            validatePaymentInput(idempotencyKey, currency, paymentMethodToken, userId);
+            validatePaymentInput(idempotencyKey, currency, card, userId);
 
             String buyerKey = memberBuyerKey(userId);
 
@@ -210,7 +211,7 @@ public class CheckoutService {
             List<PricedCartLine> pricedItems = priceItemsOnce(snapshotItems);
             totalPrice = sumPrices(pricedItems);
 
-            paymentResult = chargePayment(userId, null, totalPrice, idempotencyKey, currency, paymentMethodToken);
+            paymentResult = chargePayment(userId, null, totalPrice, idempotencyKey, currency, card);
             validatePaymentResult(paymentResult, totalPrice, currency);
 
             IssuanceResultDTO issuanceResult = issueTickets(userId, null, snapshotItems);
@@ -306,7 +307,7 @@ public class CheckoutService {
     //
     // See checkoutMember for the 3-phase description.
     public CheckoutResultDTO checkoutGuest(String guestSessionId, String guestEmail, String idempotencyKey,
-            String currency, String paymentMethodToken, int buyerAge) {
+            String currency, CardDetailsDTO card, int buyerAge) {
         requireMarketOpen();
         ActiveOrder order = null;
         PaymentResultDTO paymentResult = null;
@@ -319,7 +320,7 @@ public class CheckoutService {
 
         try {
             validateGuestCheckoutIdentity(guestSessionId, guestEmail);
-            validatePaymentInput(idempotencyKey, currency, paymentMethodToken, null);
+            validatePaymentInput(idempotencyKey, currency, card, null);
 
             String buyerKey = guestBuyerKey(guestSessionId, guestEmail);
 
@@ -356,7 +357,7 @@ public class CheckoutService {
             List<PricedCartLine> pricedItems = priceItemsOnce(snapshotItems);
             totalPrice = sumPrices(pricedItems);
 
-            paymentResult = chargePayment(null, guestEmail, totalPrice, idempotencyKey, currency, paymentMethodToken);
+            paymentResult = chargePayment(null, guestEmail, totalPrice, idempotencyKey, currency, card);
             validatePaymentResult(paymentResult, totalPrice, currency);
 
             IssuanceResultDTO issuanceResult = issueTickets(null, guestEmail, snapshotItems);
@@ -485,7 +486,7 @@ public class CheckoutService {
     // reference to the payment method that the user wants to use for the
     // transaction. If any of these validations fail, we throw an exception to
     // prevent the checkout from proceeding with invalid payment information.
-    private void validatePaymentInput(String idempotencyKey, String currency, String paymentMethodToken,
+    private void validatePaymentInput(String idempotencyKey, String currency, CardDetailsDTO card,
             Integer userId) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new IllegalArgumentException("Missing idempotency key");
@@ -495,8 +496,8 @@ public class CheckoutService {
             throw new IllegalArgumentException("Missing currency");
         }
 
-        if (paymentMethodToken == null || paymentMethodToken.isBlank()) {
-            throw new IllegalArgumentException("Missing payment method token");
+        if (card == null || card.cardNumber() == null || card.cardNumber().isBlank()) {
+            throw new IllegalArgumentException("Missing card details");
         }
     }
 
@@ -616,12 +617,12 @@ public class CheckoutService {
     // the payment gateway will be validated to ensure that the charge was
     // successful and that the amount and currency match what we expected.
     private PaymentResultDTO chargePayment(Integer buyerUserId, String buyerEmail, double totalPrice,
-            String idempotencyKey, String currency, String paymentMethodToken) {
+            String idempotencyKey, String currency, CardDetailsDTO card) {
         PaymentRequestDTO requestToPay = new PaymentRequestDTO(
                 idempotencyKey,
                 totalPrice,
                 currency,
-                paymentMethodToken,
+                card,
                 buyerUserId,
                 buyerEmail);
 
