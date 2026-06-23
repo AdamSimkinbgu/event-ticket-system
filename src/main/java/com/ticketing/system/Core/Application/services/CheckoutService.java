@@ -1392,7 +1392,7 @@ public class CheckoutService {
             Event event = eventRepository.findById(eventId);
 
             if (event == null) {
-                throw new InvalidTokenException("Event not found: " + eventId);
+                throw new EventNotFoundException(eventId);
             }
 
             int buyerId;
