@@ -10,6 +10,8 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkSelect;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.presenters.messaging.SubmitComplaintPresenter;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.account.SupportInboxView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -17,6 +19,7 @@ import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
+import com.vaadin.flow.router.QueryParameters;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
@@ -27,12 +30,16 @@ import java.util.List;
 @PermitAll
 public class SubmitComplaintView extends LkPage {
 
+    private final SubmitComplaintPresenter presenter;
+
     private final LkSelect about    = new LkSelect("An order or ticket",
         List.of("An order or ticket", "An event or organizer", "Payment or refund", "The TicketHub app", "Something else"));
     private final TextField subject = new TextField("Subject");
     private final TextArea  details = new TextArea("Details");
 
-    public SubmitComplaintView() {
+    public SubmitComplaintView(SubmitComplaintPresenter presenter) {
+        this.presenter = presenter;
+
         title("Submit a complaint");
         subtitle("Tell us what went wrong — an admin will respond shortly.");
         add(buildForm());
@@ -78,7 +85,18 @@ public class SubmitComplaintView extends LkPage {
             Toasts.failure("Please fill in subject and details.");
             return;
         }
-        Toasts.success("Complaint submitted — we'll get back to you in your Support inbox.");
-        UI.getCurrent().navigate(SupportInboxView.class);
+        switch (presenter.submit(AuthSession.token(),
+                subject.getValue(), details.getValue(), about.getValue())) {
+            case SubmitComplaintPresenter.Outcome.Success ok -> {
+                Toasts.success("Complaint submitted — we'll get back to you in your Support inbox.");
+                // Forward-compatible focus contract honored by SupportInboxView (#277).
+                UI.getCurrent().navigate(SupportInboxView.class,
+                    QueryParameters.of("c", ok.conversationId()));
+            }
+            case SubmitComplaintPresenter.Outcome.NotAuthenticated ignored ->
+                Toasts.failure("Your session has expired — please sign in again.");
+            case SubmitComplaintPresenter.Outcome.Failure fail ->
+                Toasts.failure("Could not submit complaint: " + fail.reason());
+        }
     }
 }

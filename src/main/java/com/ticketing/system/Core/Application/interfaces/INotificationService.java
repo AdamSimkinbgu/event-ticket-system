@@ -28,4 +28,13 @@ public interface INotificationService {
     void notifyOwnerAppointmentPending(int userId, int companyId, String companyName);
 
     void notifyRoleChanged(int userId, int companyId, String companyName, String newRole);
+
+    /**
+     * Messaging → notification bridge. Fired when a new message/inquiry arrives for a
+     * recipient (member or company owner) so they get a real-time DIRECT_MESSAGE notification.
+     * {@code conversationId} lets the UI deep-link to the thread; {@code senderLabel} is a
+     * human-readable origin (e.g. "a system admin", "a production company").
+     */
+    void notifyNewMessage(int recipientUserId, String conversationId, String senderLabel,
+            String subject, String snippet);
 }

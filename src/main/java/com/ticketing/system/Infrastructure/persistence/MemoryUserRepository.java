@@ -33,6 +33,11 @@ public class MemoryUserRepository implements IUserRepository {
     public void unlock(Integer id) { locks.unlock(id); }
 
     @Override
+    public List<User> findAll() {
+        return new java.util.ArrayList<>(usersById.values());
+    }
+
+    @Override
     public int nextId() {
         return idSequence.getAndIncrement();
     }

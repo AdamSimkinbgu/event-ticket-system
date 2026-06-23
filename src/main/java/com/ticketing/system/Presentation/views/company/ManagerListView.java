@@ -140,8 +140,6 @@ public class ManagerListView extends LkPage {
         grid.row(row);
     }
 
-       
-
     private void handleEdit(AppointmentInfoDTO m, List<String> permissionNames) {
         switch (presenter.editPermissions(
                 AuthSession.token(), m.companyId(), m.targetUserId(), permissionNames)) {

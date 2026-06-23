@@ -173,4 +173,26 @@ public class NotificationService implements INotificationService {
         );
         dispatcher.dispatch(notification);
     }
+
+    @Override
+    public void notifyNewMessage(int recipientUserId, String conversationId, String senderLabel,
+            String subject, String snippet) {
+        String safeSubject = subject == null ? "" : subject;
+        String safeSnippet = snippet == null ? "" : snippet;
+        String message = String.format("New message from %s: %s", senderLabel, safeSubject);
+        Notification notification = new Notification(
+                UUID.randomUUID().toString(),
+                recipientUserId,
+                NotificationType.DIRECT_MESSAGE,
+                NotificationStatus.PENDING,
+                message,
+                LocalDateTime.now(),
+                Map.<String, Object>of(
+                        "conversationId", conversationId,
+                        "senderLabel", senderLabel,
+                        "subject", safeSubject,
+                        "snippet", safeSnippet)
+        );
+        dispatcher.dispatch(notification);
+    }
 }
