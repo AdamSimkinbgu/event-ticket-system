@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Wipes every in-memory repository back to an empty state. Used by
- * {@link DemoDataSeeder#wipeAndReseed()} so a demo reset starts from a
+ * a {@code seed.mode=wipe} run so a reset starts from a
  * deterministic clean slate without restarting the JVM.
  *
  * <p>Uses reflection rather than adding {@code clear()} methods to each

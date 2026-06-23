@@ -1,0 +1,85 @@
+# ============================================================================
+#  TA REVIEW SCENARIO  —  initial system state (V3 "initialize from a file")
+# ============================================================================
+#  This file boots the system to a known state by running ONE operation per
+#  line through the real application services. Blank lines and lines starting
+#  with '#' are ignored, so this header is just documentation. Edit any value
+#  and reboot (or boot with --seed.mode=wipe) to re-run the edited scenario.
+#
+#  ALIASES: refer to users / companies / events by short names (u1, p1, e1).
+#  The engine maps each alias to the real id the service mints, so you never
+#  type a numeric id.
+#
+#  QUOTING: wrap a value with spaces in "double quotes" (e.g. a company name).
+#  NAMED ARGS: optional settings are written key=value (e.g. publish=true).
+#
+#  OPERATIONS  (positional args first, then key=value options)
+#  ---------------------------------------------------------------------------
+#   register <alias> <password> <email> <age>     register a member
+#                                                 e.g. register u1 password123 u1@x.com 30
+#   login <alias>                                 log a registered member in
+#   login-admin <alias> <username> <password>     sign in to the admin pool (default admin/admin)
+#   logout <alias>                                log one user out
+#   logout-all                                    log every logged-in user out
+#   guest <alias>                                 open an anonymous guest session (for guest buys)
+#   open-company <owner> <companyAlias> "<name>" ["<desc>"]
+#   appoint-owner <by> <company> <target>         invite <target> as a co-owner
+#   appoint-manager <by> <company> <target> perms=A,B,C
+#                                                 perms: CONFIGURE_VENUE, MANAGE_INVENTORY,
+#                                                        EDIT_POLICIES, VIEW_SALES, RESPOND_TO_INQUIRIES
+#   confirm <alias> <company>                     accept a pending owner/manager appointment
+#   add-event <by> <company> <eventAlias> <zone>... [name="..."] [category=CONCERT]
+#                                                 [city=Tel Aviv] [days=30] [publish=true]
+#        zone spec:   standing:<capacity>@<price>     e.g. standing:30@50
+#                     seated:<rows>x<cols>@<price>    e.g. seated:10x10@100
+#   publish <by> <company> <event>                SCHEDULED -> ON_SALE
+#   reserve <buyer> <event> <zoneRef> qty=<n> | seats=A-1,A-2
+#                                                 zoneRef: a zone index, or 'standing' / 'seated'
+#   checkout <buyer> [email=... age=...]          guests must pass email + age
+#   cancel-event <by> <event>                     cancel the event and refund holders
+#   contact-company <from> <company> subject="..." body="..."
+#   submit-complaint <from> subject="..." body="..."
+#   announce <adminAlias> title="..." body="..." [audience=BROADCAST_MEMBERS|BROADCAST_PRODUCERS]
+#   assert-status <event> <STATUS> by=<owner>     fail unless the event is in <STATUS>
+#                                                 (DRAFT/SCHEDULED/ON_SALE/SOLD_OUT/CANCELED/COMPLETED)
+#   expect-error <op> <args...>                   PASS only if the wrapped op throws (negative test)
+#   add-coupon ...                                SKIPPED — coupons are out of scope in this system
+# ============================================================================
+
+# 1. register users u1, u2, u3, u4
+register u1 password123 u1@demo.test 30
+register u2 password123 u2@demo.test 35
+register u3 password123 u3@demo.test 28
+register u4 password123 u4@demo.test 41
+
+# 2. login u1
+login u1
+
+# 3. u1 opens production company p1
+open-company u1 p1 "Production Company p1"
+
+# 4. u1 appoints u2 as owner
+appoint-owner u1 p1 u2
+
+# 5-6. u2 logs in and confirms the owner appointment
+login u2
+confirm u2 p1
+
+# 7. u2 appoints u3 as manager — may edit the venue layout (CONFIGURE_VENUE)
+#    but NOT manage policies (EDIT_POLICIES is intentionally omitted)
+appoint-manager u2 p1 u3 perms=CONFIGURE_VENUE
+
+# 8-9. u3 logs in and confirms the manager appointment
+login u3
+confirm u3 p1
+
+# 10. u2 adds event e1 to p1: a standing zone of 30 tickets @ 50,
+#     and a seated zone of 100 tickets (10x10) @ 100
+add-event u2 p1 e1 standing:30@50 seated:10x10@100 name="e1"
+
+# 11. u2 adds a 20% company-wide coupon, code "sale123"
+#     -> SKIPPED: coupons are out of scope in this system (no discount feature).
+add-coupon u2 p1 code=sale123 percent=20
+
+# 12. all users log out
+logout-all

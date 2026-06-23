@@ -5,11 +5,11 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
 /**
- * Date anchor for {@code DemoDataSeeder}. Captures
+ * Date anchor for {@code ScenarioRunner}. Captures
  * {@link Clock#instant()} once at construction so every timestamp
  * produced in a single seed pass is computed relative to the same
- * "now". Each call to {@code DemoDataSeeder.wipeAndReseed()} creates a
- * fresh {@code DemoClock}, so a demo reset re-anchors against the
+ * "now". Each {@code seed.mode=wipe} run creates a
+ * fresh {@code DemoClock}, so a reset re-anchors against the
  * current moment without dragging stale offsets along.
  *
  * <p>Not a Spring bean — instantiated explicitly by the orchestrator
