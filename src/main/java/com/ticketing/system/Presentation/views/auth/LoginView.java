@@ -112,7 +112,7 @@ public class LoginView extends LkAuthCard {
             case LoginPresenter.Outcome.GuestSessionMissing miss ->
                 Toasts.failure("Session expired — please refresh the page. (" + miss.reason() + ")");
             case LoginPresenter.Outcome.Failure fail ->
-                Toasts.failure("Sign-in failed: " + fail.reason());
+                Toasts.failure(fail.error());
         }
     }
 

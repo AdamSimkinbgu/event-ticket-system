@@ -1,8 +1,10 @@
 package com.ticketing.system.Presentation.components;
 
 import com.ticketing.system.Presentation.components.kit.LkIcon;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.notification.Notification;
@@ -39,6 +41,71 @@ public final class Toasts {
     /** Warning toast — amber theme, 5s, top-end. Use for near-expiry or "be careful" hints. */
     public static void warn(String msg) {
         toast(msg, NotificationVariant.LUMO_WARNING, 5000);
+    }
+
+    /**
+     * Structured failure toast driven by an {@link ErrorPayload}.
+     * Retryable errors use amber (warning); permanent errors use red.
+     * If {@code payload.helpHref()} is set a "Learn more" anchor is appended.
+     */
+    public static void failure(ErrorPayload payload) {
+        failure(payload, null);
+    }
+
+    /**
+     * Structured failure toast with an optional retry callback.
+     * When {@code onRetry} is non-null and {@code payload.retryable()} is true
+     * a "Retry" button is shown that invokes the callback then closes the toast.
+     */
+    public static void failure(ErrorPayload payload, Runnable onRetry) {
+        NotificationVariant variant = payload.retryable()
+                ? NotificationVariant.LUMO_WARNING
+                : NotificationVariant.LUMO_ERROR;
+        int duration = payload.retryable() ? 8000 : 6000;
+
+        Notification n = new Notification();
+        n.setPosition(Notification.Position.TOP_END);
+        n.setDuration(duration);
+        n.addThemeVariants(variant);
+
+        Div content = new Div();
+        content.getStyle()
+                .set("display", "flex")
+                .set("align-items", "center")
+                .set("gap", "14px");
+
+        Span text = new Span(payload.message());
+        text.getStyle().set("flex", "1 1 auto");
+        content.add(text);
+
+        if (payload.retryable() && onRetry != null) {
+            Button retryBtn = new Button("Retry", e -> {
+                n.close();
+                onRetry.run();
+            });
+            retryBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE, ButtonVariant.LUMO_SMALL);
+            retryBtn.getStyle().set("color", "inherit").set("font-weight", "600");
+            content.add(retryBtn);
+        }
+
+        if (payload.helpHref() != null && !payload.helpHref().isBlank()) {
+            Anchor link = new Anchor(payload.helpHref(), "Learn more");
+            link.setTarget("_blank");
+            link.getStyle().set("color", "inherit").set("font-size", "0.85em");
+            content.add(link);
+        }
+
+        Button close = new Button(new LkIcon("close", 14), e -> n.close());
+        close.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE, ButtonVariant.LUMO_SMALL);
+        close.getElement().setAttribute("aria-label", "Dismiss");
+        close.getStyle()
+                .set("color", "inherit")
+                .set("opacity", "0.7")
+                .set("margin", "-4px -6px -4px 0");
+        content.add(close);
+
+        n.add(content);
+        n.open();
     }
 
     private static void toast(String msg, NotificationVariant variant, int durationMs) {

@@ -4,6 +4,8 @@ import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Domain.exceptions.AccountLockedException;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -31,7 +33,7 @@ public class AdminLoginPresenter {
         } catch (AuthenticationFailedException e) {
             return new Outcome.InvalidCredentials();
         } catch (RuntimeException e) {
-            return new Outcome.Failure(e.getMessage());
+            return new Outcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -39,6 +41,6 @@ public class AdminLoginPresenter {
         record Success(AuthTokenDTO authToken) implements Outcome { }
         record InvalidCredentials() implements Outcome { }
         record Locked(String reason) implements Outcome { }
-        record Failure(String reason) implements Outcome { }
+        record Failure(ErrorPayload error) implements Outcome { }
     }
 }

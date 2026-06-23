@@ -8,7 +8,9 @@ import org.springframework.stereotype.Component;
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.services.ReservationService;
+import com.ticketing.system.Presentation.components.ErrorPayload;
 import com.ticketing.system.Presentation.components.Money;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 import com.ticketing.system.Presentation.session.SessionIdentity;
 
 @Component
@@ -35,17 +37,17 @@ public class CartPresenter {
             }
             return new LoadOutcome.Shown(toVM(order), subtotalCents(order));
         } catch (RuntimeException e) {
-            return new LoadOutcome.Failure(e.getMessage());
+            return new LoadOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
     public RemoveOutcome removeLine(CartVM.LineVM line) {
         if (line == null) {
-            return new RemoveOutcome.Failure("No line selected");
+            return new RemoveOutcome.Failure(ErrorPayload.unknown("No line selected"));
         }
         String credential = identity.credential();
         if (credential == null || credential.isBlank()) {
-            return new RemoveOutcome.Failure("Your session has expired");
+            return new RemoveOutcome.Failure(ErrorPayload.guestSessionExpired());
         }
         try {
             InventorySelectionDTO selection = (line.seatNumber() != null)
@@ -61,7 +63,7 @@ public class CartPresenter {
             }
             return new RemoveOutcome.Removed(toVM(updated), subtotalCents(updated));
         } catch (RuntimeException e) {
-            return new RemoveOutcome.Failure(e.getMessage());
+            return new RemoveOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -95,11 +97,11 @@ public class CartPresenter {
         record Shown(CartVM cart, long subtotalCents)        implements LoadOutcome { }
         record Empty()                                       implements LoadOutcome { }
         record NotAuthenticated()                            implements LoadOutcome { }
-        record Failure(String reason)                        implements LoadOutcome { }
+        record Failure(ErrorPayload error)                   implements LoadOutcome { }
     }
 
     public sealed interface RemoveOutcome {
         record Removed(CartVM cart, long subtotalCents)      implements RemoveOutcome { }
-        record Failure(String reason)                        implements RemoveOutcome { }
+        record Failure(ErrorPayload error)                   implements RemoveOutcome { }
     }
 }

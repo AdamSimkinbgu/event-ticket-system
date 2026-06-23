@@ -79,7 +79,7 @@ public class CompanyEventListView extends LkPage {
             case CompanyEventListPresenter.Outcome.NotAuthenticated ignored ->
                 eventsCard.add(Lk.muted("Your session has expired — please sign in again."));
             case CompanyEventListPresenter.Outcome.Failure fail ->
-                eventsCard.add(Lk.muted("Could not load events: " + fail.reason()));
+                eventsCard.add(Lk.muted(fail.error().message()));
         }
     }
 

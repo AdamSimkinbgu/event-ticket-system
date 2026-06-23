@@ -1,6 +1,8 @@
 package com.ticketing.system.Presentation.presenters.auth;
 
 import com.ticketing.system.Core.Application.services.MemberQueryService;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 import com.ticketing.system.Presentation.session.AuthSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -54,7 +56,7 @@ public class UsernameAvailabilityPresenter {
             }
             return new Outcome.Available();
         } catch (RuntimeException e) {
-            return new Outcome.Failure(e.getMessage());
+            return new Outcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -65,6 +67,6 @@ public class UsernameAvailabilityPresenter {
         record AdminReserved() implements Outcome { }
         record Taken() implements Outcome { }
         record Available() implements Outcome { }
-        record Failure(String reason) implements Outcome { }
+        record Failure(ErrorPayload error) implements Outcome { }
     }
 }

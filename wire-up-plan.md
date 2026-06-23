@@ -16,6 +16,8 @@ V2 ships a Vaadin frontend whose every view talks to the real application servic
 
 ## The pattern (already in flight)
 
+> **Convention reference:** [docs/coding-standards.md](docs/coding-standards.md) — presenter outcome shapes, `ErrorPayload` factory methods, exception → `ErrorCode` mapping table, and `Toasts` usage rules.
+
 `#299` (V2-AUTH-01) shipped `LoginPresenter` / `RegisterPresenter` as Vaadin-free POJOs with sealed `Outcome` hierarchies. Every other write-side view inherits this shape:
 
 ```

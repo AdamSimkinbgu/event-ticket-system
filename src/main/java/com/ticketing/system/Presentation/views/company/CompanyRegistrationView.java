@@ -101,7 +101,7 @@ public class CompanyRegistrationView extends LkPage {
             case CompanyRegistrationPresenter.Outcome.NameTaken taken ->
                 Toasts.failure(taken.reason());
             case CompanyRegistrationPresenter.Outcome.Failure fail ->
-                Toasts.failure("Registration failed: " + fail.reason());
+                Toasts.failure(fail.error());
         }
 
         if (outcome instanceof CompanyRegistrationPresenter.Outcome.Success) {

@@ -8,6 +8,8 @@ import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 
 @Component
 public class EventManagementPresenter {
@@ -29,7 +31,7 @@ public class EventManagementPresenter {
         } catch (EventNotFoundException e) {
             return new LoadOutcome.NotFound();
         } catch (RuntimeException e) {
-            return new LoadOutcome.Failure(e.getMessage());
+            return new LoadOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -41,7 +43,7 @@ public class EventManagementPresenter {
         } catch (InvalidTokenException e) {
             return new SaveOutcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new SaveOutcome.Failure(e.getMessage());
+            return new SaveOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -53,7 +55,7 @@ public class EventManagementPresenter {
         } catch (InvalidTokenException e) {
             return new CancelOutcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new CancelOutcome.Failure(e.getMessage());
+            return new CancelOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -61,18 +63,18 @@ public class EventManagementPresenter {
         record Success(EventDetailDTO event) implements LoadOutcome {}
         record NotAuthenticated() implements LoadOutcome {}
         record NotFound() implements LoadOutcome {}
-        record Failure(String reason) implements LoadOutcome {}
+        record Failure(ErrorPayload error) implements LoadOutcome {}
     }
 
     public sealed interface SaveOutcome {
         record Success() implements SaveOutcome {}
         record NotAuthenticated() implements SaveOutcome {}
-        record Failure(String reason) implements SaveOutcome {}
+        record Failure(ErrorPayload error) implements SaveOutcome {}
     }
 
     public sealed interface CancelOutcome {
         record Success() implements CancelOutcome {}
         record NotAuthenticated() implements CancelOutcome {}
-        record Failure(String reason) implements CancelOutcome {}
+        record Failure(ErrorPayload error) implements CancelOutcome {}
     }
 }

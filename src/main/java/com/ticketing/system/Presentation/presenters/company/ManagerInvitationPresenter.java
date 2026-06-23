@@ -11,6 +11,8 @@ import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Core.Domain.users.Permission;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 
 @Component
 public class ManagerInvitationPresenter {
@@ -37,7 +39,7 @@ public class ManagerInvitationPresenter {
         } catch (UserNotFoundException e) {
             return new Outcome.UserNotFound(inviteeUsername);
         } catch (RuntimeException e) {
-            return new Outcome.Failure(e.getMessage());
+            return new Outcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -46,6 +48,6 @@ public class ManagerInvitationPresenter {
         record NotAuthenticated() implements Outcome {}
         record NoCompany() implements Outcome {}
         record UserNotFound(String username) implements Outcome {}
-        record Failure(String reason) implements Outcome {}
+        record Failure(ErrorPayload error) implements Outcome {}
     }
 }

@@ -180,7 +180,7 @@ public class RegisterView extends LkAuthCard {
             case RegisterPresenter.Outcome.InvalidInput bad ->
                 Toasts.failure("Invalid input: " + bad.reason());
             case RegisterPresenter.Outcome.Failure fail ->
-                Toasts.failure("Registration failed: " + fail.reason());
+                Toasts.failure(fail.error());
         }
     }
 }

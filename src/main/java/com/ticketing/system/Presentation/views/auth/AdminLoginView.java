@@ -70,7 +70,7 @@ public class AdminLoginView extends LkAuthCard {
             case AdminLoginPresenter.Outcome.Locked locked ->
                 Toasts.failure(locked.reason());
             case AdminLoginPresenter.Outcome.Failure fail ->
-                Toasts.failure("Sign-in failed: " + fail.reason());
+                Toasts.failure(fail.error());
         }
     }
 }

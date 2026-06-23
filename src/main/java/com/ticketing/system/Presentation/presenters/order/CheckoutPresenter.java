@@ -19,7 +19,9 @@ import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryExceptio
 import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
 import com.ticketing.system.Core.Domain.exceptions.PolicyViolationException;
+import com.ticketing.system.Presentation.components.ErrorPayload;
 import com.ticketing.system.Presentation.components.Money;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.vaadin.flow.server.VaadinSession;
 
@@ -67,7 +69,7 @@ public class CheckoutPresenter {
             }
             return new LoadOutcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new LoadOutcome.Failure(e.getMessage());
+            return new LoadOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -113,7 +115,7 @@ public class CheckoutPresenter {
             if (cause instanceof InvalidStateTransitionException) return new PayOutcome.OrderExpired("Order expired during checkout");
             if (cause instanceof IdempotencyConflictException)   return new PayOutcome.DuplicateSubmission();
             log.error("Checkout failed unexpectedly", e);
-            return new PayOutcome.Failure(cause.getMessage());
+            return new PayOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -160,7 +162,7 @@ public class CheckoutPresenter {
         record Loaded(ActiveOrderDTO order, Pricing pricing) implements LoadOutcome { }
         record Empty()                implements LoadOutcome { }
         record NotAuthenticated()     implements LoadOutcome { }
-        record Failure(String reason) implements LoadOutcome { }
+        record Failure(ErrorPayload error) implements LoadOutcome { }
     }
 
     public sealed interface PayOutcome {
@@ -170,6 +172,6 @@ public class CheckoutPresenter {
         record SoldOut(String reason)                implements PayOutcome { }
         record OrderExpired(String reason)           implements PayOutcome { }
         record DuplicateSubmission()                 implements PayOutcome { }
-        record Failure(String reason)                implements PayOutcome { }
+        record Failure(ErrorPayload error)           implements PayOutcome { }
     }
 }

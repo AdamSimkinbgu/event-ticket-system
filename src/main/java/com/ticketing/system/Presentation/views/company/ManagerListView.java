@@ -73,7 +73,7 @@ public class ManagerListView extends LkPage {
             case ManagerListPresenter.Outcome.NotAuthenticated ignored -> content.add(banner(
                 "Your session has expired — please sign in again."));
             case ManagerListPresenter.Outcome.Failure fail -> content.add(banner(
-                "Could not load managers: " + fail.reason()));
+                fail.error().message()));
         }
     }
 
@@ -152,7 +152,7 @@ public class ManagerListView extends LkPage {
             case ManagerListPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case ManagerListPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not update permissions: " + fail.reason());
+                Toasts.failure(fail.error());
         }
     }
 
@@ -165,7 +165,7 @@ public class ManagerListView extends LkPage {
             case ManagerListPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case ManagerListPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not revoke manager: " + fail.reason());
+                Toasts.failure(fail.error());
         }
     }
 

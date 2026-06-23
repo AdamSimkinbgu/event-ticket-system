@@ -120,7 +120,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
             case VenueMapPresenter.LoadOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case VenueMapPresenter.LoadOutcome.Failure fail ->
-                Toasts.failure("Could not load the venue map: " + fail.reason());
+                Toasts.failure(fail.error());
         }
     }
 
@@ -449,7 +449,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
             case VenueMapPresenter.SaveOutcome.NoCompany ignored ->
                 Toasts.failure("You don't own a company — register one first.");
             case VenueMapPresenter.SaveOutcome.Failure fail ->
-                Toasts.failure("Could not save venue map: " + fail.reason());
+                Toasts.failure(fail.error());
         }
     }
 

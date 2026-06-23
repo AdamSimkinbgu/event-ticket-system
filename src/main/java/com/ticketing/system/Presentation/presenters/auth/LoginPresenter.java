@@ -5,6 +5,8 @@ import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
 import com.ticketing.system.Core.Domain.exceptions.GuestSessionRequiredException;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -43,7 +45,7 @@ public class LoginPresenter {
         } catch (GuestSessionRequiredException e) {
             return new Outcome.GuestSessionMissing(e.getMessage());
         } catch (RuntimeException e) {
-            return new Outcome.Failure(e.getMessage());
+            return new Outcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -52,6 +54,6 @@ public class LoginPresenter {
         record Success(LoginDTO loginDTO) implements Outcome { }
         record InvalidCredentials() implements Outcome { }
         record GuestSessionMissing(String reason) implements Outcome { }
-        record Failure(String reason) implements Outcome { }
+        record Failure(ErrorPayload error) implements Outcome { }
     }
 }

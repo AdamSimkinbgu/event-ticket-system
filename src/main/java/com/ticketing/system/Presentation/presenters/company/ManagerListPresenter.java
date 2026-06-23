@@ -12,6 +12,8 @@ import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.users.Permission;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 
 /**
  * MVP presenter for {@code ManagerListView}. Holds no Vaadin imports so the
@@ -57,7 +59,7 @@ public class ManagerListPresenter {
         } catch (InvalidTokenException e) {
             return new Outcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new Outcome.Failure(e.getMessage());
+            return new Outcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -80,7 +82,7 @@ public class ManagerListPresenter {
         } catch (InvalidTokenException e) {
             return new ActionOutcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new ActionOutcome.Failure(e.getMessage());
+            return new ActionOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -100,7 +102,7 @@ public class ManagerListPresenter {
         } catch (InvalidTokenException e) {
             return new ActionOutcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new ActionOutcome.Failure(e.getMessage());
+            return new ActionOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -111,13 +113,13 @@ public class ManagerListPresenter {
                        List<AppointmentInfoDTO> pendingInvitations) implements Outcome { }
         record NotAuthenticated() implements Outcome { }
         record NoCompany() implements Outcome { }
-        record Failure(String reason) implements Outcome { }
+        record Failure(ErrorPayload error) implements Outcome { }
     }
 
     /** Result of a manager mutation (edit permissions / revoke) the view reacts to. */
     public sealed interface ActionOutcome {
         record Success() implements ActionOutcome { }
         record NotAuthenticated() implements ActionOutcome { }
-        record Failure(String reason) implements ActionOutcome { }
+        record Failure(ErrorPayload error) implements ActionOutcome { }
     }
 }

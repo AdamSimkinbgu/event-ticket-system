@@ -15,8 +15,10 @@ import com.ticketing.system.Core.Application.dto.VenueMapDTO;
 import com.ticketing.system.Core.Application.services.CatalogService;
 import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Core.Domain.events.ZoneType;
+import com.ticketing.system.Presentation.components.ErrorPayload;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatedZonePicker;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 import com.ticketing.system.Presentation.session.SessionIdentity;
 
 @Component
@@ -39,7 +41,7 @@ public class SeatPickerPresenter {
         try {
             VenueMapDTO map = catalogService.getEventVenueMap(identity.credential(), eventId);
             if (map == null) {
-                return new LoadOutcome.Failure("Could not load venue map");
+                return new LoadOutcome.Failure(ErrorPayload.unknown("Could not load venue map"));
             }
             InventoryZoneDTO zone = map.inventoryZones().stream()
                     .filter(z -> z.getId() == zoneId)
@@ -51,7 +53,7 @@ public class SeatPickerPresenter {
             ZoneType zoneType = ZoneType.valueOf(zone.getZoneType());
             return new LoadOutcome.Loaded(zone, zoneType);
         } catch (RuntimeException e) {
-            return new LoadOutcome.Failure("Could not load this zone — please refresh and try again");
+            return new LoadOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -64,7 +66,7 @@ public class SeatPickerPresenter {
             }
             return new ReserveOutcome.Success(selection.getSeatNumbers().size());
         } catch (RuntimeException e) {
-            return new ReserveOutcome.Failure(e.getMessage());
+            return new ReserveOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -78,7 +80,7 @@ public class SeatPickerPresenter {
             }
             return new ReserveOutcome.Success(quantity);
         } catch (RuntimeException e) {
-            return new ReserveOutcome.Failure(e.getMessage());
+            return new ReserveOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -133,11 +135,11 @@ public class SeatPickerPresenter {
     public sealed interface LoadOutcome {
         record Loaded(InventoryZoneDTO zone, ZoneType zoneType) implements LoadOutcome { }
         record NotFound(String message) implements LoadOutcome { }
-        record Failure(String message)  implements LoadOutcome { }
+        record Failure(ErrorPayload error) implements LoadOutcome { }
     }
 
     public sealed interface ReserveOutcome {
-        record Success(int quantity)   implements ReserveOutcome { }
-        record Failure(String message) implements ReserveOutcome { }
+        record Success(int quantity)          implements ReserveOutcome { }
+        record Failure(ErrorPayload error)    implements ReserveOutcome { }
     }
 }

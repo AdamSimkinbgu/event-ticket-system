@@ -5,6 +5,8 @@ import org.springframework.stereotype.Component;
 import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.CurrentCompanies;
 
@@ -34,7 +36,7 @@ public class CompanyRegistrationPresenter {
         } catch (IllegalStateException e) {
             return new Outcome.NameTaken(e.getMessage());
         } catch (RuntimeException e) {
-            return new Outcome.Failure(e.getMessage());
+            return new Outcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -47,6 +49,6 @@ public class CompanyRegistrationPresenter {
 
         record NameTaken(String reason) implements Outcome { }
 
-        record Failure(String reason) implements Outcome { }
+        record Failure(ErrorPayload error) implements Outcome { }
     }
 }

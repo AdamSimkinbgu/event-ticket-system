@@ -12,6 +12,8 @@ import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 
 @Component
 public class VenueMapPresenter {
@@ -34,7 +36,7 @@ public class VenueMapPresenter {
         } catch (InvalidTokenException e) {
             return new LoadOutcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new LoadOutcome.Failure(e.getMessage());
+            return new LoadOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -49,7 +51,7 @@ public class VenueMapPresenter {
         } catch (InvalidTokenException e) {
             return new SaveOutcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new SaveOutcome.Failure(e.getMessage());
+            return new SaveOutcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -76,13 +78,13 @@ public class VenueMapPresenter {
     public sealed interface LoadOutcome {
         record Success(VenueLayoutDTO layout) implements LoadOutcome {}
         record NotAuthenticated() implements LoadOutcome {}
-        record Failure(String reason) implements LoadOutcome {}
+        record Failure(ErrorPayload error) implements LoadOutcome {}
     }
 
     public sealed interface SaveOutcome {
         record Success() implements SaveOutcome {}
         record NotAuthenticated() implements SaveOutcome {}
         record NoCompany() implements SaveOutcome {}
-        record Failure(String reason) implements SaveOutcome {}
+        record Failure(ErrorPayload error) implements SaveOutcome {}
     }
 }

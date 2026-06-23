@@ -7,6 +7,8 @@ import com.ticketing.system.Core.Domain.exceptions.DuplicateUsernameException;
 import com.ticketing.system.Core.Domain.exceptions.GuestSessionRequiredException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidEmailFormatException;
 import com.ticketing.system.Core.Domain.exceptions.WeakPasswordException;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -50,7 +52,7 @@ public class RegisterPresenter {
         } catch (IllegalArgumentException e) {
             return new Outcome.InvalidInput(e.getMessage());
         } catch (RuntimeException e) {
-            return new Outcome.Failure(e.getMessage());
+            return new Outcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
@@ -62,6 +64,6 @@ public class RegisterPresenter {
         record InvalidEmail() implements Outcome { }
         record GuestSessionMissing(String reason) implements Outcome { }
         record InvalidInput(String reason) implements Outcome { }
-        record Failure(String reason) implements Outcome { }
+        record Failure(ErrorPayload error) implements Outcome { }
     }
 }

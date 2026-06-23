@@ -59,7 +59,7 @@ public class OwnerDashboardView extends LkPage {
             case OwnerDashboardPresenter.Outcome.NotAuthenticated ignored -> showBanner(
                 "Your session has expired — please sign in again.");
             case OwnerDashboardPresenter.Outcome.Failure fail -> showBanner(
-                "Could not load your workspace: " + fail.reason());
+                fail.error().message());
         }
     }
 

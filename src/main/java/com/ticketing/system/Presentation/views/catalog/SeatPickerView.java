@@ -84,7 +84,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
             case SeatPickerPresenter.LoadOutcome.NotFound nf ->
                 bodyHolder.add(infoBanner(nf.message()));
             case SeatPickerPresenter.LoadOutcome.Failure f ->
-                bodyHolder.add(infoBanner(f.message()));
+                bodyHolder.add(infoBanner(f.error().message()));
         }
     }
 
@@ -228,7 +228,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
                 UI.getCurrent().navigate(CartView.class);
             }
             case SeatPickerPresenter.ReserveOutcome.Failure f ->
-                Toasts.failure(f.message());
+                Toasts.failure(f.error());
         }
     }
 
@@ -283,7 +283,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
                 UI.getCurrent().navigate(CartView.class);
             }
             case SeatPickerPresenter.ReserveOutcome.Failure f ->
-                Toasts.failure(f.message());
+                Toasts.failure(f.error());
         }
     }
 

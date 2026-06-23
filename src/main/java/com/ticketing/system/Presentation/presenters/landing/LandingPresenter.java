@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
 import com.ticketing.system.Core.Application.services.CatalogService;
+import com.ticketing.system.Presentation.components.ErrorPayload;
+import com.ticketing.system.Presentation.presenters.ExceptionTranslator;
 
 /**
  * MVP presenter for {@code LandingView} (V2-LANDING-01). Holds no Vaadin imports so the
@@ -40,13 +42,13 @@ public class LandingPresenter {
             List<EventSummaryDTO> upcoming = catalogService.upcomingOnSale(UPCOMING_LIMIT);
             return new Outcome.Success(featured, upcoming);
         } catch (RuntimeException e) {
-            return new Outcome.Failure(e.getMessage());
+            return new Outcome.Failure(ExceptionTranslator.toPayload(e));
         }
     }
 
     /** Sealed outcome the view switches on to render the poster rows or an empty state. */
     public sealed interface Outcome {
         record Success(List<EventSummaryDTO> featured, List<EventSummaryDTO> upcoming) implements Outcome { }
-        record Failure(String reason) implements Outcome { }
+        record Failure(ErrorPayload error) implements Outcome { }
     }
 }
