@@ -32,6 +32,9 @@ public interface IUserRepository extends IRepository<User, Integer> {
     /** Fast existence check used during UC-11 registration validation. */
     boolean existsByUsername(String username);
 
+    /** All registered users. Backs admin broadcast-to-all-members (messaging II.6.3.2). */
+    List<User> findAll();
+
     /** Mints a fresh userId. Storage owns ID generation rather than the service. UC-11. */
     int nextId();
 

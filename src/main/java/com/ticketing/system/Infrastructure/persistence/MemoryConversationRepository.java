@@ -18,10 +18,9 @@ import com.ticketing.system.Core.Domain.messaging.ParticipantType;
  * In-memory {@link IConversationRepository} for V1. Lets Spring wire
  * MessagingService.
  *
- * <p>{@code countUnreadForMember} requires per-message read tracking that
- * the {@code Conversation} aggregate doesn't yet expose at this granularity
- * — returning 0 is a safe placeholder that matches the "no unread" UX state
- * until messaging UCs (II.3.10 / II.6.3.x) are implemented for real.
+ * <p>Read-tracking ({@code countUnreadForMember}) is computed by summing
+ * {@link Conversation#unreadCountFor(int)} over the conversations where the
+ * member is a participant.
  */
 @Repository
 public class MemoryConversationRepository implements IConversationRepository {
@@ -83,10 +82,17 @@ public class MemoryConversationRepository implements IConversationRepository {
 
     @Override
     public int countUnreadForMember(int memberId) {
-        // Per-message unread tracking not exposed by Conversation yet. Return
-        // 0 as a placeholder so the inbox badge renders cleanly until the
-        // messaging UCs are implemented.
-        return 0;
+        int total = 0;
+        for (Conversation c : conversationsById.values()) {
+            boolean isParticipant = (c.getInitiatorType() == ParticipantType.MEMBER
+                            && c.getInitiatorId() == memberId)
+                    || (c.getCounterpartyType() == ParticipantType.MEMBER
+                            && c.getCounterpartyId() == memberId);
+            if (isParticipant) {
+                total += c.unreadCountFor(memberId);
+            }
+        }
+        return total;
     }
 
     @Override

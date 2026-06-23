@@ -1,5 +1,7 @@
 package com.ticketing.system.Infrastructure.persistence;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -48,5 +50,10 @@ public class MemoryAdminRepository implements IAdminRepository {
     @Override
     public boolean existsAny() {
         return !adminsById.isEmpty();
+    }
+
+    @Override
+    public List<Admin> findAll() {
+        return new ArrayList<>(adminsById.values());
     }
 }

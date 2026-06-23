@@ -1,8 +1,14 @@
 package com.ticketing.system.Core.Domain.messaging;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
+import com.ticketing.system.Core.Domain.exceptions.ConversationClosedException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidParticipantException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
+import com.ticketing.system.Core.Domain.exceptions.MessageNotFoundException;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 // Aggregate root for the centralized messaging subsystem.
@@ -50,6 +56,23 @@ public class Conversation implements InvariantChecked {
         checkInvariants();
     }
 
+    // Factory — opens a new conversation with its first message already attached.
+    // Generates the conversationId, the first messageId, and the timestamps internally
+    // so id/time creation stays in the domain (callers don't synthesize them).
+    public static Conversation start(ConversationType type,
+                                     int initiatorId, ParticipantType initiatorType,
+                                     int counterpartyId, ParticipantType counterpartyType,
+                                     String subject, String firstMessageBody) {
+        LocalDateTime now = LocalDateTime.now();
+        Message first = new Message(UUID.randomUUID().toString(),
+                initiatorId, initiatorType, firstMessageBody, now);
+        List<Message> messages = new ArrayList<>();
+        messages.add(first);
+        return new Conversation(UUID.randomUUID().toString(), type,
+                initiatorId, initiatorType, counterpartyId, counterpartyType,
+                subject, now, messages);
+    }
+
     public String getConversationId() { return conversationId; }
     public ConversationType getType() { return type; }
     public ConversationStatus getStatus() { return status; }
@@ -66,25 +89,67 @@ public class Conversation implements InvariantChecked {
     // Throws ConversationClosedException if status is CLOSED or RESOLVED.
     // Throws InvalidParticipantException if sender is not initiator or counterparty.
     public void addMessage(int senderId, ParticipantType senderType, String body) {
-        throw new UnsupportedOperationException("messaging: not implemented");
+        if (isClosed()) {
+            throw new ConversationClosedException(conversationId);
+        }
+        if (!involvesParticipant(senderId, senderType)) {
+            throw new InvalidParticipantException(senderId, conversationId);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        messages.add(new Message(UUID.randomUUID().toString(), senderId, senderType, body, now));
+        this.lastMessageAt = now;
+        // Auto status flip between the two sides: the initiator re-opens; the other side responds.
+        if (isInitiatorSide(senderId, senderType)) {
+            if (status == ConversationStatus.RESPONDED) {
+                status = ConversationStatus.OPEN;
+            }
+        } else if (status == ConversationStatus.OPEN) {
+            status = ConversationStatus.RESPONDED;
+        }
+        checkInvariants();
     }
 
     // Mark a single message read by the given participant (the non-sender).
     public void markMessageRead(String messageId, int readerId) {
-        throw new UnsupportedOperationException("messaging: not implemented");
+        for (Message m : messages) {
+            if (m.getMessageId().equals(messageId)) {
+                if (m.getSenderId() != readerId) {
+                    m.markRead();
+                }
+                return;
+            }
+        }
+        throw new MessageNotFoundException(messageId);
     }
 
     // Status transitions.
     public void transitionToResponded() {
-        throw new UnsupportedOperationException("messaging: not implemented");
+        if (isClosed()) {
+            throw new InvalidStateTransitionException("Conversation", status.name(),
+                    ConversationStatus.RESPONDED.name());
+        }
+        this.status = ConversationStatus.RESPONDED;
+        checkInvariants();
     }
 
     public void transitionToResolved() {
-        throw new UnsupportedOperationException("messaging: not implemented");
+        if (status == ConversationStatus.RESOLVED) {
+            return; // idempotent
+        }
+        if (status == ConversationStatus.CLOSED) {
+            throw new InvalidStateTransitionException("Conversation", status.name(),
+                    ConversationStatus.RESOLVED.name());
+        }
+        this.status = ConversationStatus.RESOLVED;
+        checkInvariants();
     }
 
     public void transitionToClosed() {
-        throw new UnsupportedOperationException("messaging: not implemented");
+        if (status == ConversationStatus.CLOSED) {
+            return; // idempotent
+        }
+        this.status = ConversationStatus.CLOSED;
+        checkInvariants();
     }
 
     // State checks.
@@ -93,11 +158,40 @@ public class Conversation implements InvariantChecked {
     }
 
     public boolean involvesParticipant(int participantId, ParticipantType participantType) {
-        throw new UnsupportedOperationException("messaging: not implemented");
+        if (participantType == null) {
+            return false;
+        }
+        boolean matchesInitiator = participantId == initiatorId && participantType == initiatorType;
+        boolean matchesCounterparty = participantId == counterpartyId && participantType == counterpartyType;
+        if (matchesInitiator || matchesCounterparty) {
+            return true;
+        }
+        // A specific ADMIN acts on behalf of the ADMIN_GROUP (the complaint queue).
+        if (participantType == ParticipantType.ADMIN) {
+            return initiatorType == ParticipantType.ADMIN_GROUP
+                    || counterpartyType == ParticipantType.ADMIN_GROUP;
+        }
+        return false;
     }
 
+    // Unread = messages addressed to (i.e. not sent by) the reader and not yet read.
     public int unreadCountFor(int readerId) {
-        throw new UnsupportedOperationException("messaging: not implemented");
+        int count = 0;
+        for (Message m : messages) {
+            if (m.getSenderId() != readerId && !m.isRead()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // Whether the given sender represents the initiator side of this thread
+    // (a specific ADMIN counts as the initiator when the initiator is the ADMIN_GROUP).
+    private boolean isInitiatorSide(int senderId, ParticipantType senderType) {
+        if (senderId == initiatorId && senderType == initiatorType) {
+            return true;
+        }
+        return senderType == ParticipantType.ADMIN && initiatorType == ParticipantType.ADMIN_GROUP;
     }
 
     @Override
