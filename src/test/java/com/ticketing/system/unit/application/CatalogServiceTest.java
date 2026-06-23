@@ -9,6 +9,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +20,7 @@ import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
+import com.ticketing.system.Core.Application.dto.SearchResultDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapDTO;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.CatalogService;
@@ -648,6 +650,111 @@ class CatalogServiceTest {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    // -------------------------------------------------------------------------
+    // V2-SEARCH-01 (#281): top-bar search across events + artists + venues
+    // -------------------------------------------------------------------------
+
+    // A minimal ON_SALE event for search: name, company, artists, and a venue at LOCATION
+    // ("Brussels, Belgium"). search() never reads status/rating/category, so we leave those unstubbed.
+    private Event searchEvent(int id, int companyId, String name, List<String> artists) {
+        Event e = mock(Event.class);
+        when(e.getId()).thenReturn(id);
+        when(e.getName()).thenReturn(name);
+        when(e.getCompanyId()).thenReturn(companyId);
+        when(e.getArtistsNames()).thenReturn(artists);
+        when(e.getVenueMap()).thenReturn(new VenueMap(id, LOCATION, List.of()));
+        return e;
+    }
+
+    @Test
+    void givenInvalidCredential_whenSearch_thenThrowsInvalidTokenException() {
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(false);
+
+        assertThrows(InvalidTokenException.class,
+                () -> catalogService.search(VALID_TOKEN, "coldplay", 8));
+    }
+
+    @Test
+    void givenBlankQuery_whenSearch_thenReturnsEmpty() {
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+
+        assertTrue(catalogService.search(VALID_TOKEN, "   ", 8).isEmpty());
+    }
+
+    @Test
+    void givenEventNameMatch_whenSearch_thenEventRowReturned() {
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        Event e = searchEvent(1, 10, "Coldplay Live", List.of("Coldplay"));
+        ProductionCompany company = createMockCompany("Live Nation", 4.5);
+        when(mockEventRepository.findByStatus(EventStatus.ON_SALE)).thenReturn(List.of(e));
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
+
+        List<SearchResultDTO> results = catalogService.search(VALID_TOKEN, "coldplay live", 8);
+
+        assertEquals(1, results.size());
+        assertEquals("EVENT", results.get(0).type());
+        assertEquals("Coldplay Live", results.get(0).title());
+        assertEquals(1, results.get(0).eventId());
+    }
+
+    @Test
+    void givenArtistMatch_whenSearch_thenArtistRowReturned() {
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        Event e = searchEvent(2, 10, "Mystery Show", List.of("Coldplay", "Support Act"));
+        ProductionCompany company = createMockCompany("Live Nation", 4.5);
+        when(mockEventRepository.findByStatus(EventStatus.ON_SALE)).thenReturn(List.of(e));
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
+
+        List<SearchResultDTO> results = catalogService.search(VALID_TOKEN, "coldplay", 8);
+
+        assertEquals(1, results.size());
+        assertEquals("ARTIST", results.get(0).type());
+        assertEquals("Coldplay", results.get(0).title());
+        assertEquals(2, results.get(0).eventId());
+    }
+
+    @Test
+    void givenVenueMatch_whenSearch_thenVenueRowReturned() {
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        Event e = searchEvent(3, 10, "Some Gig", List.of("Nobody"));
+        ProductionCompany company = createMockCompany("Live Nation", 4.5);
+        when(mockEventRepository.findByStatus(EventStatus.ON_SALE)).thenReturn(List.of(e));
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
+
+        List<SearchResultDTO> results = catalogService.search(VALID_TOKEN, "brussels", 8);
+
+        assertEquals(1, results.size());
+        assertEquals("VENUE", results.get(0).type());
+        assertEquals("Brussels, Belgium", results.get(0).title());
+        assertEquals(3, results.get(0).eventId());
+    }
+
+    @Test
+    void givenInactiveCompany_whenSearch_thenEventExcluded() {
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        Event e = searchEvent(1, 10, "Coldplay Live", List.of("Coldplay"));
+        when(mockEventRepository.findByStatus(EventStatus.ON_SALE)).thenReturn(List.of(e));
+        ProductionCompany inactive = mock(ProductionCompany.class);
+        when(inactive.getStatus()).thenReturn(CompanyStatus.INACTIVE);
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(inactive);
+
+        assertTrue(catalogService.search(VALID_TOKEN, "coldplay", 8).isEmpty());
+    }
+
+    @Test
+    void givenManyMatches_whenSearch_thenCappedToLimit() {
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        List<Event> many = new ArrayList<>();
+        for (int i = 1; i <= 10; i++) {
+            many.add(searchEvent(i, 10, "Show " + i, List.of()));
+        }
+        ProductionCompany company = createMockCompany("Live Nation", 4.5);
+        when(mockEventRepository.findByStatus(EventStatus.ON_SALE)).thenReturn(many);
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
+
+        assertEquals(3, catalogService.search(VALID_TOKEN, "show", 3).size());
+    }
 
     private CatalogSearchFiltersDTO emptyFilters() {
         return new CatalogSearchFiltersDTO(

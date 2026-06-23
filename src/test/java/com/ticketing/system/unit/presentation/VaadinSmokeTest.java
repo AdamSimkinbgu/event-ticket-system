@@ -6,6 +6,7 @@ import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkConfirm;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
+import com.ticketing.system.Presentation.components.kit.LkSearchPanel;
 import com.ticketing.system.Presentation.components.venue.VkQuantitySelector;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
@@ -338,6 +339,9 @@ class VaadinSmokeTest {
         assertDoesNotThrow(() -> new LkBtn("Sign in"),    "LkBtn failed");
         assertDoesNotThrow(() -> new LkCard("Card"),      "LkCard failed");
         assertDoesNotThrow(() -> new LkBadge("OK"),       "LkBadge failed");
+        // Live top-bar search panel (#281) — debounced input + search-fn callback, no DI needed.
+        assertDoesNotThrow(() -> new LkSearchPanel(List.of("Coldplay"), q -> List.of()),
+            "live LkSearchPanel failed");
         // Domain components used by the venue / seat picker views.
         assertDoesNotThrow(() -> new VkSeat(VkSeat.State.free, "1"), "VkSeat failed");
         assertDoesNotThrow(VkSeatLegend::new,             "VkSeatLegend failed");

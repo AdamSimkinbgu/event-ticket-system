@@ -3,7 +3,9 @@ package com.ticketing.system.Core.Application.services;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -15,6 +17,7 @@ import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
+import com.ticketing.system.Core.Application.dto.SearchResultDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapDTO;
 import com.ticketing.system.Core.Application.dtoMappers.VenueMapMapper;
 import com.ticketing.system.Core.Application.dtoMappers.EventMapper;
@@ -190,6 +193,77 @@ public class CatalogService {
                 companyId, effectiveFilters, results.size());
 
         return results;
+    }
+
+
+
+
+    //* V2-SEARCH-01 (#281): Top-bar search across events, artists, and venues. Accepts a JWT (Member)
+    //* or a raw sessionId (Guest) — same audience as browse/search. Matches the query (case-insensitive
+    //* substring) over publicly-visible ON_SALE events from ACTIVE companies and emits typed rows;
+    //* artists/venues are de-duplicated. There are no dedicated artist/venue pages, so every row points
+    //* at a representative event (its EventDetailsView). Results are round-robined across the three types
+    //* so one kind can't crowd out the others, then capped to {limit}.
+    public List<SearchResultDTO> search(String credential, String query, int limit) {
+        if (!this.sessionManager.validateCredential(credential)) {
+            log.warn("Invalid credential provided while performing top-bar search");
+            throw new InvalidTokenException();
+        }
+        String q = query == null ? "" : query.trim().toLowerCase();
+        if (q.isEmpty() || limit <= 0) {
+            return List.of();
+        }
+
+        List<SearchResultDTO> events = new ArrayList<>();
+        List<SearchResultDTO> artists = new ArrayList<>();
+        List<SearchResultDTO> venues = new ArrayList<>();
+        Set<String> seenArtists = new LinkedHashSet<>();
+        Set<String> seenVenues = new LinkedHashSet<>();
+
+        for (Event event : eventRepository.findByStatus(EventStatus.ON_SALE)) {
+            ProductionCompany company = activeCompanyOrNull(event.getCompanyId());
+            if (company == null) {
+                continue; // closed / unknown company — not publicly visible
+            }
+
+            String eventName = event.getName();
+            if (eventName != null && eventName.toLowerCase().contains(q)) {
+                events.add(new SearchResultDTO("EVENT", eventName, company.getName(), event.getId()));
+            }
+
+            if (event.getArtistsNames() != null) {
+                for (String artist : event.getArtistsNames()) {
+                    if (artist != null && artist.toLowerCase().contains(q)
+                            && seenArtists.add(artist.toLowerCase())) {
+                        artists.add(new SearchResultDTO("ARTIST", artist, "Artist · " + eventName, event.getId()));
+                    }
+                }
+            }
+
+            String venue = venueLabel(event);
+            if (venue != null && venue.toLowerCase().contains(q) && seenVenues.add(venue.toLowerCase())) {
+                venues.add(new SearchResultDTO("VENUE", venue, "Venue · " + eventName, event.getId()));
+            }
+        }
+
+        List<SearchResultDTO> results = new ArrayList<>();
+        boolean added = true;
+        for (int i = 0; results.size() < limit && added; i++) {
+            added = false;
+            if (i < events.size())  { results.add(events.get(i));  added = true; if (results.size() == limit) break; }
+            if (i < artists.size()) { results.add(artists.get(i)); added = true; if (results.size() == limit) break; }
+            if (i < venues.size())  { results.add(venues.get(i));  added = true; if (results.size() == limit) break; }
+        }
+        log.info("Top-bar search for '{}' returning {} results", q, results.size());
+        return results;
+    }
+
+    // *HELPER METHOD* — "city, country" label for an event's venue, or null if it has no location.
+    private String venueLabel(Event event) {
+        if (event.getVenueMap() == null || event.getVenueMap().getLocation() == null) {
+            return null;
+        }
+        return event.getVenueMap().getLocation().toString();
     }
 
     
