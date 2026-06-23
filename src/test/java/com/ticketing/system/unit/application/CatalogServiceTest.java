@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
+import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapDTO;
@@ -35,6 +36,7 @@ import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.VenueMap;
+import com.ticketing.system.Core.Domain.exceptions.CompanyClosedException;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.NullVenueMapException;
@@ -509,6 +511,93 @@ class CatalogServiceTest {
 
     
     // -------------------------------------------------------------------------
+    // #272 / UC-8: getEventDetail (public single-event read for the buyer page)
+    // -------------------------------------------------------------------------
+
+    // getEventDetail returns the full detail (incl. lineup) for an ON_SALE event of an active company.
+    @Test
+    void givenValidCredentialAndOnSaleEvent_whenGetEventDetail_thenReturnsDetailWithLineup() {
+        Event event = detailEvent(EVENT_ID, 10, EventStatus.ON_SALE);
+        ProductionCompany company = createMockCompany("Acme Live", 4.5);
+
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
+
+        EventDetailDTO result = catalogService.getEventDetail(VALID_TOKEN, EVENT_ID);
+
+        assertNotNull(result);
+        assertEquals("Event " + EVENT_ID, result.name());
+        assertEquals(EventStatus.ON_SALE, result.status());
+        assertEquals("Acme Live", result.companyName());
+        assertEquals(List.of("Artist A", "Artist B"), result.artistsNames());
+        assertEquals("Brussels", result.location().city());
+    }
+
+    // A SOLD_OUT event is still publicly viewable (the page shows a badge + disabled purchase).
+    @Test
+    void givenSoldOutEvent_whenGetEventDetail_thenReturnsDetail() {
+        Event event = detailEvent(EVENT_ID, 10, EventStatus.SOLD_OUT);
+        ProductionCompany company = createMockCompany("Acme Live", 4.5);
+
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
+
+        EventDetailDTO result = catalogService.getEventDetail(VALID_TOKEN, EVENT_ID);
+
+        assertEquals(EventStatus.SOLD_OUT, result.status());
+    }
+
+    // Invalid/expired credential is rejected before any lookup.
+    @Test
+    void givenInvalidCredential_whenGetEventDetail_thenThrowsInvalidTokenException() {
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(false);
+
+        assertThrows(InvalidTokenException.class,
+                () -> catalogService.getEventDetail(VALID_TOKEN, EVENT_ID));
+    }
+
+    // A missing event yields EventNotFoundException.
+    @Test
+    void givenNonExistentEvent_whenGetEventDetail_thenThrowsEventNotFoundException() {
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.findById(EVENT_ID)).thenReturn(null);
+
+        assertThrows(EventNotFoundException.class,
+                () -> catalogService.getEventDetail(VALID_TOKEN, EVENT_ID));
+    }
+
+    // Events of a closed/inactive company are hidden.
+    @Test
+    void givenInactiveCompany_whenGetEventDetail_thenThrowsCompanyClosedException() {
+        Event event = detailEvent(EVENT_ID, 10, EventStatus.ON_SALE);
+        ProductionCompany company = mock(ProductionCompany.class);
+        when(company.getStatus()).thenReturn(CompanyStatus.INACTIVE);
+
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
+
+        assertThrows(CompanyClosedException.class,
+                () -> catalogService.getEventDetail(VALID_TOKEN, EVENT_ID));
+    }
+
+    // DRAFT / SCHEDULED events are not yet public — treated as not found.
+    @Test
+    void givenDraftEvent_whenGetEventDetail_thenThrowsEventNotFoundException() {
+        Event event = detailEvent(EVENT_ID, 10, EventStatus.DRAFT);
+        ProductionCompany company = createMockCompany("Acme Live", 4.5);
+
+        when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
+        when(mockEventRepository.findById(EVENT_ID)).thenReturn(event);
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(company);
+
+        assertThrows(EventNotFoundException.class,
+                () -> catalogService.getEventDetail(VALID_TOKEN, EVENT_ID));
+    }
+
+    // -------------------------------------------------------------------------
     // V2-LANDING-01: featured / upcomingOnSale (guest-facing landing rows)
     // -------------------------------------------------------------------------
 
@@ -586,6 +675,23 @@ class CatalogServiceTest {
         when(mockCompany.getRating()).thenReturn(rating);
         when(mockCompany.getStatus()).thenReturn(CompanyStatus.ACTIVE);
         return mockCompany;
+    }
+
+    // A fully-stubbed event for getEventDetail tests (mapper reads name/desc/rating/category/
+    // lineup/location/showDates/status).
+    private Event detailEvent(int id, int companyId, EventStatus status) {
+        Event mockEvent = mock(Event.class);
+        when(mockEvent.getId()).thenReturn(id);
+        when(mockEvent.getName()).thenReturn("Event " + id);
+        when(mockEvent.getStatus()).thenReturn(status);
+        when(mockEvent.getRating()).thenReturn(4.5);
+        when(mockEvent.getDescription()).thenReturn("Description for event " + id);
+        when(mockEvent.getCategory()).thenReturn(EventCategory.MUSIC);
+        when(mockEvent.getCompanyId()).thenReturn(companyId);
+        when(mockEvent.getArtistsNames()).thenReturn(List.of("Artist A", "Artist B"));
+        when(mockEvent.getVenueMap()).thenReturn(new VenueMap(id, LOCATION, List.of()));
+        when(mockEvent.getShowDates()).thenReturn(List.of());
+        return mockEvent;
     }
 
     // An ON_SALE event with an explicit rating (for featured ordering). No show dates needed —

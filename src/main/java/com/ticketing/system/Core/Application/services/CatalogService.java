@@ -13,6 +13,7 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
+import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapDTO;
 import com.ticketing.system.Core.Application.dtoMappers.VenueMapMapper;
@@ -323,7 +324,42 @@ public class CatalogService {
 
             log.info("Venue map found for eventId: {} while getting venue map and being returned", eventId);
             return new VenueMapMapper().venueMapToVenueMapDTO(event.getVenueMap());
-        
+
     }
-    
+
+
+    // UC-8: Public single-event detail for the buyer event page (header, description, schedule, lineup).
+    // Accepts either a JWT (Member) or a raw sessionId (Guest) — same audience as browse / getEventVenueMap.
+    public EventDetailDTO getEventDetail(String credential, int eventId) {
+        log.info("Fetching event detail for eventId: {}", eventId);
+
+        if (!this.sessionManager.validateCredential(credential)) {
+            log.warn("Invalid credential provided while getting event detail for eventId: {}", eventId);
+            throw new InvalidTokenException();
+        }
+
+        Event event = this.eventRepository.findById(eventId);
+        if (event == null) {
+            log.warn("Event not found while getting event detail: {}", eventId);
+            throw new EventNotFoundException("Event with ID " + eventId + " not found while getting event detail");
+        }
+
+        // Enforce company status is ACTIVE — closed companies' events are not publicly visible.
+        ProductionCompany company = productionCompanyRepository.getCompanyById(event.getCompanyId());
+        if (company == null || company.getStatus() != CompanyStatus.ACTIVE) {
+            log.warn("Attempt to access event detail for eventId: {} from inactive company", eventId);
+            throw new CompanyClosedException("Event with ID " + eventId + " not found while getting event detail");
+        }
+
+        // DRAFT / SCHEDULED events are not yet public; ON_SALE / SOLD_OUT / CANCELED / COMPLETED are viewable
+        // (the buyer page renders a status badge and disables purchasing for the non-purchasable ones).
+        if (event.getStatus() == EventStatus.DRAFT || event.getStatus() == EventStatus.SCHEDULED) {
+            log.warn("Attempt to access non-public event detail (status {}) for eventId: {}", event.getStatus(), eventId);
+            throw new EventNotFoundException("Event with ID " + eventId + " not found while getting event detail");
+        }
+
+        log.info("Event detail found for eventId: {} and being returned", eventId);
+        return new EventMapper().toEventDetailDTO(event, company.getName());
+    }
+
 }

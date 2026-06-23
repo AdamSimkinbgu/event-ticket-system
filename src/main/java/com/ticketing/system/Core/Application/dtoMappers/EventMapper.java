@@ -1,10 +1,12 @@
 package com.ticketing.system.Core.Application.dtoMappers;
 
+import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
 import com.ticketing.system.Core.Application.dto.ShowDateDTO;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
+import com.ticketing.system.Core.Domain.events.Location;
 
 public class EventMapper {
 
@@ -29,6 +31,26 @@ public class EventMapper {
                 minPrice,
                 maxPrice,
                 event.getStatus() == EventStatus.SOLD_OUT);
+    }
+
+
+    // HELPER METHOD to convert Event --> EventDetailDTO (full detail, incl. lineup).
+    // Used by EventManagementService (owner-side) and CatalogService (guest-side); the
+    // caller resolves the company name since the two services reach the company differently.
+    public EventDetailDTO toEventDetailDTO(Event event, String companyName) {
+        Location location = event.getVenueMap() != null ? event.getVenueMap().getLocation() : null;
+        return new EventDetailDTO(
+                String.valueOf(event.getId()),
+                event.getName(),
+                event.getRating(),
+                event.getDescription(),
+                event.getCategory(),
+                location,
+                String.valueOf(event.getCompanyId()),
+                companyName,
+                event.getStatus(),
+                event.getShowDates(),
+                event.getArtistsNames());
     }
 
 

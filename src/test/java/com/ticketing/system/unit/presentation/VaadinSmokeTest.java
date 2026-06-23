@@ -19,8 +19,11 @@ import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
+import com.ticketing.system.Presentation.views.catalog.EventDetailsView;
 import com.ticketing.system.Presentation.presenters.admin.GlobalHistoryPresenter;
 import com.ticketing.system.Presentation.presenters.catalog.BrowseEventsPresenter;
+import com.ticketing.system.Presentation.presenters.catalog.EventDetailsPresenter;
+import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.ticketing.system.Presentation.views.company.CompanyInquiryInboxView;
 import com.ticketing.system.Presentation.views.company.ManagerListView;
 import com.ticketing.system.Presentation.views.company.OwnerDashboardView;
@@ -139,6 +142,17 @@ class VaadinSmokeTest {
         assertDoesNotThrow(
             () -> new GlobalHistoryView(context.getBean(GlobalHistoryPresenter.class)),
             "GlobalHistoryView (admin route) failed to construct");
+    }
+
+    @Test
+    void eventDetailsViewInstantiates() {
+        // Buyer event page wired to a presenter (#272). The constructor only builds the
+        // bodyHolder shell — load + page build happen in beforeEnter — so bare mocks exercise
+        // the construction path (a canary for kit-API breakage at wiring time).
+        EventDetailsPresenter presenter = mock(EventDetailsPresenter.class);
+        SessionIdentity sessionIdentity = mock(SessionIdentity.class);
+        assertDoesNotThrow(() -> new EventDetailsView(presenter, sessionIdentity),
+            "EventDetailsView failed to construct");
     }
 
     @Test
