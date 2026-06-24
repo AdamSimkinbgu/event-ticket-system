@@ -277,6 +277,9 @@ public class CompanyManagementService {
             throw new CompanyNotFoundException(companyId);
         }
         User requester = userRepository.getUserById(requesterId);
+        if (requester == null) {
+            throw new UserNotFoundException(requesterId);
+        }
         requester.requireOwnerInCompany(companyId);
 
         AppointmentInfoMapper mapper = new AppointmentInfoMapper();
@@ -300,6 +303,9 @@ public class CompanyManagementService {
             throw new CompanyNotFoundException(companyId);
         }
         User requester = userRepository.getUserById(requesterId);
+        if (requester == null) {
+            throw new UserNotFoundException(requesterId);
+        }
         requester.requireOwnerInCompany(companyId);
 
         AppointmentInfoMapper mapper = new AppointmentInfoMapper();
@@ -321,6 +327,9 @@ public class CompanyManagementService {
     public List<ProductionCompanyDTO> findOwnedCompanies(String token) {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
+        if (user == null) {
+            throw new UserNotFoundException(userId);
+        }
 
         List<ProductionCompanyDTO> owned = new ArrayList<>();
         for (CompanyAppointment appt : user.getAllCompanyAppointments()) {
@@ -351,6 +360,9 @@ public class CompanyManagementService {
     public List<MyCompanyDTO> findMyCompanies(String token) {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
+        if (user == null) {
+            throw new UserNotFoundException(userId);
+        }
 
         List<MyCompanyDTO> companies = new ArrayList<>();
         for (CompanyAppointment appt : user.getAllCompanyAppointments()) {
@@ -383,6 +395,9 @@ public class CompanyManagementService {
     public List<InvitationDTO> listMyInvitations(String token) {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
+        if (user == null) {
+            throw new UserNotFoundException(userId);
+        }
 
         List<InvitationDTO> invitations = new ArrayList<>();
         for (CompanyAppointment appt : user.getAllCompanyAppointments()) {
@@ -421,6 +436,8 @@ public class CompanyManagementService {
     public ProductionCompanyDTO registerCompany(String token, CompanyRegistrationDTO request) {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
+
+     
 
         // CompanyRegistrationDTO is a class with get* accessors, not a record.
         if (request.getName() == null || request.getName().trim().isEmpty() ||
@@ -619,6 +636,9 @@ public class CompanyManagementService {
 
     public List<UserCompanyDTO> listForUser(int userId) {
         User user = userRepository.getUserById(userId);
+        if (user == null) {
+            throw new UserNotFoundException(userId);
+        }
         List<UserCompanyDTO> memberships = new ArrayList<>();
         for (CompanyAppointment appointment : user.getAllCompanyAppointments()) {
             if (appointment.getStatus() != AppointmentStatus.ACTIVE) {
@@ -638,6 +658,9 @@ public class CompanyManagementService {
 
     public boolean isOwnerOf(int userId, int companyId) {
         User user = userRepository.getUserById(userId);
+        if (user == null) {
+            throw new UserNotFoundException(userId);
+        }
         CompanyAppointment appointment = user.getActiveCompanyAppointment(companyId);
         return appointment != null && appointment.getRole() == CompanyRole.Owner;
     }

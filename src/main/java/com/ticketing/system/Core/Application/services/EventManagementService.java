@@ -11,8 +11,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
+import com.ticketing.system.Core.Domain.exceptions.CompanyNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Application.dto.EventCreationDTO;
@@ -169,8 +171,17 @@ public class EventManagementService {
     public List<EventDetailDTO> listEventsForCompany(String token, int companyId) {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
-        user.requirePermissionInCompany(companyId, Permission.MANAGE_INVENTORY);
+        if (user == null) {
+            throw new UserNotFoundException(userId);
+        }
+
         ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null) {
+            throw new CompanyNotFoundException("Company not found for ID: " + companyId);
+        }
+
+        user.requirePermissionInCompany(companyId, Permission.MANAGE_INVENTORY);
+        
 
         EventMapper mapper = new EventMapper();
         return eventRepository.findByCompanyId(companyId).stream()
@@ -178,12 +189,53 @@ public class EventManagementService {
             .toList();
     }
 
+    public EventDetailDTO getEvent(String token, int eventId) {
+        int userId = validateTokenAndGetUserId(token);
+        Event event = eventRepository.findById(eventId);
+        if (event == null) {
+            throw new EventNotFoundException(eventId);
+        }
+        User user = userRepository.getUserById(userId);
+        if (user == null) {
+            throw new UserNotFoundException(userId);
+        }
+        user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
+        ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
+        if (company == null) {
+            throw new CompanyNotFoundException("Company not found for ID: " + event.getCompanyId());
+        }
+
+        return new EventDetailDTO(
+            String.valueOf(event.getId()),
+            event.getName(),
+            event.getRating(),
+            null,
+            event.getCategory(),
+            event.getVenueMap() != null ? event.getVenueMap().getLocation() : null,
+            String.valueOf(event.getCompanyId()),
+            company.getName(),
+            event.getStatus(),
+            event.getShowDates(),
+            event.getArtistsNames()
+            );
+    }
+
+    
+
+
+
     // II.4.2.3 — Read back the current zone states from the domain so the
     // editor reflects real-time inventory (capacity consumed by sales, etc.).
     public VenueLayoutDTO getEventZones(String token, int eventId) {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
+        if (user == null) {
+            throw new UserNotFoundException(userId);
+        }
         Event event = eventRepository.findById(eventId);
+        if (event == null) {
+            throw new EventNotFoundException("Event not found for ID: " + eventId);
+        }
         user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
 
         VenueMap map = event.getVenueMap();

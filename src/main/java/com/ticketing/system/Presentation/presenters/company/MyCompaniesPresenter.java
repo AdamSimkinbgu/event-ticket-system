@@ -4,8 +4,11 @@ import java.util.List;
 
 import org.springframework.stereotype.Component;
 
+import com.ticketing.system.Core.Application.dto.OwnerAppointmentRequestDTO;
 import com.ticketing.system.Core.Application.dto.UserCompanyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
+import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.CurrentCompanies;
 
@@ -56,5 +59,33 @@ public class MyCompaniesPresenter {
 
     public void selectCompany(int companyId) {
         CurrentCompanies.setCurrentCompany(companyId);
+    }
+
+
+    public AppointOutcome appoint(String inviteeIdentifier) {
+        String token = AuthSession.token();
+        if (token == null) return new AppointOutcome.NotAuthenticated();
+        try {
+            UserCompanyDTO company = currentCompany();
+            if (company == null) return new AppointOutcome.NoCompany();
+            int targetUserId = companyManagementService.resolveUserId(inviteeIdentifier);
+            companyManagementService.appointOwner(token,
+                    new OwnerAppointmentRequestDTO(company.companyId(), targetUserId));
+            return new AppointOutcome.Success();
+        } catch (InvalidTokenException e) {
+            return new AppointOutcome.NotAuthenticated();
+        } catch (UserNotFoundException e) {
+            return new AppointOutcome.UserNotFound(inviteeIdentifier);
+        } catch (RuntimeException e) {
+            return new AppointOutcome.Failure(e.getMessage());
+        }
+    }
+
+    public sealed interface AppointOutcome {
+        record Success() implements AppointOutcome {}
+        record NotAuthenticated() implements AppointOutcome {}
+        record NoCompany() implements AppointOutcome {}
+        record UserNotFound(String username) implements AppointOutcome {}
+        record Failure(String reason) implements AppointOutcome {}
     }
 }

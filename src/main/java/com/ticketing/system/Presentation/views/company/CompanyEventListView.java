@@ -18,6 +18,7 @@ import com.ticketing.system.Presentation.presenters.company.CompanyEventListPres
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.views.admin.CompanySalesView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Span;
@@ -97,7 +98,6 @@ public class CompanyEventListView extends LkPage {
     }
 
     private void addEventRow(LkGrid grid, EventDetailDTO ev) {
-        
         Map<String, Object> row = new LinkedHashMap<>();
         Span name = new Span();
         name.getElement().setProperty("innerHTML", "<b>" + escape(ev.name()) + "</b>");
@@ -120,6 +120,7 @@ public class CompanyEventListView extends LkPage {
             iconBtn("edit",    "Edit metadata", () -> UI.getCurrent().navigate("owner/events/" + ev.eventId())),
             iconBtn("map",     "Venue map",     () -> UI.getCurrent().navigate("owner/venue/" + ev.eventId())),
             iconBtn("policy",  "Policies",      () -> UI.getCurrent().navigate(PurchasePolicyEditorView.class)),
+            iconBtn("chart",   "Sales",         () -> UI.getCurrent().navigate(CompanySalesView.class)),
             iconBtn("warning", "Cancel event",  () -> Toasts.warn("Cancel-event dialog — V2-CADMIN-EVT-CANCEL."))
         );
         row.put("act", actions);
