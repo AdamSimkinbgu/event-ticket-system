@@ -78,9 +78,25 @@ public class SystemAnalyticsService {
         long activeVisitors = Math.max(0L,
                 metrics.total(MetricType.VISITOR_ENTRY) - metrics.total(MetricType.VISITOR_EXIT));
 
+        // Single receipt scan per snapshot — count both the rate window and the hour throughput
+        // in one pass (this runs on the auto-refresh poll every few seconds).
         LocalDateTime now = LocalDateTime.now(clock);
-        long purchasesWindow = countPurchasesSince(now.minusMinutes(windowMinutes));
-        long purchasesHour = countPurchasesSince(now.minusMinutes(THROUGHPUT_WINDOW_MINUTES));
+        LocalDateTime windowCutoff = now.minusMinutes(windowMinutes);
+        LocalDateTime hourCutoff = now.minusMinutes(THROUGHPUT_WINDOW_MINUTES);
+        long purchasesWindow = 0;
+        long purchasesHour = 0;
+        for (OrderReceipt receipt : allReceipts()) {
+            LocalDateTime purchasedAt = receipt.getPurchaseTime();
+            if (purchasedAt == null) {
+                continue;
+            }
+            if (!purchasedAt.isBefore(windowCutoff)) {
+                purchasesWindow++;
+            }
+            if (!purchasedAt.isBefore(hourCutoff)) {
+                purchasesHour++;
+            }
+        }
 
         SystemAnalyticsDTO dto = new SystemAnalyticsDTO(
                 activeVisitors,
@@ -113,8 +129,7 @@ public class SystemAnalyticsService {
 
         LocalDateTime cutoff = LocalDateTime.now(clock).minusDays(REVENUE_WINDOW_DAYS);
         double revenue30d = 0.0;
-        for (OrderReceipt receipt : orderReceiptRepository.findGlobal(
-                new GlobalHistoryFiltersDTO(null, null, null, null, null))) {
+        for (OrderReceipt receipt : allReceipts()) {
             LocalDateTime purchasedAt = receipt.getPurchaseTime();
             if (!receipt.wasRefunded() && purchasedAt != null && !purchasedAt.isBefore(cutoff)) {
                 revenue30d += receipt.getTotalAmount();
@@ -126,20 +141,14 @@ public class SystemAnalyticsService {
         return dto;
     }
 
-    /** Counts immutable receipts whose purchaseTime is at or after {@code since}. */
-    private long countPurchasesSince(LocalDateTime since) {
-        // A fully-null filter matches every receipt (the date filters are LocalDate, too coarse
-        // for minute-level windows), so we count by the receipt's own purchaseTime in memory.
-        List<OrderReceipt> all = orderReceiptRepository.findGlobal(
+    /**
+     * All receipts (a fully-null filter matches every receipt). The repo's date filters are
+     * {@code LocalDate} — too coarse for minute-level windows — so callers filter by the receipt's
+     * own {@code purchaseTime} in memory. Fetched once per snapshot.
+     */
+    private List<OrderReceipt> allReceipts() {
+        return orderReceiptRepository.findGlobal(
                 new GlobalHistoryFiltersDTO(null, null, null, null, null));
-        long n = 0;
-        for (OrderReceipt receipt : all) {
-            LocalDateTime purchasedAt = receipt.getPurchaseTime();
-            if (purchasedAt != null && !purchasedAt.isBefore(since)) {
-                n++;
-            }
-        }
-        return n;
     }
 
     private double perMinute(long countInWindow) {
