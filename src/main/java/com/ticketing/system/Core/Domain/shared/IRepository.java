@@ -40,10 +40,13 @@ package com.ticketing.system.Core.Domain.shared;
  *   <li><b>In-memory implementations</b> (current) use a per-id
  *       {@link java.util.concurrent.locks.ReentrantLock} via
  *       {@code RepositoryLocks}. Reentrant: same thread re-locking is safe.</li>
- *   <li><b>JPA-backed implementations</b> (future V2) will translate
- *       {@code lockForUpdate} to {@code SELECT ... FOR UPDATE} within the
- *       surrounding {@code @Transactional}; {@code unlock} becomes a no-op
- *       (the transaction boundary releases the row lock on commit/rollback).</li>
+ *   <li><b>JPA-backed implementations</b> (V3) make {@code lockForUpdate} and
+ *       {@code unlock} <b>no-ops</b>. Concurrency is handled by {@code @Version}
+ *       OPTIMISTIC locking on the aggregate — at the granularity of the real
+ *       contention (e.g. per-{@code Seat} for Event, so independent reservations
+ *       don't conflict) — and the service use-case retries on
+ *       {@code OptimisticLockException} (a fresh transaction re-reads the current
+ *       version). No pessimistic {@code SELECT ... FOR UPDATE} is used.</li>
  * </ul>
  *
  * <p><b>Always pair lockForUpdate with unlock in a try/finally.</b>
