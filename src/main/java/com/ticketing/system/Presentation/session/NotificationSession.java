@@ -33,10 +33,10 @@ public final class NotificationSession {
         return value instanceof List<?> list ? (List<NotificationDTO>) list : Collections.emptyList();
     }
 
-    /** Count of notifications that have not been read yet (status == "PENDING"). */
+    /** Count of notifications that have not been read yet (status != "READ"). */
     public static int getUnreadCount() {
         return (int) getAll().stream()
-                .filter(n -> "PENDING".equals(n.status()))
+                .filter(n -> !"READ".equals(n.status()))
                 .count();
     }
 
