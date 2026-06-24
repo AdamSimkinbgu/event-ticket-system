@@ -471,7 +471,10 @@ public final class ScenarioOps {
         for (int r = 0; r < rows; r++) {
             char rowLetter = (char) ('A' + r);
             for (int c = 0; c < cols; c++) {
-                seats.add(new SeatConfigDTO(rowLetter + "-" + (c + 1), c * 60.0, r * 60.0));
+                // Canonical <row><num> labels (A1, no dash) — seat rows are parsed by their leading
+                // non-digit run (EventManagementService.getEventZones / SeatPickerPresenter.rowOf),
+                // so "A-1" would mis-parse its row as "A-". Matches generateSeats()/buildSeatRow.
+                seats.add(new SeatConfigDTO(String.valueOf(rowLetter) + (c + 1), c * 60.0, r * 60.0));
             }
         }
         return seats;

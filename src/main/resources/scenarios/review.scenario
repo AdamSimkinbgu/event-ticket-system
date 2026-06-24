@@ -33,7 +33,7 @@
 #        zone spec:   standing:<capacity>@<price>     e.g. standing:30@50
 #                     seated:<rows>x<cols>@<price>    e.g. seated:10x10@100
 #   publish <by> <company> <event>                SCHEDULED -> ON_SALE
-#   reserve <buyer> <event> <zoneRef> qty=<n> | seats=A-1,A-2
+#   reserve <buyer> <event> <zoneRef> qty=<n> | seats=A1,A2
 #                                                 zoneRef: a zone index, or 'standing' / 'seated'
 #   checkout <buyer> [email=... age=...]          guests must pass email + age
 #   cancel-event <by> <event>                     cancel the event and refund holders
