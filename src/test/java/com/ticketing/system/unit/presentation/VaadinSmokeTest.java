@@ -19,9 +19,11 @@ import com.ticketing.system.Presentation.views.admin.AdminComplaintQueueView;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
+import com.ticketing.system.Presentation.views.admin.SystemAnalyticsView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.ticketing.system.Presentation.views.catalog.EventDetailsView;
 import com.ticketing.system.Presentation.presenters.admin.GlobalHistoryPresenter;
+import com.ticketing.system.Presentation.presenters.admin.SystemAnalyticsPresenter;
 import com.ticketing.system.Presentation.presenters.catalog.BrowseEventsPresenter;
 import com.ticketing.system.Presentation.presenters.catalog.EventDetailsPresenter;
 import com.ticketing.system.Presentation.session.SessionIdentity;
@@ -47,6 +49,8 @@ import com.ticketing.system.Presentation.presenters.landing.LandingPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.SubmitComplaintPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.SupportInboxPresenter;
 import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
+import com.ticketing.system.Core.Application.dto.MarketStateDTO;
+import com.ticketing.system.Core.Application.dto.SystemAnalyticsDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dto.ConversationDTO;
 import com.ticketing.system.Core.Application.dto.MessageDTO;
@@ -193,6 +197,21 @@ class VaadinSmokeTest {
         // (which is exercised by the buyer-side construction path).
         assertDoesNotThrow(AdminDashboardView::new,      "AdminDashboardView failed to construct");
         assertDoesNotThrow(OrganizationalTreeView::new,  "OrganizationalTreeView failed to construct");
+    }
+
+    @Test
+    void systemAnalyticsViewInstantiates() {
+        // System Analytics dashboard wired to a presenter (UC-46 / #43, #279). The constructor
+        // runs an initial load(), so the mock presenter returns a success outcome to exercise the
+        // market-card + KPI-stat build path without a UI context.
+        SystemAnalyticsPresenter presenter = mock(SystemAnalyticsPresenter.class);
+        MarketStateDTO market = new MarketStateDTO(
+            "OPEN", LocalDateTime.now(), LocalDateTime.now(), true, true, true);
+        SystemAnalyticsDTO analytics = new SystemAnalyticsDTO(0L, 0d, 0d, 0d, 0d, 0d, 0L, 0L, 0L, 0L, 0L, 5);
+        when(presenter.load()).thenReturn(
+            new SystemAnalyticsPresenter.Outcome.Success(market, analytics));
+        assertDoesNotThrow(() -> new SystemAnalyticsView(presenter),
+            "SystemAnalyticsView failed to construct");
     }
 
     @Test

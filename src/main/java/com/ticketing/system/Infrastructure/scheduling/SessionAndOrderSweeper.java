@@ -13,6 +13,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.system.Core.Application.events.OrderExpiredEvent;
+import com.ticketing.system.Core.Application.interfaces.ISystemMetrics;
+import com.ticketing.system.Core.Application.interfaces.MetricType;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
@@ -56,18 +58,21 @@ public class SessionAndOrderSweeper {
     private final IEventRepository eventRepository;
     private final Clock clock;
     private final ApplicationEventPublisher eventPublisher;
+    private final ISystemMetrics systemMetrics;
 
     public SessionAndOrderSweeper(
             ISessionRepository sessionRepository,
             IActiveOrderRepository activeOrderRepository,
             IEventRepository eventRepository,
             Clock clock,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            ISystemMetrics systemMetrics) {
         this.sessionRepository = sessionRepository;
         this.activeOrderRepository = activeOrderRepository;
         this.eventRepository = eventRepository;
         this.clock = clock;
         this.eventPublisher = eventPublisher;
+        this.systemMetrics = systemMetrics;
     }
     
     @Scheduled(fixedDelayString = "${sweeper.fixed-delay-ms:60000}")
@@ -90,6 +95,11 @@ public class SessionAndOrderSweeper {
         for (Session session : expired) {
             cleanUpAttachedCart(session);
             sessionRepository.delete(session.getSessionId());
+            // A swept-out guest session is a visitor exit (analytics, UC-46). Member
+            // sessions persist their cart by userId, so they are not counted here.
+            if (!session.isMember()) {
+                systemMetrics.record(MetricType.VISITOR_EXIT);
+            }
         }
         return expired.size();
     }

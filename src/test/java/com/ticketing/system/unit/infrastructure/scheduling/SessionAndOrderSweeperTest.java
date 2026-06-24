@@ -28,6 +28,8 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventorySelection;
+import com.ticketing.system.Core.Application.interfaces.ISystemMetrics;
+import com.ticketing.system.Core.Application.interfaces.MetricType;
 import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.Session;
 import com.ticketing.system.Infrastructure.scheduling.SessionAndOrderSweeper;
@@ -55,6 +57,7 @@ class SessionAndOrderSweeperTest {
     private IEventRepository eventRepo;
     private Clock fixedClock;
     private ApplicationEventPublisher eventPublisher;
+    private ISystemMetrics systemMetrics;
     private SessionAndOrderSweeper sweeper;
 
     @BeforeEach
@@ -64,7 +67,8 @@ class SessionAndOrderSweeperTest {
         eventRepo      = mock(IEventRepository.class);
         fixedClock     = Clock.fixed(T0, ZoneOffset.UTC);
         eventPublisher = mock(ApplicationEventPublisher.class);
-        sweeper = new SessionAndOrderSweeper(sessionRepo, orderRepo, eventRepo, fixedClock, eventPublisher);
+        systemMetrics  = mock(ISystemMetrics.class);
+        sweeper = new SessionAndOrderSweeper(sessionRepo, orderRepo, eventRepo, fixedClock, eventPublisher, systemMetrics);
 
         // Defaults: nothing expired.
         when(sessionRepo.findExpiredBefore(any())).thenReturn(List.of());
@@ -122,6 +126,8 @@ class SessionAndOrderSweeperTest {
         verify(sessionRepo).delete("orphan-sid");
         verify(orderRepo, never()).delete(any());
         verify(eventRepo, never()).save(any());
+        // A swept guest session counts as a visitor exit (analytics, UC-46).
+        verify(systemMetrics).record(MetricType.VISITOR_EXIT);
     }
 
     // ---------------------------------------------------------------------
@@ -141,6 +147,8 @@ class SessionAndOrderSweeperTest {
         verify(orderRepo, never()).getBySessionId(any());
         verify(orderRepo, never()).delete(any());
         verify(eventRepo, never()).save(any());
+        // A member session expiry is NOT a visitor exit (entry was counted at guest start).
+        verify(systemMetrics, never()).record(MetricType.VISITOR_EXIT);
     }
 
     // ---------------------------------------------------------------------

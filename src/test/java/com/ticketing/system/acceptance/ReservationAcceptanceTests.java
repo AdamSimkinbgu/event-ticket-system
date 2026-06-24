@@ -4,6 +4,7 @@ import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.dto.ReservationResultDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Application.interfaces.ISystemMetrics;
 import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Core.Application.services.SystemAdminService;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
@@ -68,7 +69,8 @@ public class ReservationAcceptanceTests {
                 notificationService,
                 mock(IProductionCompanyRepository.class),
                 mock(IUserRepository.class),
-                systemAdminService
+                systemAdminService,
+                mock(ISystemMetrics.class)
         );
 
         event = mock(Event.class, RETURNS_DEEP_STUBS);

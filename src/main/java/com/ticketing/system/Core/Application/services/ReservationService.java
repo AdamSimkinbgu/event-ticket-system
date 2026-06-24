@@ -15,6 +15,8 @@ import com.ticketing.system.Core.Application.dto.BuyerContextDTO;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Application.interfaces.ISystemMetrics;
+import com.ticketing.system.Core.Application.interfaces.MetricType;
 import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
@@ -40,6 +42,7 @@ public class ReservationService {
     private final IProductionCompanyRepository companyRepository;
     private final IUserRepository userRepository;
     private final SystemAdminService systemAdminService;
+    private final ISystemMetrics systemMetrics;
 
     @Value("${constants.ticket-reservation-duration}")
     private int reservationTimeoutMinutes;
@@ -51,7 +54,8 @@ public class ReservationService {
             INotificationService notificationService,
             IProductionCompanyRepository companyRepository,
             IUserRepository userRepository,
-            SystemAdminService systemAdminService) {
+            SystemAdminService systemAdminService,
+            ISystemMetrics systemMetrics) {
         this.eventRepository = eventRepository;
         this.activeOrderRepository = activeOrderRepository;
         this.iSessionManager = iSessionManager;
@@ -59,6 +63,7 @@ public class ReservationService {
         this.companyRepository = companyRepository;
         this.userRepository = userRepository;
         this.systemAdminService = systemAdminService;
+        this.systemMetrics = systemMetrics;
     }
 
     // ---------------------------------------------------------------------
@@ -164,6 +169,7 @@ public class ReservationService {
             activeOrderRepository.save(activeOrder);
             // Notify the member of the successful reservation. For guests, we do not have a user ID to send notifications to, so we skip this step for guests. The notification can be used to trigger email notifications, app push notifications, etc. to inform the member of their successful reservation and any details they may need (e.g. event name, zone, quantity reserved, etc.).
             notifySuccessAfterUnlock = true;
+            systemMetrics.record(MetricType.RESERVATION);
             // Return the reservation result, which includes details about the reservation such as event ID, zone ID, quantity reserved, seat numbers if applicable, and the expiration time of the reservation (based on the current time plus the configured reservation timeout). This information can be used by the frontend to show the user their current reservations and how long they have before they expire, etc.
             return buildReservationResult(eventId, zoneId, selection);
 
