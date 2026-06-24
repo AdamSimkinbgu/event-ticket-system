@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import com.ticketing.system.Core.Domain.Admin.Admin;
@@ -17,6 +18,7 @@ import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
  * replaces this class without touching the application layer.
  */
 @Repository
+@Profile("!jpa")
 public class MemoryAdminRepository implements IAdminRepository {
 
     private final Map<Integer, Admin> adminsById = new ConcurrentHashMap<>();
