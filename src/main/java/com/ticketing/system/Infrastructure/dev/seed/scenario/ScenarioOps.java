@@ -509,8 +509,7 @@ public final class ScenarioOps {
         }
     }
 
-    private static String label(ScenarioCommand cmd) {
         int take = Math.min(3, cmd.positional().size());
-        return (cmd.op() + " " + String.join(" ", cmd.positional().subList(0, take))).trim();
-    }
+        String args = String.join(" ", cmd.positional().subList(0, take));
+        return ("L" + cmd.line() + " " + cmd.op() + (args.isBlank() ? "" : " " + args)).trim();
 }
