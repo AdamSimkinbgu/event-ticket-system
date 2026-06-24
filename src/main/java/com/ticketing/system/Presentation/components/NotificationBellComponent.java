@@ -30,10 +30,14 @@ public class NotificationBellComponent extends Span {
     }
 
     private void build() {
-        List<NotificationDTO> notifs = NotificationSession.getAll();
-        int unread = AuthSession.isSignedIn()
-                ? (int) notifs.stream().filter(n -> "PENDING".equals(n.status())).count()
-                : 0;
+        List<NotificationDTO> notifs = AuthSession.isSignedIn()
+                ? NotificationSession.getAll().stream()
+                        .sorted(java.util.Comparator.comparing(NotificationDTO::createdAt,
+                                java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())).reversed())
+                        .toList()
+                : List.of();
+
+        int unread = (int) notifs.stream().filter(n -> !"READ".equals(n.status())).count();
 
         NativeButton bell = new NativeButton();
         bell.addClassName("lk-bell");
