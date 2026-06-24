@@ -47,6 +47,7 @@ public final class SeedReport {
             byStage.computeIfAbsent(e.stage(), k -> new int[4])[e.status().ordinal()]++;
         }
 
+        StringBuilder sb = new StringBuilder();
         sb.append("\n========== SEED SMOKE REPORT ==========\n");
         for (var en : byStage.entrySet()) {
             int[] t = en.getValue();
