@@ -11,7 +11,6 @@ import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.ticketing.system.Presentation.session.AuthSession;
-import com.ticketing.system.Presentation.session.GuestSession;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.company.CompanyRegistrationView;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
@@ -34,6 +33,8 @@ import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.router.AfterNavigationEvent;
 import com.vaadin.flow.router.AfterNavigationObserver;
 import com.vaadin.flow.server.VaadinSession;
+import com.ticketing.system.Presentation.components.kit.LkNotifPanel;
+import com.ticketing.system.Presentation.session.NotificationSession;
 import com.ticketing.system.Presentation.session.SessionIdentity;
 
 import java.util.ArrayList;
@@ -46,20 +47,22 @@ import java.util.Map;
  * {@link AfterNavigationObserver} so the avatar menu reflects current
  * {@link AuthSession} state and the top-nav highlights the active section.
  *
- * <p>System-admin entry points are deliberately not exposed here — the
+ * <p>
+ * System-admin entry points are deliberately not exposed here — the
  * admin workspace lives at its own endpoint behind a separate sign-in.
  */
 public class MainLayout extends AppLayout implements AfterNavigationObserver {
 
-    /** View class → top-nav label that should light up while that view is active. */
+    /**
+     * View class → top-nav label that should light up while that view is active.
+     */
     private static final Map<Class<?>, String> NAV_LABELS = Map.of(
-        BrowseEventsView.class,      "Browse",
-        EventDetailsView.class,      "Browse",
-        MyAccountView.class,         "My Tickets",
-        CartView.class,              "My Tickets",
-        CheckoutView.class,          "My Tickets",
-        OrderConfirmationView.class, "My Tickets"
-    );
+            BrowseEventsView.class, "Browse",
+            EventDetailsView.class, "Browse",
+            MyAccountView.class, "My Tickets",
+            CartView.class, "My Tickets",
+            CheckoutView.class, "My Tickets",
+            OrderConfirmationView.class, "My Tickets");
 
     private final ReservationService reservationService;
     private LkTopBar topBar;
@@ -68,7 +71,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
     private final SearchPresenter searchPresenter;
 
     public MainLayout(ReservationService reservationService, SignOutFlow signOutFlow,
-                      SessionIdentity identity, SearchPresenter searchPresenter) {
+            SessionIdentity identity, SearchPresenter searchPresenter) {
         this.reservationService = reservationService;
         this.signOutFlow = signOutFlow;
         this.identity = identity;
@@ -81,134 +84,146 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         rebuildTopBar(findActiveLabel(event));
     }
 
-   private void rebuildTopBar(String activeLabel) {
-    if (topBar != null) topBar.getElement().removeFromParent();
+    private void rebuildTopBar(String activeLabel) {
+        if (topBar != null)
+            topBar.getElement().removeFromParent();
 
-    boolean signedIn = AuthSession.isSignedIn();
-    String name = signedIn ? AuthSession.displayName() : "Guest";
+        boolean signedIn = AuthSession.isSignedIn();
+        String name = signedIn ? AuthSession.displayName() : "Guest";
 
-    int cartSize = 0;
-    Long cartDeadlineMs = null;
+        int cartSize = 0;
+        Long cartDeadlineMs = null;
 
-    VaadinSession session = VaadinSession.getCurrent();
-    if (session != null) {
-        session.lock();
-        try {
-            long now = System.currentTimeMillis();
-            Long lastFetchMs = (Long) session.getAttribute("cart.fetch.time");
-            Integer cachedSize = (Integer) session.getAttribute("cart.size");
-            Long cachedDeadlineMs = (Long) session.getAttribute("cart.deadline");
+        VaadinSession session = VaadinSession.getCurrent();
+        if (session != null) {
+            session.lock();
+            try {
+                long now = System.currentTimeMillis();
+                Long lastFetchMs = (Long) session.getAttribute("cart.fetch.time");
+                Integer cachedSize = (Integer) session.getAttribute("cart.size");
+                Long cachedDeadlineMs = (Long) session.getAttribute("cart.deadline");
 
-            if (lastFetchMs != null && (now - lastFetchMs) < 10_000 && cachedSize != null) {
-                cartSize = cachedSize;
-                cartDeadlineMs = cachedDeadlineMs;
-            } else {
-                try {
-                    String credential = identity.credential();
-                    ActiveOrderDTO order = (credential != null)
-                            ? reservationService.viewMyActiveOrder(credential) : null;
-                    if (order != null && !order.lines().isEmpty()) {
-                        cartSize = order.lines().size();
-                        long remSec = order.remainingSecondsBeforeExpiry();
-                        if (remSec > 0) {
-                            cartDeadlineMs = now + remSec * 1000L;
+                if (lastFetchMs != null && (now - lastFetchMs) < 10_000 && cachedSize != null) {
+                    cartSize = cachedSize;
+                    cartDeadlineMs = cachedDeadlineMs;
+                } else {
+                    try {
+                        String credential = identity.credential();
+                        ActiveOrderDTO order = (credential != null)
+                                ? reservationService.viewMyActiveOrder(credential)
+                                : null;
+                        if (order != null && !order.lines().isEmpty()) {
+                            cartSize = order.lines().size();
+                            long remSec = order.remainingSecondsBeforeExpiry();
+                            if (remSec > 0) {
+                                cartDeadlineMs = now + remSec * 1000L;
+                            }
                         }
+                    } catch (Exception e) {
+                        // Log but don't fail topbar render
                     }
-                } catch (Exception e) {
-                    // Log but don't fail topbar render
+                    session.setAttribute("cart.size", cartSize);
+                    session.setAttribute("cart.deadline", cartDeadlineMs);
+                    session.setAttribute("cart.fetch.time", now);
                 }
-                session.setAttribute("cart.size", cartSize);
-                session.setAttribute("cart.deadline", cartDeadlineMs);
-                session.setAttribute("cart.fetch.time", now);
+            } finally {
+                session.unlock();
             }
-        } finally {
-            session.unlock();
         }
+
+        List<LkTopBar.NavItem> nav = new ArrayList<>();
+        nav.add(new LkTopBar.NavItem("Browse", BrowseEventsView.class));
+        nav.add(new LkTopBar.NavItem("My Tickets", MyAccountView.class));
+
+        if (Capabilities.has(Capability.ADMIN_WORKSPACE)) {
+            nav.add(new LkTopBar.NavItem("Admin", AdminDashboardView.class));
+        }
+
+        LkTopBar bar = new LkTopBar(LkTopBar.Variant.MAIN)
+                .brand("TicketHub", LandingView.class)
+                .nav(nav, activeLabel)
+                .search(buildSearchPanel())
+                .cart(CartView.class, cartSize, cartDeadlineMs)
+                .bell(
+                    LkNotifPanel.fromDTOs(NotificationSession.getAll()),
+                    signedIn && NotificationSession.getUnreadCount() > 0
+                        ? String.valueOf(NotificationSession.getUnreadCount())
+                        : null,
+                    "Notifications"
+                );
+
+        if (signedIn) {
+            bar.account(initials(name), name, buildMemberMenu(name));
+        } else {
+            bar.guestActions(LoginView.class, RegisterView.class);
+        }
+
+        topBar = bar;
+        addToNavbar(topBar);
     }
-
-    List<LkTopBar.NavItem> nav = new ArrayList<>();
-    nav.add(new LkTopBar.NavItem("Browse",     BrowseEventsView.class));
-    nav.add(new LkTopBar.NavItem("My Tickets", MyAccountView.class));
-
-    if (Capabilities.has(Capability.ADMIN_WORKSPACE)) {
-        nav.add(new LkTopBar.NavItem("Admin", AdminDashboardView.class));
-    }
-
-    LkTopBar bar = new LkTopBar(LkTopBar.Variant.MAIN)
-        .brand("TicketHub", LandingView.class)
-        .nav(nav, activeLabel)
-        .search(buildSearchPanel())
-        .cart(CartView.class, cartSize, cartDeadlineMs)
-        .bellDefault(false);
-
-    if (signedIn) {
-        bar.account(initials(name), name, buildMemberMenu(name));
-    } else {
-        bar.guestActions(LoginView.class, RegisterView.class);
-    }
-
-    topBar = bar;
-    addToNavbar(topBar);
-}
 
     /**
      * Live top-bar search panel (#281). Backs the kit {@link LkSearchPanel} with
-     * {@link SearchPresenter}: the debounced input runs a catalog search via the current
-     * credential, each row records the query as a recent search and opens the event's detail page.
+     * {@link SearchPresenter}: the debounced input runs a catalog search via the
+     * current
+     * credential, each row records the query as a recent search and opens the
+     * event's detail page.
      */
     private LkSearchPanel buildSearchPanel() {
         return new LkSearchPanel(
-            searchPresenter.recents(),
-            query -> searchPresenter.search(identity.credential(), query).stream()
-                .map(r -> new LkSearchPanel.Row(r.type(), r.title(), r.subtitle(), () -> {
-                    searchPresenter.record(query);
-                    UI.getCurrent().navigate("events/" + r.eventId());
-                }))
-                .toList());
+                searchPresenter.recents(),
+                query -> searchPresenter.search(identity.credential(), query).stream()
+                        .map(r -> new LkSearchPanel.Row(r.type(), r.title(), r.subtitle(), () -> {
+                            searchPresenter.record(query);
+                            UI.getCurrent().navigate("events/" + r.eventId());
+                        }))
+                        .toList());
     }
 
     /** Member-persona account menu — wired to {@link AuthSession} + view routes. */
     private LkAccountMenu buildMemberMenu(String name) {
         LkMenu menu = new LkMenu(
-            new LkMenu.Item("ticket",    "My account").onClick(() -> UI.getCurrent().navigate(MyAccountView.class)),
-            new LkMenu.Item("users",     "My profile").onClick(() -> UI.getCurrent().navigate(MyProfileView.class)),
-            new LkMenu.Item("crown",     "My invitations").onClick(() -> UI.getCurrent().navigate(MyInvitationsView.class)),
-            new LkMenu.Item("briefcase", "My companies").onClick(() -> UI.getCurrent().navigate(MyCompaniesView.class)),
-            new LkMenu.Item("comment",   "Support inbox").onClick(() -> UI.getCurrent().navigate(SupportInboxView.class)),
-            new LkMenu.Divider()
-        );
+                new LkMenu.Item("ticket", "My account").onClick(() -> UI.getCurrent().navigate(MyAccountView.class)),
+                new LkMenu.Item("users", "My profile").onClick(() -> UI.getCurrent().navigate(MyProfileView.class)),
+                new LkMenu.Item("crown", "My invitations")
+                        .onClick(() -> UI.getCurrent().navigate(MyInvitationsView.class)),
+                new LkMenu.Item("briefcase", "My companies")
+                        .onClick(() -> UI.getCurrent().navigate(MyCompaniesView.class)),
+                new LkMenu.Item("comment", "Support inbox")
+                        .onClick(() -> UI.getCurrent().navigate(SupportInboxView.class)),
+                new LkMenu.Divider());
 
         // Capability-driven owner workspace vs become-an-organizer CTA.
         if (Capabilities.has(Capability.OWNER_WORKSPACE)) {
             menu.add(new LkMenu.Item("building", "Workspace")
-                .onClick(() -> UI.getCurrent().navigate(OwnerDashboardView.class)));
+                    .onClick(() -> UI.getCurrent().navigate(OwnerDashboardView.class)));
         } else if (Capabilities.has(Capability.REGISTER_COMPANY)) {
             menu.add(new LkMenu.Item("plus", "Become an organizer")
-                .hint("free")
-                .onClick(() -> UI.getCurrent().navigate(CompanyRegistrationView.class)));
+                    .hint("free")
+                    .onClick(() -> UI.getCurrent().navigate(CompanyRegistrationView.class)));
         }
 
         menu.add(
-            new LkMenu.Divider(),
-            new LkMenu.Item("logout", "Sign out").danger().onClick(() -> {
-                signOutFlow.execute();
-                UI.getCurrent().navigate(LoginView.class);
-            })
-        );
+                new LkMenu.Divider(),
+                new LkMenu.Item("logout", "Sign out").danger().onClick(() -> {
+                    signOutFlow.execute();
+                    UI.getCurrent().navigate(LoginView.class);
+                }));
         return new LkAccountMenu(initials(name), name, "Signed in member · V2-AUTH-02 stub", menu, null, null);
     }
 
     private static String findActiveLabel(AfterNavigationEvent event) {
         for (HasElement el : event.getActiveChain()) {
             String label = NAV_LABELS.get(el.getClass());
-            if (label != null) return label;
+            if (label != null)
+                return label;
         }
         return null;
     }
-    
 
     private static String initials(String name) {
-        if (name == null || name.isBlank()) return "??";
+        if (name == null || name.isBlank())
+            return "??";
         String[] parts = name.trim().split("\\s+");
         if (parts.length == 1) {
             String p = parts[0];

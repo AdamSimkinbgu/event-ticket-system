@@ -8,6 +8,7 @@ import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.auth.LoginPresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.GuestSession;
+import com.ticketing.system.Presentation.session.NotificationSession;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.vaadin.flow.component.Key;
@@ -118,6 +119,7 @@ public class LoginView extends LkAuthCard {
 
     private void onSuccess(LoginDTO dto) {
         AuthSession.storeAuth(dto.authToken());
+        NotificationSession.store(dto.notifications());
         String name = dto.authToken().username();
         if (AuthSession.isAdmin()) {
             Toasts.success("Signed in as admin · " + name);

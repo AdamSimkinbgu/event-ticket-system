@@ -1,12 +1,9 @@
 package com.ticketing.system.acceptance;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -32,24 +29,16 @@ import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.dto.LocationDTO;
 import com.ticketing.system.Core.Application.dto.ShowDateDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
-import com.ticketing.system.Core.Application.dto.ZoneDetailDTO;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
-import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
-import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.events.Location;
-import com.ticketing.system.Core.Domain.events.Seat;
-import com.ticketing.system.Core.Domain.events.SeatedZone;
 import com.ticketing.system.Core.Domain.events.ShowDate;
-import com.ticketing.system.Core.Domain.events.StandingZone;
-import com.ticketing.system.Core.Domain.events.VenueMap;
-import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Permission;
@@ -65,26 +54,19 @@ class CompanyAcceptanceTest {
         @Autowired
         private EventManagementService eventManagementService;
         @Autowired
-        private IProductionCompanyRepository companyRepository;
-        @Autowired
         private IEventRepository eventRepository;
-        @Autowired
-        private ITicketRepository ticketRepository;
-        @Autowired
-        private IOrderReceiptRepository orderReceiptRepository;
         @Autowired
         private IUserRepository userRepository;
 
         private AuthTokenDTO registerAndLoginMember(String name) {
                 String sid = authService.startGuestSession().sessionId();
 
-    authService.register(new RegisterRequestDTO(
-            name,
-            name + "@test.com",
-            "Password1",
-            sid,
-            20
-    ));
+                authService.register(new RegisterRequestDTO(
+                                name,
+                                name + "@test.com",
+                                "Password1",
+                                sid,
+                                20));
 
                 return authService
                                 .login(new LoginRequestDTO(name, "Password1", sid))
@@ -118,19 +100,17 @@ class CompanyAcceptanceTest {
                                 new CompanyRegistrationDTO("capacityCompany", "desc")).companyId();
 
                 EventCreationDTO eventRequest = new EventCreationDTO(
-                        companyId,
-                        "Capacity Test Event",
+                                companyId,
+                                "Capacity Test Event",
                                 "Testing inventory zone capacity",
-                                        List.of("Test Artist", "Another Artist"),
+                                List.of("Test Artist", "Another Artist"),
                                 EventCategory.CONCERT,
-                                        4.5,
-                        new Location("Test Venue", "Test City"),
-                        List.of(new ShowDate(
-                                LocalDateTime.now().plusDays(1),
-                                LocalDateTime.now().plusDays(30)
-                        )),
-                        null
-                );
+                                4.5,
+                                new Location("Test Venue", "Test City"),
+                                List.of(new ShowDate(
+                                                LocalDateTime.now().plusDays(1),
+                                                LocalDateTime.now().plusDays(30))),
+                                null);
                 EventDetailDTO event = eventManagementService.addEvent(owner.token(), eventRequest);
 
                 eventManagementService.configureVenueMap(owner.token(), companyId, new VenueMapConfigDTO(
@@ -142,7 +122,8 @@ class CompanyAcceptanceTest {
 
                 Event storedEvent = eventRepository.findById(Integer.parseInt(event.eventId()));
 
-                //eventManagementService.updateStandingZoneCapacity(owner.token(), companyId, storedEvent.getId(), 1, 150);
+                // eventManagementService.updateStandingZoneCapacity(owner.token(), companyId,
+                // storedEvent.getId(), 1, 150);
                 //
                 eventManagementService.addPlacesToStandingZone(owner.token(), companyId, storedEvent.getId(), 1, 50);
                 InventoryZone zone = storedEvent.getVenueMap().getInventoryZones().stream()
@@ -316,7 +297,8 @@ class CompanyAcceptanceTest {
                                 companyId, "Summer Festival", "desc", List.of("DJ Max"),
                                 EventCategory.FESTIVAL, 4.5,
                                 new Location("Germany", "Berlin"),
-                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(4))),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1),
+                                                LocalDateTime.now().plusDays(1).plusHours(4))),
                                 null));
 
                 EventDetailDTO result = eventManagementService.getEventDetail(owner.token(),
@@ -346,7 +328,8 @@ class CompanyAcceptanceTest {
                                 companyId, "Manager View Event", "desc", List.of("Artist"),
                                 EventCategory.MUSIC, 4.0,
                                 new Location("France", "Paris"),
-                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1),
+                                                LocalDateTime.now().plusDays(1).plusHours(3))),
                                 null));
 
                 EventDetailDTO result = eventManagementService.getEventDetail(manager.token(),
@@ -367,7 +350,8 @@ class CompanyAcceptanceTest {
                                 companyId, "Private Event", "desc", List.of("Artist"),
                                 EventCategory.MUSIC, 4.0,
                                 new Location("Spain", "Madrid"),
-                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1),
+                                                LocalDateTime.now().plusDays(1).plusHours(3))),
                                 null));
 
                 assertThrows(RuntimeException.class,
@@ -389,7 +373,8 @@ class CompanyAcceptanceTest {
                                 companyId, "Original Name", "desc", List.of("Artist"),
                                 EventCategory.MUSIC, 4.0,
                                 new Location("Italy", "Rome"),
-                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1),
+                                                LocalDateTime.now().plusDays(1).plusHours(3))),
                                 null));
 
                 eventManagementService.editEventDetails(owner.token(),
@@ -409,7 +394,8 @@ class CompanyAcceptanceTest {
                                 companyId, "Category Event", "desc", List.of("Artist"),
                                 EventCategory.MUSIC, 4.0,
                                 new Location("Japan", "Tokyo"),
-                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1),
+                                                LocalDateTime.now().plusDays(1).plusHours(3))),
                                 null));
 
                 eventManagementService.editEventDetails(owner.token(),
@@ -429,7 +415,8 @@ class CompanyAcceptanceTest {
                                 companyId, "Old Name", "desc", List.of("Artist"),
                                 EventCategory.MUSIC, 4.0,
                                 new Location("Brazil", "Rio"),
-                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1),
+                                                LocalDateTime.now().plusDays(1).plusHours(3))),
                                 null));
 
                 eventManagementService.editEventDetails(owner.token(),
@@ -456,12 +443,14 @@ class CompanyAcceptanceTest {
                                 companyId, "Restricted Event", "desc", List.of("Artist"),
                                 EventCategory.MUSIC, 4.0,
                                 new Location("UK", "London"),
-                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1),
+                                                LocalDateTime.now().plusDays(1).plusHours(3))),
                                 null));
 
                 assertThrows(RuntimeException.class,
                                 () -> eventManagementService.editEventDetails(manager.token(),
-                                                new EventUpdateDTO(created.eventId(), "Blocked Edit", null, null, null, null)));
+                                                new EventUpdateDTO(created.eventId(), "Blocked Edit", null, null, null,
+                                                                null)));
         }
 
         @Test
@@ -474,7 +463,8 @@ class CompanyAcceptanceTest {
                                 companyId, "Full Edit Event", "original desc", List.of("Artist"),
                                 EventCategory.MUSIC, 4.0,
                                 new Location("Italy", "Rome"),
-                                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                                List.of(new ShowDate(LocalDateTime.now().plusDays(1),
+                                                LocalDateTime.now().plusDays(1).plusHours(3))),
                                 null));
 
                 LocalDateTime newStart = LocalDateTime.now().plusDays(20);
