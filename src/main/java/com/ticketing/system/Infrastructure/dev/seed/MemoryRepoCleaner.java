@@ -12,6 +12,7 @@ import com.ticketing.system.Infrastructure.persistence.MemoryTicketRepository;
 import com.ticketing.system.Infrastructure.persistence.MemoryUserRepository;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -20,8 +21,10 @@ import java.lang.reflect.Modifier;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
 
 /**
  * Wipes every in-memory repository back to an empty state. Used by
@@ -31,10 +34,16 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>Uses reflection rather than adding {@code clear()} methods to each
  * memory repo because (a) {@code clear()} would have no place on the
  * domain {@code IRepository} interface and (b) the same reflection
- * works the day a new memory repo is added — just add it to the
- * constructor list. Resets non-final instance Maps, Collections, and
- * AtomicInteger / AtomicLong counters; leaves locks and final
- * configuration alone.
+ * works the day a new memory repo is added. Resets non-final instance
+ * Maps, Collections, and AtomicInteger / AtomicLong counters; leaves
+ * locks and final configuration alone.
+ *
+ * <p>Each {@code Memory*Repository} is injected via {@link ObjectProvider}, so it is
+ * OPTIONAL: as an aggregate migrates to JPA (the {@code jpa} profile) its
+ * {@code Memory*Repository} bean is {@code @Profile("!jpa")} and disappears — it then
+ * simply drops out of the wipe (its data lives in the database; clearing that is the
+ * {@code seed.mode} reset-safety work, #366). So this cleaner keeps working through the
+ * whole Memory→JPA migration without edits.
  *
  * <p>{@code @Profile("dev")} only — never instantiated in production.
  */
@@ -46,20 +55,24 @@ public class MemoryRepoCleaner {
     private final List<Object> repositories;
 
     public MemoryRepoCleaner(
-            MemoryUserRepository userRepo,
-            MemorySessionRepository sessionRepo,
-            MemoryActiveOrderRepository activeOrderRepo,
-            MemoryEventRepository eventRepo,
-            MemoryTicketRepository ticketRepo,
-            MemoryOrderReceiptRepository orderReceiptRepo,
-            MemoryNotificationRepository notificationRepo,
-            MemoryConversationRepository conversationRepo,
-            MemoryProductionCompanyRepository companyRepo,
-            MemoryAdminRepository adminRepo) {
-        this.repositories = List.of(
-            userRepo, sessionRepo, activeOrderRepo, eventRepo, ticketRepo,
-            orderReceiptRepo, notificationRepo, conversationRepo, companyRepo, adminRepo
-        );
+            ObjectProvider<MemoryUserRepository> userRepo,
+            ObjectProvider<MemorySessionRepository> sessionRepo,
+            ObjectProvider<MemoryActiveOrderRepository> activeOrderRepo,
+            ObjectProvider<MemoryEventRepository> eventRepo,
+            ObjectProvider<MemoryTicketRepository> ticketRepo,
+            ObjectProvider<MemoryOrderReceiptRepository> orderReceiptRepo,
+            ObjectProvider<MemoryNotificationRepository> notificationRepo,
+            ObjectProvider<MemoryConversationRepository> conversationRepo,
+            ObjectProvider<MemoryProductionCompanyRepository> companyRepo,
+            ObjectProvider<MemoryAdminRepository> adminRepo) {
+        // getIfAvailable() is null for any aggregate already migrated to JPA
+        // (its Memory* bean is @Profile("!jpa"), absent in the jpa profile) — it's skipped.
+        this.repositories = Stream.of(
+                userRepo, sessionRepo, activeOrderRepo, eventRepo, ticketRepo,
+                orderReceiptRepo, notificationRepo, conversationRepo, companyRepo, adminRepo)
+            .<Object>map(ObjectProvider::getIfAvailable)
+            .filter(Objects::nonNull)
+            .toList();
     }
 
     public void clearAll() {

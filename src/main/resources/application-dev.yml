@@ -1,21 +1,24 @@
-# V2 dev profile (V2-F-01).
+# V3 dev profile.
 #
-# The codebase uses Memory*Repository classes for persistence — no real DB is
-# needed at runtime. But the default `application.yml` is V3-prep wired for
-# Postgres + JPA, which makes Spring Boot fail on startup if there's no DB.
+# dev now runs on the real JPA persistence path against in-memory H2 (no Postgres
+# or Docker needed locally). The `jpa` profile is auto-activated for dev via
+# spring.profiles.group in application.yml, so the Jpa* repositories are wired:
+# mapped aggregates (Admin, …) persist to H2, while aggregates not yet migrated
+# stay on their in-memory Memory* repos until their own Lane-B slice.
 #
-# This profile EXCLUDES DataSource + JPA auto-config so the app boots cleanly
-# with Vaadin + Memory* repos and no Postgres / Docker. Activate it with:
+# Deploy/run uses the SAME `jpa` profile against Postgres (Supabase) by setting the
+# DB_* env vars — a config-only switch, no code change.
 #
 #   ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
-#
-# V3 will delete this profile and bring back the JPA stack via the ORM lane.
 spring:
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
-      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
-      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+  datasource:
+    url: jdbc:h2:mem:devdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
 
 # Scenario init (ScenarioRunner) — boots the system from an editable command file.
 #   scenario:  the file to run (classpath:scenarios/*.scenario, or file:/abs/path/to/your.scenario)
