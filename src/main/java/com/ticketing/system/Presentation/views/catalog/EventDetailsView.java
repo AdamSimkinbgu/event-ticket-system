@@ -1,11 +1,12 @@
 package com.ticketing.system.Presentation.views.catalog;
 
+import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.GridPlacementDTO;
 import com.ticketing.system.Core.Application.dto.InventoryZoneDTO;
-import com.ticketing.system.Core.Application.dto.VenueMapDTO;
-import com.ticketing.system.Core.Application.services.CatalogService;
+import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
+import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkCol;
@@ -15,6 +16,7 @@ import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
 import com.ticketing.system.Presentation.components.venue.VkVenueMap;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.presenters.catalog.EventDetailsPresenter;
 import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -26,6 +28,7 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -35,24 +38,29 @@ import java.util.Locale;
 @AnonymousAllowed
 public class EventDetailsView extends LkPage implements BeforeEnterObserver {
 
-    private final CatalogService catalogService;
+    private static final DateTimeFormatter DATE_FMT =
+            DateTimeFormatter.ofPattern("EEE, d MMM yyyy · HH:mm", Locale.US);
+
+    private final EventDetailsPresenter presenter;
     private final SessionIdentity sessionIdentity;
 
     private int eventId;
+    private EventDetailDTO detail;
     private List<InventoryZoneDTO> zones = List.of();
     private int gridRows = 3;
     private int gridCols = 3;
     private Integer selectedZoneId = null;
 
+    private final Div bodyHolder = new Div();
     private final Div mapContainer = new Div();
     private final Div zonesCardHolder = new Div();
     private Span selectedLine;
+    private LkBtn chooseBtn;
 
-    public EventDetailsView(CatalogService catalogService, SessionIdentity sessionIdentity) {
-        this.catalogService = catalogService;
+    public EventDetailsView(EventDetailsPresenter presenter, SessionIdentity sessionIdentity) {
+        this.presenter = presenter;
         this.sessionIdentity = sessionIdentity;
-        add(buildHero());
-        add(buildSplit());
+        add(bodyHolder);
     }
 
     @Override
@@ -60,32 +68,37 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
         this.eventId = event.getRouteParameters().get("eventId")
                 .map(s -> { try { return Integer.parseInt(s); } catch (NumberFormatException e) { return 0; } })
                 .orElse(0);
-        loadVenue();
+        loadAndBuild();
     }
 
-    private void loadVenue() {
+    private void loadAndBuild() {
+        bodyHolder.removeAll();
+        this.detail = null;
+        this.zones = List.of();
+        this.selectedZoneId = null;
+
         if (eventId <= 0) {
+            bodyHolder.add(infoBanner("This event isn't available."));
             return;
         }
-        try {
-            VenueMapDTO map = catalogService.getEventVenueMap(sessionIdentity.credential(), eventId);
-            this.zones = map.inventoryZones();
-            this.gridRows = map.gridRows();
-            this.gridCols = map.gridCols();
-            this.selectedZoneId = firstSelectableZoneId();
-            refreshMap();
-            refreshZonesCard();
-            updateSelectedLine();
-        } catch (RuntimeException ex) {
-            // No (accessible) venue map — leave the placeholders; the rail shows a hint.
-            this.zones = List.of();
-            refreshMap();
-            refreshZonesCard();
-            updateSelectedLine();
+
+        switch (presenter.load(sessionIdentity.credential(), eventId)) {
+            case EventDetailsPresenter.Outcome.Success s -> {
+                this.detail = s.event();
+                this.zones = s.zones();
+                this.gridRows = s.gridRows();
+                this.gridCols = s.gridCols();
+                this.selectedZoneId = firstSelectableZoneId();
+                bodyHolder.add(buildHero(), buildSplit());
+            }
+            case EventDetailsPresenter.Outcome.NotFound nf ->
+                bodyHolder.add(infoBanner(nf.message()));
+            case EventDetailsPresenter.Outcome.Failure f ->
+                bodyHolder.add(infoBanner(f.message()));
         }
     }
 
-    // -------- hero (event metadata — static placeholder; no public single-event read exists yet) --------
+    // -------- hero (real event metadata: header, lineup, schedule, description, status badge) --------
 
     private Component buildHero() {
         Div hero = new Div();
@@ -94,22 +107,43 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
         Div poster = new Div();
         poster.addClassName("bz-evt-hero-poster");
         poster.getStyle().set("background", "linear-gradient(135deg, #8b5cf6, #ec4899)");
-        poster.setText("EVENT");
+        poster.setText(posterText(detail.name()));
 
         Div meta = new Div();
         meta.addClassName("bz-evt-hero-meta");
 
         LkRow badges = new LkRow().gap(8);
-        badges.add(new LkBadge("ON SALE", LkBadge.Tone.success).small());
+        badges.add(statusBadge(detail.status()));
+        if (detail.category() != null) {
+            badges.add(new LkBadge(prettify(detail.category().toString()), LkBadge.Tone.muted).small());
+        }
 
         Div title = new Div();
         title.addClassName("bz-evt-title");
-        title.setText("Event detail");
+        title.setText(detail.name());
 
-        Span sub = Lk.muted("Pick your area below to choose seats or quantity");
-        sub.getStyle().set("font-size", "15px");
+        meta.add(badges, title);
 
-        meta.add(badges, title, sub);
+        String lineup = detail.artistsNames() == null ? "" : String.join(" · ", detail.artistsNames());
+        if (!lineup.isBlank()) {
+            Span artists = new Span(lineup);
+            artists.getStyle().set("font-size", "15px").set("font-weight", "600");
+            meta.add(artists);
+        }
+
+        String when = scheduleLine();
+        if (when != null) {
+            Span schedule = Lk.muted(when);
+            schedule.getStyle().set("font-size", "14px");
+            meta.add(schedule);
+        }
+
+        if (detail.description() != null && !detail.description().isBlank()) {
+            Span desc = Lk.muted(detail.description());
+            desc.getStyle().set("font-size", "15px");
+            meta.add(desc);
+        }
+
         hero.add(poster, meta);
         return hero;
     }
@@ -124,6 +158,7 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
             .subtitle("Tap a zone to choose seats or quantity")
             .pad(16);
 
+        mapContainer.removeAll();
         mapContainer.add(renderMap());
         mapCard.add(mapContainer);
 
@@ -241,18 +276,40 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
         selectedLine = new Span();
         updateSelectedLine();
 
-        LkBtn choose = new LkBtn("Choose tickets →")
+        chooseBtn = new LkBtn("Choose tickets →")
             .variant(LkBtn.Variant.primary)
             .size(LkBtn.Size.l)
             .full()
             .onClick(e -> openPicker());
-        choose.getStyle().set("margin-top", "10px");
+        chooseBtn.getStyle().set("margin-top", "10px");
         Span hint = Lk.muted("Seats lock for 10 min once selected");
         hint.getStyle()
             .set("display", "block").set("margin-top", "8px")
             .set("text-align", "center").set("font-size", "12.5px");
-        card.add(selectedLine, choose, hint);
+        card.add(selectedLine, chooseBtn, hint);
+        updateReserveState();
         return card;
+    }
+
+    /** Disable + relabel 'Choose tickets' for non-purchasable events (cancelled / ended / sold out). */
+    private void updateReserveState() {
+        if (chooseBtn == null) {
+            return;
+        }
+        EventStatus status = detail == null ? null : detail.status();
+        if (status == EventStatus.CANCELED) {
+            chooseBtn.setEnabled(false);
+            chooseBtn.label("Event cancelled");
+        } else if (status == EventStatus.COMPLETED) {
+            chooseBtn.setEnabled(false);
+            chooseBtn.label("Event ended");
+        } else if (status == EventStatus.SOLD_OUT || firstSelectableZoneId() == null) {
+            chooseBtn.setEnabled(false);
+            chooseBtn.label("Sold out");
+        } else {
+            chooseBtn.setEnabled(true);
+            chooseBtn.label("Choose tickets →");
+        }
     }
 
     private void openPicker() {
@@ -282,6 +339,58 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
         int row = Math.min((idx / Math.max(gridCols, 1)) + 1, gridRows);
         int col = (idx % Math.max(gridCols, 1)) + 1;
         return new GridPlacementDTO(row, col, 1, 1);
+    }
+
+    private static String posterText(String name) {
+        if (name == null || name.isBlank()) {
+            return "EVENT";
+        }
+        return name.trim().substring(0, 1).toUpperCase(Locale.US);
+    }
+
+    private static LkBadge statusBadge(EventStatus status) {
+        if (status == null) {
+            return new LkBadge("—", LkBadge.Tone.muted).small();
+        }
+        return switch (status) {
+            case ON_SALE   -> new LkBadge("ON SALE", LkBadge.Tone.success).small();
+            case SOLD_OUT  -> new LkBadge("SOLD OUT", LkBadge.Tone.warning).small();
+            case CANCELED  -> new LkBadge("CANCELLED", LkBadge.Tone.error).small();
+            case COMPLETED -> new LkBadge("PAST", LkBadge.Tone.muted).small();
+            default        -> new LkBadge(prettify(status.toString()), LkBadge.Tone.muted).small();
+        };
+    }
+
+    private static String prettify(String enumName) {
+        if (enumName == null || enumName.isBlank()) {
+            return "";
+        }
+        String lower = enumName.replace('_', ' ').toLowerCase(Locale.US);
+        return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
+    }
+
+    private String scheduleLine() {
+        StringBuilder sb = new StringBuilder();
+        if (detail.showDates() != null && !detail.showDates().isEmpty()
+                && detail.showDates().get(0).getStartTime() != null) {
+            sb.append(DATE_FMT.format(detail.showDates().get(0).getStartTime()));
+        }
+        var loc = detail.location();
+        if (loc != null) {
+            if (sb.length() > 0) {
+                sb.append(" · ");
+            }
+            sb.append(loc.city()).append(", ").append(loc.country());
+        }
+        return sb.length() == 0 ? null : sb.toString();
+    }
+
+    private Component infoBanner(String message) {
+        LkBanner banner = new LkBanner();
+        banner.tone(LkBanner.Tone.info);
+        banner.setIcon(new LkIcon("info", 18));
+        banner.setBody(new Span(message));
+        return banner;
     }
 
     private static String pct(double v) {

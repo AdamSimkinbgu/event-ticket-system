@@ -6,6 +6,7 @@ import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.CheckoutService;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
+import com.ticketing.system.Core.Application.services.SystemAdminService;
 import com.ticketing.system.Core.Domain.ActiveOrder.*;
 import com.ticketing.system.Core.Domain.Tickets.*;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
@@ -43,6 +44,7 @@ public class CheckoutServiceAcceptanceTest {
     private IUserRepository userRepository;
 
     private CheckoutService checkoutService;
+    private SystemAdminService systemAdminService;
 
     @Autowired private AuthenticationService authService;
     @Autowired private CompanyManagementService companyService;
@@ -101,6 +103,9 @@ public class CheckoutServiceAcceptanceTest {
         notificationService = mock(INotificationService.class);
         sessionManager = mock(ISessionManager.class);
 
+        systemAdminService = mock(SystemAdminService.class);
+        when(systemAdminService.isMarketOpen()).thenReturn(true);
+
         checkoutService = new CheckoutService(
                 activeOrderRepository,
                 eventRepository,
@@ -111,7 +116,8 @@ public class CheckoutServiceAcceptanceTest {
                 notificationService,
                 sessionManager,
                 userRepository,
-                companyRepository
+                companyRepository,
+                systemAdminService
         );
 
         event1 = mock(Event.class);
@@ -916,7 +922,8 @@ public class CheckoutServiceAcceptanceTest {
                 notificationService,
                 sessionManager,
                 userRepository,
-                companyRepository
+                companyRepository,
+                systemAdminService
         );
     }
 

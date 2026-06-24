@@ -142,7 +142,11 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
 
     @Override
     public void afterNavigation(AfterNavigationEvent event) {
-        if (reload() instanceof CheckoutPresenter.LoadOutcome.Failure) {
+        CheckoutPresenter.LoadOutcome outcome = reload();
+        // beforeEnter paints the page while activeOrder is still null; the order loads here, so
+        // re-render the lines / subtotal / total / timer now that it is available.
+        syncDynamicUI();
+        if (outcome instanceof CheckoutPresenter.LoadOutcome.Failure) {
             Toasts.warn("Could not load your cart — please try again.");
         }
     }

@@ -23,6 +23,8 @@ import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.exceptions.ExternalServiceUnavailableException;
 import com.ticketing.system.Core.Domain.exceptions.InitializationIntegrityException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
+import com.ticketing.system.Core.Domain.exceptions.MarketNotOpenException;
 import com.ticketing.system.Core.Domain.exceptions.MissingDefaultAdminException;
 import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
@@ -60,6 +62,7 @@ public class SystemAdminService {
     private enum PlatformStatus { UNINITIALIZED, READY, OPEN, CLOSED }
     private volatile PlatformStatus status = PlatformStatus.UNINITIALIZED;
     private volatile LocalDateTime lastInitializedAt;
+    private volatile LocalDateTime lastOpenedAt;
 
     public SystemAdminService(
             ISessionManager sessionManager,
@@ -103,15 +106,8 @@ public class SystemAdminService {
             return;
         }
 
-        // I.1.2 — at least one payment service must be reachable.
-        if (paymentGateways.stream().noneMatch(this::isReachable)) {
-            throw new ExternalServiceUnavailableException("no reachable payment service");
-        }
-
-        // I.1.3 — at least one ticket-issuance service must be reachable.
-        if (ticketIssuers.stream().noneMatch(this::isReachable)) {
-            throw new ExternalServiceUnavailableException("no reachable ticket issuance service");
-        }
+        // I.1.2 / I.1.3 — at least one payment service and one ticket-issuance service reachable.
+        requireExternalServicesReachable();
 
         // I.1.4 — guarantee at least one System Admin (auto-create a default if none).
         createDefaultAdminIfMissing();
@@ -153,23 +149,109 @@ public class SystemAdminService {
         }
     }
 
-    // UC-32 — open the trading market after re-verifying gateways/issuers/admin.
-    public MarketStateDTO openMarket(MarketControlRequestDTO request) {
-        throw new UnsupportedOperationException("UC-32: not implemented");
+    // UC-32 (#9, I.2.1) — open the trading market so transactions can begin.
+    // Admin-only. Re-verifies both external services (I.2.2) and the structural
+    // invariants before flipping to OPEN. Idempotent on an already-open market;
+    // opens from READY or re-opens from CLOSED, never from UNINITIALIZED. Sales
+    // are gated on this state (see isMarketOpen()).
+    public synchronized MarketStateDTO openMarket(MarketControlRequestDTO request) {
+        requireSystemAdmin(tokenOf(request));
+
+        if (status == PlatformStatus.OPEN) {
+            log.info("Market already open; ignoring open request.");
+            return buildMarketState();
+        }
+        if (status == PlatformStatus.UNINITIALIZED) {
+            throw new MarketNotOpenException("platform not initialized");
+        }
+
+        // I.2.2 — re-verify both external services at open time; don't flip state if either is down.
+        requireExternalServicesReachable();
+
+        // I.2.1 — re-assert structural invariants (>=1 admin + system-wide integrity) before going live.
+        if (!adminRepository.existsAny()) {
+            throw new InitializationIntegrityException("no System Admin present");
+        }
+        integrityVerifier.verify();
+
+        this.status = PlatformStatus.OPEN;
+        this.lastOpenedAt = LocalDateTime.now();
+        log.info("Market opened.");
+        return buildMarketState();
     }
 
-    // (No closeMarket UC defined; defensive method for ops/incident response.)
-    public MarketStateDTO closeMarket(MarketControlRequestDTO request) {
-        throw new UnsupportedOperationException("not implemented (no UC defined; admin/ops use)");
+    // UC-32 — close the trading market (admin/ops incident control; no dedicated
+    // UC). Admin-only. Idempotent on an already-closed market; rejects a close
+    // when the market was never opened.
+    public synchronized MarketStateDTO closeMarket(MarketControlRequestDTO request) {
+        requireSystemAdmin(tokenOf(request));
+
+        if (status == PlatformStatus.CLOSED) {
+            log.info("Market already closed; ignoring close request.");
+            return buildMarketState();
+        }
+        if (status != PlatformStatus.OPEN) {
+            throw new InvalidStateTransitionException("market is not open; cannot close");
+        }
+
+        this.status = PlatformStatus.CLOSED;
+        log.info("Market closed (reason: {}).", reasonOrDefault(request));
+        return buildMarketState();
     }
 
-    // Health snapshot for admin dashboards.
+    // Read-only market/health snapshot for admin dashboards. No token — the admin
+    // route is already access-gated and this exposes no sensitive data.
     public MarketStateDTO viewMarketState() {
-        throw new UnsupportedOperationException("not implemented");
+        return buildMarketState();
+    }
+
+    // Read boundary for the private status enum: the sales gate
+    // (ReservationService / CheckoutService) blocks transactions while the market
+    // is not OPEN. (I.2.1 / UC-32)
+    public boolean isMarketOpen() {
+        return status == PlatformStatus.OPEN;
+    }
+
+    // *HELPER* — single builder for the market snapshot so health probing lives in one place.
+    private MarketStateDTO buildMarketState() {
+        boolean paymentHealthy = paymentGateways.stream().anyMatch(this::isReachable);
+        boolean issuerHealthy = ticketIssuers.stream().anyMatch(this::isReachable);
+        boolean adminPresent = adminRepository.existsAny();
+        return new MarketStateDTO(
+                status.name(),
+                lastInitializedAt,
+                lastOpenedAt,
+                paymentHealthy,
+                issuerHealthy,
+                adminPresent);
+    }
+
+    // *HELPER* — null-safe accessors for the optional control request.
+    private static String tokenOf(MarketControlRequestDTO request) {
+        return request == null ? null : request.token();
+    }
+
+    private static String reasonOrDefault(MarketControlRequestDTO request) {
+        if (request == null || request.reason() == null || request.reason().isBlank()) {
+            return "unspecified";
+        }
+        return request.reason();
     }
 
 
 
+
+    // *HELPER* — I.1.2/I.1.3 & I.2.2 external-service quorum: at least one payment
+    // gateway and one ticket issuer must be reachable. Shared by initialize and
+    // openMarket so the "service down" failure is identical in both paths.
+    private void requireExternalServicesReachable() {
+        if (paymentGateways.stream().noneMatch(this::isReachable)) {
+            throw new ExternalServiceUnavailableException("no reachable payment service");
+        }
+        if (ticketIssuers.stream().noneMatch(this::isReachable)) {
+            throw new ExternalServiceUnavailableException("no reachable ticket issuance service");
+        }
+    }
 
     // *HELPER* — UC-1 step 4 / I.1.1: re-assert the platform post-conditions as a single gate.
     // Defensive against an external service dropping between the initial check and this point.

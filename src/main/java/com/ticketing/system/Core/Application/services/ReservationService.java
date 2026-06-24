@@ -27,6 +27,7 @@ import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchaseContext;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchaseStage;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.exceptions.MarketNotOpenException;
 
 
 @Service
@@ -38,6 +39,7 @@ public class ReservationService {
     private final INotificationService notificationService;
     private final IProductionCompanyRepository companyRepository;
     private final IUserRepository userRepository;
+    private final SystemAdminService systemAdminService;
 
     @Value("${constants.ticket-reservation-duration}")
     private int reservationTimeoutMinutes;
@@ -48,13 +50,15 @@ public class ReservationService {
             ISessionManager iSessionManager,
             INotificationService notificationService,
             IProductionCompanyRepository companyRepository,
-            IUserRepository userRepository) {
+            IUserRepository userRepository,
+            SystemAdminService systemAdminService) {
         this.eventRepository = eventRepository;
         this.activeOrderRepository = activeOrderRepository;
         this.iSessionManager = iSessionManager;
         this.notificationService = notificationService;
         this.companyRepository = companyRepository;
         this.userRepository = userRepository;
+        this.systemAdminService = systemAdminService;
     }
 
     // ---------------------------------------------------------------------
@@ -94,6 +98,13 @@ public class ReservationService {
                 selection == null ? null : selection.getSeatNumbers());
 
         validateReservationArguments(eventId, zoneId, selection);
+
+        // UC-32 / I.2.1 — no tickets may be held while the trading market is closed.
+        // Checked before any locks are acquired. (Removing items from an existing
+        // cart is intentionally NOT gated.)
+        if (!systemAdminService.isMarketOpen()) {
+            throw new MarketNotOpenException();
+        }
 
         Event event = null;
         ActiveOrder activeOrder = null;
@@ -260,6 +271,16 @@ public class ReservationService {
             InventoryZone zone = getZoneOrThrow(event, zoneId); // validates venue map + zone exists before touching the order
             removedPricePerTicket = zone.getprice();
             activeOrder = getActiveOrderOrThrow(buyer);
+
+            // CheckoutService marks orders CHECKOUT_IN_PROGRESS and releases the order lock during Phase 2.
+            // Reject remove attempts in that state so a concurrent removal can't mutate the cart snapshot
+            // checkout is pricing/charging against. Fails fast here (before releasing inventory) instead of
+            // letting the domain throw mid-flow and forcing a rollback — mirrors the guard in reserve(...).
+            if (activeOrder.isCheckoutInProgress()) {
+                log.warn("Request rejected: cannot modify active order during checkout. eventId={}, zoneId={}, userId={}, sessionId={}",
+                        eventId, zoneId, buyer.isMember() ? buyer.userId() : null, buyer.isMember() ? null : buyer.sessionId());
+                throw new IllegalStateException("Cannot modify active order during checkout");
+            }
 
             // Validate first so we do not release inventory for tickets that are not in the active order.
             activeOrder.validateContainsReservation(eventId, zoneId, selection);

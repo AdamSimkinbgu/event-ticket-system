@@ -3,6 +3,7 @@ package com.ticketing.system.Presentation.views.company;
 import com.ticketing.system.Core.Application.dto.GridPlacementDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.dto.ZoneDetailDTO;
+import com.ticketing.system.Core.Domain.events.SeatLabels;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
@@ -456,9 +457,9 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     private List<VenueMapConfigDTO.SeatConfigDTO> generateSeats(int rows, int seatsPerRow) {
         List<VenueMapConfigDTO.SeatConfigDTO> seats = new ArrayList<>();
         for (int r = 0; r < rows; r++) {
-            char rowLabel = (char) ('A' + r);
+            String rowLabel = SeatLabels.rowLabel(r);
             for (int c = 1; c <= seatsPerRow; c++) {
-                seats.add(new VenueMapConfigDTO.SeatConfigDTO(rowLabel + "" + c, c, r));
+                seats.add(new VenueMapConfigDTO.SeatConfigDTO(rowLabel + c, c, r));
             }
         }
         return seats;

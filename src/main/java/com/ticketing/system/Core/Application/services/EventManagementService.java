@@ -23,6 +23,7 @@ import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
 import com.ticketing.system.Core.Application.dto.GridPlacementDTO;
 import com.ticketing.system.Core.Application.dto.VenueLayoutDTO;
+import com.ticketing.system.Core.Application.dtoMappers.EventMapper;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.dto.ZoneDetailDTO;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
@@ -162,17 +163,7 @@ public class EventManagementService {
         eventRepository.save(newEvent);
 
         log.info("Event {} created successfully with ID {}", request.name(), newEventId);
-        return new EventDetailDTO(
-                String.valueOf(newEventId),
-                newEvent.getName(),
-                newEvent.getRating(),
-                newEvent.getDescription(),
-                newEvent.getCategory(),
-                request.location(),
-                String.valueOf(newEvent.getCompanyId()),
-                company.getName(),
-                newEvent.getStatus(),
-                newEvent.getShowDates());
+        return new EventMapper().toEventDetailDTO(newEvent, company.getName());
     }
 
     // II.4.1.1 — Owner lists all events under their company.
@@ -190,19 +181,10 @@ public class EventManagementService {
         user.requirePermissionInCompany(companyId, Permission.MANAGE_INVENTORY);
         
 
+        EventMapper mapper = new EventMapper();
         return eventRepository.findByCompanyId(companyId).stream()
-                .map(e -> new EventDetailDTO(
-                        String.valueOf(e.getId()),
-                        e.getName(),
-                        e.getRating(),
-                        e.getDescription(),
-                        e.getCategory(),
-                        e.getVenueMap() != null ? e.getVenueMap().getLocation() : null,
-                        String.valueOf(companyId),
-                        company.getName(),
-                        e.getStatus(),
-                        e.getShowDates()))
-                .toList();
+            .map(e -> mapper.toEventDetailDTO(e, company.getName()))
+            .toList();
     }
 
     public EventDetailDTO getEvent(String token, int eventId) {
@@ -718,19 +700,7 @@ public class EventManagementService {
         User user = userRepository.getUserById(userId);
         user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
 
-        Location location = event.getVenueMap() != null ? event.getVenueMap().getLocation() : null;
-
-        return new EventDetailDTO(
-                String.valueOf(event.getId()),
-                event.getName(),
-                event.getRating(),
-                event.getDescription(),
-                event.getCategory(),
-                location,
-                String.valueOf(event.getCompanyId()),
-                company.getName(),
-                event.getStatus(),
-                event.getShowDates());
+        return new EventMapper().toEventDetailDTO(event, company.getName());
     }
 
     // UC-19 — owner opens an event's sales: SCHEDULED -> ON_SALE.

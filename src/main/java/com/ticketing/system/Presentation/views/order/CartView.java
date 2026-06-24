@@ -145,7 +145,7 @@ public class CartView extends LkPage {
             "  s--; " +
             "  window.cartTimerId = setTimeout(tick,1000);" +
             "}" +
-            "tick();", remainingSeconds);
+            "tick();", (int) remainingSeconds);   // Vaadin's JsonCodec can't encode Long — pass an int (a hold timer never overflows)
 
         timer.addDetachListener(ev ->
             timer.getElement().executeJs("if(window.cartTimerId) { clearTimeout(window.cartTimerId); }"));
