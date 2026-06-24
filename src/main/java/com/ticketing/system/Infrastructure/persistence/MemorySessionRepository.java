@@ -8,22 +8,24 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.Session;
 
 /**
- * In-memory {@link ISessionRepository} for V1.
+ * In-memory {@link ISessionRepository}.
  *
  * <p>Storage is a thread-safe {@code ConcurrentHashMap} keyed by sessionId.
- * Mirrors {@code MemoryUserRepository}'s shape. A future JPA-backed adapter
- * will replace this class without touching the application layer.
+ * Mirrors {@code MemoryUserRepository}'s shape. {@code @Profile("!jpa")}: the
+ * {@code jpa} run/dev profile swaps in {@link JpaSessionRepository} instead.
  *
  * <p>{@link Clock} is injected so tests can supply a fixed clock for
  * deterministic expiry behavior.
  */
 @Repository
+@Profile("!jpa")
 public class MemorySessionRepository implements ISessionRepository {
 
     private final Map<String, Session> sessionsById = new ConcurrentHashMap<>();
