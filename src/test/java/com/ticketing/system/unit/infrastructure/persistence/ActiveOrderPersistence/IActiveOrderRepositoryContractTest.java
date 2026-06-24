@@ -140,4 +140,19 @@ abstract class IActiveOrderRepositoryContractTest {
         repo.save(cart);
         assertTrue(repo.findExpired().isEmpty());
     }
+
+    @Test
+    void save_persistsCartItems() {
+        // A member cart with items survives save/reload (the "cart survives a restart" acceptance).
+        ActiveOrder cart = ActiveOrder.forMember(5, "sid-A");
+        cart.addStandingReservation(1, 10, 2, 50.0, java.time.LocalDateTime.now());          // 2 standing
+        cart.addSeatedReservation(1, 11, java.util.List.of("A1"), 75.0, java.time.LocalDateTime.now()); // 1 seated
+        repo.save(cart);
+
+        ActiveOrder found = repo.getByUserId(5);
+        assertNotNull(found);
+        assertEquals(3, found.getItems().size());
+        assertTrue(found.getItems().stream()
+                .anyMatch(i -> i.geteventId() == 1 && i.getzoneId() == 11 && "A1".equals(i.getSeatNumber())));
+    }
 }
