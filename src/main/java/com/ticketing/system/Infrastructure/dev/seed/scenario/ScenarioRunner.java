@@ -113,7 +113,7 @@ public class ScenarioRunner implements ApplicationRunner {
             case "wipe" -> {
                 log.info("seed.mode=wipe — clearing in-memory repositories before init");
                 memoryRepoCleaner.clearAll();
-                devUserSeeder.run(null);   // a wipe nukes dev.member/dev.admin too
+                devUserSeeder.run(null);   // a wipe nukes dev.member too
                 runScenario();
             }
             default -> runScenario();

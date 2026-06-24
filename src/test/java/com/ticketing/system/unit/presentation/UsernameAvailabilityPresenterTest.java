@@ -43,9 +43,9 @@ class UsernameAvailabilityPresenterTest {
 
     @Test
     void adminPoolName_returnsAdminReserved() {
-        // AuthSession.ADMIN_USERNAMES includes "admin", "platform.admin", "bar.miyara", "dev.admin"
+        // AuthSession.ADMIN_USERNAMES includes "admin", "platform.admin", "bar.miyara"
         assertInstanceOf(Outcome.AdminReserved.class, presenter.check("admin"));
-        assertInstanceOf(Outcome.AdminReserved.class, presenter.check("dev.admin"));
+        assertInstanceOf(Outcome.AdminReserved.class, presenter.check("platform.admin"));
     }
 
     @Test
