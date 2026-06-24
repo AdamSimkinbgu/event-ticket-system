@@ -27,6 +27,7 @@ public class LkNotifPanel extends Div {
         head.addClassName("lk-notif-h");
         Span title = new Span();
         title.getElement().setProperty("innerHTML", "<b>" + escape(headerTitle) + "</b>");
+        // TODO(#225): wire to NotificationService.markAllRead() once Notification.markRead() is implemented.
         NativeButton markAll = new NativeButton("Mark all read");
         markAll.addClassName("lk-link-btn");
         head.add(title, markAll);
@@ -132,7 +133,7 @@ public class LkNotifPanel extends Div {
             .map(n -> new Item(
                 TYPE_ICON.getOrDefault(n.type(), "bell"),
                 TYPE_TITLE.getOrDefault(n.type(), "Notification"),
-                n.message(),
+                n.message() == null ? "" : n.message(),
                 relativeTime(n.createdAt()),
                 !"READ".equals(n.status())
             ))

@@ -17,7 +17,12 @@ public final class NotificationSession {
 
     private NotificationSession() {}
 
-    /** Store the pending notifications delivered on login. Replaces any previous list. */
+    /**
+     * Store the pending notifications delivered on login. Replaces any previous list.
+     * TODO(I.5 / #225): this is a login-only snapshot — notifications generated mid-session
+     *  (PURCHASE_CONFIRMED, CART_EXPIRING, etc.) won't appear in the bell until the user
+     *  logs out and back in. Real-time delivery is deferred to Grade ג'.
+     */
     public static void store(List<NotificationDTO> notifications) {
         VaadinSession s = VaadinSession.getCurrent();
         if (s == null || notifications == null) return;
