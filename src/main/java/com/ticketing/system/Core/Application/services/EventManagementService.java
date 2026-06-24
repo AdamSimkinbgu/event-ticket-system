@@ -212,7 +212,8 @@ public class EventManagementService {
             String.valueOf(event.getCompanyId()),
             company.getName(),
             event.getStatus(),
-            event.getShowDates()
+            event.getShowDates(),
+            event.getArtistsNames()
             );
     }
 
