@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import com.ticketing.system.Core.Application.dto.BarcodeDTO;
+import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
@@ -38,6 +39,8 @@ import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
 import com.ticketing.system.Core.Application.services.CheckoutService;
+import com.ticketing.system.Core.Application.services.SystemAdminService;
+import com.ticketing.system.Core.Domain.exceptions.MarketNotOpenException;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
@@ -81,6 +84,7 @@ class CheckoutServiceTest {
     private INotificationService mockNotificationService;
     private ISessionManager mockiSessionManager;
     private IUserRepository mockUserRepository;
+    private SystemAdminService mockSystemAdminService;
 
     private CheckoutService checkoutService;
 
@@ -105,7 +109,8 @@ class CheckoutServiceTest {
 
     private final String IDEMPOTENCY_KEY = "idem-key-1";
     private final String CURRENCY = "ILS";
-    private final String PAYMENT_METHOD_TOKEN = "payment-token";
+    private final CardDetailsDTO PAYMENT_METHOD_TOKEN =
+            new CardDetailsDTO("4111111111111234", "123", 12, 2030, "Test Holder");
 
     private ActiveOrder mockOrder;
     private CartLineItem itemEvent1Zone1;
@@ -134,6 +139,9 @@ class CheckoutServiceTest {
           when(mockUserRepository.getUserById(USER_ID)).thenReturn(mockUser); 
         
 
+        mockSystemAdminService = mock(SystemAdminService.class);
+        when(mockSystemAdminService.isMarketOpen()).thenReturn(true);
+
         checkoutService = new CheckoutService(
                 mockActiveOrderRepo,
                 mockEventRepo,
@@ -144,7 +152,8 @@ class CheckoutServiceTest {
                 mockNotificationService,
                 mockiSessionManager,
                 mockUserRepository,
-                mock(IProductionCompanyRepository.class)
+                mock(IProductionCompanyRepository.class),
+                mockSystemAdminService
         );
 
         mockOrder = mock(ActiveOrder.class);
@@ -186,6 +195,27 @@ class CheckoutServiceTest {
 
         when(mockOrder.isCheckoutInProgress()).thenReturn(true);
         when(mockOrder.getOrderKey()).thenReturn("mock-order-key");
+    }
+
+    // --- UC-32 / I.2.1: sales gated on an OPEN market ---
+
+    @Test
+    void GivenMarketClosed_WhenCheckoutMember_ThenThrowsAndNoCharge() {
+        // Events are ON_SALE (see setUp) and the order is valid — the closed market
+        // is the only thing blocking the sale, and it blocks before any charge.
+        when(mockSystemAdminService.isMarketOpen()).thenReturn(false);
+        assertThrows(MarketNotOpenException.class, () ->
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN));
+        verify(mockPaymentGateway, never()).charge(any());
+    }
+
+    @Test
+    void GivenMarketClosed_WhenCheckoutGuest_ThenThrowsAndNoCharge() {
+        when(mockSystemAdminService.isMarketOpen()).thenReturn(false);
+        assertThrows(MarketNotOpenException.class, () ->
+                checkoutService.checkoutGuest("guest-session", "guest@test.com",
+                        IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN, 30));
+        verify(mockPaymentGateway, never()).charge(any());
     }
 
     @Test
@@ -796,7 +826,7 @@ void GivenValidCheckout_WhenCheckout_ThenReturnCheckoutResultAndSaveTicketAndRec
                         100.0,
                         1,
                     PAYMENT_TRANSACTION_ID,
-                    List.of(TICKET_ID_1)
+                    List.of(new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_1, "barcode-value-1"))
             ),
             result
     );
@@ -939,7 +969,9 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                                     250.0,
                                     1,
                     PAYMENT_TRANSACTION_ID,
-                    List.of(TICKET_ID_1, TICKET_ID_2)
+                    List.of(
+                            new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_1, "barcode-zone-1"),
+                            new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_2, "barcode-zone-2"))
             ),
             result
     );
@@ -1027,7 +1059,9 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                                            300.0,
                                            1,
                                            PAYMENT_TRANSACTION_ID,
-                                           List.of(TICKET_ID_1, TICKET_ID_3)),
+                                           List.of(
+                                                   new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_1, "barcode-event-1"),
+                                                   new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_3, "barcode-event-2"))),
                            result);
 
            ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);

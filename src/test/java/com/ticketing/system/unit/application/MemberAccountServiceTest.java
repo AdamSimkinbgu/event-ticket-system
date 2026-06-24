@@ -14,6 +14,9 @@ import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.Tickets.TicketStatus;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.exceptions.EntityNotFoundException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 
@@ -25,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @ExtendWith(MockitoExtension.class)
 class MemberAccountServiceTest {
@@ -115,5 +119,81 @@ class MemberAccountServiceTest {
 
     @Test @Disabled("UC-16 + II.3.5.2: history reflects price-at-purchase, not current price")
     void givenPriceChangedAfterSale_whenViewMyHistory_thenOriginalPriceShown() {
+    }
+
+    // ---- viewMyReceipt (#276): single member-owned receipt; throws instead of degrading ----
+
+    static final int RECEIPT_ID = 7;
+    static final int OTHER_USER = 99;
+
+    private static OrderReceipt memberReceipt(int receiptId, int userId) {
+        LocalDateTime t = LocalDateTime.of(2026, 6, 1, 12, 0);
+        ReceiptLine line = new ReceiptLine(101, 150.00, 2, 1, "15", t);
+        return OrderReceipt.forMember(receiptId, userId, 150.00, List.of(line));
+    }
+
+    @Test
+    void givenOwnReceipt_whenViewMyReceipt_thenRecordReturned() {
+        OrderReceipt own = memberReceipt(RECEIPT_ID, USER_ID);
+        Mockito.when(authenticationService.validateToken(VALID_TOKEN)).thenReturn(true);
+        Mockito.when(authenticationService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        Mockito.when(orderReceiptRepository.findByOrderReceiptId(RECEIPT_ID)).thenReturn(Optional.of(own));
+        Mockito.when(ticketRepository.findByOrderReceiptId(RECEIPT_ID)).thenReturn(List.of());
+        Mockito.when(eventRepository.findById(2)).thenReturn(null);
+
+        PurchaseRecordDTO record = service.viewMyReceipt(VALID_TOKEN, RECEIPT_ID);
+
+        assertThat(record.orderReceiptId()).isEqualTo(RECEIPT_ID);
+        assertThat(record.buyerUserId()).isEqualTo(USER_ID);
+        assertThat(record.totalPaid()).isEqualByComparingTo(150.00);
+        assertThat(record.tickets()).hasSize(1);
+        assertThat(record.tickets().getFirst().ticketId()).isEqualTo(101);
+    }
+
+    @Test
+    void givenInvalidToken_whenViewMyReceipt_thenInvalidTokenThrown() {
+        Mockito.when(authenticationService.validateToken(INVALID_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.viewMyReceipt(INVALID_TOKEN, RECEIPT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+
+        Mockito.verify(orderReceiptRepository, Mockito.never()).findByOrderReceiptId(Mockito.anyInt());
+    }
+
+    @Test
+    void givenMissingReceipt_whenViewMyReceipt_thenEntityNotFoundThrown() {
+        Mockito.when(authenticationService.validateToken(VALID_TOKEN)).thenReturn(true);
+        Mockito.when(authenticationService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        Mockito.when(orderReceiptRepository.findByOrderReceiptId(RECEIPT_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.viewMyReceipt(VALID_TOKEN, RECEIPT_ID))
+                .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    @Test
+    void givenAnotherMembersReceipt_whenViewMyReceipt_thenUnauthorizedThrown() {
+        OrderReceipt someoneElses = memberReceipt(RECEIPT_ID, OTHER_USER);
+        Mockito.when(authenticationService.validateToken(VALID_TOKEN)).thenReturn(true);
+        Mockito.when(authenticationService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        Mockito.when(orderReceiptRepository.findByOrderReceiptId(RECEIPT_ID)).thenReturn(Optional.of(someoneElses));
+
+        assertThatThrownBy(() -> service.viewMyReceipt(VALID_TOKEN, RECEIPT_ID))
+                .isInstanceOf(UnauthorizedActionException.class);
+
+        // ownership rejected before any enrichment work
+        Mockito.verify(ticketRepository, Mockito.never()).findByOrderReceiptId(Mockito.anyInt());
+    }
+
+    @Test
+    void givenGuestReceipt_whenViewMyReceipt_thenUnauthorizedThrown() {
+        LocalDateTime t = LocalDateTime.of(2026, 6, 1, 12, 0);
+        ReceiptLine line = new ReceiptLine(101, 150.00, 2, 1, "15", t);
+        OrderReceipt guestReceipt = OrderReceipt.forGuest("g@example.com", "guest-sess-1", RECEIPT_ID, 150.00, List.of(line));
+        Mockito.when(authenticationService.validateToken(VALID_TOKEN)).thenReturn(true);
+        Mockito.when(authenticationService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        Mockito.when(orderReceiptRepository.findByOrderReceiptId(RECEIPT_ID)).thenReturn(Optional.of(guestReceipt));
+
+        assertThatThrownBy(() -> service.viewMyReceipt(VALID_TOKEN, RECEIPT_ID))
+                .isInstanceOf(UnauthorizedActionException.class);
     }
 }

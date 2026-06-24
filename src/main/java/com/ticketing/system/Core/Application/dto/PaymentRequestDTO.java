@@ -10,7 +10,7 @@ public record PaymentRequestDTO(
     String idempotencyKey,
     double amount,
     String currency,
-    String paymentMethodToken,           // tokenized card ref — never raw PAN
+    CardDetailsDTO card,                  // raw card details — the gateway (WSEP `pay`) needs them
     Integer buyerUserId,
     String buyerEmail
 ) {}

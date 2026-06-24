@@ -3,6 +3,7 @@ package com.ticketing.system.Infrastructure.dev.seed.scenario;
 import com.ticketing.system.Core.Application.dto.AnnouncementRequestDTO;
 import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
+import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
 import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
 import com.ticketing.system.Core.Application.dto.EventCreationDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
@@ -315,12 +316,13 @@ public final class ScenarioOps {
     private void checkout(ScenarioCommand cmd, ScenarioContext ctx) {
         String buyer = cmd.requirePos(0, "buyer alias");
         String idem = "scenario-" + (++seq);
+        CardDetailsDTO card = new CardDetailsDTO("4111111111111111", "123", 12, 2030, "Demo " + buyer);
         if (ctx.isGuest(buyer)) {
             checkoutService.checkoutGuest(ctx.guestSession(buyer),
-                cmd.named("email", buyer + "@guest.demo.test"), idem, "ILS", "demo-card-guest",
+                cmd.named("email", buyer + "@guest.demo.test"), idem, "ILS", card,
                 cmd.intNamed("age", 30));
         } else {
-            checkoutService.checkoutMember(ctx.token(buyer), idem, "ILS", "demo-card-" + buyer);
+            checkoutService.checkoutMember(ctx.token(buyer), idem, "ILS", card);
         }
     }
 

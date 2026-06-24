@@ -142,7 +142,11 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
 
     @Override
     public void afterNavigation(AfterNavigationEvent event) {
-        if (reload() instanceof CheckoutPresenter.LoadOutcome.Failure) {
+        CheckoutPresenter.LoadOutcome outcome = reload();
+        // beforeEnter paints the page while activeOrder is still null; the order loads here, so
+        // re-render the lines / subtotal / total / timer now that it is available.
+        syncDynamicUI();
+        if (outcome instanceof CheckoutPresenter.LoadOutcome.Failure) {
             Toasts.warn("Could not load your cart — please try again.");
         }
     }
@@ -460,9 +464,10 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
         try {
             String idempotencyKey = currentIdempotencyKey();
             CheckoutPresenter.PayOutcome outcome = isMember
-                ? presenter.payAsMember(memberToken, idempotencyKey, cardNumber.getValue())
-                : presenter.payAsGuest(sessionId, guestEmail.getValue().trim(),
-                                       guestAge.getValue(), idempotencyKey, cardNumber.getValue());
+                ? presenter.payAsMember(memberToken, idempotencyKey,
+                                        cardNumber.getValue(), cvc.getValue(), expiry.getValue(), cardholder.getValue())
+                : presenter.payAsGuest(sessionId, guestEmail.getValue().trim(), guestAge.getValue(), idempotencyKey,
+                                       cardNumber.getValue(), cvc.getValue(), expiry.getValue(), cardholder.getValue());
 
             switch (outcome) {
                 case CheckoutPresenter.PayOutcome.Success ok -> {

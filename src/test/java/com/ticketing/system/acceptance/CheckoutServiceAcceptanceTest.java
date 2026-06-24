@@ -6,6 +6,7 @@ import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.CheckoutService;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
+import com.ticketing.system.Core.Application.services.SystemAdminService;
 import com.ticketing.system.Core.Domain.ActiveOrder.*;
 import com.ticketing.system.Core.Domain.Tickets.*;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
@@ -43,6 +44,7 @@ public class CheckoutServiceAcceptanceTest {
     private IUserRepository userRepository;
 
     private CheckoutService checkoutService;
+    private SystemAdminService systemAdminService;
 
     @Autowired private AuthenticationService authService;
     @Autowired private CompanyManagementService companyService;
@@ -73,7 +75,8 @@ public class CheckoutServiceAcceptanceTest {
     private static final String INVALID_TOKEN = "invalid-token";
     private static final String IDEMPOTENCY_KEY = "idem-123";
     private static final String CURRENCY = "ILS";
-    private static final String PAYMENT_METHOD_TOKEN = "pay-token";
+    private static final CardDetailsDTO PAYMENT_METHOD_TOKEN =
+            new CardDetailsDTO("4111111111111234", "123", 12, 2030, "Test Holder");
 
     private static final int USER_ID = 1;
     private static final int EVENT_ID_1 = 10;
@@ -101,6 +104,9 @@ public class CheckoutServiceAcceptanceTest {
         notificationService = mock(INotificationService.class);
         sessionManager = mock(ISessionManager.class);
 
+        systemAdminService = mock(SystemAdminService.class);
+        when(systemAdminService.isMarketOpen()).thenReturn(true);
+
         checkoutService = new CheckoutService(
                 activeOrderRepository,
                 eventRepository,
@@ -111,7 +117,8 @@ public class CheckoutServiceAcceptanceTest {
                 notificationService,
                 sessionManager,
                 userRepository,
-                companyRepository
+                companyRepository,
+                systemAdminService
         );
 
         event1 = mock(Event.class);
@@ -401,11 +408,12 @@ public class CheckoutServiceAcceptanceTest {
     }
 
     @Test
-    void GivenBlankPaymentMethodToken_WhenCheckout_ThenThrowException() {
+    void GivenBlankCard_WhenCheckout_ThenThrowException() {
         validSession();
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, " ")
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY,
+                        new CardDetailsDTO(" ", "123", 12, 2030, "X"))
         );
 
         assertEquals("Checkout failed, tickets returned to stock", exception.getMessage());
@@ -916,7 +924,8 @@ public class CheckoutServiceAcceptanceTest {
                 notificationService,
                 sessionManager,
                 userRepository,
-                companyRepository
+                companyRepository,
+                systemAdminService
         );
     }
 

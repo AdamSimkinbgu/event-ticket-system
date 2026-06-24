@@ -1,11 +1,9 @@
 package com.ticketing.system.Core.Application.services;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import lombok.extern.slf4j.Slf4j;
 // Owner / Manager-side write service for the Event aggregate and its lifecycle.
@@ -22,9 +20,9 @@ import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
-import com.ticketing.system.Core.Application.dto.ShowDateDTO;
 import com.ticketing.system.Core.Application.dto.GridPlacementDTO;
 import com.ticketing.system.Core.Application.dto.VenueLayoutDTO;
+import com.ticketing.system.Core.Application.dtoMappers.EventMapper;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.dto.ZoneDetailDTO;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
@@ -61,7 +59,6 @@ import com.ticketing.system.Core.Domain.policies.purchase.AndPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.MaxTicketsPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.MinTicketsPurchasePolicy;
 
-
 @Service
 @Slf4j
 public class EventManagementService {
@@ -93,7 +90,8 @@ public class EventManagementService {
         this.paymentGateway = paymentGateway;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
-        this.currentVenueMapIdCounter = 0;  // Initialize the venue map ID counter, change the counter to be internal but here for now.
+        this.currentVenueMapIdCounter = 0; // Initialize the venue map ID counter, change the counter to be internal but
+                                           // here for now.
     }
 
     // Flow:
@@ -118,7 +116,7 @@ public class EventManagementService {
         int ownerId = validateTokenAndGetUserId(token);
 
         ProductionCompany company = null;
-        //TODO: see about all the other exceptions throws handlings/catches.
+        // TODO: see about all the other exceptions throws handlings/catches.
         try {
             company = companyRepository.getCompanyById(request.companyId());
         } catch (RuntimeException e) {
@@ -131,11 +129,11 @@ public class EventManagementService {
 
         int newEventId = eventRepository.nextId();
         VenueMap venueMap = new VenueMap(eventRepository.nextVenueMapId(), request.location(), List.of());
-        //! Note: Discount policy is currently not in the implementation plan so just put as 0 discount for every event here
-        // not doing discount automatically without the ability to change this from the outside right now.
+        // ! Note: Discount policy is currently not in the implementation plan so just
+        // put as 0 discount for every event here
+        // not doing discount automatically without the ability to change this from the
+        // outside right now.
         DiscountPolicy discountPolicy = new DiscountPolicy(0);
-
-
 
         PurchasePolicy companyPurchasePolicy = company.getPurchasePolicy();
         if (companyPurchasePolicy == null) {
@@ -146,8 +144,7 @@ public class EventManagementService {
 
         PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
                 companyPurchasePolicy,
-                eventSpecificPurchasePolicy
-        );
+                eventSpecificPurchasePolicy);
 
         Event newEvent = new Event(
                 newEventId,
@@ -161,24 +158,12 @@ public class EventManagementService {
                 venueMap,
                 request.showDates(),
                 inheritedAndExtendedPurchasePolicy,
-                discountPolicy
-        );
+                discountPolicy);
         eventRepository.save(newEvent);
 
         log.info("Event {} created successfully with ID {}", request.name(), newEventId);
-        return new EventDetailDTO(
-                String.valueOf(newEventId),
-                newEvent.getName(),
-                newEvent.getRating(),
-                newEvent.getDescription(),
-                newEvent.getCategory(),
-                request.location(),
-                String.valueOf(newEvent.getCompanyId()),
-                company.getName(),
-                newEvent.getStatus(),
-                newEvent.getShowDates());
+        return new EventMapper().toEventDetailDTO(newEvent, company.getName());
     }
-
 
     // II.4.1.1 — Owner lists all events under their company.
     public List<EventDetailDTO> listEventsForCompany(String token, int companyId) {
@@ -187,19 +172,9 @@ public class EventManagementService {
         user.requirePermissionInCompany(companyId, Permission.MANAGE_INVENTORY);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
 
+        EventMapper mapper = new EventMapper();
         return eventRepository.findByCompanyId(companyId).stream()
-            .map(e -> new EventDetailDTO(
-                String.valueOf(e.getId()),
-                e.getName(),
-                e.getRating(),
-                e.getDescription(),
-                e.getCategory(),
-                e.getVenueMap() != null ? e.getVenueMap().getLocation() : null,
-                String.valueOf(companyId),
-                company.getName(),
-                e.getStatus(),
-                e.getShowDates()
-            ))
+            .map(e -> mapper.toEventDetailDTO(e, company.getName()))
             .toList();
     }
 
@@ -222,9 +197,9 @@ public class EventManagementService {
         List<ZoneDetailDTO> result = new ArrayList<>();
         for (InventoryZone zone : map.getInventoryZones()) {
             GridPlacementDTO placement = zone.hasGridPlacement()
-                ? new GridPlacementDTO(zone.getGridRow(), zone.getGridCol(),
-                                       zone.getGridRowSpan(), zone.getGridColSpan())
-                : null;
+                    ? new GridPlacementDTO(zone.getGridRow(), zone.getGridCol(),
+                            zone.getGridRowSpan(), zone.getGridColSpan())
+                    : null;
             if (zone.isSeated()) {
                 SeatedZone sz = (SeatedZone) zone;
                 List<Seat> seats = sz.getSeats();
@@ -235,7 +210,8 @@ public class EventManagementService {
                 for (Seat s : seats) {
                     String label = s.getLabel();
                     int i = 0;
-                    while (i < label.length() && !Character.isDigit(label.charAt(i))) i++;
+                    while (i < label.length() && !Character.isDigit(label.charAt(i)))
+                        i++;
                     String rowLabel = i > 0 ? label.substring(0, i) : label;
                     seatsByRow.merge(rowLabel, 1, Integer::sum);
                 }
@@ -244,17 +220,11 @@ public class EventManagementService {
                 result.add(new ZoneDetailDTO(zone.getName(), true, rows, seatsPerRow, 0, zone.getprice(), placement));
             } else {
                 result.add(new ZoneDetailDTO(
-                    zone.getName(), false, 0, 0, zone.getCapacity(), zone.getprice(), placement));
+                        zone.getName(), false, 0, 0, zone.getCapacity(), zone.getprice(), placement));
             }
         }
         return new VenueLayoutDTO(map.getGridRows(), map.getGridCols(), result);
     }
-
-    
-
-
-
-
 
     // configureVenueMap is a separate method that can be called multiple times to
     // update the venue map and inventory zones *before* the event goes live.
@@ -271,7 +241,6 @@ public class EventManagementService {
             log.info("Configuring venue map for company {}, event {}, by user {}", companyId, config.eventId(), userId);
 
             User user = userRepository.getUserById(userId);
-            ProductionCompany company = companyRepository.getCompanyById(companyId);
             user.requirePermissionInCompany(companyId, Permission.CONFIGURE_VENUE);
 
             Event event = eventRepository.findById(eventId);
@@ -313,8 +282,10 @@ public class EventManagementService {
                     event.getVenueMap() != null ? event.getVenueMap().getLocation() : null,
                     zones, gridRows, gridCols);
 
-            // Apply each zone's grid placement. Zone IDs were assigned 1..N in config order,
-            // so the same iteration order maps each config back to its zone. Bounds + overlap
+            // Apply each zone's grid placement. Zone IDs were assigned 1..N in config
+            // order,
+            // so the same iteration order maps each config back to its zone. Bounds +
+            // overlap
             // are validated by VenueMap.placeZoneOnGrid.
             int placementZoneId = 1;
             for (VenueMapConfigDTO.ZoneConfigDTO zoneConfig : config.zones()) {
@@ -335,9 +306,8 @@ public class EventManagementService {
         }
     }
 
-    
-
-    // UC-19 — partial update; immutability rules enforced inside Event.editDetails().
+    // UC-19 — partial update; immutability rules enforced inside
+    // Event.editDetails().
     public void editEventDetails(String token, EventUpdateDTO update) {
         int userId = validateTokenAndGetUserId(token);
 
@@ -382,12 +352,6 @@ public class EventManagementService {
             eventRepository.unlock(eventId);
         }
     }
-
-
-
-
-
-
 
     public int addInventoryZone(String token, int companyId, int eventId, VenueMapConfigDTO.ZoneConfigDTO zoneConfig) {
 
@@ -436,7 +400,6 @@ public class EventManagementService {
             eventRepository.unlock(eventId);
         }
     }
-    
 
     public void removeInventoryZone(String token, int companyId, int eventId, int zoneId) {
 
@@ -455,24 +418,10 @@ public class EventManagementService {
         }
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     // UC-20 — Owner/Manager configures venue map and inventory zones.
 
-    // addPlacesToStandingZone is a helper function that allows the owner/manager to add more places to a standing zone.
+    // addPlacesToStandingZone is a helper function that allows the owner/manager to
+    // add more places to a standing zone.
     public void addPlacesToStandingZone(String token, int companyId, int eventId, int zoneId, int placesToAdd) {
         eventRepository.lockForUpdate(eventId);
 
@@ -487,8 +436,8 @@ public class EventManagementService {
         }
     }
 
-
-    // removePlacesFromStandingZone is a helper function that allows the owner/manager to remove a specified number of places from a standing zone.
+    // removePlacesFromStandingZone is a helper function that allows the
+    // owner/manager to remove a specified number of places from a standing zone.
     public void removePlacesFromStandingZone(String token, int companyId, int eventId, int zoneId, int placesToRemove) {
         eventRepository.lockForUpdate(eventId);
 
@@ -503,8 +452,8 @@ public class EventManagementService {
         }
     }
 
-
-    // addSeatsToSeatedZone is a helper function that allows the owner/manager to add specific seats to a seated zone.
+    // addSeatsToSeatedZone is a helper function that allows the owner/manager to
+    // add specific seats to a seated zone.
     public void addSeatsToSeatedZone(
             String token,
             int companyId,
@@ -525,8 +474,8 @@ public class EventManagementService {
         }
     }
 
-
-    // removeSeatsFromSeatedZone is a helper function that allows the owner/manager to remove specific seats from a seated zone.
+    // removeSeatsFromSeatedZone is a helper function that allows the owner/manager
+    // to remove specific seats from a seated zone.
     public void removeSeatsFromSeatedZone(
             String token,
             int companyId,
@@ -547,9 +496,8 @@ public class EventManagementService {
         }
     }
 
-
-    
-    // addSeatRowToSeatedZone is a helper function that allows the owner/manager to add an entire row of seats to a seated zone.
+    // addSeatRowToSeatedZone is a helper function that allows the owner/manager to
+    // add an entire row of seats to a seated zone.
     public void addSeatRowToSeatedZone(
             String token,
             int companyId,
@@ -584,13 +532,13 @@ public class EventManagementService {
         }
     }
 
-
-
-    //*
-    //* removeSeatRowFromSeatedZone is a helper function that allows the owner/manager to remove an entire row of seats from a seated zone. 
-    //* It takes the row label and constructs the list of seat labels to remove based on the existing seat layout in the zone. 
-    //* This ensures that all seats in the specified row are removed consistently.
-    // */ 
+    // *
+    // * removeSeatRowFromSeatedZone is a helper function that allows the
+    // owner/manager to remove an entire row of seats from a seated zone.
+    // * It takes the row label and constructs the list of seat labels to remove
+    // based on the existing seat layout in the zone.
+    // * This ensures that all seats in the specified row are removed consistently.
+    // */
     public void removeSeatRowFromSeatedZone(
             String token,
             int companyId,
@@ -612,10 +560,10 @@ public class EventManagementService {
         }
     }
 
-
-
-    // getAuthorizedEventForVenueEdit is a helper function that validates the token, checks user permissions, 
-    // and retrieves the event for venue editing. It throws exceptions if any validation fails.
+    // getAuthorizedEventForVenueEdit is a helper function that validates the token,
+    // checks user permissions,
+    // and retrieves the event for venue editing. It throws exceptions if any
+    // validation fails.
     private Event getAuthorizedEventForVenueEdit(String token, int companyId, int eventId) {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
@@ -644,8 +592,8 @@ public class EventManagementService {
         return event;
     }
 
-
-    // to-DomainSeats is a helper function to convert a list of SeatConfigDTO objects to a list of Seat domain objects.
+    // to-DomainSeats is a helper function to convert a list of SeatConfigDTO
+    // objects to a list of Seat domain objects.
     private List<Seat> toDomainSeats(List<VenueMapConfigDTO.SeatConfigDTO> seatConfigs) {
         if (seatConfigs == null || seatConfigs.isEmpty()) {
             throw new IllegalArgumentException("Seats list must be non-empty");
@@ -656,10 +604,10 @@ public class EventManagementService {
                 .toList();
     }
 
-
-
-    // buildSeatRow is a helper function to create a list of Seat objects for a row in a seated zone. 
-    // It validates the input parameters and constructs the seats based on the provided starting position and spacing.
+    // buildSeatRow is a helper function to create a list of Seat objects for a row
+    // in a seated zone.
+    // It validates the input parameters and constructs the seats based on the
+    // provided starting position and spacing.
     private List<Seat> buildSeatRow(
             String rowLabel,
             int firstSeatNumber,
@@ -694,8 +642,6 @@ public class EventManagementService {
         return rowSeats;
     }
 
-
-
     // Detail view for owner-side editing pages.
     public EventDetailDTO getEventDetail(String token, int eventId) {
         int userId = validateTokenAndGetUserId(token);
@@ -707,41 +653,13 @@ public class EventManagementService {
         User user = userRepository.getUserById(userId);
         user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
 
-        Location location = event.getVenueMap() != null ? event.getVenueMap().getLocation() : null;
-
-        return new EventDetailDTO(
-                String.valueOf(event.getId()),
-                event.getName(),
-                event.getRating(),
-                event.getDescription(),
-                event.getCategory(),
-                location,
-                String.valueOf(event.getCompanyId()),
-                company.getName(),
-                event.getStatus(),
-                event.getShowDates()
-        );
+        return new EventMapper().toEventDetailDTO(event, company.getName());
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     // UC-19 — owner opens an event's sales: SCHEDULED -> ON_SALE.
     // The actual transition (and its venue-map/show-date/invariant guards) lives in
-    // Event.transitionToOnSale(); this method enforces auth, ownership, and locking.
+    // Event.transitionToOnSale(); this method enforces auth, ownership, and
+    // locking.
     public void publishEvent(String token, int companyId, int eventId) {
         int userId = validateTokenAndGetUserId(token);
 
@@ -765,9 +683,6 @@ public class EventManagementService {
         }
     }
 
-
-
-
     // UC-19 — soft cancel; fires EventCancelled domain event for UC-4 refund
     // pipeline.
     public void cancelEventAndRefund(String token, int eventId) {
@@ -779,7 +694,6 @@ public class EventManagementService {
 
         try {
             Event event = eventRepository.findById(eventId); // throws if not found, which is what we want here.
-            ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
             User user = userRepository.getUserById(ownerId);
             user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
 
@@ -870,7 +784,7 @@ public class EventManagementService {
 
             log.info("Event {} canceled and refund flow completed", eventId);
 
-        } catch (EventNotFoundException e) { //TODO: check if these Catches are good
+        } catch (EventNotFoundException e) { // TODO: check if these Catches are good
             log.warn("Event {} not found for cancellation", eventId);
             throw new RuntimeException("Event not found");
         } catch (RefundFailedException e) {
@@ -902,7 +816,6 @@ public class EventManagementService {
         }
     }
 
-    
     // helper function for cancelEventAndRefund to validate refund results from the
     // payment gateway and throw domain-specific exceptions if something looks
     // wrong. This keeps the main flow cleaner and centralizes refund validation
@@ -925,25 +838,18 @@ public class EventManagementService {
         }
     }
 
-
-
-    
-
-
-
-
-
-
-
-
-
-
     // UC-21 — set / replace event-level purchase + discount policies.
-    // this function replaces any existing event-level purchase policy with a new one built from the provided DTO, while also inheriting 
-    // and combining with the company-level purchase policy. If the company does not have a purchase policy, it simply uses the event-specific 
-    // one. The resulting combined purchase policy is then set on the event and saved to the repository.
+    // this function replaces any existing event-level purchase policy with a new
+    // one built from the provided DTO, while also inheriting
+    // and combining with the company-level purchase policy. If the company does not
+    // have a purchase policy, it simply uses the event-specific
+    // one. The resulting combined purchase policy is then set on the event and
+    // saved to the repository.
 
-    // in this function, lock the event as well to prevent concurrent modifications to the event's purchase policy while we're updating it. This ensures that we have a consistent view of the event's state and that we don't accidentally overwrite changes made by another user at the same time.
+    // in this function, lock the event as well to prevent concurrent modifications
+    // to the event's purchase policy while we're updating it. This ensures that we
+    // have a consistent view of the event's state and that we don't accidentally
+    // overwrite changes made by another user at the same time.
     public void setEventPolicies(String token, EventPolicyConfigDTO config) {
         if (!sessionManager.validateToken(token)) {
             throw new RuntimeException("Invalid token");
@@ -983,8 +889,7 @@ public class EventManagementService {
 
             PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
                     companyPurchasePolicy,
-                    eventSpecificPurchasePolicy
-            );
+                    eventSpecificPurchasePolicy);
 
             event.setPurchasePolicy(inheritedAndExtendedPurchasePolicy);
 
@@ -995,11 +900,6 @@ public class EventManagementService {
             eventRepository.unlock(config.eventId());
         }
     }
-
-
-
-
-
 
     private PurchasePolicy buildPurchasePolicyFromDTO(PurchasePolicyDTO dto) {
         if (dto == null) {
@@ -1059,8 +959,7 @@ public class EventManagementService {
         for (int i = 1; i < children.size(); i++) {
             result = new AndPurchasePolicy(
                     result,
-                    buildPurchasePolicyFromDTO(children.get(i))
-            );
+                    buildPurchasePolicyFromDTO(children.get(i)));
         }
 
         return result;
@@ -1078,13 +977,7 @@ public class EventManagementService {
         return result;
     }
 
-    
-
-
-
-
-
-  private int validateTokenAndGetUserId(String token) {
+    private int validateTokenAndGetUserId(String token) {
         if (!sessionManager.validateToken(token)) {
             log.warn("Invalid token provided");
             throw new InvalidTokenException();
@@ -1093,36 +986,40 @@ public class EventManagementService {
     }
 
     public PurchasePolicyDTO getEventPurchasePolicy(String token, int companyId, int eventId) {
-    if (!sessionManager.validateToken(token))
-        throw new RuntimeException("Invalid token");
-    int userId = sessionManager.extractUserId(token);
-    ProductionCompany company = companyRepository.getCompanyById(companyId);
-    if (company == null) throw new RuntimeException("Company not found");
-    company.checkowner(userId);
-    Event event = eventRepository.findById(eventId);
-    if (event == null) throw new RuntimeException("Event not found");
-    if (event.getCompanyId() != companyId) throw new RuntimeException("Event does not belong to this company");
-   PurchasePolicy stored = event.getPurchasePolicy();
-if (stored instanceof AndPurchasePolicy a) {
-    return policyToDTO(a.getRightPolicy());
-}
-return policyToDTO(stored);
-}
-private PurchasePolicyDTO policyToDTO(PurchasePolicy policy) {
-    if (policy == null || policy instanceof NoPurchasePolicy)
+        if (!sessionManager.validateToken(token))
+            throw new RuntimeException("Invalid token");
+        int userId = sessionManager.extractUserId(token);
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null)
+            throw new RuntimeException("Company not found");
+        company.checkowner(userId);
+        Event event = eventRepository.findById(eventId);
+        if (event == null)
+            throw new RuntimeException("Event not found");
+        if (event.getCompanyId() != companyId)
+            throw new RuntimeException("Event does not belong to this company");
+        PurchasePolicy stored = event.getPurchasePolicy();
+        if (stored instanceof AndPurchasePolicy a) {
+            return policyToDTO(a.getRightPolicy());
+        }
+        return policyToDTO(stored);
+    }
+
+    private PurchasePolicyDTO policyToDTO(PurchasePolicy policy) {
+        if (policy == null || policy instanceof NoPurchasePolicy)
+            return new PurchasePolicyDTO("NONE", null, null, null, null);
+        if (policy instanceof AgePurchasePolicy a)
+            return new PurchasePolicyDTO("AGE", a.getMinimumAge(), null, null, null);
+        if (policy instanceof MinTicketsPurchasePolicy m)
+            return new PurchasePolicyDTO("MIN_TICKETS", null, m.getMinimumTickets(), null, null);
+        if (policy instanceof MaxTicketsPurchasePolicy m)
+            return new PurchasePolicyDTO("MAX_TICKETS", null, null, m.getMaximumTickets(), null);
+        if (policy instanceof AndPurchasePolicy a)
+            return new PurchasePolicyDTO("AND", null, null, null,
+                    List.of(policyToDTO(a.getLeftPolicy()), policyToDTO(a.getRightPolicy())));
+        if (policy instanceof OrPurchasePolicy o)
+            return new PurchasePolicyDTO("OR", null, null, null,
+                    List.of(policyToDTO(o.getLeftPolicy()), policyToDTO(o.getRightPolicy())));
         return new PurchasePolicyDTO("NONE", null, null, null, null);
-    if (policy instanceof AgePurchasePolicy a)
-        return new PurchasePolicyDTO("AGE", a.getMinimumAge(), null, null, null);
-    if (policy instanceof MinTicketsPurchasePolicy m)
-        return new PurchasePolicyDTO("MIN_TICKETS", null, m.getMinimumTickets(), null, null);
-    if (policy instanceof MaxTicketsPurchasePolicy m)
-        return new PurchasePolicyDTO("MAX_TICKETS", null, null, m.getMaximumTickets(), null);
-    if (policy instanceof AndPurchasePolicy a)
-        return new PurchasePolicyDTO("AND", null, null, null,
-            List.of(policyToDTO(a.getLeftPolicy()), policyToDTO(a.getRightPolicy())));
-    if (policy instanceof OrPurchasePolicy o)
-        return new PurchasePolicyDTO("OR", null, null, null,
-            List.of(policyToDTO(o.getLeftPolicy()), policyToDTO(o.getRightPolicy())));
-    return new PurchasePolicyDTO("NONE", null, null, null, null);
-}
+    }
 }
