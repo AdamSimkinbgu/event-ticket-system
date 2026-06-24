@@ -134,7 +134,7 @@ public class LkNotifPanel extends Div {
                 TYPE_TITLE.getOrDefault(n.type(), "Notification"),
                 n.message(),
                 relativeTime(n.createdAt()),
-                "PENDING".equals(n.status())
+                !"READ".equals(n.status())
             ))
             .toList();
         return new LkNotifPanel("Notifications", items, "View all notifications");
