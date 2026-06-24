@@ -1048,7 +1048,8 @@ public class CheckoutService {
                 paymentResult.paymentTransactionId(),
                 issuanceResult.barcodes()
                         .stream()
-                        .map(barcode -> barcode.ticketId())
+                        .map(barcode -> new CheckoutResultDTO.IssuedTicketDTO(
+                                barcode.ticketId(), barcode.barcodeValue()))
                         .toList());
     }
 
