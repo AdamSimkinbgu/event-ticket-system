@@ -137,6 +137,26 @@ public class LkTopBar extends Header {
         link.getElement().appendChild(new Span(label).getElement());
     }
 
+    /**
+     * Add an icon+label action into the right slot, next to the bell / account.
+     * Unlike {@link #rightLink} this adds no flex spacer, so several actions sit
+     * together at the upper-right edge (the slot is auto-margined right by CSS).
+     */
+    public LkTopBar rightAction(String label, String iconName, Class<? extends Component> target) {
+        ensureRightSlot();
+        if (target != null) {
+            RouterLink link = new RouterLink();
+            link.setRoute(target);
+            decorateRightLink(link, label, iconName);
+            rightSlot.add(link);
+        } else {
+            Span a = new Span();
+            decorateRightLink(a, label, iconName);
+            rightSlot.add(a);
+        }
+        return this;
+    }
+
     // ---------------------------------------------------------------------
     // Right slot — bell / account / guest actions
     // ---------------------------------------------------------------------

@@ -32,13 +32,16 @@ import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 
 /**
- * Full-page receipt for one member-owned order (#276). Reached by clicking "View" on the
- * {@code MyAccountView} orders grid ({@code receipt/{orderReceiptId}}). Loads the real receipt
- * through {@link ReceiptPresenter}; the view never calls the service directly nor uses
- * {@code try/catch} — it switches on the presenter's sealed {@code Outcome}. A receipt that isn't
+ * Full-page receipt for one member-owned order (#276). Reached by clicking
+ * "View" on the
+ * {@code MyAccountView} orders grid ({@code receipt/{orderReceiptId}}). Loads
+ * the real receipt
+ * through {@link ReceiptPresenter}; the view never calls the service directly
+ * nor uses
+ * {@code try/catch} — it switches on the presenter's sealed {@code Outcome}. A
+ * receipt that isn't
  * the signed-in member's renders a 403 banner.
  */
 @Route(value = "receipt/:receiptId", layout = MainLayout.class)
@@ -57,7 +60,7 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
     private int receiptId;
 
     public ReceiptView(ReceiptPresenter presenter, RefundPresenter refundPresenter,
-                       SessionIdentity sessionIdentity) {
+            SessionIdentity sessionIdentity) {
         this.presenter = presenter;
         this.refundPresenter = refundPresenter;
         this.sessionIdentity = sessionIdentity;
@@ -67,7 +70,13 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
         this.receiptId = event.getRouteParameters().get("receiptId")
-                .map(s -> { try { return Integer.parseInt(s); } catch (NumberFormatException e) { return 0; } })
+                .map(s -> {
+                    try {
+                        return Integer.parseInt(s);
+                    } catch (NumberFormatException e) {
+                        return 0;
+                    }
+                })
                 .orElse(0);
         loadAndBuild();
     }
@@ -84,10 +93,10 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
         }
 
         switch (presenter.load(sessionIdentity.memberToken(), receiptId)) {
-            case ReceiptPresenter.Outcome.Success s   -> renderReceipt(s.receipt());
+            case ReceiptPresenter.Outcome.Success s -> renderReceipt(s.receipt());
             case ReceiptPresenter.Outcome.NotFound nf -> bodyHolder.add(infoBanner(nf.message()));
             case ReceiptPresenter.Outcome.Forbidden f -> bodyHolder.add(infoBanner(f.message()));
-            case ReceiptPresenter.Outcome.Failure f   -> bodyHolder.add(infoBanner(f.message()));
+            case ReceiptPresenter.Outcome.Failure f -> bodyHolder.add(infoBanner(f.message()));
         }
     }
 
@@ -120,16 +129,15 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
         LkRow actions = new LkRow().gap(8);
         if (refundEligible(receipt)) {
             actions.add(new LkBtn("Request refund").variant(LkBtn.Variant.primary)
-                .icon(new LkIcon("card", 15))
-                .onClick(e -> openRefund(receipt)));
+                    .icon(new LkIcon("card", 15))
+                    .onClick(e -> openRefund(receipt)));
         }
         actions.add(
-            new LkBtn("Print").variant(LkBtn.Variant.secondary)
-                .icon(new LkIcon("copy", 15))
-                .onClick(e -> UI.getCurrent().getPage().executeJs("window.print()")),
-            new LkBtn("Email receipt").variant(LkBtn.Variant.tertiary)
-                .onClick(e -> Toasts.success("Receipt resent to your account email (mock)."))
-        );
+                new LkBtn("Print").variant(LkBtn.Variant.secondary)
+                        .icon(new LkIcon("copy", 15))
+                        .onClick(e -> UI.getCurrent().getPage().executeJs("window.print()")),
+                new LkBtn("Email receipt").variant(LkBtn.Variant.tertiary)
+                        .onClick(e -> Toasts.success("Receipt resent to your account email (mock).")));
         return actions;
     }
 
@@ -137,28 +145,28 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
 
     private static boolean refundEligible(PurchaseRecordDTO r) {
         if (r.refunded() || r.buyerUserId() == null) {
-            return false;   // already refunded, or a guest order (member-only flow)
+            return false; // already refunded, or a guest order (member-only flow)
         }
-        return r.tickets().stream().anyMatch(t ->
-            t.currentStatus() == TicketStatus.PAID || t.currentStatus() == TicketStatus.ISSUED);
+        return r.tickets().stream()
+                .anyMatch(t -> t.currentStatus() == TicketStatus.PAID || t.currentStatus() == TicketStatus.ISSUED);
     }
 
     private void openRefund(PurchaseRecordDTO receipt) {
         BzRefundDialog.open("#" + receipt.orderReceiptId(), receipt.totalPaid(),
-            reason -> handleRefund(receipt.orderReceiptId(), reason));
+                reason -> handleRefund(receipt.orderReceiptId(), reason));
     }
 
     private void handleRefund(int orderId, String reason) {
         switch (refundPresenter.requestRefund(sessionIdentity.memberToken(), orderId, reason)) {
             case RefundPresenter.Outcome.Success s -> {
                 Toasts.success("Refund requested — reference " + s.reference()
-                    + ". Processed in 3–5 business days.");
-                loadAndBuild();   // re-render: the order now shows as refunded
+                        + ". Processed in 3–5 business days.");
+                loadAndBuild(); // re-render: the order now shows as refunded
             }
             case RefundPresenter.Outcome.NotEligible n -> Toasts.warn(n.message());
-            case RefundPresenter.Outcome.NotFound n    -> Toasts.failure(n.message());
-            case RefundPresenter.Outcome.Forbidden f   -> Toasts.failure(f.message());
-            case RefundPresenter.Outcome.Failure f     -> Toasts.failure(f.message());
+            case RefundPresenter.Outcome.NotFound n -> Toasts.failure(n.message());
+            case RefundPresenter.Outcome.Forbidden f -> Toasts.failure(f.message());
+            case RefundPresenter.Outcome.Failure f -> Toasts.failure(f.message());
         }
     }
 
@@ -171,15 +179,15 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
 
         LkRow steps = new LkRow().gap(8);
         steps.add(
-            new LkBadge("✓ Requested", LkBadge.Tone.success).small(),
-            new LkBadge("✓ Processing", LkBadge.Tone.success).small(),
-            new LkBadge("✓ Refunded", LkBadge.Tone.success).small());
+                new LkBadge("✓ Requested", LkBadge.Tone.success).small(),
+                new LkBadge("✓ Processing", LkBadge.Tone.success).small(),
+                new LkBadge("✓ Refunded", LkBadge.Tone.success).small());
         col.add(steps);
 
         TransactionRecordDTO refundTx = refundTransaction(receipt);
         if (refundTx != null) {
             Span note = Lk.muted("Refunded " + money(refundTx.amount())
-                + (refundTx.timestamp() == null ? "" : " on " + refundTx.timestamp().format(DATE_FMT)));
+                    + (refundTx.timestamp() == null ? "" : " on " + refundTx.timestamp().format(DATE_FMT)));
             note.getStyle().set("font-size", "12.5px").set("display", "block");
             col.add(note);
         }
@@ -193,25 +201,25 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
         LkCard card = new LkCard().pad(18);
         Div row = new Div();
         row.getStyle()
-            .set("display", "grid")
-            .set("grid-template-columns", "repeat(auto-fit, minmax(140px, 1fr))")
-            .set("gap", "18px");
+                .set("display", "grid")
+                .set("grid-template-columns", "repeat(auto-fit, minmax(140px, 1fr))")
+                .set("gap", "18px");
 
         LkBadge statusBadge = new LkBadge(receipt.refunded() ? "Refunded" : "Paid",
-            receipt.refunded() ? LkBadge.Tone.muted : LkBadge.Tone.success).small();
+                receipt.refunded() ? LkBadge.Tone.muted : LkBadge.Tone.success).small();
 
         Span totalSpan = new Span();
         totalSpan.getElement().setProperty("innerHTML",
-            "<b style='font-size:1.1rem;color:#0f172a'>" + money(receipt.totalPaid()) + "</b>");
+                "<b style='font-size:1.1rem;color:#0f172a'>" + money(receipt.totalPaid()) + "</b>");
 
         int ticketCount = receipt.tickets().size();
 
         row.add(
-            statBlock("Status", statusBadge),
-            statBlock("Date",   new Span(receipt.purchasedAt() == null ? "—" : receipt.purchasedAt().format(DATE_FMT))),
-            statBlock("Items",  new Span(ticketCount + " ticket" + (ticketCount == 1 ? "" : "s"))),
-            statBlock("Total",  totalSpan)
-        );
+                statBlock("Status", statusBadge),
+                statBlock("Date",
+                        new Span(receipt.purchasedAt() == null ? "—" : receipt.purchasedAt().format(DATE_FMT))),
+                statBlock("Items", new Span(ticketCount + " ticket" + (ticketCount == 1 ? "" : "s"))),
+                statBlock("Total", totalSpan));
         card.add(row);
         return card;
     }
@@ -220,8 +228,8 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
         Div block = new Div();
         Span l = new Span(label.toUpperCase());
         l.getStyle()
-            .set("font-size", "0.66rem").set("font-weight", "800").set("letter-spacing", "0.1em")
-            .set("color", "var(--muted)").set("display", "block").set("margin-bottom", "4px");
+                .set("font-size", "0.66rem").set("font-weight", "800").set("letter-spacing", "0.1em")
+                .set("color", "var(--muted)").set("display", "block").set("margin-bottom", "4px");
         block.add(l, value);
         return block;
     }
@@ -271,12 +279,12 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
         }
         col.add(Lk.divider());
         col.add(paymentRow(receipt.refunded() ? "Total refunded" : "Total paid",
-                           money(receipt.totalPaid()), true));
+                money(receipt.totalPaid()), true));
 
         TransactionRecordDTO charge = paymentCharge(receipt);
         if (charge != null) {
             Span method = Lk.muted("Paid with " + charge.providerName()
-                + (charge.currency() == null || charge.currency().isBlank() ? "" : " (" + charge.currency() + ")"));
+                    + (charge.currency() == null || charge.currency().isBlank() ? "" : " (" + charge.currency() + ")"));
             method.getStyle().set("font-size", "12.5px").set("display", "block").set("margin-top", "4px");
             col.add(method);
         }
@@ -293,10 +301,12 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
     private Component paymentRow(String label, String value, boolean bold) {
         LkRow row = new LkRow().justify("space-between");
         if (bold) {
-            Span l = new Span(); l.getElement().setProperty("innerHTML",
-                "<b style='font-size:1rem'>" + label + "</b>");
-            Span v = new Span(); v.getElement().setProperty("innerHTML",
-                "<b style='font-size:1rem;color:#0f172a'>" + value + "</b>");
+            Span l = new Span();
+            l.getElement().setProperty("innerHTML",
+                    "<b style='font-size:1rem'>" + label + "</b>");
+            Span v = new Span();
+            v.getElement().setProperty("innerHTML",
+                    "<b style='font-size:1rem;color:#0f172a'>" + value + "</b>");
             row.add(l, v);
         } else {
             row.add(Lk.muted(label), new Span(value));
@@ -321,20 +331,21 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
     private Div buildTicketRow(TicketRecordDTO t) {
         Div row = new Div();
         row.getStyle()
-            .set("display", "flex").set("align-items", "center").set("gap", "16px")
-            .set("padding", "14px 18px").set("border-bottom", "1px solid #f1f5f9");
+                .set("display", "flex").set("align-items", "center").set("gap", "16px")
+                .set("padding", "14px 18px").set("border-bottom", "1px solid #f1f5f9");
 
         Div swatch = new Div();
         String[] grad = gradientFor(t.category());
         swatch.getStyle()
-            .set("width", "44px").set("height", "44px")
-            .set("border-radius", "8px").set("flex", "none")
-            .set("background", "linear-gradient(135deg, " + grad[0] + ", " + grad[1] + ")");
+                .set("width", "44px").set("height", "44px")
+                .set("border-radius", "8px").set("flex", "none")
+                .set("background", "linear-gradient(135deg, " + grad[0] + ", " + grad[1] + ")");
 
         Div info = new Div();
         info.getStyle().set("flex", "1 1 auto").set("min-width", "0");
         Span title = new Span();
-        title.getElement().setProperty("innerHTML", "<b>" + escape(orElse(t.eventName(), "Event #" + t.eventId())) + "</b>");
+        title.getElement().setProperty("innerHTML",
+                "<b>" + escape(orElse(t.eventName(), "Event #" + t.eventId())) + "</b>");
         title.getStyle().set("display", "block").set("color", "#0f172a");
         Span meta = Lk.muted(ticketMeta(t));
         meta.getStyle().set("font-size", "13px").set("display", "block").set("margin-top", "2px");
@@ -343,7 +354,7 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
         Span code = new Span(orElse(t.barcode(), "Not yet issued"));
         code.addClassName("lk-mono");
         code.getStyle()
-            .set("font-size", "0.78rem").set("color", "var(--muted)").set("letter-spacing", "0.06em");
+                .set("font-size", "0.78rem").set("color", "var(--muted)").set("letter-spacing", "0.06em");
 
         LkIconBtn viewBtn = new LkIconBtn(new LkIcon("eye", 15), "View ticket");
         viewBtn.addClickListener(e -> BzTicketDialog.show(toTicketInfo(t)));
@@ -362,31 +373,31 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
 
     private static BzTicketDialog.TicketInfo toTicketInfo(TicketRecordDTO t) {
         return new BzTicketDialog.TicketInfo(
-            orElse(t.eventName(), "Event #" + t.eventId()),
-            orElse(t.category(), "—"),
-            t.eventStartsAt() == null ? "—" : t.eventStartsAt().format(EVENT_FMT),
-            orElse(t.venue(), "—"),
-            orElse(t.zoneName(), "Zone #" + t.zoneId()),
-            orElse(t.seatNumber(), "—"),
-            money(t.pricePaid()),
-            orElse(t.barcode(), "Not yet issued"),
-            "#" + t.orderReceiptId());
+                orElse(t.eventName(), "Event #" + t.eventId()),
+                orElse(t.category(), "—"),
+                t.eventStartsAt() == null ? "—" : t.eventStartsAt().format(EVENT_FMT),
+                orElse(t.venue(), "—"),
+                orElse(t.zoneName(), "Zone #" + t.zoneId()),
+                orElse(t.seatNumber(), "—"),
+                money(t.pricePaid()),
+                orElse(t.barcode(), "Not yet issued"),
+                "#" + t.orderReceiptId());
     }
 
     // ---- helpers ----
 
     private static TransactionRecordDTO paymentCharge(PurchaseRecordDTO receipt) {
         return receipt.transactions().stream()
-            .filter(tx -> "PAYMENT_CHARGE".equals(tx.type()))
-            .findFirst()
-            .orElse(null);
+                .filter(tx -> "PAYMENT_CHARGE".equals(tx.type()))
+                .findFirst()
+                .orElse(null);
     }
 
     private static TransactionRecordDTO refundTransaction(PurchaseRecordDTO receipt) {
         return receipt.transactions().stream()
-            .filter(tx -> "REFUND".equals(tx.type()))
-            .findFirst()
-            .orElse(null);
+                .filter(tx -> "REFUND".equals(tx.type()))
+                .findFirst()
+                .orElse(null);
     }
 
     private Component infoBanner(String message) {
@@ -399,11 +410,11 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
 
     private static String[] gradientFor(String cat) {
         return switch (cat == null ? "" : cat.toLowerCase()) {
-            case "concert", "music" -> new String[]{"#8b5cf6", "#ec4899"};
-            case "sport", "sports"  -> new String[]{"#0ea5e9", "#10b981"};
-            case "theatre", "theater" -> new String[]{"#dc2626", "#f59e0b"};
-            case "conference"       -> new String[]{"#0d9488", "#1d4ed8"};
-            default                 -> new String[]{"#475569", "#1a5490"};
+            case "concert", "music" -> new String[] { "#8b5cf6", "#ec4899" };
+            case "sport", "sports" -> new String[] { "#0ea5e9", "#10b981" };
+            case "theatre", "theater" -> new String[] { "#dc2626", "#f59e0b" };
+            case "conference" -> new String[] { "#0d9488", "#1d4ed8" };
+            default -> new String[] { "#475569", "#1a5490" };
         };
     }
 

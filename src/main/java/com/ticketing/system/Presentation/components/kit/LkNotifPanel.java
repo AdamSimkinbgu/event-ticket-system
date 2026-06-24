@@ -1,10 +1,14 @@
 package com.ticketing.system.Presentation.components.kit;
 
+import com.ticketing.system.Core.Application.dto.NotificationDTO;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.NativeButton;
 import com.vaadin.flow.component.html.Span;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Notification dropdown panel — header + scrollable list + footer link.
@@ -23,6 +27,7 @@ public class LkNotifPanel extends Div {
         head.addClassName("lk-notif-h");
         Span title = new Span();
         title.getElement().setProperty("innerHTML", "<b>" + escape(headerTitle) + "</b>");
+        // TODO(#225): wire to NotificationService.markAllRead() once Notification.markRead() is implemented.
         NativeButton markAll = new NativeButton("Mark all read");
         markAll.addClassName("lk-link-btn");
         head.add(title, markAll);
@@ -79,6 +84,74 @@ public class LkNotifPanel extends Div {
             new Item("policy",   "Policy flagged for review",  "Coldplay · MOTS age-gate needs a check",         "1d", true),
             new Item("warning",  "Refund spike detected",      "Othello at Habima — 14 refunds in 1h",           "1d", true)
         ), "View admin activity feed");
+    }
+
+    private static final Map<String, String> TYPE_ICON = Map.ofEntries(
+        Map.entry("PURCHASE_CONFIRMED",              "ticket"),
+        Map.entry("REFUND_ISSUED",                   "card"),
+        Map.entry("EVENT_CANCELLED",                 "warning"),
+        Map.entry("CART_EXPIRING",                   "clock"),
+        Map.entry("EVENT_SOLD_OUT",                  "chart"),
+        Map.entry("COMPANY_CLOSED",                  "building"),
+        Map.entry("ROLE_CHANGED",                    "users"),
+        Map.entry("OWNER_APPOINTMENT_PENDING",       "crown"),
+        Map.entry("MANAGER_REVOKED",                 "warning"),
+        Map.entry("DIRECT_MESSAGE",                  "comment"),
+        Map.entry("PURCHASE_FAILED",                 "warning"),
+        Map.entry("TICKET_RESERVATION_SUCCESS",      "ticket"),
+        Map.entry("TICKET_RESERVATION_FAILURE",      "warning"),
+        Map.entry("REMOVE_TICKET_RESERVATION_SUCCESS", "ticket"),
+        Map.entry("REMOVE_TICKET_RESERVATION_FAILURE", "warning")
+    );
+
+    private static final Map<String, String> TYPE_TITLE = Map.ofEntries(
+        Map.entry("PURCHASE_CONFIRMED",              "Purchase confirmed"),
+        Map.entry("REFUND_ISSUED",                   "Refund processed"),
+        Map.entry("EVENT_CANCELLED",                 "Event cancelled"),
+        Map.entry("CART_EXPIRING",                   "Cart expiring soon"),
+        Map.entry("EVENT_SOLD_OUT",                  "Event sold out"),
+        Map.entry("COMPANY_CLOSED",                  "Company closed"),
+        Map.entry("ROLE_CHANGED",                    "Role updated"),
+        Map.entry("OWNER_APPOINTMENT_PENDING",       "Appointment pending"),
+        Map.entry("MANAGER_REVOKED",                 "Role revoked"),
+        Map.entry("DIRECT_MESSAGE",                  "New message"),
+        Map.entry("PURCHASE_FAILED",                 "Purchase failed"),
+        Map.entry("TICKET_RESERVATION_SUCCESS",      "Reservation confirmed"),
+        Map.entry("TICKET_RESERVATION_FAILURE",      "Reservation failed"),
+        Map.entry("REMOVE_TICKET_RESERVATION_SUCCESS", "Reservation removed"),
+        Map.entry("REMOVE_TICKET_RESERVATION_FAILURE", "Failed to remove reservation")
+    );
+
+    /** Build a real notification panel from the DTOs delivered on login (UC-37). */
+    public static LkNotifPanel fromDTOs(List<NotificationDTO> notifications) {
+        if (notifications == null || notifications.isEmpty()) {
+            return new LkNotifPanel("Notifications", List.of(
+                new Item("bell", "You're all caught up", "No new notifications", "", false)
+            ), "View all notifications");
+        }
+        List<Item> items = notifications.stream()
+            .map(n -> new Item(
+                TYPE_ICON.getOrDefault(n.type(), "bell"),
+                TYPE_TITLE.getOrDefault(n.type(), "Notification"),
+                n.message() == null ? "" : n.message(),
+                relativeTime(n.createdAt()),
+                !"READ".equals(n.status())
+            ))
+            .toList();
+        return new LkNotifPanel("Notifications", items, "View all notifications");
+    }
+
+    private static String relativeTime(LocalDateTime createdAt) {
+        if (createdAt == null) return "";
+        LocalDateTime now = LocalDateTime.now();
+        long minutes = ChronoUnit.MINUTES.between(createdAt, now);
+        if (minutes < 1)   return "Just now";
+        if (minutes < 60)  return minutes + "m";
+        long hours = ChronoUnit.HOURS.between(createdAt, now);
+        if (hours < 24)    return hours + "h";
+        long days = ChronoUnit.DAYS.between(createdAt, now);
+        if (days == 1)     return "Yesterday";
+        return days + "d";
     }
 
     private static String escape(String s) {

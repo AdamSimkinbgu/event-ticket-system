@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import lombok.extern.slf4j.Slf4j;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
+import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.events.OrderExpiredEvent;
 import com.ticketing.system.Core.Application.services.CheckoutService;
@@ -86,15 +87,17 @@ public class CheckoutPresenter {
 
     // ---- pay ------------------------------------------------------------
 
-        public PayOutcome payAsMember(String memberToken, String idempotencyKey, String rawCardNumber) {
-        return runPay(() -> checkoutService.checkoutMember(
-            memberToken, idempotencyKey, CURRENCY, paymentToken(rawCardNumber)));
+    public PayOutcome payAsMember(String memberToken, String idempotencyKey,
+                                  String cardNumber, String cvc, String expiry, String holder) {
+        CardDetailsDTO card = buildCard(cardNumber, cvc, expiry, holder);
+        return runPay(() -> checkoutService.checkoutMember(memberToken, idempotencyKey, CURRENCY, card));
     }
 
-    public PayOutcome payAsGuest(String sessionId, String guestEmail, int guestAge,
-                                 String idempotencyKey, String rawCardNumber) {
+    public PayOutcome payAsGuest(String sessionId, String guestEmail, int guestAge, String idempotencyKey,
+                                 String cardNumber, String cvc, String expiry, String holder) {
+        CardDetailsDTO card = buildCard(cardNumber, cvc, expiry, holder);
         return runPay(() -> checkoutService.checkoutGuest(
-            sessionId, guestEmail, idempotencyKey, CURRENCY, paymentToken(rawCardNumber), guestAge));
+            sessionId, guestEmail, idempotencyKey, CURRENCY, card, guestAge));
     }
 
     private interface Charge { CheckoutResultDTO run(); }
@@ -114,8 +117,33 @@ public class CheckoutPresenter {
         }
     }
 
-    private static String paymentToken(String cardNumber) {
-        return "tok_" + cardNumber.replaceAll("\\s+", "");
+    // Builds the gateway card payload from the raw checkout-form inputs. Parses the
+    // "MM / YY" expiry into month + 4-digit year; malformed parts fall back to 0 so
+    // the gateway, not the presenter, is the single source of a decline.
+    private static CardDetailsDTO buildCard(String cardNumber, String cvc, String expiry, String holder) {
+        int month = 0;
+        int year = 0;
+        if (expiry != null && expiry.contains("/")) {
+            String[] parts = expiry.split("/");
+            month = parseIntOrZero(parts[0].trim());
+            int yy = parts.length > 1 ? parseIntOrZero(parts[1].trim()) : 0;
+            year = (yy > 0 && yy < 100) ? 2000 + yy : yy;
+        }
+        String digits = cardNumber == null ? "" : cardNumber.replaceAll("\\s+", "");
+        return new CardDetailsDTO(
+            digits,
+            cvc == null ? "" : cvc.trim(),
+            month,
+            year,
+            holder == null ? "" : holder.trim());
+    }
+
+    private static int parseIntOrZero(String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     // ---- session --------------------------------------------------------

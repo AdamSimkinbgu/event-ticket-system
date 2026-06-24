@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import com.ticketing.system.Core.Application.dto.BarcodeDTO;
+import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
@@ -108,7 +109,8 @@ class CheckoutServiceTest {
 
     private final String IDEMPOTENCY_KEY = "idem-key-1";
     private final String CURRENCY = "ILS";
-    private final String PAYMENT_METHOD_TOKEN = "payment-token";
+    private final CardDetailsDTO PAYMENT_METHOD_TOKEN =
+            new CardDetailsDTO("4111111111111234", "123", 12, 2030, "Test Holder");
 
     private ActiveOrder mockOrder;
     private CartLineItem itemEvent1Zone1;
@@ -824,7 +826,7 @@ void GivenValidCheckout_WhenCheckout_ThenReturnCheckoutResultAndSaveTicketAndRec
                         100.0,
                         1,
                     PAYMENT_TRANSACTION_ID,
-                    List.of(TICKET_ID_1)
+                    List.of(new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_1, "barcode-value-1"))
             ),
             result
     );
@@ -967,7 +969,9 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                                     250.0,
                                     1,
                     PAYMENT_TRANSACTION_ID,
-                    List.of(TICKET_ID_1, TICKET_ID_2)
+                    List.of(
+                            new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_1, "barcode-zone-1"),
+                            new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_2, "barcode-zone-2"))
             ),
             result
     );
@@ -1055,7 +1059,9 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                                            300.0,
                                            1,
                                            PAYMENT_TRANSACTION_ID,
-                                           List.of(TICKET_ID_1, TICKET_ID_3)),
+                                           List.of(
+                                                   new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_1, "barcode-event-1"),
+                                                   new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_3, "barcode-event-2"))),
                            result);
 
            ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
