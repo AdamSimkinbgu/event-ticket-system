@@ -67,13 +67,9 @@ platform:
     username: ${PLATFORM_ADMIN_USERNAME:admin}
     password: ${PLATFORM_ADMIN_PASSWORD:admin}
 
-# External systems (UC-33 payment / UC-34 issuance). Selects which adapter backs
-# IPaymentGateway / ITicketIssuer: "stub" = in-process fake (default; used in
-# dev/test, never touches the network), "wsep" = the real WSEP HTTP adapter.
-external:
-  payment-gateway: ${EXTERNAL_PAYMENT_GATEWAY:stub}
-  ticket-issuer: ${EXTERNAL_TICKET_ISSUER:stub}
-
-# WSEP external-systems endpoint — used only when an adapter above is "wsep".
+# WSEP external systems (UC-33 payment / UC-34 issuance). WsepPaymentGateway /
+# WsepTicketIssuer back IPaymentGateway / ITicketIssuer in every real run
+# (@Profile("!test")); the test profile swaps in the in-process stubs. base-url is
+# the single koyeb endpoint both adapters POST to.
 wsep:
   base-url: ${WSEP_BASE_URL:https://damp-lynna-wsep-1984852e.koyeb.app/}

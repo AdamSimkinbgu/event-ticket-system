@@ -8,7 +8,7 @@ import com.ticketing.system.Core.Domain.exceptions.IdempotencyConflictException;
 import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -17,11 +17,12 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-// Default in-process payment gateway. Selected unless external.payment-gateway=wsep,
-// which activates WsepPaymentGateway instead (keeps the singular IPaymentGateway
-// injection in CheckoutService unambiguous).
+// In-process payment gateway for TESTS ONLY (@Profile("test")). Every real run
+// (default/prod + the dev profile) uses WsepPaymentGateway instead; the profile
+// keeps the singular IPaymentGateway injection in CheckoutService unambiguous —
+// exactly one gateway bean exists per profile.
 @Component
-@ConditionalOnProperty(name = "external.payment-gateway", havingValue = "stub", matchIfMissing = true)
+@Profile("test")
 public class StubPaymentGateway implements IPaymentGateway {
     //*Note: changed from not implemented to what's below here, can change however wanted though, it's a stub for our needs */
     private static final String GATEWAY_ID = "stub-payment-gateway";

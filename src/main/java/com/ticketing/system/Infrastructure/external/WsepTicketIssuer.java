@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.system.Core.Application.dto.BarcodeDTO;
@@ -18,9 +18,9 @@ import com.ticketing.system.Core.Domain.exceptions.TicketIssuanceFailedException
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Real ticket issuer backed by the WSEP external system. Active only when
- * {@code external.ticket-issuer=wsep}; otherwise {@link StubTicketIssuer} is
- * used. {@code handshake} → {@link #verifyConnection()} and {@code issue_ticket}
+ * Real ticket issuer backed by the WSEP external system. Active in every real
+ * run ({@code @Profile("!test")}); the test suite uses {@link StubTicketIssuer}
+ * instead. {@code handshake} → {@link #verifyConnection()} and {@code issue_ticket}
  * → {@link #issue}.
  *
  * <p>WSEP {@code issue_ticket} returns ONE ticket code per call, while a
@@ -31,7 +31,7 @@ import lombok.extern.slf4j.Slf4j;
  * the checkout's refund/rollback path.
  */
 @Component
-@ConditionalOnProperty(name = "external.ticket-issuer", havingValue = "wsep")
+@Profile("!test")
 @Slf4j
 public class WsepTicketIssuer implements ITicketIssuer {
 

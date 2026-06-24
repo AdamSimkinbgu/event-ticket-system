@@ -22,9 +22,10 @@ import java.util.Map;
  * showcase — selections are spread across these so demo dashboards
  * have varied per-event sales.
  *
- * <p>{@link com.ticketing.system.Infrastructure.external.StubPaymentGateway}
- * accepts any payment-method token, so the seed never requires
- * external credentials.
+ * <p>In the {@code dev} profile these run through the real
+ * {@link com.ticketing.system.Infrastructure.external.WsepPaymentGateway} /
+ * {@link com.ticketing.system.Infrastructure.external.WsepTicketIssuer}, so the
+ * seeded tickets carry real WSEP barcodes (boot depends on the endpoint being up).
  */
 public final class DemoOrders {
 

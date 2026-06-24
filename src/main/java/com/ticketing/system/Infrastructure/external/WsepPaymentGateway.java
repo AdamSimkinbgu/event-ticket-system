@@ -3,7 +3,7 @@ package com.ticketing.system.Infrastructure.external;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
@@ -17,9 +17,9 @@ import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Real payment gateway backed by the WSEP external system. Active only when
- * {@code external.payment-gateway=wsep}; otherwise {@link StubPaymentGateway} is
- * used. Each method is one WSEP action exactly per the documented contract:
+ * Real payment gateway backed by the WSEP external system. Active in every real
+ * run ({@code @Profile("!test")}); the test suite uses {@link StubPaymentGateway}
+ * instead. Each method is one WSEP action exactly per the documented contract:
  * {@code handshake} → {@link #verifyConnection()}, {@code pay} → {@link #charge},
  * {@code refund} → {@link #refund}. {@code "-1"} is the universal failure reply
  * and is translated into the matching domain exception.
@@ -29,7 +29,7 @@ import lombok.extern.slf4j.Slf4j;
  * requires them — just never recorded).
  */
 @Component
-@ConditionalOnProperty(name = "external.payment-gateway", havingValue = "wsep")
+@Profile("!test")
 @Slf4j
 public class WsepPaymentGateway implements IPaymentGateway {
 
