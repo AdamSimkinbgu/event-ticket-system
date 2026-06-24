@@ -464,9 +464,10 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
         try {
             String idempotencyKey = currentIdempotencyKey();
             CheckoutPresenter.PayOutcome outcome = isMember
-                ? presenter.payAsMember(memberToken, idempotencyKey, cardNumber.getValue())
-                : presenter.payAsGuest(sessionId, guestEmail.getValue().trim(),
-                                       guestAge.getValue(), idempotencyKey, cardNumber.getValue());
+                ? presenter.payAsMember(memberToken, idempotencyKey,
+                                        cardNumber.getValue(), cvc.getValue(), expiry.getValue(), cardholder.getValue())
+                : presenter.payAsGuest(sessionId, guestEmail.getValue().trim(), guestAge.getValue(), idempotencyKey,
+                                       cardNumber.getValue(), cvc.getValue(), expiry.getValue(), cardholder.getValue());
 
             switch (outcome) {
                 case CheckoutPresenter.PayOutcome.Success ok -> {

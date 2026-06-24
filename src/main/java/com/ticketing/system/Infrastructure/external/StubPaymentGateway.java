@@ -8,6 +8,7 @@ import com.ticketing.system.Core.Domain.exceptions.IdempotencyConflictException;
 import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -16,7 +17,12 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+// In-process payment gateway for TESTS ONLY (@Profile("test")). Every real run
+// (default/prod + the dev profile) uses WsepPaymentGateway instead; the profile
+// keeps the singular IPaymentGateway injection in CheckoutService unambiguous —
+// exactly one gateway bean exists per profile.
 @Component
+@Profile("test")
 public class StubPaymentGateway implements IPaymentGateway {
     //*Note: changed from not implemented to what's below here, can change however wanted though, it's a stub for our needs */
     private static final String GATEWAY_ID = "stub-payment-gateway";
@@ -129,8 +135,8 @@ public class StubPaymentGateway implements IPaymentGateway {
             throw new PaymentGatewayException("currency is required");
         }
 
-        if (request.paymentMethodToken() == null || request.paymentMethodToken().isBlank()) {
-            throw new PaymentGatewayException("payment method token is required");
+        if (request.card() == null || request.card().cardNumber() == null || request.card().cardNumber().isBlank()) {
+            throw new PaymentGatewayException("card details are required");
         }
 
         boolean memberBuyer = request.buyerUserId() != null;
@@ -150,7 +156,7 @@ public class StubPaymentGateway implements IPaymentGateway {
     private boolean samePaymentRequest(PaymentRequestDTO a, PaymentRequestDTO b) {
         return Double.compare(a.amount(), b.amount()) == 0
                 && Objects.equals(a.currency(), b.currency())
-                && Objects.equals(a.paymentMethodToken(), b.paymentMethodToken())
+                && Objects.equals(a.card(), b.card())
                 && Objects.equals(a.buyerUserId(), b.buyerUserId())
                 && Objects.equals(a.buyerEmail(), b.buyerEmail());
     }

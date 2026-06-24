@@ -75,3 +75,10 @@ platform:
   admin:
     username: ${PLATFORM_ADMIN_USERNAME:admin}
     password: ${PLATFORM_ADMIN_PASSWORD:admin}
+
+# WSEP external systems (UC-33 payment / UC-34 issuance). WsepPaymentGateway /
+# WsepTicketIssuer back IPaymentGateway / ITicketIssuer in every real run
+# (@Profile("!test")); the test profile swaps in the in-process stubs. base-url is
+# the single koyeb endpoint both adapters POST to.
+wsep:
+  base-url: ${WSEP_BASE_URL:https://damp-lynna-wsep-1984852e.koyeb.app/}

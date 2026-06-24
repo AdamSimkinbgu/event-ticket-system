@@ -1,5 +1,6 @@
 package com.ticketing.system.Infrastructure.dev.seed;
 
+import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.services.CheckoutService;
@@ -21,9 +22,10 @@ import java.util.Map;
  * showcase — selections are spread across these so demo dashboards
  * have varied per-event sales.
  *
- * <p>{@link com.ticketing.system.Infrastructure.external.StubPaymentGateway}
- * accepts any payment-method token, so the seed never requires
- * external credentials.
+ * <p>In the {@code dev} profile these run through the real
+ * {@link com.ticketing.system.Infrastructure.external.WsepPaymentGateway} /
+ * {@link com.ticketing.system.Infrastructure.external.WsepTicketIssuer}, so the
+ * seeded tickets carry real WSEP barcodes (boot depends on the endpoint being up).
  */
 public final class DemoOrders {
 
@@ -85,7 +87,8 @@ public final class DemoOrders {
             InventorySelectionDTO.standing(quantity));
 
         String idem = "demo-" + buyerKey + "-" + eventName.hashCode();
-        checkoutService.checkoutMember(token, idem, "ILS", "demo-card-" + buyerKey);
+        checkoutService.checkoutMember(token, idem, "ILS",
+            new CardDetailsDTO("4111111111111111", "123", 12, 2030, "Demo " + buyerKey));
     }
 
     private void reservePending(String buyerKey, String eventName, int zoneId, int quantity) {
