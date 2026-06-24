@@ -26,7 +26,6 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,12 +43,14 @@ public class AdminAnnouncementsView extends LkPage {
 
     private final AdminAnnouncementsPresenter presenter;
 
-    private final TextField subject  = new TextField("Subject");
-    private final TextArea  body     = new TextArea("Body");
-    private final LkSelect  audience = new LkSelect(AUDIENCE_MEMBERS,
-        List.of(AUDIENCE_MEMBERS, AUDIENCE_PRODUCERS)).label("Audience");
+    private final TextField subject = new TextField("Subject");
+    private final TextArea body = new TextArea("Body");
+    private final LkSelect audience = new LkSelect(AUDIENCE_MEMBERS,
+            List.of(AUDIENCE_MEMBERS, AUDIENCE_PRODUCERS)).label("Audience");
 
-    /** History grid lives in its own slot so it can reload in place after a send. */
+    /**
+     * History grid lives in its own slot so it can reload in place after a send.
+     */
     private final Div historySlot = new Div();
 
     public AdminAnnouncementsView(AdminAnnouncementsPresenter presenter) {
@@ -81,12 +82,11 @@ public class AdminAnnouncementsView extends LkPage {
 
         LkRow actions = new LkRow().gap(8).justify("flex-end");
         actions.add(
-            new LkBtn("Save draft").variant(LkBtn.Variant.tertiary)
-                .onClick(e -> Toasts.warn("Draft saving isn't available yet.")),
-            new LkBtn("Send announcement").variant(LkBtn.Variant.primary)
-                .icon(new LkIcon("arrowRight", 15))
-                .onClick(e -> send())
-        );
+                new LkBtn("Save draft").variant(LkBtn.Variant.tertiary)
+                        .onClick(e -> Toasts.warn("Draft saving isn't available yet.")),
+                new LkBtn("Send announcement").variant(LkBtn.Variant.primary)
+                        .icon(new LkIcon("arrowRight", 15))
+                        .onClick(e -> send()));
         card.add(actions);
         return card;
     }
@@ -120,11 +120,12 @@ public class AdminAnnouncementsView extends LkPage {
     private void reloadHistory() {
         historySlot.removeAll();
         switch (presenter.load(AuthSession.token())) {
-            case AdminAnnouncementsPresenter.Outcome.Success ok -> historySlot.add(buildHistoryCard(ok.announcements()));
+            case AdminAnnouncementsPresenter.Outcome.Success ok ->
+                historySlot.add(buildHistoryCard(ok.announcements()));
             case AdminAnnouncementsPresenter.Outcome.NotAuthenticated ignored -> historySlot.add(
-                banner("Your session has expired — please sign in again."));
+                    banner("Your session has expired — please sign in again."));
             case AdminAnnouncementsPresenter.Outcome.Failure fail -> historySlot.add(
-                banner("Could not load announcement history: " + fail.reason()));
+                    banner("Could not load announcement history: " + fail.reason()));
         }
     }
 
@@ -136,16 +137,17 @@ public class AdminAnnouncementsView extends LkPage {
         }
 
         LkGrid grid = new LkGrid()
-            .col("Sent",       "sent")
-            .col("Subject",    "subj")
-            .col("Audience",   "aud")
-            .col("Recipients", "rec", LkGrid.Align.RIGHT)
-            .col("Sender",     "send");
+                .col("Sent", "sent")
+                .col("Subject", "subj")
+                .col("Audience", "aud")
+                .col("Recipients", "rec", LkGrid.Align.RIGHT)
+                .col("Sender", "send");
 
         for (SentAnnouncement a : announcements) {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("sent", a.sentAt() == null ? "—" : a.sentAt().format(SENT_FMT));
-            // Plain-text Span (Vaadin escapes it) styled bold — never set innerHTML with user content.
+            // Plain-text Span (Vaadin escapes it) styled bold — never set innerHTML with
+            // user content.
             Span subj = new Span(a.subject() == null ? "" : a.subject());
             subj.getStyle().set("font-weight", "600");
             row.put("subj", subj);

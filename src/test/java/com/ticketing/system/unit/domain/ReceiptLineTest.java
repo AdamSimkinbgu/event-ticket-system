@@ -9,10 +9,7 @@ import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.time.LocalDateTime;
-
 class ReceiptLineTest extends BaseDomainTest {
-
 
     @Test
     void testGetTicketIdReturnsCorrectId() {
@@ -32,11 +29,6 @@ class ReceiptLineTest extends BaseDomainTest {
         assertEquals(50.0, line.getPriceAtReservation());
     }
 
-
-
-
-
-
     @Test
     void GivenStandingReceiptLine_WhenCreated_ThenSeatNumberIsNull() {
         ReceiptLine line = track(new ReceiptLine(
@@ -45,8 +37,7 @@ class ReceiptLineTest extends BaseDomainTest {
                 10,
                 5,
                 null,
-                LocalDateTime.now()
-        ));
+                LocalDateTime.now()));
 
         assertEquals(100, line.getTicketId());
         assertEquals(10, line.getEventId());
@@ -62,8 +53,7 @@ class ReceiptLineTest extends BaseDomainTest {
                 10,
                 7,
                 "B14",
-                LocalDateTime.now()
-        ));
+                LocalDateTime.now()));
 
         assertEquals(101, line.getTicketId());
         assertEquals(10, line.getEventId());
@@ -79,13 +69,7 @@ class ReceiptLineTest extends BaseDomainTest {
                 10,
                 7,
                 "   ",
-                LocalDateTime.now()
-        ));
+                LocalDateTime.now()));
     }
-
-
-
-
-
 
 }

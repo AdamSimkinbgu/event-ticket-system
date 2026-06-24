@@ -2,7 +2,6 @@ package com.ticketing.system.unit.infrastructure.persistence.EventPersistence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDate;
@@ -182,7 +181,7 @@ public abstract class IEventRepositoryContractTest {
         Event event = new Event(1, "Concert", 4.5, List.of("John Doe", "Jane Smith"),
                 EventCategory.CONCERT, 10, EventStatus.ON_SALE, vm,
                 List.of(new ShowDate(FUTURE_START, FUTURE_END)),
-                 new NoPurchasePolicy(), new DiscountPolicy(0));
+                new NoPurchasePolicy(), new DiscountPolicy(0));
         eventRepo.save(event);
 
         List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(

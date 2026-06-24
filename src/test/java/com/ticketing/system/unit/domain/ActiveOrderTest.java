@@ -15,7 +15,6 @@ import com.ticketing.system.support.BaseDomainTest;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
@@ -30,19 +29,23 @@ class ActiveOrderTest extends BaseDomainTest {
 
     @Test
     @Disabled("V1: addReservation appends CartLineItem (UC-5)")
-    void givenEmptyOrder_whenAddReservation_thenLineAdded() {}
+    void givenEmptyOrder_whenAddReservation_thenLineAdded() {
+    }
 
     @Test
     @Disabled("V1: validateCanCheckout rejects empty (UC-10)")
-    void givenEmptyOrder_whenValidateCanCheckout_thenThrows() {}
+    void givenEmptyOrder_whenValidateCanCheckout_thenThrows() {
+    }
 
     @Test
     @Disabled("V1: validateCanCheckout rejects expired (UC-10)")
-    void givenExpiredItem_whenValidateCanCheckout_thenThrows() {}
+    void givenExpiredItem_whenValidateCanCheckout_thenThrows() {
+    }
 
     @Test
     @Disabled("V1: ReturnToStock empties order (UC-2 / UC-14)")
-    void givenOrderWithItems_whenReturnToStock_thenOrderEmpty() {}
+    void givenOrderWithItems_whenReturnToStock_thenOrderEmpty() {
+    }
 
     @Test
     void GivenManyThreadsRemoveStandingSpotsFromSameActiveOrder_WhenRemoveStandingSpots_ThenDoNotRemoveMoreThanExists()
@@ -100,15 +103,6 @@ class ActiveOrderTest extends BaseDomainTest {
         }
     }
 
-
-
-
-
-
-
-
-
-
     @Test
     void GivenStandingReservation_WhenAddStandingReservation_ThenCreatesQuantityLineItemsWithNullSeatNumber() {
         ActiveOrder order = track(new ActiveOrder(USER_ID));
@@ -135,8 +129,7 @@ class ActiveOrderTest extends BaseDomainTest {
                 ZONE_ID,
                 List.of("A1", "A2", "A3"),
                 120.0,
-                LocalDateTime.now()
-        );
+                LocalDateTime.now());
 
         assertEquals(3, order.getItems().size());
         assertEquals(List.of("A1", "A2", "A3"),
@@ -147,15 +140,12 @@ class ActiveOrderTest extends BaseDomainTest {
     void GivenDuplicateSeats_WhenAddSeatedReservation_ThenThrowsException() {
         ActiveOrder order = track(new ActiveOrder(USER_ID));
 
-        assertThrows(IllegalArgumentException.class, () ->
-                order.addSeatedReservation(
-                        EVENT_ID,
-                        ZONE_ID,
-                        List.of("A1", "A1"),
-                        120.0,
-                        LocalDateTime.now()
-                )
-        );
+        assertThrows(IllegalArgumentException.class, () -> order.addSeatedReservation(
+                EVENT_ID,
+                ZONE_ID,
+                List.of("A1", "A1"),
+                120.0,
+                LocalDateTime.now()));
 
         assertTrue(order.getItems().isEmpty());
     }
@@ -169,8 +159,7 @@ class ActiveOrderTest extends BaseDomainTest {
                 ZONE_ID,
                 List.of("A1", "A2", "A3"),
                 120.0,
-                LocalDateTime.now()
-        );
+                LocalDateTime.now());
 
         order.removeSeats(EVENT_ID, ZONE_ID, List.of("A2"));
 
@@ -188,12 +177,9 @@ class ActiveOrderTest extends BaseDomainTest {
                 ZONE_ID,
                 List.of("A1", "A2"),
                 120.0,
-                LocalDateTime.now()
-        );
+                LocalDateTime.now());
 
-        assertThrows(IllegalArgumentException.class, () ->
-                order.removeSeats(EVENT_ID, ZONE_ID, List.of("A3"))
-        );
+        assertThrows(IllegalArgumentException.class, () -> order.removeSeats(EVENT_ID, ZONE_ID, List.of("A3")));
 
         assertEquals(2, order.getItems().size());
         assertEquals(List.of("A1", "A2"),
@@ -220,8 +206,7 @@ class ActiveOrderTest extends BaseDomainTest {
                 ZONE_ID,
                 "A7",
                 120.0,
-                LocalDateTime.now()
-        );
+                LocalDateTime.now());
 
         ActiveOrderDTO.CartLineDTO dto = item.toDTO();
 
@@ -230,7 +215,6 @@ class ActiveOrderTest extends BaseDomainTest {
         assertEquals("A7", dto.seatNumber());
         assertEquals(120.0, dto.pricePerTicket());
     }
-
 
     @Test
     void GivenDuplicateSeatNumbers_WhenRemoveSeats_ThenThrowsAndCartUnchanged() {

@@ -2,7 +2,6 @@ package com.ticketing.system.Core.Domain.users;
 
 import java.time.LocalDateTime;
 import java.util.EnumSet;
-import java.util.Set;
 
 import com.ticketing.system.Core.Domain.exceptions.InvalidPermissionException;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
@@ -33,8 +32,10 @@ public class CompanyAppointment implements InvariantChecked {
         this.inviterId = inviterId;
         this.role = role;
         this.status = status;
-        // Empty/null-safe: EnumSet.copyOf throws on an empty non-EnumSet collection, and would
-        // run before checkInvariants(). The Manager/Owner permission rules are enforced below.
+        // Empty/null-safe: EnumSet.copyOf throws on an empty non-EnumSet collection,
+        // and would
+        // run before checkInvariants(). The Manager/Owner permission rules are enforced
+        // below.
         this.permissions = (permissions == null || permissions.isEmpty())
                 ? EnumSet.noneOf(Permission.class)
                 : EnumSet.copyOf(permissions);
@@ -54,10 +55,12 @@ public class CompanyAppointment implements InvariantChecked {
             throw new IllegalStateException("CompanyAppointment invariant violated: permissions must not be null");
         }
         if (role == CompanyRole.Manager && permissions.isEmpty()) {
-            throw new IllegalStateException("CompanyAppointment invariant violated: Manager role must have at least one permission");
+            throw new IllegalStateException(
+                    "CompanyAppointment invariant violated: Manager role must have at least one permission");
         }
         if (role == CompanyRole.Owner && !permissions.isEmpty()) {
-            throw new IllegalStateException("CompanyAppointment invariant violated: Owner role must not have explicit permissions");
+            throw new IllegalStateException(
+                    "CompanyAppointment invariant violated: Owner role must not have explicit permissions");
         }
         if (createdAt == null) {
             throw new IllegalStateException("CompanyAppointment invariant violated: createdAt must not be null");
@@ -78,7 +81,8 @@ public class CompanyAppointment implements InvariantChecked {
                 targetId,
                 inviterId,
                 CompanyRole.Owner,
-                AppointmentStatus.ACTIVE,  // active because the founder is active immediately, used when opening a company.
+                AppointmentStatus.ACTIVE, // active because the founder is active immediately, used when opening a
+                                          // company.
                 null);
     }
 
@@ -114,9 +118,12 @@ public class CompanyAppointment implements InvariantChecked {
     }
 
     public void setPermissions(EnumSet<Permission> newPermissions) {
-        // Validate-before-commit: roll back to the previous permission set if the new one
-        // would violate an invariant (e.g. emptying a Manager's permissions), so a rejected
-        // call never leaves the appointment corrupted. checkInvariants stays the sole validator.
+        // Validate-before-commit: roll back to the previous permission set if the new
+        // one
+        // would violate an invariant (e.g. emptying a Manager's permissions), so a
+        // rejected
+        // call never leaves the appointment corrupted. checkInvariants stays the sole
+        // validator.
         EnumSet<Permission> previous = this.permissions;
         this.permissions = newPermissions;
         try {
@@ -149,14 +156,16 @@ public class CompanyAppointment implements InvariantChecked {
         checkInvariants();
     }
 
-    // UC-24 — ACTIVE -> REVOKED. Owner appointments do NOT support revoke (II.4.9 Cancelled in v0).
+    // UC-24 — ACTIVE -> REVOKED. Owner appointments do NOT support revoke (II.4.9
+    // Cancelled in v0).
     public void revoke(int revokerId) {
         if (this.status != AppointmentStatus.ACTIVE) {
             throw new IllegalStateException("Only active appointments can be revoked.");
         }
         if (this.role == CompanyRole.Owner) {
             if (this.inviterId != revokerId && this.targetId != revokerId) {
-                // if the appointment is an owner appointment, either the original inviter or the target themselves can revoke it (per UC-24 owner revoke condition).
+                // if the appointment is an owner appointment, either the original inviter or
+                // the target themselves can revoke it (per UC-24 owner revoke condition).
                 throw new IllegalArgumentException("Only the original inviter or target can revoke this appointment.");
             }
         } else {
@@ -193,8 +202,7 @@ public class CompanyAppointment implements InvariantChecked {
         }
         return this.permissions.contains(permission);
     }
-    
-    
+
     /// Getters for all fields (no setters except for permissions, as role/status
     /// changes are handled by specific methods above to enforce lifecycle rules).
 
