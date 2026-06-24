@@ -15,10 +15,19 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.system.Core.Application.dto.AdminOverviewDTO;
 import com.ticketing.system.Core.Application.dto.SystemAnalyticsDTO;
 import com.ticketing.system.Core.Application.interfaces.ISystemMetrics;
 import com.ticketing.system.Core.Application.interfaces.MetricType;
 import com.ticketing.system.Core.Application.services.SystemAnalyticsService;
+import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
+import com.ticketing.system.Core.Domain.company.ProductionCompany;
+import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.EventStatus;
+import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.messaging.Conversation;
+import com.ticketing.system.Core.Domain.messaging.ConversationType;
+import com.ticketing.system.Core.Domain.messaging.IConversationRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 
@@ -34,14 +43,21 @@ class SystemAnalyticsServiceTest {
 
     private ISystemMetrics metrics;
     private IOrderReceiptRepository orderReceiptRepository;
+    private IProductionCompanyRepository companyRepository;
+    private IEventRepository eventRepository;
+    private IConversationRepository conversationRepository;
     private SystemAnalyticsService service;
 
     @BeforeEach
     void setUp() {
         metrics = mock(ISystemMetrics.class);
         orderReceiptRepository = mock(IOrderReceiptRepository.class);
+        companyRepository = mock(IProductionCompanyRepository.class);
+        eventRepository = mock(IEventRepository.class);
+        conversationRepository = mock(IConversationRepository.class);
         Clock clock = Clock.fixed(T0, ZoneOffset.UTC);
-        service = new SystemAnalyticsService(metrics, orderReceiptRepository, clock, WINDOW);
+        service = new SystemAnalyticsService(metrics, orderReceiptRepository, companyRepository,
+                eventRepository, conversationRepository, clock, WINDOW);
     }
 
     @Test
@@ -98,6 +114,51 @@ class SystemAnalyticsServiceTest {
     private static OrderReceipt receiptAt(LocalDateTime purchaseTime) {
         OrderReceipt receipt = mock(OrderReceipt.class);
         when(receipt.getPurchaseTime()).thenReturn(purchaseTime);
+        return receipt;
+    }
+
+    @Test
+    void adminOverview_countsActiveCompaniesLiveEventsOpenComplaints_andSums30dRevenue() {
+        when(companyRepository.findActive()).thenReturn(List.of(
+                mock(ProductionCompany.class), mock(ProductionCompany.class)));               // 2 active
+        when(eventRepository.findByStatus(EventStatus.ON_SALE)).thenReturn(List.of(
+                mock(Event.class), mock(Event.class), mock(Event.class)));                    // 3 live
+
+        // Build the stubbed conversations first — nesting conversation()'s own when(...) inside
+        // thenReturn(...) would trip Mockito's UnfinishedStubbing check.
+        Conversation openA = conversation(false);
+        Conversation openB = conversation(false);
+        Conversation closed = conversation(true);
+        when(conversationRepository.findByType(ConversationType.COMPLAINT))
+                .thenReturn(List.of(openA, openB, closed));                                   // 2 open, 1 closed
+
+        LocalDateTime base = LocalDateTime.ofInstant(T0, ZoneOffset.UTC);
+        OrderReceipt inWindow = receipt(base, false, 100.0);                  // counts
+        OrderReceipt alsoInWindow = receipt(base.minusDays(10), false, 50.0); // counts
+        OrderReceipt refunded = receipt(base, true, 999.0);                   // excluded: refunded
+        OrderReceipt tooOld = receipt(base.minusDays(40), false, 999.0);      // excluded: > 30d
+        when(orderReceiptRepository.findGlobal(any()))
+                .thenReturn(List.of(inWindow, alsoInWindow, refunded, tooOld));
+
+        AdminOverviewDTO dto = service.adminOverview();
+
+        assertEquals(2, dto.activeCompanies());
+        assertEquals(3, dto.liveEvents());
+        assertEquals(2, dto.openComplaints());
+        assertEquals(150.0, dto.revenue30d(), 1e-9);
+    }
+
+    private static Conversation conversation(boolean closed) {
+        Conversation conversation = mock(Conversation.class);
+        when(conversation.isClosed()).thenReturn(closed);
+        return conversation;
+    }
+
+    private static OrderReceipt receipt(LocalDateTime purchaseTime, boolean refunded, double total) {
+        OrderReceipt receipt = mock(OrderReceipt.class);
+        when(receipt.getPurchaseTime()).thenReturn(purchaseTime);
+        when(receipt.wasRefunded()).thenReturn(refunded);
+        when(receipt.getTotalAmount()).thenReturn(total);
         return receipt;
     }
 }

@@ -22,6 +22,7 @@ import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
 import com.ticketing.system.Presentation.views.admin.SystemAnalyticsView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.ticketing.system.Presentation.views.catalog.EventDetailsView;
+import com.ticketing.system.Presentation.presenters.admin.AdminDashboardPresenter;
 import com.ticketing.system.Presentation.presenters.admin.GlobalHistoryPresenter;
 import com.ticketing.system.Presentation.presenters.admin.SystemAnalyticsPresenter;
 import com.ticketing.system.Presentation.presenters.catalog.BrowseEventsPresenter;
@@ -48,6 +49,7 @@ import com.ticketing.system.Presentation.presenters.account.MyInvitationsPresent
 import com.ticketing.system.Presentation.presenters.landing.LandingPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.SubmitComplaintPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.SupportInboxPresenter;
+import com.ticketing.system.Core.Application.dto.AdminOverviewDTO;
 import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
 import com.ticketing.system.Core.Application.dto.MarketStateDTO;
 import com.ticketing.system.Core.Application.dto.SystemAnalyticsDTO;
@@ -193,10 +195,21 @@ class VaadinSmokeTest {
 
     @Test
     void platformAdminViewsInstantiate() {
-        // Every PlatformAdminLayout view. Sign-in is now the unified LoginView
-        // (which is exercised by the buyer-side construction path).
-        assertDoesNotThrow(AdminDashboardView::new,      "AdminDashboardView failed to construct");
+        // No-arg PlatformAdminLayout views. Sign-in is now the unified LoginView
+        // (which is exercised by the buyer-side construction path). AdminDashboardView
+        // now takes a presenter, so it has its own test below.
         assertDoesNotThrow(OrganizationalTreeView::new,  "OrganizationalTreeView failed to construct");
+    }
+
+    @Test
+    void adminDashboardViewInstantiates() {
+        // Admin workspace landing wired to a presenter (#279). The constructor runs an initial
+        // load() to build the KPI row, so the mock presenter returns a success outcome.
+        AdminDashboardPresenter presenter = mock(AdminDashboardPresenter.class);
+        when(presenter.load()).thenReturn(
+            new AdminDashboardPresenter.Outcome.Success(new AdminOverviewDTO(0, 0, 0, 0.0)));
+        assertDoesNotThrow(() -> new AdminDashboardView(presenter),
+            "AdminDashboardView failed to construct");
     }
 
     @Test

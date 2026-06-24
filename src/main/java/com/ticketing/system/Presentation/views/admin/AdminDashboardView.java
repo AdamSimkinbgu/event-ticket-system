@@ -1,11 +1,13 @@
 package com.ticketing.system.Presentation.views.admin;
 
+import com.ticketing.system.Core.Application.dto.AdminOverviewDTO;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkStat;
 import com.ticketing.system.Presentation.components.kit.LkTile;
 import com.ticketing.system.Presentation.layouts.PlatformAdminLayout;
+import com.ticketing.system.Presentation.presenters.admin.AdminDashboardPresenter;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
@@ -21,7 +23,11 @@ import jakarta.annotation.security.PermitAll;
 @RequireCapability(Capability.ADMIN_WORKSPACE)
 public class AdminDashboardView extends LkPage {
 
-    public AdminDashboardView() {
+    private final AdminDashboardPresenter presenter;
+
+    public AdminDashboardView(AdminDashboardPresenter presenter) {
+        this.presenter = presenter;
+
         title("Admin workspace");
         subtitle("Cross-company moderation, broadcasts, and platform analytics.");
 
@@ -32,12 +38,27 @@ public class AdminDashboardView extends LkPage {
     private Component buildStats() {
         Div row = new Div();
         row.addClassName("ow-stats");
-        row.add(
-            new LkStat("Active companies",  "42").delta("▲ 3 this week", LkStat.Tone.up),
-            new LkStat("Live events",       "118"),
-            new LkStat("Open complaints",   "7").delta("▼ 2 vs last week", LkStat.Tone.warn),
-            new LkStat("Platform revenue · 30d", "$5.8M").delta("▲ 12%", LkStat.Tone.up)
-        );
+        switch (presenter.load()) {
+            case AdminDashboardPresenter.Outcome.Success ok -> {
+                AdminOverviewDTO o = ok.overview();
+                LkStat complaints = new LkStat("Open complaints", String.format("%,d", o.openComplaints()));
+                if (o.openComplaints() > 0) {
+                    complaints.delta("needs attention", LkStat.Tone.warn);
+                }
+                row.add(
+                    new LkStat("Active companies",        String.format("%,d", o.activeCompanies())),
+                    new LkStat("Live events",             String.format("%,d", o.liveEvents())),
+                    complaints,
+                    new LkStat("Platform revenue · 30d",  "$" + String.format("%,.0f", o.revenue30d()))
+                );
+            }
+            case AdminDashboardPresenter.Outcome.Failure ignored -> row.add(
+                new LkStat("Active companies",        "—"),
+                new LkStat("Live events",             "—"),
+                new LkStat("Open complaints",         "—"),
+                new LkStat("Platform revenue · 30d",  "—")
+            );
+        }
         return row;
     }
 
