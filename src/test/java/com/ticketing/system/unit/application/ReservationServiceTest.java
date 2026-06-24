@@ -3,6 +3,7 @@ package com.ticketing.system.unit.application;
 import com.ticketing.system.Core.Application.dto.ReservationResultDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Application.interfaces.ISystemMetrics;
 import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Core.Application.services.SystemAdminService;
 import com.ticketing.system.Core.Domain.exceptions.MarketNotOpenException;
@@ -94,7 +95,8 @@ public class ReservationServiceTest {
                 notificationService,
                 mock(IProductionCompanyRepository.class),
                 mock(IUserRepository.class),
-                systemAdminService
+                systemAdminService,
+                mock(ISystemMetrics.class)
         );
     }
 

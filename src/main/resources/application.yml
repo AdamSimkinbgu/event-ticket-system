@@ -39,6 +39,15 @@ constants:
   order-expiration-duration: ${ORDER_EXPIRATION_DURATION:60}
 
 
+# System Analytics dashboard (UC-46 / #43, #279).
+#  - rate-window-minutes: trailing window the per-minute rates are computed over.
+#  - refresh-interval-ms: how often the dashboard auto-refreshes its KPIs in the
+#    browser (Vaadin poll). 0 disables auto-refresh (manual "Refresh" still works).
+analytics:
+  rate-window-minutes: ${ANALYTICS_RATE_WINDOW_MINUTES:5}
+  refresh-interval-ms: ${ANALYTICS_REFRESH_INTERVAL_MS:5000}
+
+
 # Actuator (SLR.8.1 telemetry / SLR.8.2 logging visibility).
 # Restrict in production by listing only the endpoints you actually want exposed.
 management:
