@@ -25,6 +25,8 @@ import com.ticketing.system.Core.Application.dto.RefreshTokenRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Application.interfaces.ISystemMetrics;
+import com.ticketing.system.Core.Application.interfaces.MetricType;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
@@ -67,6 +69,7 @@ public class AuthenticationService {
     private final NotificationDispatchService notificationDispatchService; // for UC-37 notification flush
     private final ISessionRepository sessionRepository;
     private final IActiveOrderRepository activeOrderRepository;
+    private final ISystemMetrics systemMetrics;
     private final Clock clock;
     private final long guestIdleMinutes;
     private final long memberTtlMinutes;
@@ -88,6 +91,7 @@ public class AuthenticationService {
             NotificationDispatchService notificationDispatchService,
             ISessionRepository sessionRepository,
             IActiveOrderRepository activeOrderRepository,
+            ISystemMetrics systemMetrics,
             Clock clock,
             IAdminRepository adminRepository,
             @Value("${session.guest-idle-timeout-minutes}") long guestIdleMinutes,
@@ -101,6 +105,7 @@ public class AuthenticationService {
         this.notificationDispatchService = notificationDispatchService;
         this.sessionRepository = sessionRepository;
         this.activeOrderRepository = activeOrderRepository;
+        this.systemMetrics = systemMetrics;
         this.clock = clock;
         this.adminRepository = adminRepository;
         this.guestIdleMinutes = guestIdleMinutes;
@@ -132,6 +137,7 @@ public class AuthenticationService {
         Instant expiry = now.plus(guestIdleMinutes, ChronoUnit.MINUTES);
         String sid = UUID.randomUUID().toString();
         sessionRepository.save(new Session(sid, null, now, expiry));
+        systemMetrics.record(MetricType.VISITOR_ENTRY);
         log.info("guest session started sid={}", sid);
         return new GuestSessionDTO(sid, now);
     }
@@ -145,6 +151,7 @@ public class AuthenticationService {
         if (sessionId == null || sessionId.isBlank())
             return;
         sessionRepository.delete(sessionId);
+        systemMetrics.record(MetricType.VISITOR_EXIT);
         log.info("guest session ended sid={}", sessionId);
     }
 
@@ -202,6 +209,7 @@ public class AuthenticationService {
         // 5. Session stays Guest — just touch the activity timestamp.
         session.touch(clock.instant());
         sessionRepository.save(session);
+        systemMetrics.record(MetricType.REGISTRATION);
 
         log.info("member registered: username={} id={}", user.getUsername(), user.getUserId());
     }

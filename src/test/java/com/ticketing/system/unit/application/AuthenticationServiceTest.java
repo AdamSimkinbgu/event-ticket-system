@@ -32,6 +32,7 @@ import com.ticketing.system.Core.Application.dto.LogoutRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Application.interfaces.ISystemMetrics;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Application.services.NotificationDispatchService;
 import com.ticketing.system.Core.Application.services.ReservationService;
@@ -81,7 +82,7 @@ class AuthenticationServiceTest {
         fixedClock = Clock.fixed(T0, ZoneOffset.UTC);
         service = new AuthenticationService(
                 mockUserRepo, mockHasher, mockSessionManager, mockReservation, mockNotification,
-                mockSessionRepo, mockActiveOrderRepo,
+                mockSessionRepo, mockActiveOrderRepo, mock(ISystemMetrics.class),
                 fixedClock, mockAdminRepo, GUEST_IDLE_MINUTES, MEMBER_TTL_MINUTES, 5, 15L);
         // Default mocks: no cart for anyone. Individual D9a tests override.
         when(mockActiveOrderRepo.getBySessionId(any())).thenReturn(Optional.empty());

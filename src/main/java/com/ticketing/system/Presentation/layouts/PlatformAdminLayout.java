@@ -11,6 +11,7 @@ import com.ticketing.system.Presentation.views.admin.AdminComplaintQueueView;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
+import com.ticketing.system.Presentation.views.admin.SystemAnalyticsView;
 import com.ticketing.system.Presentation.views.auth.LoginView;
 import com.ticketing.system.Presentation.views.landing.LandingView;
 import com.vaadin.flow.component.HasElement;
@@ -36,6 +37,7 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
 
     private static final Map<Class<?>, String> ADMIN_LABELS = Map.of(
         AdminDashboardView.class,      "Admin workspace",
+        SystemAnalyticsView.class,     "System Analytics",
         GlobalHistoryView.class,       "Global History",
         OrganizationalTreeView.class,  "Organizational Tree",
         AdminAnnouncementsView.class,  "Announcements",
@@ -64,6 +66,7 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
         topBar = new LkTopBar(LkTopBar.Variant.PLATFORM)
             .brand("Event Ticket Platform", " · Admin", LandingView.class)
             .rightLink("Back to site", "arrowLeft", LandingView.class)
+            .rightAction("Analytics", "chart", SystemAnalyticsView.class)
             .bellDefault(true)
             .account(initials(name), name, buildAdminMenu(name), "#fff", "#c2410c");
         addToNavbar(topBar);
@@ -72,6 +75,7 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
     private void buildDrawerOnce() {
         adminNav = new LkSideNav("Admin").items(List.of(
             new LkSideNav.Item("building", "Admin workspace",     AdminDashboardView.class),
+            new LkSideNav.Item("chart",    "System Analytics",    SystemAnalyticsView.class),
             new LkSideNav.Item("chart",    "Global History",      GlobalHistoryView.class),
             new LkSideNav.Item("org",      "Organizational Tree", OrganizationalTreeView.class),
             new LkSideNav.Item("comment",  "Announcements",       AdminAnnouncementsView.class),
@@ -86,7 +90,7 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
     private LkAccountMenu buildAdminMenu(String name) {
         LkMenu menu = new LkMenu(
             new LkMenu.Item("gear",      "Admin settings"),
-            new LkMenu.Item("chart",     "Platform analytics"),
+            new LkMenu.Item("chart",     "Platform analytics").onClick(() -> UI.getCurrent().navigate(SystemAnalyticsView.class)),
             new LkMenu.Divider(),
             new LkMenu.Item("arrowLeft", "Back to site").onClick(() -> UI.getCurrent().navigate(LandingView.class)),
             new LkMenu.Divider(),
