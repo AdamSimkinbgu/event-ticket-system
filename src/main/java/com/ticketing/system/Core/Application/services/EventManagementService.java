@@ -14,6 +14,7 @@ import com.ticketing.system.Core.Application.dto.RefundResultDTO;
 import com.ticketing.system.Core.Domain.exceptions.CompanyNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Application.dto.EventCreationDTO;
@@ -171,7 +172,8 @@ public class EventManagementService {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
         if (user == null) {
-             throw new InvalidTokenException("user not found");        }
+            throw new UserNotFoundException(userId);
+        }
 
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
@@ -195,13 +197,14 @@ public class EventManagementService {
         }
         User user = userRepository.getUserById(userId);
         if (user == null) {
-             throw new InvalidTokenException("user not found");        }
+            throw new UserNotFoundException(userId);
+        }
         user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
         ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
         if (company == null) {
-            throw new RuntimeException("Company not found");
+            throw new CompanyNotFoundException("Company not found for ID: " + event.getCompanyId());
         }
-       
+
         return new EventDetailDTO(
             String.valueOf(event.getId()),
             event.getName(),
@@ -227,7 +230,8 @@ public class EventManagementService {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
         if (user == null) {
-             throw new InvalidTokenException("user not found");        }
+            throw new UserNotFoundException(userId);
+        }
         Event event = eventRepository.findById(eventId);
         if (event == null) {
             throw new EventNotFoundException("Event not found for ID: " + eventId);

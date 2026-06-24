@@ -278,7 +278,7 @@ public class CompanyManagementService {
         }
         User requester = userRepository.getUserById(requesterId);
         if (requester == null) {
-             throw new InvalidTokenException("user not found");     
+            throw new UserNotFoundException(requesterId);
         }
         requester.requireOwnerInCompany(companyId);
 
@@ -304,7 +304,7 @@ public class CompanyManagementService {
         }
         User requester = userRepository.getUserById(requesterId);
         if (requester == null) {
-             throw new InvalidTokenException("user not found");        
+            throw new UserNotFoundException(requesterId);
         }
         requester.requireOwnerInCompany(companyId);
 
@@ -328,7 +328,7 @@ public class CompanyManagementService {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
         if (user == null) {
-             throw new InvalidTokenException("user not found");
+            throw new UserNotFoundException(userId);
         }
 
         List<ProductionCompanyDTO> owned = new ArrayList<>();
@@ -361,7 +361,7 @@ public class CompanyManagementService {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
         if (user == null) {
-             throw new InvalidTokenException("user not found");  
+            throw new UserNotFoundException(userId);
         }
 
         List<MyCompanyDTO> companies = new ArrayList<>();
@@ -396,7 +396,7 @@ public class CompanyManagementService {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
         if (user == null) {
-             throw new InvalidTokenException("user not found");
+            throw new UserNotFoundException(userId);
         }
 
         List<InvitationDTO> invitations = new ArrayList<>();

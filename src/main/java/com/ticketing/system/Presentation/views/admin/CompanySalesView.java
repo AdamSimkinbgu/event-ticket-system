@@ -144,6 +144,7 @@ public class CompanySalesView extends LkPage {
             Span total = new Span();
             total.getElement().setProperty("innerHTML",
                                         "<b>" + Money.format(Money.toCents(r.totalPaid())) + "</b>");
+            row.put("total", total);
 
             grid.row(row);
         }
