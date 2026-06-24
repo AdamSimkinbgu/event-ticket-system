@@ -27,6 +27,7 @@ import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
 import com.ticketing.system.Core.Application.dto.ManagerAppointmentRequestDTO;
 import com.ticketing.system.Core.Application.dto.PermissionEditDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.dto.LocationDTO;
@@ -35,6 +36,7 @@ import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.dto.ZoneDetailDTO;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
+import com.ticketing.system.Core.Application.services.CompanyAnalyticsService;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
@@ -50,7 +52,8 @@ import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.events.StandingZone;
 import com.ticketing.system.Core.Domain.events.VenueMap;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
-
+import com.ticketing.system.Core.Domain.orders.OrderReceipt;
+import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
@@ -74,6 +77,9 @@ class CompanyAcceptanceTest {
         private IOrderReceiptRepository orderReceiptRepository;
         @Autowired
         private IUserRepository userRepository;
+
+        @Autowired
+        private CompanyAnalyticsService companyAnalyticsService;
 
         private AuthTokenDTO registerAndLoginMember(String name) {
                 String sid = authService.startGuestSession().sessionId();
@@ -165,16 +171,114 @@ class CompanyAcceptanceTest {
         void GivenOwner_WhenSetCompanyPolicy_ThenStored() {
         }
 
-        // UC-22
         @Test
-        @Disabled("UC-22 main: Owner views company sales — flat list")
-        void GivenOwner_WhenViewSales_ThenFlatList() {
+        void GivenCompanyWithNoEvents_WhenViewSalesHistory_ThenEmpty() {
+        AuthTokenDTO owner = registerAndLoginMember("salesOwner1");
+        int companyId = companyService.registerCompany(
+                owner.token(), new CompanyRegistrationDTO("SalesCo1", "desc")).companyId();
+
+        PurchaseHistoryDTO result = companyAnalyticsService.salesHistory(companyId);
+
+        assertTrue(result.records().isEmpty());
         }
 
         @Test
-        @Disabled("UC-22 + II.4.5.2: prices reflect time of sale, not current")
-        void GivenPriceChanged_WhenViewSales_ThenOriginalPrice() {
+        void GivenEventWithNoOrders_WhenViewSalesHistory_ThenEmpty() {
+        AuthTokenDTO owner = registerAndLoginMember("salesOwner2");
+        int companyId = companyService.registerCompany(
+                owner.token(), new CompanyRegistrationDTO("SalesCo2", "desc")).companyId();
+
+        eventManagementService.addEvent(owner.token(), new EventCreationDTO(
+                companyId, "Empty Event", "desc", List.of("Artist"),
+                EventCategory.CONCERT, 4.0,
+                new Location("Israel", "Tel Aviv"),
+                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                null));
+
+        PurchaseHistoryDTO result = companyAnalyticsService.salesHistory(companyId);
+
+        assertTrue(result.records().isEmpty());
         }
+
+                @Test
+        void GivenOneCompletedOrder_WhenViewSalesHistory_ThenOneRecordWithCorrectTotal() {
+        AuthTokenDTO owner = registerAndLoginMember("salesOwner3");
+        int companyId = companyService.registerCompany(
+                owner.token(), new CompanyRegistrationDTO("SalesCo3", "desc")).companyId();
+
+        EventDetailDTO event = eventManagementService.addEvent(owner.token(), new EventCreationDTO(
+                companyId, "Sales Event", "desc", List.of("Artist"),
+                EventCategory.CONCERT, 4.5,
+                new Location("Israel", "Tel Aviv"),
+                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                null));
+
+        int eventId = Integer.parseInt(event.eventId());
+        int receiptId = orderReceiptRepository.nextId();
+        OrderReceipt receipt = OrderReceipt.forMember(
+                receiptId, owner.userId(), 80.0,
+                List.of(new ReceiptLine(1, 80.0, eventId, 1, null, LocalDateTime.now())));
+        orderReceiptRepository.save(receipt);
+
+        PurchaseHistoryDTO result = companyAnalyticsService.salesHistory(companyId);
+
+        assertEquals(1, result.records().size());
+        assertEquals(80.0, result.records().get(0).totalPaid());
+        }
+
+        @Test
+        void GivenTwoCompletedOrders_WhenViewSalesHistory_ThenTwoRecords() {
+        AuthTokenDTO owner = registerAndLoginMember("salesOwner4");
+        int companyId = companyService.registerCompany(
+                owner.token(), new CompanyRegistrationDTO("SalesCo4", "desc")).companyId();
+
+        EventDetailDTO event = eventManagementService.addEvent(owner.token(), new EventCreationDTO(
+                companyId, "Multi Sales Event", "desc", List.of("Artist"),
+                EventCategory.CONCERT, 4.5,
+                new Location("Israel", "Haifa"),
+                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                null));
+
+        int eventId = Integer.parseInt(event.eventId());
+        orderReceiptRepository.save(OrderReceipt.forMember(
+                orderReceiptRepository.nextId(), owner.userId(), 50.0,
+                List.of(new ReceiptLine(1, 50.0, eventId, 1, null, LocalDateTime.now()))));
+        orderReceiptRepository.save(OrderReceipt.forMember(
+                orderReceiptRepository.nextId(), owner.userId(), 30.0,
+                List.of(new ReceiptLine(2, 30.0, eventId, 1, null, LocalDateTime.now()))));
+
+        PurchaseHistoryDTO result = companyAnalyticsService.salesHistory(companyId);
+
+        assertEquals(2, result.records().size());
+        }
+
+        @Test
+        void GivenRefundedOrder_WhenViewSalesHistory_ThenStillAppearsWithRefundedFlag() {
+        AuthTokenDTO owner = registerAndLoginMember("salesOwner5");
+        int companyId = companyService.registerCompany(
+                owner.token(), new CompanyRegistrationDTO("SalesCo5", "desc")).companyId();
+
+        EventDetailDTO event = eventManagementService.addEvent(owner.token(), new EventCreationDTO(
+                companyId, "Refund Event", "desc", List.of("Artist"),
+                EventCategory.CONCERT, 4.5,
+                new Location("Israel", "Jerusalem"),
+                List.of(new ShowDate(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(3))),
+                null));
+
+        int eventId = Integer.parseInt(event.eventId());
+        int receiptId = orderReceiptRepository.nextId();
+        OrderReceipt receipt = OrderReceipt.forMember(
+                receiptId, owner.userId(), 60.0,
+                List.of(new ReceiptLine(1, 60.0, eventId, 1, null, LocalDateTime.now())));
+        receipt.markRefunded();
+        orderReceiptRepository.save(receipt);
+
+        PurchaseHistoryDTO result = companyAnalyticsService.salesHistory(companyId);
+
+        assertEquals(1, result.records().size());
+        assertTrue(result.records().get(0).refunded());
+        }
+
 
         // UC-23
         @Test
