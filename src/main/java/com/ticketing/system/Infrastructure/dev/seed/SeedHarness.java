@@ -67,6 +67,9 @@ public final class SeedHarness {
             log.warn("seed: SKIPPED [{}] {} — feature not implemented ({})", stage, name, msg(notImplemented));
             return Optional.empty();
         } catch (Throwable t) {
+            if (t instanceof Error err) {
+                throw err;
+            }
             report.record(stage, name, SeedReport.Status.FAIL, t.getClass().getSimpleName() + ": " + msg(t));
             log.error("seed: FAIL [{}] {} — {}", stage, name, msg(t), t);
             if (failFast) {
