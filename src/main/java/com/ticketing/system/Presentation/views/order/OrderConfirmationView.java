@@ -77,8 +77,11 @@ public class OrderConfirmationView extends LkPage implements BeforeEnterObserver
         String totalDisplay = (result != null)
             ? Money.format(Money.toCents(result.totalCharged()))
             : "$0.00";
+        // The real gateway transaction id (what WSEP `pay` returned), shown as-is so
+        // it matches the receipt's "Transaction <externalTransactionId>" — not a
+        // hex-mangled derivative.
         String transactionDisplay = (result != null)
-            ? String.format("%04x", result.paymentTransactionId())
+            ? String.valueOf(result.paymentTransactionId())
             : "—";
 
         Span sub = new Span(receiptDisplay + " · Transaction " + transactionDisplay
