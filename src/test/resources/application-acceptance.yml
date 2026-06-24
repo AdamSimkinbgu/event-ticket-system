@@ -1,13 +1,18 @@
+# Acceptance-test profile — isolated in-memory H2 so the suite never touches a
+# shared or real database (lecture 4.c: tests must not pollute the DB the system
+# uses). A fresh schema is created and dropped per run, so nothing persists.
+# Switch to a throwaway/ephemeral instance (e.g. Testcontainers) if a real
+# Postgres dialect is ever needed — never point this at a shared DB.
 spring:
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ticketing_test}
-    username: ${DB_USER:postgres}
-    password: ${DB_PASSWORD:postgres}
-    driver-class-name: org.postgresql.Driver
+    url: jdbc:h2:mem:acceptancedb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
 
   jpa:
     hibernate:
       ddl-auto: create-drop
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
+        dialect: org.hibernate.dialect.H2Dialect
