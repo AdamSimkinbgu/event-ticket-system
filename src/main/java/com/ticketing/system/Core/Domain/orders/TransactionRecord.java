@@ -4,6 +4,11 @@ import java.time.LocalDateTime;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+
 /**
  * Immutable audit record for an external transaction related to an OrderReceipt.
  *
@@ -11,7 +16,12 @@ import com.ticketing.system.Core.Domain.shared.InvariantChecked;
  * application/external-port DTOs. This value object stores only the stable domain
  * facts needed for purchase history, refunds, and audit.
  */
-public final class TransactionRecord implements InvariantChecked {
+// V3: an @Embeddable value object — one row in the owning OrderReceipt's receipt_transactions
+// element collection (no identity of its own). The class and its fields are non-final with a
+// protected no-arg ctor so Hibernate can hydrate; the private ctor + factories still enforce the
+// invariants for application-created records.
+@Embeddable
+public class TransactionRecord implements InvariantChecked {
 
     public enum TransactionType {
         PAYMENT_CHARGE,    // corresponds to a successful charge via IPaymentGateway. Amount should be positive.
@@ -19,12 +29,27 @@ public final class TransactionRecord implements InvariantChecked {
         REFUND             // corresponds to a successful refund via IPaymentGateway. Amount should be positive, representing the refunded amount.
     }
 
-    private final TransactionType type;
-    private final String providerName;
-    private final String externalTransactionId;
-    private final double amount;
-    private final String currency;
-    private final LocalDateTime timestamp;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "transaction_type", nullable = false)
+    private TransactionType type;
+
+    @Column(name = "provider_name", nullable = false)
+    private String providerName;
+
+    @Column(name = "external_transaction_id", nullable = false)
+    private String externalTransactionId;
+
+    @Column(nullable = false)
+    private double amount;
+
+    @Column
+    private String currency;
+
+    @Column(name = "transaction_timestamp", nullable = false)
+    private LocalDateTime timestamp;
+
+    /** For JPA only — do not call from application code. */
+    protected TransactionRecord() { }
 
     private TransactionRecord(TransactionType type, String providerName, String externalTransactionId, double amount, String currency, LocalDateTime timestamp) {
         this.type = type;
