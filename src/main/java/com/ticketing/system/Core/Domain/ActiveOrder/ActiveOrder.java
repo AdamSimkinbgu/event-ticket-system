@@ -11,6 +11,19 @@ import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+import jakarta.persistence.Version;
+
 /**
  * ActiveOrder = a cart in progress.
  *
@@ -29,14 +42,33 @@ import com.ticketing.system.Core.Domain.shared.InvariantChecked;
  *
  * <p>Invariant: at least one of userId / sessionId is non-null at all times.
  */
+// V3: mapped to JPA. The stable orderKey (a UUID generated at construction) is the @Id — it already
+// uniquely identifies the order's inventory holds, so it is the natural primary key. userId and
+// sessionId are nullable by-id columns (a cart has at least one of them); status is stored by name;
+// @Version drives optimistic locking. items are owned value rows (@ElementCollection of @Embeddable).
+// itemsLock (a thread guard) is @Transient — re-created by the field initializer on hydrate. A
+// protected no-arg ctor lets Hibernate hydrate; the public ctor still enforces the invariants.
+//
+// Identity collapse (one cart per user / per guest session) is enforced in the repository's save,
+// reproducing the in-memory behaviour even though each cart has a distinct orderKey.
+@Entity
+@Table(name = "active_orders")
 public class ActiveOrder implements InvariantChecked {
 
+    @Column(name = "user_id")
     private Integer userId;
+    @Column(name = "session_id")
     private String sessionId;
     /** Status value: order is being processed by checkout — no new items or concurrent checkouts. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private ActiveOrderStatus status;
-    private final List<CartLineItem> items;
-    private final LocalDateTime createdAt;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "active_order_items", joinColumns = @JoinColumn(name = "order_key"))
+    private List<CartLineItem> items;
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt;
+    @Transient
     private final Object itemsLock = new Object();
     /**
      * Stable identity assigned at construction. Passed to {@link com.ticketing.system.Core.Domain.events.InventorySelection}
@@ -45,7 +77,17 @@ public class ActiveOrder implements InvariantChecked {
      * order holds each reservation. Enables the 3-phase checkout to verify ownership
      * in checkout's Phase 3 without holding event locks during checkout's Phase 2 (payment/issuance).
      */
-    private final String orderKey = UUID.randomUUID().toString();
+    @Id
+    @Column(name = "order_key")
+    private String orderKey = UUID.randomUUID().toString();
+
+    @Version
+    private Long version;
+
+    /** For JPA only — do not call from application code. */
+    protected ActiveOrder() {
+        this.items = new ArrayList<>();
+    }
 
     public ActiveOrder(Integer userId, String sessionId) {
         this.userId = userId;
