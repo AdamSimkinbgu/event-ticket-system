@@ -155,7 +155,7 @@ class EventManagementServiceTest {
                 when(paymentGateway.refund(anyInt(), anyDouble())).thenReturn(
                                 new RefundResultDTO("refund-tx-1", "99", 100.0, java.time.LocalDateTime.now(),
                                                 List.of(), List.of()));
-                when(mockTicketRepo.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of());
+                when(mockTicketRepo.findByEventId(EVENT_ID)).thenReturn(List.of());
 
                 when(orderReceiptRepository.findByEventId(EVENT_ID))
                                 .thenReturn(List.of(realReceipt));
@@ -239,7 +239,7 @@ class EventManagementServiceTest {
 
                 Ticket paidTicket = new Ticket(EVENT_ID, ZONE_ID, ORDER_RECEIPT_ID, null, 100.0, 1, "BARCODE123");
                 // paidTicket.markPaid();
-                when(mockTicketRepo.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of(paidTicket));
+                when(mockTicketRepo.findByEventId(EVENT_ID)).thenReturn(List.of(paidTicket));
 
                 eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
 
@@ -260,7 +260,7 @@ class EventManagementServiceTest {
 
                 issuedTicket.markIssued("BARCODE123");
 
-                when(mockTicketRepo.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of(issuedTicket));
+                when(mockTicketRepo.findByEventId(EVENT_ID)).thenReturn(List.of(issuedTicket));
 
                 eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
 
@@ -281,7 +281,7 @@ class EventManagementServiceTest {
 
                 availableTicket.release();
 
-                when(mockTicketRepo.findByEventId(String.valueOf(EVENT_ID))).thenReturn(List.of(availableTicket));
+                when(mockTicketRepo.findByEventId(EVENT_ID)).thenReturn(List.of(availableTicket));
 
                 eventService.cancelEventAndRefund(OWNER_TOKEN, EVENT_ID);
 

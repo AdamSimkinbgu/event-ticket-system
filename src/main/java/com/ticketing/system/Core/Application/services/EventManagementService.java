@@ -808,7 +808,7 @@ public class EventManagementService {
             // PAID or ISSUED, it should be marked as REFUNDED; otherwise, it can be marked
             // as VOIDED. In a real system, we might want to handle this more robustly (e.g.
             // consider different ticket statuses, handle partial refunds, etc.).
-            List<Ticket> tickets = ticketRepository.findByEventId(String.valueOf(eventId));
+            List<Ticket> tickets = ticketRepository.findByEventId(eventId);
             // Note: we update ticket statuses after processing refunds to avoid
             // complications where we mark tickets as refunded but then encounter an error
             // during the refund process. By only updating ticket statuses after we've
