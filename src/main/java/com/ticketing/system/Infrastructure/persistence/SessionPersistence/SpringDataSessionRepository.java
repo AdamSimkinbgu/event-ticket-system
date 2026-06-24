@@ -1,5 +1,4 @@
-package com.ticketing.system.Infrastructure.persistence;
-
+package com.ticketing.system.Infrastructure.persistence.SessionPersistence;
 import java.time.Instant;
 import java.util.List;
 

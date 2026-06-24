@@ -17,7 +17,7 @@ import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.SessionExpiredException;
 import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.Session;
-import com.ticketing.system.Infrastructure.persistence.MemorySessionRepository;
+import com.ticketing.system.Infrastructure.persistence.SessionPersistence.MemorySessionRepository;
 import com.ticketing.system.Infrastructure.security.JwtSessionManager;
 
 class JwtSessionManagerTest {

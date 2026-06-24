@@ -1,5 +1,6 @@
-package com.ticketing.system.Infrastructure.persistence;
+package com.ticketing.system.Infrastructure.persistence.UserPersistence;
 
+import com.ticketing.system.Infrastructure.persistence.RepositoryLocks;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;

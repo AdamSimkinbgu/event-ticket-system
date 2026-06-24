@@ -1,5 +1,4 @@
-package com.ticketing.system.Infrastructure.persistence;
-
+package com.ticketing.system.Infrastructure.persistence.AdminPersistence;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;

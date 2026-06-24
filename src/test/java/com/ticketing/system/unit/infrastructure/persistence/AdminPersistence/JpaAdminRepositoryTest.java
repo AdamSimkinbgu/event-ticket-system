@@ -7,8 +7,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
-import com.ticketing.system.Infrastructure.persistence.JpaAdminRepository;
-import com.ticketing.system.Infrastructure.persistence.SpringDataAdminRepository;
+import com.ticketing.system.Infrastructure.persistence.AdminPersistence.JpaAdminRepository;
+import com.ticketing.system.Infrastructure.persistence.AdminPersistence.SpringDataAdminRepository;
 
 /**
  * Runs the {@link IAdminRepositoryContractTest} suite against the JPA adapter on an

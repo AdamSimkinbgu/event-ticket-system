@@ -7,8 +7,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
-import com.ticketing.system.Infrastructure.persistence.JpaTicketRepository;
-import com.ticketing.system.Infrastructure.persistence.SpringDataTicketRepository;
+import com.ticketing.system.Infrastructure.persistence.TicketPersistence.JpaTicketRepository;
+import com.ticketing.system.Infrastructure.persistence.TicketPersistence.SpringDataTicketRepository;
 
 /**
  * Runs the {@link ITicketRepositoryContractTest} suite against the JPA adapter on an

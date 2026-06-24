@@ -1,5 +1,6 @@
-package com.ticketing.system.Infrastructure.persistence;
+package com.ticketing.system.Infrastructure.persistence.SessionPersistence;
 
+import com.ticketing.system.Infrastructure.persistence.RepositoryLocks;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;

@@ -11,8 +11,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 import com.ticketing.system.Core.Domain.users.ISessionRepository;
-import com.ticketing.system.Infrastructure.persistence.JpaSessionRepository;
-import com.ticketing.system.Infrastructure.persistence.SpringDataSessionRepository;
+import com.ticketing.system.Infrastructure.persistence.SessionPersistence.JpaSessionRepository;
+import com.ticketing.system.Infrastructure.persistence.SessionPersistence.SpringDataSessionRepository;
 
 /**
  * Runs the {@link ISessionRepositoryContractTest} suite against the JPA adapter on an

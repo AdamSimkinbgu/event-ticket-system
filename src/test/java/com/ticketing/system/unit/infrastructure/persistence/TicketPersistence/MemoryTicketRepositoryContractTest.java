@@ -1,7 +1,7 @@
 package com.ticketing.system.unit.infrastructure.persistence.TicketPersistence;
 
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
-import com.ticketing.system.Infrastructure.persistence.MemoryTicketRepository;
+import com.ticketing.system.Infrastructure.persistence.TicketPersistence.MemoryTicketRepository;
 
 class MemoryTicketRepositoryContractTest extends ITicketRepositoryContractTest {
 

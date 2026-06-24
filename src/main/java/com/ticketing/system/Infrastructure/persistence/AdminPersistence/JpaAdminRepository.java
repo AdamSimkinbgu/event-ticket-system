@@ -1,5 +1,4 @@
-package com.ticketing.system.Infrastructure.persistence;
-
+package com.ticketing.system.Infrastructure.persistence.AdminPersistence;
 import java.util.List;
 
 import org.springframework.context.annotation.Profile;

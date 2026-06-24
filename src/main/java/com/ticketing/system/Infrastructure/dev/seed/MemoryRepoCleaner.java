@@ -1,15 +1,15 @@
 package com.ticketing.system.Infrastructure.dev.seed;
 
-import com.ticketing.system.Infrastructure.persistence.MemoryActiveOrderRepository;
-import com.ticketing.system.Infrastructure.persistence.MemoryAdminRepository;
-import com.ticketing.system.Infrastructure.persistence.MemoryConversationRepository;
-import com.ticketing.system.Infrastructure.persistence.MemoryEventRepository;
-import com.ticketing.system.Infrastructure.persistence.MemoryNotificationRepository;
-import com.ticketing.system.Infrastructure.persistence.MemoryOrderReceiptRepository;
-import com.ticketing.system.Infrastructure.persistence.MemoryProductionCompanyRepository;
-import com.ticketing.system.Infrastructure.persistence.MemorySessionRepository;
-import com.ticketing.system.Infrastructure.persistence.MemoryTicketRepository;
-import com.ticketing.system.Infrastructure.persistence.MemoryUserRepository;
+import com.ticketing.system.Infrastructure.persistence.ActiveOrderPersistence.MemoryActiveOrderRepository;
+import com.ticketing.system.Infrastructure.persistence.AdminPersistence.MemoryAdminRepository;
+import com.ticketing.system.Infrastructure.persistence.ConversationPersistence.MemoryConversationRepository;
+import com.ticketing.system.Infrastructure.persistence.EventPersistence.MemoryEventRepository;
+import com.ticketing.system.Infrastructure.persistence.NotificationPersistence.MemoryNotificationRepository;
+import com.ticketing.system.Infrastructure.persistence.OrderReceiptPersistence.MemoryOrderReceiptRepository;
+import com.ticketing.system.Infrastructure.persistence.ProductionCompanyPersistence.MemoryProductionCompanyRepository;
+import com.ticketing.system.Infrastructure.persistence.SessionPersistence.MemorySessionRepository;
+import com.ticketing.system.Infrastructure.persistence.TicketPersistence.MemoryTicketRepository;
+import com.ticketing.system.Infrastructure.persistence.UserPersistence.MemoryUserRepository;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;

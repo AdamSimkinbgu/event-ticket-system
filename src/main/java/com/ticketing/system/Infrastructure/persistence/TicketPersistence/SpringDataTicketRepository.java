@@ -1,5 +1,4 @@
-package com.ticketing.system.Infrastructure.persistence;
-
+package com.ticketing.system.Infrastructure.persistence.TicketPersistence;
 import java.util.List;
 
 import org.springframework.data.domain.Limit;
