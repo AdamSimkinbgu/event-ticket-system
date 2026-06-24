@@ -22,8 +22,8 @@ import lombok.extern.slf4j.Slf4j;
  * <p>Ordering matters now that reserve/checkout are gated on an OPEN market:
  * {@code @Order(1)} places this after {@code PlatformInitializationRunner}
  * (@Order(0), which brings the platform to READY) and before the purchasing
- * {@code DemoDataSeeder} (@Order(2)). The market is therefore OPEN before the
- * seeder attempts any reservation or checkout.
+ * {@code ScenarioRunner} (@Order(2)). The market is therefore OPEN before the
+ * scenario attempts any reservation or checkout.
  */
 @Component
 @Profile("dev")

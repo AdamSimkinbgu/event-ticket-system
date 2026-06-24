@@ -44,7 +44,7 @@ public final class AuthSession {
      * nobody can register a member account that shadows an admin name.
      */
     public static final Set<String> ADMIN_USERNAMES = Set.of(
-        "admin", "platform.admin", "bar.miyara", "dev.admin"
+        "admin", "platform.admin", "bar.miyara"
     );
 
     private AuthSession() { }

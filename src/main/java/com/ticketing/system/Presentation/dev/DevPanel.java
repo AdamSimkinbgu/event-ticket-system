@@ -42,15 +42,23 @@ public final class DevPanel {
     static AuthenticationService AUTH;
     static SignOutFlow SIGN_OUT_FLOW;
 
+    // The real platform-admin credentials (platform.admin.* — default admin/admin),
+    // used by the "Admin" persona toggle to sign in through the dedicated admin path.
+    private static volatile String adminUsername = "admin";
+    private static volatile String adminPassword = "admin";
+
     private DevPanel() { }
 
     public static void init(ReservationService rs) {
         reservationService = rs;
     }
 
-    public static void bindBeans(AuthenticationService auth, SignOutFlow signOutFlow) {
+    public static void bindBeans(AuthenticationService auth, SignOutFlow signOutFlow,
+                                 String adminUsername, String adminPassword) {
         AUTH = auth;
         SIGN_OUT_FLOW = signOutFlow;
+        DevPanel.adminUsername = adminUsername;
+        DevPanel.adminPassword = adminPassword;
     }
 
     private static void abandonCurrentOrder() {
@@ -78,6 +86,21 @@ public final class DevPanel {
             }
             var dto = AUTH.login(new LoginRequestDTO(username, password, guestSid));
             AuthSession.storeAuth(dto.authToken());
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    /**
+     * Sign in as the real platform admin via the dedicated admin sign-in, so the
+     * session carries a genuine admin token (admin-ness is token-derived). Replaces
+     * the retired {@code dev.admin} member account, which is no longer in the admin pool.
+     */
+    private static void signInAsAdmin() {
+        try {
+            if (AuthSession.isSignedIn()) {
+                SIGN_OUT_FLOW.execute();
+            }
+            AuthSession.storeAuth(AUTH.signInAsAdmin(adminUsername, adminPassword));
         } catch (RuntimeException ignored) {
         }
     }
@@ -283,7 +306,7 @@ public final class DevPanel {
                 if (AuthSession.isAdmin()) {
                     signInAs(DevUserSeeder.MEMBER_USERNAME, DevUserSeeder.SHARED_PASSWORD);
                 } else {
-                    signInAs(DevUserSeeder.ADMIN_USERNAME, DevUserSeeder.SHARED_PASSWORD);
+                    signInAsAdmin();
                 }
             }
         }

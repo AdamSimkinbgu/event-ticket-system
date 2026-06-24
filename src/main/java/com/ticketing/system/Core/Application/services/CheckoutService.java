@@ -557,7 +557,10 @@ public class CheckoutService {
                 throw new EventNotFoundException("Event not found: " + eventId);
             }
 
-            if (event.getStatus() != EventStatus.ON_SALE) {
+            // SOLD_OUT is allowed: an event that sold out while these tickets were reserved must still
+            // let the holders complete their purchase (mirrors Event.validateCanConfirmSale). Rejecting
+            // it here blocked the sale of the last tickets of any event.
+            if (event.getStatus() != EventStatus.ON_SALE && event.getStatus() != EventStatus.SOLD_OUT) {
                 throw new EventNotOnSaleException(
                         eventId, "" + event.getStatus());
             }

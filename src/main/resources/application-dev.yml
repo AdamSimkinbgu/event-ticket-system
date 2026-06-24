@@ -16,3 +16,12 @@ spring:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
       - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
       - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+
+# Scenario init (ScenarioRunner) — boots the system from an editable command file.
+#   scenario:  the file to run (classpath:scenarios/*.scenario, or file:/abs/path/to/your.scenario)
+#   mode:      off | wipe (clear repos + re-seed dev personas, then run) | anything else runs it
+#   fail-fast: true = stop at the first unexpected error (partial report still logged); false = run all
+seed:
+  scenario: classpath:scenarios/demo.scenario
+  mode: idempotent
+  fail-fast: false
