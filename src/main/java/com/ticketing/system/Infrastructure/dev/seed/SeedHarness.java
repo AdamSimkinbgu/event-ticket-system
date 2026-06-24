@@ -98,6 +98,9 @@ public final class SeedHarness {
         } catch (SeedAbortException abort) {
             throw abort;
         } catch (Throwable t) {
+            if (t instanceof Error err) {
+                throw err;
+            }
             if (isOrCauses(t, expected)) {
                 report.record(stage, name, SeedReport.Status.PASS, "correctly rejected with " + t.getClass().getSimpleName());
             } else {
