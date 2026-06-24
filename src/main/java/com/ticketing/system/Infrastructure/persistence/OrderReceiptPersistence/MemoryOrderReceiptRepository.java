@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import com.ticketing.system.Core.Application.dto.GlobalHistoryFiltersDTO;
@@ -15,14 +16,13 @@ import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 
 /**
- * In-memory {@link IOrderReceiptRepository} for V1. Lets Spring wire
+ * In-memory {@link IOrderReceiptRepository}. Lets Spring wire
  * CheckoutService / MemberAccountService / SystemAdminService.
- *
- * <p>Receipts are keyed by their {@code receiptId} converted to String —
- * the interface signatures use String keys throughout. UC-31's
- * filter/page/size global query throws until real admin reporting is built.
+ * {@code @Profile("!jpa")}: the {@code jpa} run/dev profile swaps in
+ * {@link JpaOrderReceiptRepository} instead.
  */
 @Repository
+@Profile("!jpa")
 public class MemoryOrderReceiptRepository implements IOrderReceiptRepository {
 
     private final Map<Integer, OrderReceipt> receiptsById = new ConcurrentHashMap<>();
@@ -101,13 +101,6 @@ public class MemoryOrderReceiptRepository implements IOrderReceiptRepository {
     }
 
     
-
-    public Map<Integer, OrderReceipt> getReceiptsById() {
-        return receiptsById;
-    }
-
-
-
 
 
 
