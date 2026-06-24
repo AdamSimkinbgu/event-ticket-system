@@ -42,18 +42,11 @@ import com.ticketing.system.Core.Domain.exceptions.CompanyClosedException;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.NullVenueMapException;
-import com.ticketing.system.Core.Domain.exceptions.SessionExpiredException;
-
-import static org.junit.jupiter.api.Assertions.*;
-
-import java.util.List;
 
 import com.ticketing.system.Core.Application.dto.InventoryZoneDTO;
 import com.ticketing.system.Core.Application.dto.SeatDTO;
-import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Domain.events.Seat;
 import com.ticketing.system.Core.Domain.events.SeatedZone;
-import com.ticketing.system.Core.Domain.events.SeatStatus;
 
 class CatalogServiceTest {
 
@@ -77,15 +70,18 @@ class CatalogServiceTest {
                 mockSessionManager,
                 mockEventRepository,
                 mockCompanyRepository,
-                mockTicketRepository
-        );
+                mockTicketRepository);
     }
 
-    @Test @Disabled("UC-3: browseEventCatalog returns active events from active companies")
-    void givenActiveCompanies_whenBrowse_thenReturnsActiveEvents() {}
+    @Test
+    @Disabled("UC-3: browseEventCatalog returns active events from active companies")
+    void givenActiveCompanies_whenBrowse_thenReturnsActiveEvents() {
+    }
 
-    @Test @Disabled("UC-3: events from closed companies excluded")
-    void givenClosedCompany_whenBrowse_thenEventsExcluded() {}
+    @Test
+    @Disabled("UC-3: events from closed companies excluded")
+    void givenClosedCompany_whenBrowse_thenEventsExcluded() {
+    }
 
     // -------------------------------------------------------------------------
     // UC-7: searchGlobal
@@ -101,7 +97,8 @@ class CatalogServiceTest {
                 () -> catalogService.searchGlobal(VALID_TOKEN, filters));
     }
 
-    // UC-7: searchGlobal propagates SessionExpiredException from the session manager
+    // UC-7: searchGlobal propagates SessionExpiredException from the session
+    // manager
     @Test
     void givenExpiredToken_whenSearchGlobal_thenThrowsSessionExpiredException() {
         when(mockSessionManager.validateCredential(VALID_TOKEN)).thenThrow(new InvalidTokenException());
@@ -111,7 +108,8 @@ class CatalogServiceTest {
                 () -> catalogService.searchGlobal(VALID_TOKEN, filters));
     }
 
-    // UC-7: searchGlobal returns all matching events when no company-rating filters are set
+    // UC-7: searchGlobal returns all matching events when no company-rating filters
+    // are set
     @Test
     void givenValidTokenAndNoFilters_whenSearchGlobal_thenReturnsAllMatchingEvents() {
         CatalogSearchFiltersDTO filters = emptyFilters();
@@ -130,7 +128,8 @@ class CatalogServiceTest {
         assertEquals(2, results.size());
     }
 
-    // UC-7: searchGlobal excludes events whose company rating is below minCompanyRating
+    // UC-7: searchGlobal excludes events whose company rating is below
+    // minCompanyRating
     @Test
     void givenMinCompanyRatingFilter_whenSearchGlobal_thenExcludesLowRatedCompanies() {
         CatalogSearchFiltersDTO filters = new CatalogSearchFiltersDTO(
@@ -138,7 +137,7 @@ class CatalogServiceTest {
         Event event1 = createMockEvent(1, 10);
         Event event2 = createMockEvent(2, 20);
         ProductionCompany highRated = createMockCompany("Company A", 4.5);
-        ProductionCompany lowRated  = createMockCompany("Company B", 2.0);
+        ProductionCompany lowRated = createMockCompany("Company B", 2.0);
 
         when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
         when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of(event1, event2));
@@ -151,7 +150,8 @@ class CatalogServiceTest {
         assertEquals("Event 1", results.get(0).name());
     }
 
-    // UC-7: searchGlobal excludes events whose company rating is above maxCompanyRating
+    // UC-7: searchGlobal excludes events whose company rating is above
+    // maxCompanyRating
     @Test
     void givenMaxCompanyRatingFilter_whenSearchGlobal_thenExcludesHighRatedCompanies() {
         CatalogSearchFiltersDTO filters = new CatalogSearchFiltersDTO(
@@ -159,7 +159,7 @@ class CatalogServiceTest {
         Event event1 = createMockEvent(1, 10);
         Event event2 = createMockEvent(2, 20);
         ProductionCompany highRated = createMockCompany("Company A", 4.5);
-        ProductionCompany lowRated  = createMockCompany("Company B", 2.0);
+        ProductionCompany lowRated = createMockCompany("Company B", 2.0);
 
         when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
         when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of(event1, event2));
@@ -172,7 +172,8 @@ class CatalogServiceTest {
         assertEquals("Event 2", results.get(0).name());
     }
 
-    // UC-7: searchGlobal returns an empty list when the repository returns no events
+    // UC-7: searchGlobal returns an empty list when the repository returns no
+    // events
     @Test
     void givenValidTokenAndEmptyRepository_whenSearchGlobal_thenReturnsEmptyList() {
         CatalogSearchFiltersDTO filters = emptyFilters();
@@ -199,7 +200,8 @@ class CatalogServiceTest {
                 () -> catalogService.searchByCompany(VALID_TOKEN, 10, filters));
     }
 
-    // UC-7: searchByCompany propagates SessionExpiredException from the session manager
+    // UC-7: searchByCompany propagates SessionExpiredException from the session
+    // manager
     @Test
     void givenExpiredToken_whenSearchByCompany_thenThrowsSessionExpiredException() {
         when(mockSessionManager.validateCredential(VALID_TOKEN)).thenThrow(new InvalidTokenException());
@@ -230,7 +232,8 @@ class CatalogServiceTest {
     // UC-7: searchByCompany does NOT apply the company-rating filter (II.2.3.2)
     @Test
     void givenCompanyRatingFilter_whenSearchByCompany_thenCompanyRatingFilterNotApplied() {
-        // minCompanyRating=4.0 but the company rating is only 1.5 — must still be returned
+        // minCompanyRating=4.0 but the company rating is only 1.5 — must still be
+        // returned
         CatalogSearchFiltersDTO filters = new CatalogSearchFiltersDTO(
                 null, null, null, null, null, null, null, null, null, null, null, 4.0, null);
         Event event1 = createMockEvent(1, 10);
@@ -245,7 +248,8 @@ class CatalogServiceTest {
         assertEquals(1, results.size());
     }
 
-    // UC-7: searchByCompany returns an empty list when no events match the given company id
+    // UC-7: searchByCompany returns an empty list when no events match the given
+    // company id
     @Test
     void givenValidTokenAndNoMatchingCompanyEvents_whenSearchByCompany_thenReturnsEmptyList() {
         CatalogSearchFiltersDTO filters = emptyFilters();
@@ -261,7 +265,6 @@ class CatalogServiceTest {
         assertNotNull(results);
         assertTrue(results.isEmpty());
     }
-
 
     // UC-8: getEventVenueMap returns correct venue map for event
     @Test
@@ -290,10 +293,14 @@ class CatalogServiceTest {
         assertEquals(50, result.inventoryZones().get(0).getPrice());
     }
 
-    // UC-8: getEventVenueMap throws InvalidTokenException when credential is invalid
-    // (including expired). Phase 4.3 of the auth rework unified the rejection path —
-    // validateCredential collapses "expired" and "invalid" into a single false return,
-    // so Catalog can no longer distinguish the two. Callers who need that distinction
+    // UC-8: getEventVenueMap throws InvalidTokenException when credential is
+    // invalid
+    // (including expired). Phase 4.3 of the auth rework unified the rejection path
+    // —
+    // validateCredential collapses "expired" and "invalid" into a single false
+    // return,
+    // so Catalog can no longer distinguish the two. Callers who need that
+    // distinction
     // should call AuthenticationService directly.
     @Test
     void givenInvalidOrExpiredCredential_whenGetEventVenueMap_thenThrowsInvalidTokenException() {
@@ -303,7 +310,8 @@ class CatalogServiceTest {
                 () -> catalogService.getEventVenueMap(VALID_TOKEN, EVENT_ID));
     }
 
-    // UC-8: getEventVenueMap throws EventNotFoundException when event does not exist
+    // UC-8: getEventVenueMap throws EventNotFoundException when event does not
+    // exist
     @Test
     void givenValidTokenAndNonExistentEvent_whenGetEventVenueMap_thenThrowsEventNotFoundException() {
         when(mockSessionManager.validateCredential(VALID_TOKEN)).thenReturn(true);
@@ -313,7 +321,8 @@ class CatalogServiceTest {
                 () -> catalogService.getEventVenueMap(VALID_TOKEN, EVENT_ID));
     }
 
-    // UC-8: getEventVenueMap throws NullVenueMapException when event has no venue map
+    // UC-8: getEventVenueMap throws NullVenueMapException when event has no venue
+    // map
     @Test
     void givenValidTokenAndEventWithNullVenueMap_whenGetEventVenueMap_thenThrowsNullVenueMapException() {
         Event mockEvent = mock(Event.class);
@@ -331,12 +340,13 @@ class CatalogServiceTest {
                 () -> catalogService.getEventVenueMap(VALID_TOKEN, EVENT_ID));
     }
 
-    // UC-8: mapper preserves all zones and their insertion order for a multi-zone venue map
+    // UC-8: mapper preserves all zones and their insertion order for a multi-zone
+    // venue map
     @Test
     void givenMultiZoneVenueMap_whenGetEventVenueMap_thenAllZonesReturnedInOrder() {
-        InventoryZone zone1 = new StandingZone(1, "Floor",   100, 50);
-        InventoryZone zone2 = new StandingZone(2, "Balcony",  80, 30);
-        InventoryZone zone3 = new StandingZone(3, "VIP",      20, 150);
+        InventoryZone zone1 = new StandingZone(1, "Floor", 100, 50);
+        InventoryZone zone2 = new StandingZone(2, "Balcony", 80, 30);
+        InventoryZone zone3 = new StandingZone(3, "VIP", 20, 150);
         VenueMap venueMap = new VenueMap(5, LOCATION, List.of(zone1, zone2, zone3));
 
         Event mockEvent = mock(Event.class);
@@ -358,7 +368,8 @@ class CatalogServiceTest {
         assertEquals(3, result.inventoryZones().get(2).getId());
     }
 
-    // UC-8: a venue map with no zones still produces a valid (non-null, empty-list) DTO
+    // UC-8: a venue map with no zones still produces a valid (non-null, empty-list)
+    // DTO
     @Test
     void givenZeroZoneVenueMap_whenGetEventVenueMap_thenReturnsDTOWithEmptyZoneList() {
         VenueMap venueMap = new VenueMap(5, LOCATION, List.of());
@@ -381,7 +392,8 @@ class CatalogServiceTest {
         assertTrue(result.inventoryZones().isEmpty());
     }
 
-    // UC-8: null or blank token must raise InvalidTokenException, not SessionExpiredException
+    // UC-8: null or blank token must raise InvalidTokenException, not
+    // SessionExpiredException
     @Test
     void givenNullToken_whenGetEventVenueMap_thenThrowsInvalidTokenException() {
         when(mockSessionManager.validateCredential(null)).thenReturn(false);
@@ -398,13 +410,6 @@ class CatalogServiceTest {
                 () -> catalogService.getEventVenueMap("", EVENT_ID));
     }
 
-
-
-
-
-
-
-
     @Test
     void givenSeatedZone_whenGetVenueMap_thenPerSeatStatusesReturned() {
         SeatedZone seatedZone = new SeatedZone(
@@ -414,9 +419,7 @@ class CatalogServiceTest {
                 List.of(
                         new Seat("A1", 0, 0),
                         new Seat("A2", 1, 0),
-                        new Seat("A3", 2, 0)
-                )
-        );
+                        new Seat("A3", 2, 0)));
 
         seatedZone.reserve(InventorySelection.seated(List.of("A1"), "test-order"));
         seatedZone.reserve(InventorySelection.seated(List.of("A2"), "test-order"));
@@ -425,8 +428,7 @@ class CatalogServiceTest {
         VenueMap venueMap = new VenueMap(
                 1,
                 LOCATION,
-                List.of(seatedZone)
-        );
+                List.of(seatedZone));
 
         Event event = createMockEvent(EVENT_ID, 10);
         ProductionCompany company = createMockCompany("Company A", 4.5);
@@ -481,8 +483,7 @@ class CatalogServiceTest {
         VenueMap venueMap = new VenueMap(
                 1,
                 LOCATION,
-                List.of(standingZone)
-        );
+                List.of(standingZone));
 
         Event event = createMockEvent(EVENT_ID, 10);
         ProductionCompany company = createMockCompany("Company A", 4.5);
@@ -505,18 +506,12 @@ class CatalogServiceTest {
         assertTrue(zoneDTO.getSeats().isEmpty());
     }
 
-
-
-
-
-
-
-    
     // -------------------------------------------------------------------------
     // #272 / UC-8: getEventDetail (public single-event read for the buyer page)
     // -------------------------------------------------------------------------
 
-    // getEventDetail returns the full detail (incl. lineup) for an ON_SALE event of an active company.
+    // getEventDetail returns the full detail (incl. lineup) for an ON_SALE event of
+    // an active company.
     @Test
     void givenValidCredentialAndOnSaleEvent_whenGetEventDetail_thenReturnsDetailWithLineup() {
         Event event = detailEvent(EVENT_ID, 10, EventStatus.ON_SALE);
@@ -536,7 +531,8 @@ class CatalogServiceTest {
         assertEquals("Brussels", result.location().city());
     }
 
-    // A SOLD_OUT event is still publicly viewable (the page shows a badge + disabled purchase).
+    // A SOLD_OUT event is still publicly viewable (the page shows a badge +
+    // disabled purchase).
     @Test
     void givenSoldOutEvent_whenGetEventDetail_thenReturnsDetail() {
         Event event = detailEvent(EVENT_ID, 10, EventStatus.SOLD_OUT);
@@ -603,14 +599,15 @@ class CatalogServiceTest {
     // V2-LANDING-01: featured / upcomingOnSale (guest-facing landing rows)
     // -------------------------------------------------------------------------
 
-    // featured returns the ON_SALE events of active companies, best-rated first, capped at the limit.
+    // featured returns the ON_SALE events of active companies, best-rated first,
+    // capped at the limit.
     @Test
     void givenOnSaleEvents_whenFeatured_thenReturnsBestRatedFirstWithinLimit() {
         ProductionCompany company = createMockCompany("Acme", 4.5);
         when(company.getCompanyId()).thenReturn(10);
-        Event low  = onSaleEvent(1, 10, 3.0);
+        Event low = onSaleEvent(1, 10, 3.0);
         Event high = onSaleEvent(2, 10, 5.0);
-        Event mid  = onSaleEvent(3, 10, 4.0);
+        Event mid = onSaleEvent(3, 10, 4.0);
 
         when(mockCompanyRepository.findActive()).thenReturn(List.of(company));
         when(mockEventRepository.findActiveByCompany(10)).thenReturn(List.of(low, high, mid));
@@ -623,7 +620,8 @@ class CatalogServiceTest {
         assertEquals("Event 3", results.get(1).name()); // rating 4.0
     }
 
-    // upcomingOnSale returns SCHEDULED events of active companies only, soonest show date first.
+    // upcomingOnSale returns SCHEDULED events of active companies only, soonest
+    // show date first.
     @Test
     void givenScheduledEvents_whenUpcomingOnSale_thenSoonestFirstAndActiveCompaniesOnly() {
         ProductionCompany active = createMockCompany("Acme", 4.5);
@@ -631,7 +629,7 @@ class CatalogServiceTest {
         when(inactive.getStatus()).thenReturn(CompanyStatus.INACTIVE);
 
         Event later = scheduledEvent(2, 10, LocalDateTime.of(2026, 8, 1, 20, 0));
-        Event soon  = scheduledEvent(1, 10, LocalDateTime.of(2026, 7, 1, 20, 0));
+        Event soon = scheduledEvent(1, 10, LocalDateTime.of(2026, 7, 1, 20, 0));
         Event hidden = mock(Event.class); // belongs to an inactive company → excluded
         when(hidden.getCompanyId()).thenReturn(20);
 
@@ -655,8 +653,10 @@ class CatalogServiceTest {
     // V2-SEARCH-01 (#281): top-bar search across events + artists + venues
     // -------------------------------------------------------------------------
 
-    // A minimal ON_SALE event for search: name, company, artists, and a venue at LOCATION
-    // ("Brussels, Belgium"). search() never reads status/rating/category, so we leave those unstubbed.
+    // A minimal ON_SALE event for search: name, company, artists, and a venue at
+    // LOCATION
+    // ("Brussels, Belgium"). search() never reads status/rating/category, so we
+    // leave those unstubbed.
     private Event searchEvent(int id, int companyId, String name, List<String> artists) {
         Event e = mock(Event.class);
         when(e.getId()).thenReturn(id);
@@ -784,7 +784,8 @@ class CatalogServiceTest {
         return mockCompany;
     }
 
-    // A fully-stubbed event for getEventDetail tests (mapper reads name/desc/rating/category/
+    // A fully-stubbed event for getEventDetail tests (mapper reads
+    // name/desc/rating/category/
     // lineup/location/showDates/status).
     private Event detailEvent(int id, int companyId, EventStatus status) {
         Event mockEvent = mock(Event.class);
@@ -801,7 +802,8 @@ class CatalogServiceTest {
         return mockEvent;
     }
 
-    // An ON_SALE event with an explicit rating (for featured ordering). No show dates needed —
+    // An ON_SALE event with an explicit rating (for featured ordering). No show
+    // dates needed —
     // the mapper handles an empty schedule.
     private Event onSaleEvent(int id, int companyId, Double rating) {
         Event mockEvent = mock(Event.class);
@@ -817,7 +819,8 @@ class CatalogServiceTest {
         return mockEvent;
     }
 
-    // A SCHEDULED event with a single show date at {start} (for upcomingOnSale ordering).
+    // A SCHEDULED event with a single show date at {start} (for upcomingOnSale
+    // ordering).
     private Event scheduledEvent(int id, int companyId, LocalDateTime start) {
         Event mockEvent = mock(Event.class);
         when(mockEvent.getId()).thenReturn(id);
