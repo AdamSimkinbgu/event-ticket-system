@@ -18,8 +18,6 @@ public interface IUserRepository extends IRepository<User, Integer> {
      */
     List<User> findUsersWithPendingAppointmentForCompany(int companyId);
 
-    boolean sendInvitation(int targetId, int companyId);
-
     /** Persists changes to an existing User. */
     void updateUser(User targetUser);
 

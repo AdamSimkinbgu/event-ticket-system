@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
@@ -14,13 +15,14 @@ import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.User;
 
 /**
- * In-memory {@link IUserRepository} for V1.
+ * In-memory {@link IUserRepository}.
  *
  * <p>Storage is a thread-safe {@code ConcurrentHashMap}; IDs are minted from
- * an {@code AtomicInteger} starting at 1. A future JPA-backed adapter will
- * replace this class without touching the application layer.
+ * an {@code AtomicInteger} starting at 1. {@code @Profile("!jpa")}: the {@code jpa}
+ * run/dev profile swaps in {@link JpaUserRepository} instead.
  */
 @Repository
+@Profile("!jpa")
 public class MemoryUserRepository implements IUserRepository {
 
     private final Map<Integer, User> usersById = new ConcurrentHashMap<>();
@@ -50,11 +52,6 @@ public class MemoryUserRepository implements IUserRepository {
             throw new UserNotFoundException(targetId);
         }
         return user;
-    }
-
-    @Override
-    public boolean sendInvitation(int targetId, int companyId) {
-        throw new UnsupportedOperationException("sendInvitation: not part of UC-11");
     }
 
     @Override
