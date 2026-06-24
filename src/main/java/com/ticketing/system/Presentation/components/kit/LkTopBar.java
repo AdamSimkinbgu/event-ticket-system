@@ -157,6 +157,13 @@ public class LkTopBar extends Header {
         return this;
     }
 
+    /** Slot a pre-built bell component (e.g. {@code NotificationBellComponent}) into the right slot. */
+    public LkTopBar bell(Component bellComponent) {
+        ensureRightSlot();
+        rightSlot.add(bellComponent);
+        return this;
+    }
+
     public LkTopBar bellDefault(boolean adminVariant) {
         return bell(adminVariant ? LkNotifPanel.admin() : LkNotifPanel.buyer(),
                     adminVariant ? "5" : "3",
