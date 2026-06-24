@@ -91,29 +91,34 @@ public class Notification implements InvariantChecked {
         return Collections.unmodifiableMap(data);
     }
 
-    // Lifecycle transition: invoked by NotificationDispatchService.deliverPending
-    // (UC-37).
-    public void markDelivered() {
+    // Lifecycle transition: PENDING → SENT (notification shown in the bell).
+    public void markSent() {
         if (status != NotificationStatus.PENDING) {
             throw new IllegalStateException(
-                    "Cannot mark as delivered a notification that is not PENDING. Current status: " + status);
+                    "Cannot mark as SENT a notification that is not PENDING. Current status: " + status);
         }
-        this.status = NotificationStatus.DELIVERED;
+        this.status = NotificationStatus.SENT;
         checkInvariants();
     }
 
+    // Lifecycle transition: SENT → PENDING (user disconnected before reading).
     public void markPending() {
-        if (status != NotificationStatus.DELIVERED) {
+        if (status != NotificationStatus.SENT) {
             throw new IllegalStateException(
-                    "Cannot mark as pending a notification that is not DELIVERED. Current status: " + status);
+                    "Cannot mark as PENDING a notification that is not SENT. Current status: " + status);
         }
         this.status = NotificationStatus.PENDING;
         checkInvariants();
     }
 
-    // Lifecycle transition: invoked when the user opens the notification in the UI.
+    // Lifecycle transition: SENT → READ (user clicked the notification item).
     public void markRead() {
-        throw new UnsupportedOperationException("not implemented");
+        if (status != NotificationStatus.SENT) {
+            throw new IllegalStateException(
+                    "Cannot mark as READ a notification that is not SENT. Current status: " + status);
+        }
+        this.status = NotificationStatus.READ;
+        checkInvariants();
     }
 
     // State checks.
@@ -121,8 +126,8 @@ public class Notification implements InvariantChecked {
         return status == NotificationStatus.PENDING;
     }
 
-    public boolean isDelivered() {
-        return status == NotificationStatus.DELIVERED;
+    public boolean isSent() {
+        return status == NotificationStatus.SENT;
     }
 
     public boolean isRead() {

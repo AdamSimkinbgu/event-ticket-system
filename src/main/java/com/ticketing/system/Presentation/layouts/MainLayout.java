@@ -1,8 +1,9 @@
 package com.ticketing.system.Presentation.layouts;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
-import com.ticketing.system.Presentation.components.NotificationBellComponent;
+import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.services.ReservationService;
+import com.ticketing.system.Presentation.components.NotificationBellComponent;
 import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkSearchPanel;
@@ -68,13 +69,16 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
     private final SignOutFlow signOutFlow;
     private final SessionIdentity identity;
     private final SearchPresenter searchPresenter;
+    private final INotificationService notificationService;
 
     public MainLayout(ReservationService reservationService, SignOutFlow signOutFlow,
-            SessionIdentity identity, SearchPresenter searchPresenter) {
+            SessionIdentity identity, SearchPresenter searchPresenter,
+            INotificationService notificationService) {
         this.reservationService = reservationService;
         this.signOutFlow = signOutFlow;
         this.identity = identity;
         this.searchPresenter = searchPresenter;
+        this.notificationService = notificationService;
         rebuildTopBar(null);
     }
 
@@ -143,7 +147,10 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
                 .nav(nav, activeLabel)
                 .search(buildSearchPanel())
                 .cart(CartView.class, cartSize, cartDeadlineMs)
-                .bell(new NotificationBellComponent());
+                .bell(new NotificationBellComponent(notifId -> {
+                    Integer userId = AuthSession.userId();
+                    if (userId != null) notificationService.markRead(userId, notifId);
+                }));
 
         if (signedIn) {
             bar.account(initials(name), name, buildMemberMenu(name));

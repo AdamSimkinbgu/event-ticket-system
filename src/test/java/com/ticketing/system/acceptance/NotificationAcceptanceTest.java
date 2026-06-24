@@ -135,20 +135,20 @@ class NotificationAcceptanceTest {
         // Act: simulate login by calling deliverPending
         List<NotificationDTO> deliveredNotifications = notificationDispatchService.deliverPending(userId);
 
-        // Assert: verify all PENDING notifications are now DELIVERED
+        // Assert: verify all PENDING notifications are now SENT
         assertNotNull(deliveredNotifications);
         assertEquals(2, deliveredNotifications.size());
 
-        // Verify both notifications are marked as DELIVERED
+        // Verify both notifications are marked as SENT
         for (NotificationDTO dto : deliveredNotifications) {
-            assertEquals("DELIVERED", dto.status());
+            assertEquals("SENT", dto.status());
         }
 
-        // Verify the notifications in the repository are now DELIVERED
+        // Verify the notifications in the repository are now SENT
         Notification savedNotif1 = notificationRepository.findById("notif-acc-37-1");
         Notification savedNotif2 = notificationRepository.findById("notif-acc-37-2");
-        assertEquals(NotificationStatus.DELIVERED, savedNotif1.getStatus());
-        assertEquals(NotificationStatus.DELIVERED, savedNotif2.getStatus());
+        assertEquals(NotificationStatus.SENT, savedNotif1.getStatus());
+        assertEquals(NotificationStatus.SENT, savedNotif2.getStatus());
     }
 
     @Test

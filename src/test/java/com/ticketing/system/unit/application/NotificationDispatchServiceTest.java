@@ -58,10 +58,10 @@ class NotificationDispatchServiceTest {
 
         service.dispatch(notification);
 
-        // Verify it was saved twice: once as PENDING, once as DELIVERED
+        // Verify it was saved twice: once as PENDING, once as SENT
         verify(mockRepo, times(2)).save(notification);
         verify(mockPushService, times(1)).send(eq(userId), any(Notification.class));
-        assertEquals(NotificationStatus.DELIVERED, notification.getStatus());
+        assertEquals(NotificationStatus.SENT, notification.getStatus());
     }
 
     @Test
@@ -147,10 +147,10 @@ class NotificationDispatchServiceTest {
         verify(mockRepo, times(1)).save(notif1);
         verify(mockRepo, times(1)).save(notif2);
 
-        // Verify all returned DTOs have DELIVERED status
+        // Verify all returned DTOs have SENT status
         assertEquals(2, result.size());
-        assertEquals("DELIVERED", result.get(0).status());
-        assertEquals("DELIVERED", result.get(1).status());
+        assertEquals("SENT", result.get(0).status());
+        assertEquals("SENT", result.get(1).status());
     }
 
     /* UC-37: no pending notifications is no-op */

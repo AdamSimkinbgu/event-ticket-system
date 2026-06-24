@@ -45,8 +45,8 @@ public class NotificationDispatchService {
      */
     public void dispatch(Notification notification) {
         // Precondition: a freshly-built notification must be PENDING. Enforced before any
-        // persistence/push so we never store an unexpected status or have markDelivered() throw
-        // mid-flow (Notification.markDelivered() requires the current status to be PENDING).
+        // persistence/push so we never store an unexpected status or have markSent() throw
+        // mid-flow (Notification.markSent() requires the current status to be PENDING).
         if (!notification.isPending()) {
             throw new IllegalArgumentException(
                     "dispatch() requires a PENDING notification, but got status: " + notification.getStatus());
@@ -66,7 +66,7 @@ public class NotificationDispatchService {
             // Step 3: Attempt delivery
             boolean pushSuccess = pushService.send(userId, notification);
             if (pushSuccess) {
-                notification.markDelivered();
+                notification.markSent();
                 notificationRepository.save(notification); // Update status to DELIVERED
                 log.info("Notification id={} delivered live to userId={}", notification.getId(), userId);
             } else {
@@ -104,7 +104,7 @@ public class NotificationDispatchService {
         for (Notification notification : pendingNotifications) {
             boolean pushSuccess = pushService.send(userId, notification);
             if (pushSuccess) {
-                notification.markDelivered();
+                notification.markSent();
                 notificationRepository.save(notification); // persist the status change
                 deliveredNotifications.add(notification.toDTO()); // convert to DTO for return
             } else {

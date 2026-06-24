@@ -11,12 +11,12 @@ import com.ticketing.system.support.BaseDomainTest;
 class NotificationTest extends BaseDomainTest {
 
     @Test
-    @Disabled("V1: markDelivered transitions PENDING -> DELIVERED (UC-37)")
-    void givenPendingNotification_whenMarkDelivered_thenStatusDelivered() {}
+    @Disabled("V1: markSent transitions PENDING -> SENT (UC-37)")
+    void givenPendingNotification_whenMarkSent_thenStatusSent() {}
 
     @Test
-    @Disabled("V1: markRead transitions DELIVERED -> READ")
-    void givenDeliveredNotification_whenMarkRead_thenStatusRead() {}
+    @Disabled("V1: markRead transitions SENT -> READ")
+    void givenSentNotification_whenMarkRead_thenStatusRead() {}
 
     @Test
     @Disabled("V1: markRead from PENDING is invalid")
