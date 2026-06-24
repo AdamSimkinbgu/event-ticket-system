@@ -1,7 +1,7 @@
 package com.ticketing.system.unit.infrastructure.persistence.EventPersistence;
 
 import com.ticketing.system.Core.Domain.events.IEventRepository;
-import com.ticketing.system.Infrastructure.persistence.MemoryEventRepository;
+import com.ticketing.system.Infrastructure.persistence.EventPersistence.MemoryEventRepository;
 
 public class MemoryEventRepositoryTest extends IEventRepositoryContractTest {
 

@@ -1,26 +1,28 @@
-package com.ticketing.system.Infrastructure.persistence;
+package com.ticketing.system.Infrastructure.persistence.TicketPersistence;
 
+import com.ticketing.system.Infrastructure.persistence.RepositoryLocks;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 
 /**
- * In-memory {@link ITicketRepository} for V1. Lets Spring wire
+ * In-memory {@link ITicketRepository}. Lets Spring wire
  * CatalogService / CheckoutService / EventManagementService /
- * MemberAccountService.
+ * MemberAccountService. {@code @Profile("!jpa")}: the {@code jpa} run/dev profile
+ * swaps in {@link JpaTicketRepository} instead.
  *
- * <p>Note: the interface mixes {@code int} (findById, holderUserId) and
- * {@code String} (findByEventId, findByOrderReceiptId) keys — for the
- * String-keyed methods we parse to int where possible and throw on the
- * orderReceiptId join (Ticket has no orderReceiptId field yet — UC-22 work).
+ * <p>All keys are {@code int}, matching the {@code Ticket} fields end-to-end (the
+ * former {@code String} eventId/zoneId on the port have been corrected to {@code int}).
  */
 @Repository
+@Profile("!jpa")
 public class MemoryTicketRepository implements ITicketRepository {
 
     private final Map<Integer, Ticket> ticketsById = new ConcurrentHashMap<>();
@@ -44,39 +46,22 @@ public class MemoryTicketRepository implements ITicketRepository {
     }
 
     @Override
-    public List<Ticket> findByEventId(String eventId) {
-        int target;
-        try {
-            target = Integer.parseInt(eventId);
-        } catch (NumberFormatException e) {
-            return List.of();
-        }
+    public List<Ticket> findByEventId(int eventId) {
         List<Ticket> result = new ArrayList<>();
         for (Ticket t : ticketsById.values()) {
-            if (t.getEventId() == target)
+            if (t.getEventId() == eventId)
                 result.add(t);
         }
         return result;
     }
 
-    
-
-
 
     @Override
-    public List<Ticket> findAvailableInZone(String eventId, String zoneId, int quantity) {
-        int eventTarget;
-        int zoneTarget;
-        try {
-            eventTarget = Integer.parseInt(eventId);
-            zoneTarget = Integer.parseInt(zoneId);
-        } catch (NumberFormatException e) {
-            return List.of();
-        }
+    public List<Ticket> findAvailableInZone(int eventId, int zoneId, int quantity) {
         List<Ticket> result = new ArrayList<>();
         for (Ticket t : ticketsById.values()) {
-            if (t.getEventId() == eventTarget
-                    && t.getZoneId() == zoneTarget
+            if (t.getEventId() == eventId
+                    && t.getZoneId() == zoneId
                     && t.isAvailable()
                     && quantity > result.size()) {
                 result.add(t);
@@ -86,18 +71,10 @@ public class MemoryTicketRepository implements ITicketRepository {
     }
 
     @Override
-    public int countAvailableInZone(String eventId, String zoneId) {
-        int eventTarget;
-        int zoneTarget;
-        try {
-            eventTarget = Integer.parseInt(eventId);
-            zoneTarget = Integer.parseInt(zoneId);
-        } catch (NumberFormatException e) {
-            return 0;
-        }
+    public int countAvailableInZone(int eventId, int zoneId) {
         int count = 0;
         for (Ticket t : ticketsById.values()) {
-            if (t.getEventId() == eventTarget && t.getZoneId() == zoneTarget && t.isAvailable())
+            if (t.getEventId() == eventId && t.getZoneId() == zoneId && t.isAvailable())
                 count++;
         }
         return count;

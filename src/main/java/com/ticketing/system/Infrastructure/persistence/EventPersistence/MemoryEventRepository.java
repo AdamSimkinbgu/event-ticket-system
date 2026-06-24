@@ -1,5 +1,6 @@
-package com.ticketing.system.Infrastructure.persistence;
+package com.ticketing.system.Infrastructure.persistence.EventPersistence;
 
+import com.ticketing.system.Infrastructure.persistence.RepositoryReadWriteLocks;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;

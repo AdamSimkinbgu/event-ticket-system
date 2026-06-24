@@ -39,7 +39,7 @@ import com.ticketing.system.Core.Domain.messaging.IConversationRepository;
 import com.ticketing.system.Core.Domain.messaging.ParticipantType;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.User;
-import com.ticketing.system.Infrastructure.persistence.MemoryConversationRepository;
+import com.ticketing.system.Infrastructure.persistence.ConversationPersistence.MemoryConversationRepository;
 
 class MessagingServiceTest {
 

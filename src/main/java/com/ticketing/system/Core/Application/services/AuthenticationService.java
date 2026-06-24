@@ -42,7 +42,7 @@ import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Session;
 import com.ticketing.system.Core.Domain.users.User;
-import com.ticketing.system.Infrastructure.persistence.MemoryActiveOrderRepository;
+import com.ticketing.system.Infrastructure.persistence.ActiveOrderPersistence.MemoryActiveOrderRepository;
 
 
 /**

@@ -14,7 +14,7 @@ import com.ticketing.system.Core.Domain.events.*;
 import com.ticketing.system.Core.Domain.orders.*;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.User;
-import com.ticketing.system.Infrastructure.persistence.MemoryActiveOrderRepository;
+import com.ticketing.system.Infrastructure.persistence.ActiveOrderPersistence.MemoryActiveOrderRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;

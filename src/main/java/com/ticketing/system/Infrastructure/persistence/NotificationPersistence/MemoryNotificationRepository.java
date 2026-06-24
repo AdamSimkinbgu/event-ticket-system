@@ -1,5 +1,6 @@
-package com.ticketing.system.Infrastructure.persistence;
+package com.ticketing.system.Infrastructure.persistence.NotificationPersistence;
 
+import com.ticketing.system.Infrastructure.persistence.RepositoryLocks;
 import com.ticketing.system.Core.Domain.notifications.INotificationRepository;
 import com.ticketing.system.Core.Domain.notifications.Notification;
 import com.ticketing.system.Core.Domain.notifications.NotificationStatus;

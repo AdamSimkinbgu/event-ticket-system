@@ -4,20 +4,66 @@ package com.ticketing.system.Core.Domain.Tickets;
 import com.ticketing.system.Core.Domain.exceptions.TicketNotAvailableException;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
+/**
+ * Unified Ticket aggregate root (inventory + post-purchase record).
+ *
+ * <p>V3: mapped to JPA as a flat row — the four references ({@code eventId},
+ * {@code zoneid}, {@code orderReceiptId}, {@code holderUserId}) are plain by-id
+ * columns, never {@code @ManyToOne} (the cross-aggregate reference rule). The
+ * {@code ticketId} {@code @Id} is ASSIGNED by the issuer (the barcode/ticketId the
+ * ticket issuer returns), never {@code @GeneratedValue}. {@code status} is stored by
+ * name ({@code @Enumerated(STRING)}) so the column is stable against enum reordering,
+ * and {@code @Version} drives optimistic locking. A protected no-arg constructor lets
+ * Hibernate hydrate instances; the public constructor still enforces the invariants.
+ */
+@Entity
+@Table(name = "tickets")
 public class Ticket implements InvariantChecked {
 
+    @Column(name = "zone_id", nullable = false)
     private int zoneid;
+
+    @Column(name = "event_id", nullable = false)
     private int eventId;
+
+    @Column(name = "seat_number")
     private String seatNumber;   // nullable for standing zones, non-null for seated zones. Represents the seat label this ticket refers to inside its zone.
+
+    @Column(nullable = false)
     private double price;
+
+    @Id
     private int ticketId;
+
+    @Column(name = "order_receipt_id", nullable = false)
     private int orderReceiptId;
+
+    @Column(name = "barcode_value")
     private String barcodeValue;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private TicketStatus status;
+
     // D7 (auth rework #181): nullable. Set on the Member path of CheckoutService;
     // stays null for Guest purchases. Lets UC-16 view-my-history go through
     // ITicketRepository.findByHolderUserId(int) in a single hop.
+    @Column(name = "holder_user_id")
     private Integer holderUserId;
+
+    @Version
+    private Long version;
+
+    /** For JPA only — do not call from application code. */
+    protected Ticket() { }
 
 
     /**

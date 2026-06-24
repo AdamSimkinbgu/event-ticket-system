@@ -12,13 +12,14 @@ public interface ITicketRepository extends IRepository<Ticket, Integer> {
     boolean save(Ticket ticket);
 
     // UC-8 / UC-22 — render venue map / list company sales.
-    List<Ticket> findByEventId(String eventId);
+    // Keys are int: Ticket stores eventId/zoneId as int, so the port uses int end-to-end.
+    List<Ticket> findByEventId(int eventId);
 
     // UC-9 (quantity-mode reservation) — atomically pick N AVAILABLE tickets in a zone.
-    List<Ticket> findAvailableInZone(String eventId, String zoneId, int quantity);
+    List<Ticket> findAvailableInZone(int eventId, int zoneId, int quantity);
 
     // UC-8 — count for standing-zone availability display.
-    int countAvailableInZone(String eventId, String zoneId);
+    int countAvailableInZone(int eventId, int zoneId);
 
     // UC-10 / UC-22 / UC-16 — tickets that belong to one OrderReceipt.
     List<Ticket> findByOrderReceiptId(int orderReceiptId);
