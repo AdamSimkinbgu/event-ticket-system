@@ -76,7 +76,7 @@ public class CompanySalesView extends LkPage {
                                   PurchaseHistoryDTO sales) {
         List<PurchaseHistoryDTO.PurchaseRecordDTO> records = sales.records();
 
-        String revenue = Money.format((long)stats.revenue30d());
+        String revenue = Money.format(Money.toCents(stats.revenue30d()));
         String tickets = String.valueOf(stats.ticketsSold30d());
 
         double aov = records.isEmpty() ? 0
@@ -100,7 +100,7 @@ public class CompanySalesView extends LkPage {
         statsDiv.add(
             new LkStat("Total revenue · 30d", revenue),
             new LkStat("Tickets sold · 30d",  tickets),
-            new LkStat("Avg order value",      Money.format((long)aov)),
+            new LkStat("Avg order value",      Money.format(Money.toCents(aov))),
             new LkStat("Top event",            topEvent)
         );
         return statsDiv;
@@ -143,8 +143,7 @@ public class CompanySalesView extends LkPage {
 
             Span total = new Span();
             total.getElement().setProperty("innerHTML",
-                    "<b>" + Money.format((long)r.totalPaid()) + "</b>");
-            row.put("total", total);
+                    "<b>" + Money.format(Money.toCents(r.totalPaid())) + "</b>");
 
             grid.row(row);
         }

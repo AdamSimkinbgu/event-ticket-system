@@ -180,8 +180,7 @@ public class EventManagementService {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
         if (user == null) {
-            throw new InvalidTokenException("User not found for token: " + token);
-        }
+             throw new InvalidTokenException("user not found");        }
 
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
@@ -214,8 +213,7 @@ public class EventManagementService {
         }
         User user = userRepository.getUserById(userId);
         if (user == null) {
-            throw new InvalidTokenException("User not found for token: " + token);
-        }
+             throw new InvalidTokenException("user not found");        }
         user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
         ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
         if (company == null) {
@@ -246,8 +244,7 @@ public class EventManagementService {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
         if (user == null) {
-            throw new InvalidTokenException("User not found for token: " + token);
-        }
+             throw new InvalidTokenException("user not found");        }
         Event event = eventRepository.findById(eventId);
         if (event == null) {
             throw new EventNotFoundException("Event not found for ID: " + eventId);

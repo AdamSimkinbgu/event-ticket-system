@@ -80,9 +80,10 @@ public class OwnerAppointmentView extends LkPage {
             Toasts.failure("Enter a username or email to appoint.");
             return;
         }
-        switch (membershipPresenter.appoint(invitee.getValue().trim())) {
+        String ident = invitee.getValue().trim();
+         switch (membershipPresenter.appoint(ident)) {
             case MyCompaniesPresenter.AppointOutcome.Success ignored -> {
-                Toasts.success(invitee.getValue() + " invited as co-owner — they'll see it in their invitations.");
+                Toasts.success(ident + " invited as co-owner — they'll see it in their invitations.");
                 UI.getCurrent().navigate(MyCompaniesView.class);
             }
             case MyCompaniesPresenter.AppointOutcome.NotAuthenticated ignored ->
