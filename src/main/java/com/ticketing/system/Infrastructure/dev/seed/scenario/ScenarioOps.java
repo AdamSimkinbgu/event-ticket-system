@@ -59,7 +59,8 @@ import java.util.Map;
  * {@link SeedHarness} interaction so each line is classified PASS / SKIPPED /
  * FAIL (and {@code expect-error} flips a throw into a PASS).
  *
- * <p>Plain class (not a bean) — instantiated per run by {@code ScenarioRunner}
+ * <p>
+ * Plain class (not a bean) — instantiated per run by {@code ScenarioRunner}
  * with the services and a fresh {@link DemoClock}.
  */
 public final class ScenarioOps {
@@ -83,14 +84,14 @@ public final class ScenarioOps {
     private int seq = 0;
 
     public ScenarioOps(AuthenticationService auth,
-                       CompanyManagementService companyService,
-                       EventManagementService eventService,
-                       ReservationService reservationService,
-                       CheckoutService checkoutService,
-                       CatalogService catalogService,
-                       MessagingService messaging,
-                       IUserRepository userRepository,
-                       DemoClock clock) {
+            CompanyManagementService companyService,
+            EventManagementService eventService,
+            ReservationService reservationService,
+            CheckoutService checkoutService,
+            CatalogService catalogService,
+            MessagingService messaging,
+            IUserRepository userRepository,
+            DemoClock clock) {
         this.auth = auth;
         this.companyService = companyService;
         this.eventService = eventService;
@@ -143,7 +144,10 @@ public final class ScenarioOps {
         harness.step("scenario", label, () -> handler.run(cmd, ctx));
     }
 
-    /** {@code expect-error <op> <args…>} — the wrapped op must throw; if it doesn't, that's a FAIL. */
+    /**
+     * {@code expect-error <op> <args…>} — the wrapped op must throw; if it doesn't,
+     * that's a FAIL.
+     */
     private void executeExpectError(ScenarioCommand cmd, ScenarioContext ctx, SeedHarness harness) {
         String innerOp = cmd.requirePos(0, "operation to expect-error");
         OpHandler handler = registry.get(innerOp);
@@ -170,7 +174,7 @@ public final class ScenarioOps {
         GuestSessionDTO guest = auth.startGuestSession();
         auth.register(new RegisterRequestDTO(username, email, password, guest.sessionId(), age));
         User user = userRepository.findByUsername(username)
-            .orElseThrow(() -> new IllegalStateException("registered user vanished: " + username));
+                .orElseThrow(() -> new IllegalStateException("registered user vanished: " + username));
         ctx.registerPrincipal(alias, username, password, user.getUserId());
     }
 
@@ -220,7 +224,7 @@ public final class ScenarioOps {
         String name = cmd.requirePos(2, "company name");
         String desc = cmd.pos(3) != null ? cmd.pos(3) : name + " — seeded production company";
         ProductionCompanyDTO c = companyService.registerCompany(ctx.token(owner),
-            new CompanyRegistrationDTO(name, desc));
+                new CompanyRegistrationDTO(name, desc));
         ctx.putCompany(companyAlias, c.companyId());
     }
 
@@ -229,7 +233,7 @@ public final class ScenarioOps {
         String company = cmd.requirePos(1, "company alias");
         String target = cmd.requirePos(2, "target alias");
         companyService.appointOwner(ctx.token(by),
-            new OwnerAppointmentRequestDTO(ctx.companyId(company), ctx.userId(target)));
+                new OwnerAppointmentRequestDTO(ctx.companyId(company), ctx.userId(target)));
     }
 
     private void appointManager(ScenarioCommand cmd, ScenarioContext ctx) {
@@ -237,14 +241,15 @@ public final class ScenarioOps {
         String company = cmd.requirePos(1, "company alias");
         String target = cmd.requirePos(2, "target alias");
         companyService.appointManager(ctx.token(by),
-            new ManagerAppointmentRequestDTO(ctx.companyId(company), ctx.userId(target), parsePerms(cmd.named("perms", ""))));
+                new ManagerAppointmentRequestDTO(ctx.companyId(company), ctx.userId(target),
+                        parsePerms(cmd.named("perms", ""))));
     }
 
     private void confirm(ScenarioCommand cmd, ScenarioContext ctx) {
         String alias = cmd.requirePos(0, "invitee alias");
         String company = cmd.requirePos(1, "company alias");
         companyService.respondToAppointment(ctx.token(alias),
-            new AppointmentResponseDTO(ctx.companyId(company), true));
+                new AppointmentResponseDTO(ctx.companyId(company), true));
     }
 
     // -- events ----------------------------------------------------------
@@ -258,7 +263,8 @@ public final class ScenarioOps {
             zones.add(parseZone(cmd.positional().get(i), zones.size() + 1));
         }
         if (zones.isEmpty()) {
-            throw new IllegalArgumentException("line " + cmd.line() + ": add-event needs at least one zone spec (e.g. standing:30@50)");
+            throw new IllegalArgumentException(
+                    "line " + cmd.line() + ": add-event needs at least one zone spec (e.g. standing:30@50)");
         }
         String token = ctx.token(by);
         int companyId = ctx.companyId(company);
@@ -270,8 +276,8 @@ public final class ScenarioOps {
         ShowDate show = new ShowDate(start, start.plusHours(3));
 
         EventDetailDTO created = eventService.addEvent(token, new EventCreationDTO(
-            companyId, name, name + " — seeded event", List.of(headliner(name)), category,
-            null, new Location("Israel", city), List.of(show), nonePolicy()));
+                companyId, name, name + " — seeded event", List.of(headliner(name)), category,
+                null, new Location("Israel", city), List.of(show), nonePolicy()));
         int eventId = Integer.parseInt(created.eventId());
         eventService.configureVenueMap(token, companyId, buildVenueMap(created.eventId(), city + " venue", zones));
         if (cmd.boolNamed("publish", false)) {
@@ -300,8 +306,8 @@ public final class ScenarioOps {
         InventorySelectionDTO selection;
         if ("SEATED".equals(zone.getZoneType())) {
             List<String> seats = cmd.named("seats") != null
-                ? List.of(cmd.named("seats").split(","))
-                : pickAvailableSeats(zone, cmd.intNamed("qty", 1));
+                    ? List.of(cmd.named("seats").split(","))
+                    : pickAvailableSeats(zone, cmd.intNamed("qty", 1));
             selection = InventorySelectionDTO.seated(seats);
         } else {
             selection = InventorySelectionDTO.standing(cmd.intNamed("qty", 1));
@@ -319,8 +325,8 @@ public final class ScenarioOps {
         CardDetailsDTO card = new CardDetailsDTO("4111111111111111", "123", 12, 2030, "Demo " + buyer);
         if (ctx.isGuest(buyer)) {
             checkoutService.checkoutGuest(ctx.guestSession(buyer),
-                cmd.named("email", buyer + "@guest.demo.test"), idem, "ILS", card,
-                cmd.intNamed("age", 30));
+                    cmd.named("email", buyer + "@guest.demo.test"), idem, "ILS", card,
+                    cmd.intNamed("age", 30));
         } else {
             checkoutService.checkoutMember(ctx.token(buyer), idem, "ILS", card);
         }
@@ -338,17 +344,17 @@ public final class ScenarioOps {
         String from = cmd.requirePos(0, "member alias");
         String company = cmd.requirePos(1, "company alias");
         messaging.startConversation(ctx.token(from), new StartConversationRequestDTO(
-            ctx.userId(from), ParticipantType.MEMBER.name(),
-            ctx.companyId(company), ParticipantType.COMPANY.name(),
-            ConversationType.INQUIRY.name(),
-            cmd.named("subject", "Inquiry"), cmd.named("body", "Hello, I have a question.")));
+                ctx.userId(from), ParticipantType.MEMBER.name(),
+                ctx.companyId(company), ParticipantType.COMPANY.name(),
+                ConversationType.INQUIRY.name(),
+                cmd.named("subject", "Inquiry"), cmd.named("body", "Hello, I have a question.")));
     }
 
     private void submitComplaint(ScenarioCommand cmd, ScenarioContext ctx) {
         String from = cmd.requirePos(0, "member alias");
         messaging.submitComplaint(ctx.token(from), new SubmitComplaintRequestDTO(
-            ctx.userId(from), cmd.named("subject", "Complaint"),
-            cmd.named("body", "I have an issue that needs attention."), null));
+                ctx.userId(from), cmd.named("subject", "Complaint"),
+                cmd.named("body", "I have an issue that needs attention."), null));
     }
 
     private void announce(ScenarioCommand cmd, ScenarioContext ctx) {
@@ -357,10 +363,10 @@ public final class ScenarioOps {
             throw new IllegalStateException("announce needs an admin logged in via 'login-admin'");
         }
         messaging.announce(admin.token, new AnnouncementRequestDTO(
-            admin.userId, cmd.named("title", "Announcement"),
-            cmd.named("body", "Platform announcement."),
-            ParticipantType.valueOf(cmd.named("audience", "BROADCAST_MEMBERS")).name(),
-            List.of(), List.of()));
+                admin.userId, cmd.named("title", "Announcement"),
+                cmd.named("body", "Platform announcement."),
+                ParticipantType.valueOf(cmd.named("audience", "BROADCAST_MEMBERS")).name(),
+                List.of(), List.of()));
     }
 
     // -- assertions / skips ----------------------------------------------
@@ -370,17 +376,21 @@ public final class ScenarioOps {
         EventStatus expected = EventStatus.valueOf(cmd.requirePos(1, "expected status").toUpperCase());
         String by = cmd.named("by");
         if (by == null) {
-            throw new IllegalArgumentException("line " + cmd.line() + ": assert-status needs by=<owner alias> to read the event");
+            throw new IllegalArgumentException(
+                    "line " + cmd.line() + ": assert-status needs by=<owner alias> to read the event");
         }
         EventStatus actual = eventService.getEventDetail(ctx.token(by), ctx.eventId(eventAlias)).status();
         if (actual != expected) {
-            throw new IllegalStateException("expected event " + eventAlias + " to be " + expected + " but it is " + actual);
+            throw new IllegalStateException(
+                    "expected event " + eventAlias + " to be " + expected + " but it is " + actual);
         }
     }
 
     private void addCoupon(ScenarioCommand cmd, ScenarioContext ctx) {
-        // Coupons are out of scope for this system — recognised so a scenario stays valid,
-        // but recorded as SKIPPED (the harness classifies UnsupportedOperationException that way).
+        // Coupons are out of scope for this system — recognised so a scenario stays
+        // valid,
+        // but recorded as SKIPPED (the harness classifies UnsupportedOperationException
+        // that way).
         throw new UnsupportedOperationException("coupons are out of scope — no discount/coupon feature in this system");
     }
 
@@ -394,15 +404,16 @@ public final class ScenarioOps {
         Integer index = tryParseInt(zoneRef);
         if (index != null) {
             return map.inventoryZones().stream()
-                .filter(z -> z.getId() == index)
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("no zone with id " + zoneRef + " on event " + eventId));
+                    .filter(z -> z.getId() == index)
+                    .findFirst()
+                    .orElseThrow(
+                            () -> new IllegalStateException("no zone with id " + zoneRef + " on event " + eventId));
         }
         String type = zoneRef.equalsIgnoreCase("seated") ? "SEATED" : "STANDING";
         return map.inventoryZones().stream()
-            .filter(z -> type.equals(z.getZoneType()) && z.getAvailableAmount() > 0)
-            .findFirst()
-            .orElseThrow(() -> new IllegalStateException("no available " + type + " zone on event " + eventId));
+                .filter(z -> type.equals(z.getZoneType()) && z.getAvailableAmount() > 0)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("no available " + type + " zone on event " + eventId));
     }
 
     private static List<String> pickAvailableSeats(InventoryZoneDTO zone, int n) {
@@ -418,12 +429,15 @@ public final class ScenarioOps {
             }
         }
         if (labels.size() < n) {
-            throw new IllegalStateException("not enough available seats in zone " + zone.getName() + " (" + labels.size() + "/" + n + ")");
+            throw new IllegalStateException(
+                    "not enough available seats in zone " + zone.getName() + " (" + labels.size() + "/" + n + ")");
         }
         return labels;
     }
 
-    /** Parse a zone spec like {@code standing:30@50} or {@code seated:10x10@100}. */
+    /**
+     * Parse a zone spec like {@code standing:30@50} or {@code seated:10x10@100}.
+     */
     private static ZoneConfigDTO parseZone(String spec, int index) {
         String[] atParts = spec.split("@");
         if (atParts.length != 2) {
@@ -448,7 +462,8 @@ public final class ScenarioOps {
             int cols = Integer.parseInt(rc[1]);
             return new ZoneConfigDTO("Seated " + index, true, null, buildSeats(rows, cols), price, null);
         }
-        throw new IllegalArgumentException("unknown zone type '" + type + "' in '" + spec + "' (use standing or seated)");
+        throw new IllegalArgumentException(
+                "unknown zone type '" + type + "' in '" + spec + "' (use standing or seated)");
     }
 
     private static List<SeatConfigDTO> buildSeats(int rows, int cols) {
@@ -462,7 +477,10 @@ public final class ScenarioOps {
         return seats;
     }
 
-    /** Pack zones into a 2-column grid (full-width final odd zone) so placement always validates. */
+    /**
+     * Pack zones into a 2-column grid (full-width final odd zone) so placement
+     * always validates.
+     */
     private static VenueMapConfigDTO buildVenueMap(String eventId, String venueName, List<ZoneConfigDTO> raw) {
         int n = raw.size();
         int cols = n == 1 ? 1 : 2;
@@ -471,9 +489,10 @@ public final class ScenarioOps {
         for (int i = 0; i < n; i++) {
             ZoneConfigDTO z = raw.get(i);
             GridPlacementDTO placement = (n % 2 == 1 && i == n - 1)
-                ? new GridPlacementDTO(rows, 1, 1, cols)
-                : new GridPlacementDTO(i / 2 + 1, i % 2 + 1, 1, 1);
-            placed.add(new ZoneConfigDTO(z.zoneName(), z.seated(), z.capacity(), z.seats(), z.pricePerTicket(), placement));
+                    ? new GridPlacementDTO(rows, 1, 1, cols)
+                    : new GridPlacementDTO(i / 2 + 1, i % 2 + 1, 1, 1);
+            placed.add(new ZoneConfigDTO(z.zoneName(), z.seated(), z.capacity(), z.seats(), z.pricePerTicket(),
+                    placement));
         }
         return new VenueMapConfigDTO(eventId, venueName, rows, cols, placed);
     }
@@ -509,7 +528,10 @@ public final class ScenarioOps {
         }
     }
 
+    /** Short, stable label for harness output: line number, op, and up to 3 args. */
+    private static String label(ScenarioCommand cmd) {
         int take = Math.min(3, cmd.positional().size());
         String args = String.join(" ", cmd.positional().subList(0, take));
         return ("L" + cmd.line() + " " + cmd.op() + (args.isBlank() ? "" : " " + args)).trim();
+    }
 }
