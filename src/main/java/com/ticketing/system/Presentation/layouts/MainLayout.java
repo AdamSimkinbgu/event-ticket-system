@@ -1,7 +1,7 @@
 package com.ticketing.system.Presentation.layouts;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
-import com.ticketing.system.Core.Application.dto.NotificationDTO;
+import com.ticketing.system.Presentation.components.NotificationBellComponent;
 import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
@@ -34,8 +34,6 @@ import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.router.AfterNavigationEvent;
 import com.vaadin.flow.router.AfterNavigationObserver;
 import com.vaadin.flow.server.VaadinSession;
-import com.ticketing.system.Presentation.components.kit.LkNotifPanel;
-import com.ticketing.system.Presentation.session.NotificationSession;
 import com.ticketing.system.Presentation.session.SessionIdentity;
 
 import java.util.ArrayList;
@@ -144,13 +142,8 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
                 .brand("TicketHub", LandingView.class)
                 .nav(nav, activeLabel)
                 .search(buildSearchPanel())
-                .cart(CartView.class, cartSize, cartDeadlineMs);
-
-        List<NotificationDTO> notifs = NotificationSession.getAll();
-        int unread = (int) notifs.stream().filter(n -> "PENDING".equals(n.status())).count();
-        bar.bell(LkNotifPanel.fromDTOs(notifs),
-                 signedIn && unread > 0 ? String.valueOf(unread) : null,
-                 "Notifications");
+                .cart(CartView.class, cartSize, cartDeadlineMs)
+                .bell(new NotificationBellComponent());
 
         if (signedIn) {
             bar.account(initials(name), name, buildMemberMenu(name));

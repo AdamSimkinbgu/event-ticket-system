@@ -40,7 +40,6 @@ import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.Admin.Admin;
 import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
-import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Domain.exceptions.AccountLockedException;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
 import com.ticketing.system.Core.Domain.exceptions.DuplicateEmailException;
@@ -159,7 +158,7 @@ class AuthenticationServiceTest {
     @Test
     void givenMalformedEmail_whenRegister_thenInvalidEmailFormatExceptionThrown() {
         assertThrows(InvalidEmailFormatException.class,
-                () -> service.register(new RegisterRequestDTO("alice", "not-an-email", "Password1", "guest-1",56)));
+                () -> service.register(new RegisterRequestDTO("alice", "not-an-email", "Password1", "guest-1", 56)));
         verifyNoInteractions(mockHasher);
         verify(mockUserRepo, never()).save(any(User.class));
         verify(mockSessionRepo, never()).findById(any());
@@ -168,13 +167,13 @@ class AuthenticationServiceTest {
     @Test
     void givenNullEmail_whenRegister_thenInvalidEmailFormatExceptionThrown() {
         assertThrows(InvalidEmailFormatException.class,
-                () -> service.register(new RegisterRequestDTO("alice", null, "Password1", "guest-1",56)));
+                () -> service.register(new RegisterRequestDTO("alice", null, "Password1", "guest-1", 56)));
     }
 
     @Test
     void givenShortPassword_whenRegister_thenWeakPasswordExceptionThrown() {
         assertThrows(WeakPasswordException.class,
-                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Pw1", "guest-1",56)));
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Pw1", "guest-1", 56)));
         verifyNoInteractions(mockHasher);
         verify(mockUserRepo, never()).save(any(User.class));
     }
@@ -182,19 +181,21 @@ class AuthenticationServiceTest {
     @Test
     void givenPasswordWithoutDigit_whenRegister_thenWeakPasswordExceptionThrown() {
         assertThrows(WeakPasswordException.class,
-                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Passwords", "guest-1",56)));
+                () -> service
+                        .register(new RegisterRequestDTO("alice", "alice@example.com", "Passwords", "guest-1", 56)));
     }
 
     @Test
     void givenPasswordWithoutLetter_whenRegister_thenWeakPasswordExceptionThrown() {
         assertThrows(WeakPasswordException.class,
-                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "12345678", "guest-1",56)));
+                () -> service
+                        .register(new RegisterRequestDTO("alice", "alice@example.com", "12345678", "guest-1", 56)));
     }
 
     @Test
     void givenNullPassword_whenRegister_thenWeakPasswordExceptionThrown() {
         assertThrows(WeakPasswordException.class,
-                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", null, "guest-1",56)));
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", null, "guest-1", 56)));
     }
 
     // ----------------------------------------------------------------------
@@ -204,7 +205,7 @@ class AuthenticationServiceTest {
     @Test
     void givenNoGuestSessionId_whenRegister_thenGuestSessionRequiredExceptionThrown() {
         assertThrows(GuestSessionRequiredException.class,
-                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", null,56)));
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", null, 56)));
         verifyNoInteractions(mockHasher);
         verify(mockUserRepo, never()).save(any(User.class));
     }
@@ -212,14 +213,14 @@ class AuthenticationServiceTest {
     @Test
     void givenBlankGuestSessionId_whenRegister_thenGuestSessionRequiredExceptionThrown() {
         assertThrows(GuestSessionRequiredException.class,
-                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "   ",56)));
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "   ", 56)));
     }
 
     @Test
     void givenUnknownGuestSessionId_whenRegister_thenGuestSessionRequiredExceptionThrown() {
         when(mockSessionRepo.findById("ghost")).thenReturn(Optional.empty());
         assertThrows(GuestSessionRequiredException.class,
-                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "ghost",56)));
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "ghost", 56)));
     }
 
     @Test
@@ -227,7 +228,7 @@ class AuthenticationServiceTest {
         Session memberSession = new Session("sid", 99, T0, T0.plusSeconds(3600));
         when(mockSessionRepo.findById("sid")).thenReturn(Optional.of(memberSession));
         assertThrows(GuestSessionRequiredException.class,
-                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "sid",56)));
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "sid", 56)));
     }
 
     @Test
@@ -235,7 +236,7 @@ class AuthenticationServiceTest {
         Session expired = new Session("sid", null, T0.minusSeconds(7200), T0.minusSeconds(60));
         when(mockSessionRepo.findById("sid")).thenReturn(Optional.of(expired));
         assertThrows(GuestSessionRequiredException.class,
-                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "sid",56)));
+                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "sid", 56)));
     }
 
     // ----------------------------------------------------------------------
@@ -250,7 +251,7 @@ class AuthenticationServiceTest {
         when(mockUserRepo.nextId()).thenReturn(42);
         when(mockHasher.hash("Password1")).thenReturn("HASHED");
 
-        service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "guest-1",56));
+        service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "guest-1", 56));
 
         verify(mockHasher, times(1)).hash("Password1");
         ArgumentCaptor<User> savedUser = ArgumentCaptor.forClass(User.class);
@@ -268,7 +269,7 @@ class AuthenticationServiceTest {
         when(mockUserRepo.nextId()).thenReturn(1);
         when(mockHasher.hash(any())).thenReturn("HASHED");
 
-        service.register(new RegisterRequestDTO("bob", "bob@example.com", "Password1", "guest-1",56));
+        service.register(new RegisterRequestDTO("bob", "bob@example.com", "Password1", "guest-1", 56));
 
         // II.1.4 / D10a: session must remain Guest after register.
         assertTrue(guest.isGuest());
@@ -283,7 +284,8 @@ class AuthenticationServiceTest {
         when(mockUserRepo.existsByUsername("alice")).thenReturn(true);
 
         assertThrows(DuplicateUsernameException.class,
-                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "guest-1",56)));
+                () -> service
+                        .register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "guest-1", 56)));
         verifyNoInteractions(mockHasher);
         verify(mockUserRepo, never()).save(any(User.class));
     }
@@ -293,10 +295,11 @@ class AuthenticationServiceTest {
         mockValidGuestSession("guest-1");
         when(mockUserRepo.existsByUsername("alice")).thenReturn(false);
         when(mockUserRepo.findByEmail("alice@example.com"))
-                .thenReturn(Optional.of(new User(1, "other", "alice@example.com", "HASH",59)));
+                .thenReturn(Optional.of(new User(1, "other", "alice@example.com", "HASH", 59)));
 
         assertThrows(DuplicateEmailException.class,
-                () -> service.register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "guest-1",56)));
+                () -> service
+                        .register(new RegisterRequestDTO("alice", "alice@example.com", "Password1", "guest-1", 56)));
         verifyNoInteractions(mockHasher);
         verify(mockUserRepo, never()).save(any(User.class));
     }
@@ -308,7 +311,7 @@ class AuthenticationServiceTest {
         when(mockUserRepo.existsByUsername(any())).thenReturn(true);
 
         assertThrows(InvalidEmailFormatException.class,
-                () -> service.register(new RegisterRequestDTO("alice", "not-an-email", "Password1", "guest-1",56)));
+                () -> service.register(new RegisterRequestDTO("alice", "not-an-email", "Password1", "guest-1", 56)));
         verify(mockUserRepo, never()).existsByUsername(any());
         verify(mockSessionRepo, never()).findById(any());
     }
@@ -397,7 +400,7 @@ class AuthenticationServiceTest {
     @Test
     void givenWrongPassword_whenLogin_thenAuthenticationFailedExceptionThrown() {
         mockValidGuestSession("guest-1");
-        User user = new User(7, "alice", "alice@example.com", "STORED_HASH",77);
+        User user = new User(7, "alice", "alice@example.com", "STORED_HASH", 77);
         when(mockUserRepo.findByUsername("alice")).thenReturn(Optional.of(user));
         when(mockHasher.matches("wrong", "STORED_HASH")).thenReturn(false);
         when(mockReservation.restoreActiveOrder(7)).thenReturn(null);
@@ -423,7 +426,7 @@ class AuthenticationServiceTest {
     @Test
     void givenInvalidCredentials_whenLogin_thenRejected() {
         mockValidGuestSession("guest-1");
-        User user = new User(7, "alice", "alice@example.com", "STORED_HASH",89);
+        User user = new User(7, "alice", "alice@example.com", "STORED_HASH", 89);
         when(mockUserRepo.findByUsername("alice")).thenReturn(Optional.of(user));
         when(mockHasher.matches("badpass", "STORED_HASH")).thenReturn(false);
 
