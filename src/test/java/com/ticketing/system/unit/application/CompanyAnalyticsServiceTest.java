@@ -1,6 +1,8 @@
 package com.ticketing.system.unit.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -11,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
+import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.services.CompanyAnalyticsService;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
@@ -60,6 +63,20 @@ class CompanyAnalyticsServiceTest {
         when(r.wasRefunded()).thenReturn(refunded);
         when(r.getPurchaseTime()).thenReturn(purchasedAt);
         when(r.getReceiptLines()).thenReturn(lines);
+        return r;
+    }
+
+
+    private static OrderReceipt fullReceipt(boolean refunded, LocalDateTime purchasedAt,
+                                         List<ReceiptLine> lines, int id) {
+        OrderReceipt r = mock(OrderReceipt.class);
+        when(r.wasRefunded()).thenReturn(refunded);
+        when(r.getPurchaseTime()).thenReturn(purchasedAt);
+        when(r.getReceiptLines()).thenReturn(lines);
+        when(r.getId()).thenReturn(id);
+        when(r.getTransactionRecords()).thenReturn(List.of());
+        when(r.getHolderUserId()).thenReturn(null); // guest order; mapper is null-safe
+        when(r.getGuestEmail()).thenReturn(null);
         return r;
     }
 
@@ -116,5 +133,72 @@ class CompanyAnalyticsServiceTest {
         assertEquals(0, stats.ticketsSold30d());
         assertEquals(0.0, stats.revenue30d());
         assertEquals(0, stats.openInquiries());
+    }
+
+
+    // ─── salesHistory unit tests ──────────────────────────────────────────────────
+
+    @Test
+    void salesHistory_noEventsForCompany_returnsEmptyHistory() {
+        when(eventRepository.findIdsByCompany(COMPANY_ID)).thenReturn(List.of());
+
+        PurchaseHistoryDTO result = service.salesHistory(COMPANY_ID);
+
+        assertTrue(result.records().isEmpty());
+    }
+
+    @Test
+    void salesHistory_eventsExistButNoReceipts_returnsEmptyHistory() {
+        when(eventRepository.findIdsByCompany(COMPANY_ID)).thenReturn(List.of(EVENT_A, EVENT_B));
+        when(orderReceiptRepository.findByEventIds(List.of(EVENT_A, EVENT_B))).thenReturn(List.of());
+
+        PurchaseHistoryDTO result = service.salesHistory(COMPANY_ID);
+
+        assertTrue(result.records().isEmpty());
+    }
+
+    @Test
+    void salesHistory_twoReceipts_returnsTwoRecords() {
+        when(eventRepository.findIdsByCompany(COMPANY_ID)).thenReturn(List.of(EVENT_A));
+        OrderReceipt r1 = fullReceipt(false, LocalDateTime.now().minusDays(1),
+                List.of(line(1, 50.0, EVENT_A)), 1);
+        OrderReceipt r2 = fullReceipt(false, LocalDateTime.now().minusDays(2),
+                List.of(line(2, 30.0, EVENT_A)), 2);
+        when(orderReceiptRepository.findByEventIds(List.of(EVENT_A))).thenReturn(List.of(r1, r2));
+        when(ticketRepository.findByOrderReceiptId(anyInt())).thenReturn(List.of());
+
+        PurchaseHistoryDTO result = service.salesHistory(COMPANY_ID);
+
+        assertEquals(2, result.records().size());
+    }
+
+    @Test
+    void salesHistory_refundedReceiptIsIncluded() {
+        when(eventRepository.findIdsByCompany(COMPANY_ID)).thenReturn(List.of(EVENT_A));
+        OrderReceipt r = fullReceipt(true, LocalDateTime.now().minusDays(3),
+                List.of(line(1, 40.0, EVENT_A)), 1);
+        when(orderReceiptRepository.findByEventIds(List.of(EVENT_A))).thenReturn(List.of(r));
+        when(ticketRepository.findByOrderReceiptId(1)).thenReturn(List.of());
+
+        PurchaseHistoryDTO result = service.salesHistory(COMPANY_ID);
+
+        assertEquals(1, result.records().size());
+        assertTrue(result.records().get(0).refunded());
+    }
+
+    @Test
+    void salesHistory_linesFromOtherCompanyEventsAreExcluded() {
+        when(eventRepository.findIdsByCompany(COMPANY_ID)).thenReturn(List.of(EVENT_A));
+        // receipt contains one line for EVENT_A and one for a different company's event
+        OrderReceipt r = fullReceipt(false, LocalDateTime.now().minusDays(1),
+                List.of(line(1, 100.0, EVENT_A), line(2, 200.0, OTHER_COMPANY_EVENT)), 1);
+        when(orderReceiptRepository.findByEventIds(List.of(EVENT_A))).thenReturn(List.of(r));
+        when(ticketRepository.findByOrderReceiptId(1)).thenReturn(List.of());
+
+        PurchaseHistoryDTO result = service.salesHistory(COMPANY_ID);
+
+        assertEquals(1, result.records().size());
+        assertEquals(1,     result.records().get(0).tickets().size()); // only EVENT_A ticket
+        assertEquals(100.0, result.records().get(0).totalPaid());      // only EVENT_A revenue
     }
 }
