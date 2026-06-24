@@ -147,8 +147,8 @@ public class OwnerDashboardView extends LkPage {
                 CompanyEventListView.class));
 
         if (Capabilities.has(Capability.RESPOND_INQUIRIES))
-            tiles.add(tile("comment", "Member Inquiries",
-                "Respond to questions about your events and mark resolved.",
+            tiles.add(tile("comment", "Customer Inquiries",
+                "View member inquiries (with their username) and respond in a chat thread.",
                 CompanyInquiryInboxView.class));
 
         if (Capabilities.has(Capability.VIEW_COMPANY_SALES))

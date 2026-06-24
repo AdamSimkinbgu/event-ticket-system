@@ -49,7 +49,8 @@ class CompanyInquiryInboxPresenterTest {
     private static ConversationDTO conversation(String id, String type) {
         return new ConversationDTO(
             id, type, "OPEN", 1, "MEMBER", 7, "COMPANY",
-            "Subject " + id, LocalDateTime.now(), LocalDateTime.now(), 0, List.of());
+            "Subject " + id, LocalDateTime.now(), LocalDateTime.now(), 0, List.of(),
+            "alice", "Acme");
     }
 
     // -- loadFor --------------------------------------------------------------
@@ -79,15 +80,15 @@ class CompanyInquiryInboxPresenterTest {
         MyCompanyDTO acme = company(7, "Acme");
         when(companyManagement.findMyCompanies(TOKEN)).thenReturn(List.of(other, acme));
         ConversationDTO inquiry = conversation("c1", "INQUIRY");
-        ConversationDTO announcement = conversation("c2", "ANNOUNCEMENT");
-        when(messaging.viewCompanyInbox(TOKEN, 7)).thenReturn(List.of(inquiry, announcement));
+        ConversationDTO direct = conversation("c2", "DIRECT");
+        when(messaging.viewCompanyInbox(TOKEN, 7)).thenReturn(List.of(inquiry, direct));
 
         CompanyInquiryInboxPresenter.Outcome outcome = presenter.loadFor(TOKEN, 7);
 
         CompanyInquiryInboxPresenter.Outcome.Success ok =
             assertInstanceOf(CompanyInquiryInboxPresenter.Outcome.Success.class, outcome);
         assertEquals(7, ok.selected().companyId());
-        // The admin → company announcement is filtered out; only member inquiries remain.
+        // Only member inquiries are shown (the inbox keeps INQUIRY threads).
         assertEquals(List.of(inquiry), ok.conversations());
         verify(messaging).viewCompanyInbox(TOKEN, 7);
     }
@@ -211,5 +212,27 @@ class CompanyInquiryInboxPresenterTest {
         CompanyInquiryInboxPresenter.ActionOutcome outcome = presenter.close(TOKEN, "c1");
 
         assertInstanceOf(CompanyInquiryInboxPresenter.ActionOutcome.NotAuthenticated.class, outcome);
+    }
+
+    // -- loadOne --------------------------------------------------------------
+
+    @Test
+    void loadOne_nullToken_returnsNotAuthenticated_withoutCallingService() {
+        CompanyInquiryInboxPresenter.SingleOutcome outcome = presenter.loadOne(null, "c1");
+
+        assertInstanceOf(CompanyInquiryInboxPresenter.SingleOutcome.NotAuthenticated.class, outcome);
+        verify(messaging, never()).viewConversation(anyString(), anyString());
+    }
+
+    @Test
+    void loadOne_success_returnsConversation() {
+        ConversationDTO inquiry = conversation("c1", "INQUIRY");
+        when(messaging.viewConversation(TOKEN, "c1")).thenReturn(inquiry);
+
+        CompanyInquiryInboxPresenter.SingleOutcome outcome = presenter.loadOne(TOKEN, "c1");
+
+        CompanyInquiryInboxPresenter.SingleOutcome.Success ok =
+            assertInstanceOf(CompanyInquiryInboxPresenter.SingleOutcome.Success.class, outcome);
+        assertEquals(inquiry, ok.conversation());
     }
 }

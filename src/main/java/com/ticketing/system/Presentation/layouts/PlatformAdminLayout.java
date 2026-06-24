@@ -6,8 +6,8 @@ import com.ticketing.system.Presentation.components.kit.LkSideNav;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
 import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.ticketing.system.Presentation.session.AuthSession;
-import com.ticketing.system.Presentation.views.admin.AdminAnnouncementsView;
 import com.ticketing.system.Presentation.views.admin.AdminComplaintQueueView;
+import com.ticketing.system.Presentation.views.admin.AdminSendMessagesView;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
@@ -40,7 +40,7 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
         SystemAnalyticsView.class,     "System Analytics",
         GlobalHistoryView.class,       "Global History",
         OrganizationalTreeView.class,  "Organizational Tree",
-        AdminAnnouncementsView.class,  "Announcements",
+        AdminSendMessagesView.class,   "Send Messages",
         AdminComplaintQueueView.class, "Complaint Queue"
     );
 
@@ -78,7 +78,7 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
             new LkSideNav.Item("chart",    "System Analytics",    SystemAnalyticsView.class),
             new LkSideNav.Item("chart",    "Global History",      GlobalHistoryView.class),
             new LkSideNav.Item("org",      "Organizational Tree", OrganizationalTreeView.class),
-            new LkSideNav.Item("comment",  "Announcements",       AdminAnnouncementsView.class),
+            new LkSideNav.Item("comment",  "Send Messages",       AdminSendMessagesView.class),
             new LkSideNav.Item("warning",  "Complaint Queue",     AdminComplaintQueueView.class)
         ), null).platform();
 

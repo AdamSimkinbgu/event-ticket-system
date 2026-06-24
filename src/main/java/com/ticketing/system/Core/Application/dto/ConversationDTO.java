@@ -18,5 +18,7 @@ public record ConversationDTO(
     LocalDateTime createdAt,
     LocalDateTime lastMessageAt,
     int unreadCountForViewer,
-    List<MessageDTO> messages
+    List<MessageDTO> messages,
+    String initiatorDisplayName,     // resolved: member username / company name / "TicketHub Support"
+    String counterpartyDisplayName   // resolved: same scheme
 ) {}

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.system.Core.Domain.exceptions.BusinessRuleViolationException;
 import com.ticketing.system.Core.Domain.exceptions.ConversationClosedException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidParticipantException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
@@ -93,6 +94,23 @@ class ConversationTest extends BaseDomainTest {
         assertTrue(c.involvesParticipant(ADMIN_ID, ParticipantType.ADMIN));
         c.addMessage(ADMIN_ID, ParticipantType.ADMIN, "Looking into it");
         assertEquals(ConversationStatus.RESPONDED, c.getStatus());
+    }
+
+    // -- one-shot complaint rule ------------------------------------------------
+
+    @Test
+    void complaint_memberCannotReplyAfterOpening_throws() {
+        Conversation c = complaint();  // already carries the member's opening message
+        assertThrows(BusinessRuleViolationException.class,
+                () -> c.addMessage(MEMBER_ID, ParticipantType.MEMBER, "any update?"));
+    }
+
+    @Test
+    void complaint_secondAdminReply_throws() {
+        Conversation c = complaint();
+        c.addMessage(ADMIN_ID, ParticipantType.ADMIN, "First and only response");
+        assertThrows(BusinessRuleViolationException.class,
+                () -> c.addMessage(ADMIN_ID, ParticipantType.ADMIN, "second response"));
     }
 
     @Test

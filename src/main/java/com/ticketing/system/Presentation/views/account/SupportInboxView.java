@@ -14,6 +14,7 @@ import com.ticketing.system.Presentation.components.messaging.MdThread;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.messaging.SupportInboxPresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.views.messaging.NewInquiryView;
 import com.ticketing.system.Presentation.views.messaging.SubmitComplaintView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -67,7 +68,7 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
         actions(
             new LkBtn("New inquiry").variant(LkBtn.Variant.secondary)
                 .icon(new LkIcon("comment", 15))
-                .onClick(e -> Toasts.warn("New-inquiry composer wires with V2-MSG-04.")),
+                .onClick(e -> UI.getCurrent().navigate(NewInquiryView.class)),
             new LkBtn("Submit complaint").variant(LkBtn.Variant.primary)
                 .icon(new LkIcon("warning", 15))
                 .onClick(e -> UI.getCurrent().navigate(SubmitComplaintView.class))
@@ -165,10 +166,16 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
 
         detailCard.title(conv.subject());
         detailCard.subtitle(whoFor(conv) + " · " + humanizeStatus(conv.status()));
-        detailCard.add(new MdThread(toThreadMessages(conv.messages())));
+        detailCard.add(new MdThread(toThreadMessages(conv)));
 
-        // Terminal threads (RESOLVED / CLOSED) accept no further messages.
-        if (!isTerminal(conv.status())) {
+        if ("COMPLAINT".equals(conv.type())) {
+            // Complaints are one-shot — the member never replies; show the status instead of a reply bar.
+            String note = isTerminal(conv.status())
+                ? "This complaint has been reviewed and resolved — no further replies are accepted."
+                : "Your complaint is with the TicketHub admin team. Their response will appear here.";
+            detailCard.add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 17), note));
+        } else if (!isTerminal(conv.status())) {
+            // Inquiries and admin outreach are two-way chats (until closed).
             MdReplyBar reply = new MdReplyBar();
             reply.onSend(this::handleReply);
             detailCard.add(reply);
@@ -213,29 +220,25 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
 
     // -- Display mapping ------------------------------------------------------
 
-    private static List<MdThread.Message> toThreadMessages(List<MessageDTO> messages) {
+    private static List<MdThread.Message> toThreadMessages(ConversationDTO conv) {
+        String other = whoFor(conv);
         List<MdThread.Message> out = new ArrayList<>();
-        for (MessageDTO m : messages) {
+        for (MessageDTO m : conv.messages()) {
             boolean me = "MEMBER".equals(m.senderType());
-            String from = me ? "You" : labelForSide(m.senderType());
-            out.add(new MdThread.Message(from, relativeTime(m.sentAt()), me, m.body()));
+            out.add(new MdThread.Message(me ? "You" : other, relativeTime(m.sentAt()), me, m.body()));
         }
         return out;
     }
 
-    /** Master-row / detail label for the member's counterparty. */
+    /**
+     * Label for the member's counterparty — the resolved display name of whichever party isn't the
+     * member. On inquiries/complaints the member initiated, that's the counterparty (company /
+     * "TicketHub Support"); on admin outreach the member is the counterparty, so it's the initiator.
+     */
     private static String whoFor(ConversationDTO c) {
-        return labelForSide(c.counterpartyType());
-    }
-
-    private static String labelForSide(String participantType) {
-        return switch (participantType) {
-            case "ADMIN", "ADMIN_GROUP" -> "TicketHub Support";
-            // Member → company inquiries aren't UI-creatable yet (V2-MSG-04), so this
-            // branch is effectively unused; the DTO carries no company display name.
-            case "COMPANY" -> "Production company";
-            default -> "TicketHub";
-        };
+        return "MEMBER".equals(c.initiatorType())
+            ? c.counterpartyDisplayName()
+            : c.initiatorDisplayName();
     }
 
     private static String iconFor(String type) {

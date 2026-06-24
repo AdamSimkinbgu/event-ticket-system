@@ -43,7 +43,8 @@ class AdminComplaintQueuePresenterTest {
     private static ConversationDTO complaint(String id, String status) {
         return new ConversationDTO(
             id, "COMPLAINT", status, 1, "MEMBER", 0, "ADMIN_GROUP",
-            "Subject " + id, LocalDateTime.now(), LocalDateTime.now(), 0, List.of());
+            "Subject " + id, LocalDateTime.now(), LocalDateTime.now(), 0, List.of(),
+            "alice", "TicketHub Support");
     }
 
     // -- load -----------------------------------------------------------------
@@ -123,83 +124,36 @@ class AdminComplaintQueuePresenterTest {
         assertEquals("not an admin", fail.reason());
     }
 
-    // -- reply ----------------------------------------------------------------
+    // -- respond (one-shot) ---------------------------------------------------
 
     @Test
-    void reply_nullToken_returnsNotAuthenticated_withoutCallingService() {
-        AdminComplaintQueuePresenter.ActionOutcome outcome = presenter.reply(null, "c1", "hi");
+    void respond_nullToken_returnsNotAuthenticated_withoutCallingService() {
+        AdminComplaintQueuePresenter.ActionOutcome outcome = presenter.respond(null, "c1", "resolved");
 
         assertInstanceOf(AdminComplaintQueuePresenter.ActionOutcome.NotAuthenticated.class, outcome);
         verify(messaging, never()).respondToComplaint(anyString(), any());
     }
 
     @Test
-    void reply_happyPath_returnsSuccess_andSendsBodyWithoutStatusTransition() {
+    void respond_happyPath_returnsSuccess_andSendsBodyWithResolvedStatus() {
         AdminComplaintQueuePresenter.ActionOutcome outcome =
-            presenter.reply(TOKEN, "c1", "Looking into the duplicate charge.");
+            presenter.respond(TOKEN, "c1", "Refund issued — resolved.");
 
         assertInstanceOf(AdminComplaintQueuePresenter.ActionOutcome.Success.class, outcome);
         ArgumentCaptor<RespondToComplaintRequestDTO> captor =
             ArgumentCaptor.forClass(RespondToComplaintRequestDTO.class);
         verify(messaging).respondToComplaint(eq(TOKEN), captor.capture());
         assertEquals("c1", captor.getValue().conversationId());
-        assertEquals("Looking into the duplicate charge.", captor.getValue().body());
-        assertNull(captor.getValue().newStatus(), "a plain reply must not transition status");
+        assertEquals("Refund issued — resolved.", captor.getValue().body());
+        assertEquals("RESOLVED", captor.getValue().newStatus(), "the single response resolves the complaint");
     }
 
     @Test
-    void reply_serviceThrows_returnsFailureWithMessage() {
-        doThrow(new RuntimeException("conversation closed"))
-            .when(messaging).respondToComplaint(anyString(), any());
-
-        AdminComplaintQueuePresenter.ActionOutcome outcome = presenter.reply(TOKEN, "c1", "late");
-
-        AdminComplaintQueuePresenter.ActionOutcome.Failure fail =
-            assertInstanceOf(AdminComplaintQueuePresenter.ActionOutcome.Failure.class, outcome);
-        assertEquals("conversation closed", fail.reason());
-    }
-
-    @Test
-    void reply_invalidToken_returnsNotAuthenticated() {
-        doThrow(new InvalidTokenException("bad"))
-            .when(messaging).respondToComplaint(anyString(), any());
-
-        AdminComplaintQueuePresenter.ActionOutcome outcome = presenter.reply(TOKEN, "c1", "hi");
-
-        assertInstanceOf(AdminComplaintQueuePresenter.ActionOutcome.NotAuthenticated.class, outcome);
-    }
-
-    // -- resolve --------------------------------------------------------------
-
-    @Test
-    void resolve_nullToken_returnsNotAuthenticated_withoutCallingService() {
-        AdminComplaintQueuePresenter.ActionOutcome outcome = presenter.resolve(null, "c1");
-
-        assertInstanceOf(AdminComplaintQueuePresenter.ActionOutcome.NotAuthenticated.class, outcome);
-        verify(messaging, never()).respondToComplaint(anyString(), any());
-    }
-
-    @Test
-    void resolve_happyPath_returnsSuccess_andSendsResolvedStatusWithNonBlankBody() {
-        AdminComplaintQueuePresenter.ActionOutcome outcome = presenter.resolve(TOKEN, "c1");
-
-        assertInstanceOf(AdminComplaintQueuePresenter.ActionOutcome.Success.class, outcome);
-        ArgumentCaptor<RespondToComplaintRequestDTO> captor =
-            ArgumentCaptor.forClass(RespondToComplaintRequestDTO.class);
-        verify(messaging).respondToComplaint(eq(TOKEN), captor.capture());
-        assertEquals("c1", captor.getValue().conversationId());
-        assertEquals("RESOLVED", captor.getValue().newStatus());
-        // The domain rejects blank bodies; resolve must still carry a message.
-        assertFalse(captor.getValue().body() == null || captor.getValue().body().isBlank(),
-            "resolve must send a non-blank message body");
-    }
-
-    @Test
-    void resolve_serviceThrows_returnsFailureWithMessage() {
+    void respond_serviceThrows_returnsFailureWithMessage() {
         doThrow(new RuntimeException("already resolved"))
             .when(messaging).respondToComplaint(anyString(), any());
 
-        AdminComplaintQueuePresenter.ActionOutcome outcome = presenter.resolve(TOKEN, "c1");
+        AdminComplaintQueuePresenter.ActionOutcome outcome = presenter.respond(TOKEN, "c1", "late");
 
         AdminComplaintQueuePresenter.ActionOutcome.Failure fail =
             assertInstanceOf(AdminComplaintQueuePresenter.ActionOutcome.Failure.class, outcome);
@@ -207,12 +161,43 @@ class AdminComplaintQueuePresenterTest {
     }
 
     @Test
-    void resolve_invalidToken_returnsNotAuthenticated() {
+    void respond_invalidToken_returnsNotAuthenticated() {
         doThrow(new InvalidTokenException("bad"))
             .when(messaging).respondToComplaint(anyString(), any());
 
-        AdminComplaintQueuePresenter.ActionOutcome outcome = presenter.resolve(TOKEN, "c1");
+        AdminComplaintQueuePresenter.ActionOutcome outcome = presenter.respond(TOKEN, "c1", "hi");
 
         assertInstanceOf(AdminComplaintQueuePresenter.ActionOutcome.NotAuthenticated.class, outcome);
+    }
+
+    // -- loadOne --------------------------------------------------------------
+
+    @Test
+    void loadOne_nullToken_returnsNotAuthenticated_withoutCallingService() {
+        AdminComplaintQueuePresenter.SingleOutcome outcome = presenter.loadOne(null, "c1");
+
+        assertInstanceOf(AdminComplaintQueuePresenter.SingleOutcome.NotAuthenticated.class, outcome);
+        verify(messaging, never()).viewConversation(anyString(), anyString());
+    }
+
+    @Test
+    void loadOne_success_returnsConversation() {
+        ConversationDTO c = complaint("c1", "OPEN");
+        when(messaging.viewConversation(TOKEN, "c1")).thenReturn(c);
+
+        AdminComplaintQueuePresenter.SingleOutcome outcome = presenter.loadOne(TOKEN, "c1");
+
+        AdminComplaintQueuePresenter.SingleOutcome.Success ok =
+            assertInstanceOf(AdminComplaintQueuePresenter.SingleOutcome.Success.class, outcome);
+        assertEquals(c, ok.conversation());
+    }
+
+    @Test
+    void loadOne_invalidToken_returnsNotAuthenticated() {
+        when(messaging.viewConversation(eq(TOKEN), anyString())).thenThrow(new InvalidTokenException("bad"));
+
+        AdminComplaintQueuePresenter.SingleOutcome outcome = presenter.loadOne(TOKEN, "c1");
+
+        assertInstanceOf(AdminComplaintQueuePresenter.SingleOutcome.NotAuthenticated.class, outcome);
     }
 }

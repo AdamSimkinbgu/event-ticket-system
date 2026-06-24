@@ -2,15 +2,16 @@ package com.ticketing.system.Core.Application.services;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Objects;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
-import com.ticketing.system.Core.Application.dto.AnnounceResultDTO;
-import com.ticketing.system.Core.Application.dto.AnnouncementRequestDTO;
 import com.ticketing.system.Core.Application.dto.ComplaintFilterDTO;
 import com.ticketing.system.Core.Application.dto.ConversationDTO;
+import com.ticketing.system.Core.Application.dto.OutreachRequestDTO;
+import com.ticketing.system.Core.Application.dto.OutreachResultDTO;
 import com.ticketing.system.Core.Application.dto.RespondToComplaintRequestDTO;
 import com.ticketing.system.Core.Application.dto.SendMessageRequestDTO;
 import com.ticketing.system.Core.Application.dto.StartConversationRequestDTO;
@@ -84,15 +85,14 @@ public class MessagingService {
     // Write operations
     // ---------------------------------------------------------------------------
 
-    // II.3.10 — Member starts an INQUIRY conversation with a Company (or any DIRECT thread).
+    // II.3.10 — Member starts an INQUIRY conversation (two-way chat) with a Company.
     public ConversationDTO startConversation(String token, StartConversationRequestDTO request) {
         int memberId = authenticate(token);
         int companyId = request.counterpartyId();
         ProductionCompany company = companyRepository.getCompanyById(companyId); // throws if missing
 
-        ConversationType type = parseType(request.type(), ConversationType.INQUIRY);
         Conversation conversation = Conversation.start(
-                type,
+                ConversationType.INQUIRY,
                 memberId, ParticipantType.MEMBER,
                 companyId, ParticipantType.COMPANY,
                 request.subject(), request.firstMessageBody());
@@ -100,9 +100,9 @@ public class MessagingService {
 
         // Bridge — a member opened an inquiry; notify the company's owners.
         notifyCompanyOwners(company, conversation, senderLabel(ParticipantType.MEMBER), request.firstMessageBody());
-        log.info("Conversation {} ({}) started by member {} to company {}",
-                conversation.getConversationId(), type, memberId, companyId);
-        return new ConversationMapper().toDTO(conversation, memberId);
+        log.info("Inquiry {} started by member {} to company {}",
+                conversation.getConversationId(), memberId, companyId);
+        return toDTO(conversation, memberId);
     }
 
 
@@ -117,6 +117,12 @@ public class MessagingService {
         conversationRepository.lockForUpdate(conversationId);
         try {
             conversation = loadConversation(conversationId);
+            // Complaints are one-shot: the admin's single reply goes through respondToComplaint,
+            // never this chat path. (The domain enforces this too — belt and suspenders.)
+            if (conversation.getType() == ConversationType.COMPLAINT) {
+                throw new BusinessRuleViolationException(
+                        "Complaints are not a chat — they accept a single admin response only");
+            }
             sender = resolveCallerSide(caller, conversation);
             conversation.addMessage(sender.id(), sender.type(), request.body());
             conversationRepository.save(conversation);
@@ -148,12 +154,12 @@ public class MessagingService {
         // Bridge — notify all admins a complaint was filed.
         notifyAllAdmins(conversation, senderLabel(ParticipantType.MEMBER), body);
         log.info("Complaint {} submitted by member {}", conversation.getConversationId(), memberId);
-        return new ConversationMapper().toDTO(conversation, memberId);
+        return toDTO(conversation, memberId);
     }
 
 
 
-    // II.6.3.1 — admin responds to a complaint and may transition status.
+    // II.6.3.1 — admin sends the single response to a complaint, which resolves it (one-shot).
     public void respondToComplaint(String token, RespondToComplaintRequestDTO request) {
         int adminId = requireSystemAdmin(token);
         String conversationId = request.conversationId();
@@ -166,8 +172,10 @@ public class MessagingService {
                 throw new BusinessRuleViolationException(
                         "Conversation " + conversationId + " is not a complaint");
             }
+            // The admin's reply is the complaint's terminal response: append it, then resolve.
+            // The lock serializes concurrent admins; the domain rejects a second admin reply.
             conversation.addMessage(adminId, ParticipantType.ADMIN, request.body());
-            applyNewStatus(conversation, request.newStatus());
+            conversation.transitionToResolved();
             conversationRepository.save(conversation);
         } finally {
             conversationRepository.unlock(conversationId);
@@ -176,48 +184,53 @@ public class MessagingService {
         // Bridge — notify the member who filed the complaint.
         safeNotify(conversation.getInitiatorId(), conversationId,
                 senderLabel(ParticipantType.ADMIN), conversation.getSubject(), request.body());
-        log.info("Admin {} responded to complaint {} (newStatus={})", adminId, conversationId, request.newStatus());
+        log.info("Admin {} resolved complaint {}", adminId, conversationId);
     }
 
-    // II.6.3.2 — admin outreach. Fans out to one ANNOUNCEMENT conversation per recipient
-    // (a real two-party thread each), so read-tracking and the notification bridge stay uniform.
-    public AnnounceResultDTO announce(String token, AnnouncementRequestDTO request) {
+    // II.6.3.2 — admin proactive messaging. Resolves the recipient set (explicit members, and/or
+    // all members, and/or all producers' owner accounts), then opens one two-way DIRECT
+    // conversation per recipient so each lands in that member's Support Inbox as a chat.
+    public OutreachResultDTO sendOutreach(String token, OutreachRequestDTO request) {
         int adminId = requireSystemAdmin(token);
-        String audience = request.audienceType() == null ? "" : request.audienceType().trim().toUpperCase();
+
+        Set<Integer> recipientIds = new LinkedHashSet<>();
+        if (request.allMembers()) {
+            for (User member : userRepository.findAll()) {
+                recipientIds.add(member.getUserId());
+            }
+        }
+        if (request.allProducers()) {
+            for (ProductionCompany company : companyRepository.findActive()) {
+                for (Integer ownerId : company.getOwnerIds()) {
+                    if (ownerId != null) recipientIds.add(ownerId);
+                }
+            }
+        }
+        if (!request.allMembers() && !request.allProducers()) {
+            for (Integer memberId : safeList(request.recipientMemberIds())) {
+                if (memberId != null) recipientIds.add(memberId);
+            }
+        }
+
+        if (recipientIds.isEmpty()) {
+            throw new BusinessRuleViolationException("Outreach matched no recipients");
+        }
 
         List<Conversation> created = new ArrayList<>();
-        switch (audience) {
-            case "ALL_MEMBERS", "BROADCAST_MEMBERS" -> {
-                for (User member : userRepository.findAll()) {
-                    created.add(announceToMember(adminId, member.getUserId(), request));
-                }
-            }
-            case "MEMBER_LIST" -> {
-                for (Integer memberId : safeList(request.audienceMemberIds())) {
-                    if (memberId != null) {
-                        created.add(announceToMember(adminId, memberId, request));
-                    }
-                }
-            }
-            case "PRODUCERS" -> {
-                List<Integer> companyIds = safeList(request.audienceCompanyIds());
-                List<ProductionCompany> targets = companyIds.isEmpty()
-                        ? companyRepository.findActive()
-                        : companyIds.stream().filter(Objects::nonNull).map(this::tryGetCompany)
-                                .filter(Objects::nonNull).toList();
-                for (ProductionCompany company : targets) {
-                    created.add(announceToCompany(adminId, company, request));
-                }
-            }
-            default -> throw new IllegalArgumentException(
-                    "Unknown announcement audienceType: " + request.audienceType());
+        for (Integer memberId : recipientIds) {
+            Conversation conversation = Conversation.start(
+                    ConversationType.DIRECT,
+                    adminId, ParticipantType.ADMIN,
+                    memberId, ParticipantType.MEMBER,
+                    request.subject(), request.body());
+            conversationRepository.save(conversation);
+            safeNotify(memberId, conversation.getConversationId(),
+                    senderLabel(ParticipantType.ADMIN), request.subject(), request.body());
+            created.add(conversation);
         }
 
-        if (created.isEmpty()) {
-            throw new BusinessRuleViolationException("Announcement matched no recipients");
-        }
-        log.info("Admin {} announced to {} recipient(s) (audience={})", adminId, created.size(), audience);
-        return new AnnounceResultDTO(created.size(), created.get(0).getConversationId());
+        log.info("Admin {} sent outreach to {} recipient(s)", adminId, created.size());
+        return new OutreachResultDTO(created.size(), created.get(0).getConversationId());
     }
 
 
@@ -256,13 +269,12 @@ public class MessagingService {
     // Read operations
     // ---------------------------------------------------------------------------
 
-    // Member-facing inbox view.
+    // Member-facing Support Inbox: inquiries + complaints the member opened, plus admin outreach.
     public List<ConversationDTO> viewMyConversations(String token) {
         int memberId = authenticate(token);
-        ConversationMapper mapper = new ConversationMapper();
-        return conversationRepository.findByParticipant(memberId, ParticipantType.MEMBER).stream()
+        return conversationRepository.findMemberInbox(memberId).stream()
                 .sorted(Comparator.comparing(Conversation::getLastMessageAt).reversed())
-                .map(c -> mapper.toDTO(c, memberId))
+                .map(c -> toDTO(c, memberId))
                 .toList();
     }
 
@@ -271,7 +283,7 @@ public class MessagingService {
         Caller caller = authenticateCaller(token);
         Conversation conversation = loadConversation(conversationId);
         CallerSide side = resolveCallerSide(caller, conversation); // throws if not a participant
-        return new ConversationMapper().toDTO(conversation, side.id());
+        return toDTO(conversation, side.id());
     }
 
     // II.4.4 — company support inbox: all conversations where this company is counterparty.
@@ -281,10 +293,9 @@ public class MessagingService {
             throw new UnauthorizedActionException(
                     "view company inbox", callerId);
         }
-        ConversationMapper mapper = new ConversationMapper();
         return conversationRepository.findByCompanyAsCounterparty(companyId).stream()
                 .sorted(Comparator.comparing(Conversation::getLastMessageAt).reversed())
-                .map(c -> mapper.toDTO(c, companyId))
+                .map(c -> toDTO(c, companyId))
                 .toList();
     }
 
@@ -296,22 +307,20 @@ public class MessagingService {
                 ? conversationRepository.findByTypeAndStatus(ConversationType.COMPLAINT, status)
                 : conversationRepository.findByType(ConversationType.COMPLAINT);
 
-        ConversationMapper mapper = new ConversationMapper();
         return complaints.stream()
                 .filter(c -> matchesComplaintFilter(c, filters))
                 .sorted(Comparator.comparing(Conversation::getLastMessageAt).reversed())
-                .map(c -> mapper.toDTO(c, adminId))
+                .map(c -> toDTO(c, adminId))
                 .toList();
     }
 
-    // II.6.3.2 — admin "sent history": every ANNOUNCEMENT conversation across the platform.
+    // II.6.3.2 — admin "sent history": every DIRECT conversation the admin initiated.
     // The fan-out creates one conversation per recipient; callers group them into broadcasts.
-    public List<ConversationDTO> viewSentAnnouncements(String token) {
+    public List<ConversationDTO> viewSentOutreach(String token) {
         int adminId = requireSystemAdmin(token);
-        ConversationMapper mapper = new ConversationMapper();
-        return conversationRepository.findByType(ConversationType.ANNOUNCEMENT).stream()
+        return conversationRepository.findByTypeAndInitiatorType(ConversationType.DIRECT, ParticipantType.ADMIN).stream()
                 .sorted(Comparator.comparing(Conversation::getLastMessageAt).reversed())
-                .map(c -> mapper.toDTO(c, adminId))
+                .map(c -> toDTO(c, adminId))
                 .toList();
     }
 
@@ -426,7 +435,7 @@ public class MessagingService {
                 }
             }
             case ADMIN, ADMIN_GROUP -> notifyAllAdmins(conversation, label, body);
-            default -> { /* BROADCAST_MEMBERS / SYSTEM — no single recipient to notify */ }
+            default -> { /* SYSTEM — no single recipient to notify */ }
         }
     }
 
@@ -468,30 +477,31 @@ public class MessagingService {
     }
 
     // ---------------------------------------------------------------------------
-    // Announce fan-out helpers
+    // DTO mapping
     // ---------------------------------------------------------------------------
 
-    private Conversation announceToMember(int adminId, int memberId, AnnouncementRequestDTO request) {
-        Conversation conversation = Conversation.start(
-                ConversationType.ANNOUNCEMENT,
-                adminId, ParticipantType.ADMIN,
-                memberId, ParticipantType.MEMBER,
-                request.subject(), request.body());
-        conversationRepository.save(conversation);
-        safeNotify(memberId, conversation.getConversationId(), senderLabel(ParticipantType.ADMIN),
-                request.subject(), request.body());
-        return conversation;
+    // Maps a conversation to its DTO for the given viewer, resolving both parties' display names.
+    private ConversationDTO toDTO(Conversation c, int viewerId) {
+        return new ConversationMapper().toDTO(c, viewerId,
+                resolveDisplayName(c.getInitiatorId(), c.getInitiatorType()),
+                resolveDisplayName(c.getCounterpartyId(), c.getCounterpartyType()));
     }
 
-    private Conversation announceToCompany(int adminId, ProductionCompany company, AnnouncementRequestDTO request) {
-        Conversation conversation = Conversation.start(
-                ConversationType.ANNOUNCEMENT,
-                adminId, ParticipantType.ADMIN,
-                company.getCompanyId(), ParticipantType.COMPANY,
-                request.subject(), request.body());
-        conversationRepository.save(conversation);
-        notifyCompanyOwners(company, conversation, senderLabel(ParticipantType.ADMIN), request.body());
-        return conversation;
+    // Human-readable label for a conversation party: member username, company name, or a fixed
+    // label for the admin side / system. Falls back to "<Kind> #id" if the entity can't be loaded.
+    private String resolveDisplayName(int id, ParticipantType type) {
+        return switch (type) {
+            case MEMBER -> {
+                try { yield userRepository.getUserById(id).getUsername(); }
+                catch (RuntimeException e) { yield "Member #" + id; }
+            }
+            case COMPANY -> {
+                try { yield companyRepository.getCompanyById(id).getName(); }
+                catch (RuntimeException e) { yield "Company #" + id; }
+            }
+            case ADMIN, ADMIN_GROUP -> "TicketHub Support";
+            case SYSTEM -> "TicketHub";
+        };
     }
 
     // ---------------------------------------------------------------------------
@@ -513,24 +523,6 @@ public class MessagingService {
         }
     }
 
-    private void applyNewStatus(Conversation conversation, String newStatus) {
-        if (newStatus == null || newStatus.isBlank()) {
-            return;
-        }
-        ConversationStatus target;
-        try {
-            target = ConversationStatus.valueOf(newStatus.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Unknown conversation status: " + newStatus);
-        }
-        switch (target) {
-            case RESOLVED -> conversation.transitionToResolved();
-            case CLOSED -> conversation.transitionToClosed();
-            // RESPONDED is already set by addMessage; OPEN needs no explicit move.
-            case RESPONDED, OPEN -> { /* no-op */ }
-        }
-    }
-
     private boolean matchesComplaintFilter(Conversation c, ComplaintFilterDTO filters) {
         if (filters == null) {
             return true;
@@ -545,17 +537,6 @@ public class MessagingService {
             return false;
         }
         return true;
-    }
-
-    private ConversationType parseType(String raw, ConversationType fallback) {
-        if (raw == null || raw.isBlank()) {
-            return fallback;
-        }
-        try {
-            return ConversationType.valueOf(raw.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            return fallback;
-        }
     }
 
     private ConversationStatus parseStatusOrNull(String raw) {
@@ -575,7 +556,6 @@ public class MessagingService {
             case COMPANY -> "a production company";
             case ADMIN, ADMIN_GROUP -> "a system admin";
             case SYSTEM -> "the system";
-            case BROADCAST_MEMBERS -> "the platform";
         };
     }
 

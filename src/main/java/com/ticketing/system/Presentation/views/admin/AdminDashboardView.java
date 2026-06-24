@@ -72,9 +72,9 @@ public class AdminDashboardView extends LkPage {
             tile("org",     "Organizational tree",
                 "Per-company founder → owners → managers hierarchy.",
                 OrganizationalTreeView.class),
-            tile("comment", "Announcements",
-                "Broadcast a Conversation to all members or a specific role.",
-                AdminAnnouncementsView.class),
+            tile("comment", "Send Messages",
+                "Message individual members, all members, or all producers.",
+                AdminSendMessagesView.class),
             tile("warning", "Complaint queue",
                 "Member complaints opened via Conversation type COMPLAINT.",
                 AdminComplaintQueueView.class)

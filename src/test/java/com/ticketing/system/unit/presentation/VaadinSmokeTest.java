@@ -14,9 +14,10 @@ import com.ticketing.system.Presentation.components.venue.VkSeatedZonePicker;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.layouts.MainLayout;
-import com.ticketing.system.Presentation.views.admin.AdminAnnouncementsView;
 import com.ticketing.system.Presentation.views.admin.AdminComplaintQueueView;
+import com.ticketing.system.Presentation.views.admin.AdminComplaintRespondView;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
+import com.ticketing.system.Presentation.views.admin.AdminSendMessagesView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
 import com.ticketing.system.Presentation.views.admin.SystemAnalyticsView;
@@ -29,6 +30,7 @@ import com.ticketing.system.Presentation.presenters.catalog.BrowseEventsPresente
 import com.ticketing.system.Presentation.presenters.catalog.EventDetailsPresenter;
 import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.ticketing.system.Presentation.views.company.CompanyInquiryInboxView;
+import com.ticketing.system.Presentation.views.company.CompanyInquiryRespondView;
 import com.ticketing.system.Presentation.views.company.ManagerListView;
 import com.ticketing.system.Presentation.views.company.OwnerDashboardView;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
@@ -39,12 +41,14 @@ import com.ticketing.system.Presentation.presenters.account.MyAccountPresenter;
 import com.ticketing.system.Presentation.presenters.account.ReceiptPresenter;
 import com.ticketing.system.Presentation.presenters.account.RefundPresenter;
 import com.ticketing.system.Presentation.views.landing.LandingView;
+import com.ticketing.system.Presentation.views.messaging.NewInquiryView;
 import com.ticketing.system.Presentation.views.messaging.SubmitComplaintView;
 import com.ticketing.system.Presentation.presenters.company.ManagerListPresenter;
 import com.ticketing.system.Presentation.presenters.company.OwnerDashboardPresenter;
-import com.ticketing.system.Presentation.presenters.messaging.AdminAnnouncementsPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.AdminComplaintQueuePresenter;
+import com.ticketing.system.Presentation.presenters.messaging.AdminSendMessagesPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.CompanyInquiryInboxPresenter;
+import com.ticketing.system.Presentation.presenters.messaging.NewInquiryPresenter;
 import com.ticketing.system.Presentation.presenters.account.MyInvitationsPresenter;
 import com.ticketing.system.Presentation.presenters.landing.LandingPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.SubmitComplaintPresenter;
@@ -296,7 +300,8 @@ class VaadinSmokeTest {
             "conv-1", "COMPLAINT", "OPEN", 1, "MEMBER", 0, "ADMIN_GROUP",
             "Refund delay", LocalDateTime.now(), LocalDateTime.now(), 0,
             List.of(new MessageDTO("m-1", 1, "MEMBER", "Where's my refund?",
-                LocalDateTime.now(), false)));
+                LocalDateTime.now(), false)),
+            "alice", "TicketHub Support");
         when(presenter.load(any())).thenReturn(
             new SupportInboxPresenter.Outcome.Success(List.of(conv)));
         assertDoesNotThrow(() -> new SupportInboxView(presenter),
@@ -314,7 +319,8 @@ class VaadinSmokeTest {
             "conv-1", "INQUIRY", "OPEN", 1, "MEMBER", 7, "COMPANY",
             "Wheelchair access", LocalDateTime.now(), LocalDateTime.now(), 0,
             List.of(new MessageDTO("m-1", 1, "MEMBER", "Is there step-free access?",
-                LocalDateTime.now(), false)));
+                LocalDateTime.now(), false)),
+            "alice", "Acme");
         when(presenter.loadFor(any(), any())).thenReturn(
             new CompanyInquiryInboxPresenter.Outcome.Success(List.of(company), company, List.of(conv)));
         assertDoesNotThrow(() -> new CompanyInquiryInboxView(presenter),
@@ -332,7 +338,8 @@ class VaadinSmokeTest {
             "conv-1", "COMPLAINT", "OPEN", 1, "MEMBER", 0, "ADMIN_GROUP",
             "Charged twice", LocalDateTime.now(), LocalDateTime.now(), 0,
             List.of(new MessageDTO("m-1", 1, "MEMBER", "My card was charged twice.",
-                LocalDateTime.now(), false)));
+                LocalDateTime.now(), false)),
+            "alice", "TicketHub Support");
         when(presenter.load(any(), any())).thenReturn(
             new AdminComplaintQueuePresenter.Outcome.Success(List.of(conv)));
         assertDoesNotThrow(() -> new AdminComplaintQueueView(presenter),
@@ -340,17 +347,44 @@ class VaadinSmokeTest {
     }
 
     @Test
-    void adminAnnouncementsViewInstantiates() {
-        // Admin announcements wired to a presenter (#270). A mock presenter returning one
-        // sent-announcement row exercises the composer + history-grid build path without a UI
-        // context. (The view now takes a presenter, so it moved out of platformAdminViewsInstantiate.)
-        AdminAnnouncementsPresenter presenter = mock(AdminAnnouncementsPresenter.class);
-        AdminAnnouncementsPresenter.SentAnnouncement row = new AdminAnnouncementsPresenter.SentAnnouncement(
-            LocalDateTime.now(), "Maintenance window", "Members", 82481, "Admin #1");
+    void adminSendMessagesViewInstantiates() {
+        // Admin "Send Messages" outreach wired to a presenter (II.6.3.2). A mock presenter returning
+        // one sent row exercises the composer + recipient picker + history-grid build path without a
+        // UI context.
+        AdminSendMessagesPresenter presenter = mock(AdminSendMessagesPresenter.class);
+        AdminSendMessagesPresenter.SentOutreach row = new AdminSendMessagesPresenter.SentOutreach(
+            LocalDateTime.now(), "Maintenance window", 82481);
         when(presenter.load(any())).thenReturn(
-            new AdminAnnouncementsPresenter.Outcome.Success(List.of(row)));
-        assertDoesNotThrow(() -> new AdminAnnouncementsView(presenter),
-            "AdminAnnouncementsView failed to construct");
+            new AdminSendMessagesPresenter.Outcome.Success(List.of(row)));
+        assertDoesNotThrow(() -> new AdminSendMessagesView(presenter),
+            "AdminSendMessagesView failed to construct");
+    }
+
+    @Test
+    void newInquiryViewInstantiates() {
+        // Member "New inquiry" composer (II.3.10). The constructor builds the form shell; company
+        // search + submit happen on interaction, so a bare mock presenter exercises construction.
+        NewInquiryPresenter presenter = mock(NewInquiryPresenter.class);
+        assertDoesNotThrow(() -> new NewInquiryView(presenter),
+            "NewInquiryView failed to construct");
+    }
+
+    @Test
+    void adminComplaintRespondViewInstantiates() {
+        // Admin complaint respond page. The constructor only adds the content shell (load happens in
+        // beforeEnter), so a bare mock presenter exercises construction.
+        AdminComplaintQueuePresenter presenter = mock(AdminComplaintQueuePresenter.class);
+        assertDoesNotThrow(() -> new AdminComplaintRespondView(presenter),
+            "AdminComplaintRespondView failed to construct");
+    }
+
+    @Test
+    void companyInquiryRespondViewInstantiates() {
+        // Company inquiry respond page. The constructor only adds the content shell (load happens in
+        // beforeEnter), so a bare mock presenter exercises construction.
+        CompanyInquiryInboxPresenter presenter = mock(CompanyInquiryInboxPresenter.class);
+        assertDoesNotThrow(() -> new CompanyInquiryRespondView(presenter),
+            "CompanyInquiryRespondView failed to construct");
     }
 
     @Test

@@ -18,6 +18,7 @@ import com.ticketing.system.Presentation.components.venue.VkVenueMap;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.catalog.EventDetailsPresenter;
 import com.ticketing.system.Presentation.session.SessionIdentity;
+import com.ticketing.system.Presentation.views.messaging.NewInquiryView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -25,6 +26,7 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
+import com.vaadin.flow.router.QueryParameters;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
@@ -142,6 +144,17 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
             Span desc = Lk.muted(detail.description());
             desc.getStyle().set("font-size", "15px");
             meta.add(desc);
+        }
+
+        // Signed-in members can open an inquiry with the organizer, pre-filling this event's company.
+        if (sessionIdentity.isMember() && detail.companyId() != null) {
+            LkBtn ask = new LkBtn("Ask the organizer")
+                .variant(LkBtn.Variant.secondary)
+                .icon(new LkIcon("comment", 15))
+                .onClick(e -> UI.getCurrent().navigate(NewInquiryView.class,
+                    QueryParameters.of("company", detail.companyId())));
+            ask.getStyle().set("margin-top", "10px").set("align-self", "flex-start");
+            meta.add(ask);
         }
 
         hero.add(poster, meta);

@@ -3,7 +3,6 @@ package com.ticketing.system.Presentation.views.company;
 import com.ticketing.system.Core.Application.dto.ConversationDTO;
 import com.ticketing.system.Core.Application.dto.MessageDTO;
 import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
-import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
@@ -13,7 +12,6 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkSelect;
 import com.ticketing.system.Presentation.components.messaging.MdConvRow;
-import com.ticketing.system.Presentation.components.messaging.MdReplyBar;
 import com.ticketing.system.Presentation.components.messaging.MdThread;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.presenters.messaging.CompanyInquiryInboxPresenter;
@@ -22,9 +20,11 @@ import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.CurrentCompanies;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.router.RouteParameters;
 import jakarta.annotation.security.PermitAll;
 
 import java.time.Duration;
@@ -48,7 +48,7 @@ import java.util.Set;
  * {@code AdminComplaintQueueView} (#269) mirrors this pattern.
  */
 @Route(value = "owner/inquiries", layout = WorkspaceLayout.class)
-@PageTitle("Member inquiries · TicketHub")
+@PageTitle("Customer inquiries · TicketHub")
 @PermitAll
 @RequireCapability(Capability.RESPOND_INQUIRIES)
 public class CompanyInquiryInboxView extends LkPage {
@@ -72,7 +72,7 @@ public class CompanyInquiryInboxView extends LkPage {
     public CompanyInquiryInboxView(CompanyInquiryInboxPresenter presenter) {
         this.presenter = presenter;
 
-        title("Member inquiries");
+        title("Customer inquiries");
         subtitle("Questions from members about your events and company.");
         add(content);
         reload(CurrentCompanies.currentCompanyId());
@@ -152,7 +152,7 @@ public class CompanyInquiryInboxView extends LkPage {
         LkCard card = new LkCard("Inquiries").pad(8);
         convRows.clear();
         for (ConversationDTO c : visible) {
-            MdConvRow row = new MdConvRow("comment", c.subject(), "Member",
+            MdConvRow row = new MdConvRow("comment", c.subject(), c.initiatorDisplayName(),
                 relativeTime(c.lastMessageAt()), unreadBadge(c.unreadCountForViewer()));
             if (c.conversationId().equals(selectedId)) row.active();
             row.onSelect(() -> selectById(c.conversationId()));
@@ -186,45 +186,24 @@ public class CompanyInquiryInboxView extends LkPage {
         if (conv == null) return;
 
         detailCard.title(conv.subject());
-        detailCard.subtitle("Member · " + humanizeStatus(conv.status()));
-        detailCard.add(new MdThread(toThreadMessages(conv.messages())));
+        detailCard.subtitle(conv.initiatorDisplayName() + " · " + humanizeStatus(conv.status()));
+        detailCard.add(new MdThread(toThreadMessages(conv)));
 
-        // Terminal threads (RESOLVED / CLOSED) accept no further messages and can't be re-closed.
+        // Non-terminal inquiries get a "Respond" action that opens the dedicated chat page where
+        // the company replies (and can close the thread).
         if (!isTerminal(conv.status())) {
             Div actionRow = new Div();
             actionRow.addClassName("md-detail-actions");
-            actionRow.add(new LkBtn("Close inquiry").variant(LkBtn.Variant.tertiary)
-                .onClick(e -> handleClose()));
+            actionRow.add(new LkBtn("Respond").variant(LkBtn.Variant.primary)
+                .icon(new LkIcon("arrowRight", 15))
+                .onClick(e -> navigateToRespond(conv.conversationId())));
             detailCard.add(actionRow);
-
-            MdReplyBar reply = new MdReplyBar();
-            reply.onSend(this::handleReply);
-            detailCard.add(reply);
         }
     }
 
-    private void handleReply(String text) {
-        switch (presenter.reply(AuthSession.token(), selectedId, text)) {
-            case CompanyInquiryInboxPresenter.ActionOutcome.Success ignored ->
-                reload(companyId); // refresh thread, ordering, and unread badges
-            case CompanyInquiryInboxPresenter.ActionOutcome.NotAuthenticated ignored ->
-                Toasts.failure("Your session has expired — please sign in again.");
-            case CompanyInquiryInboxPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not send your reply: " + fail.reason());
-        }
-    }
-
-    private void handleClose() {
-        switch (presenter.close(AuthSession.token(), selectedId)) {
-            case CompanyInquiryInboxPresenter.ActionOutcome.Success ignored -> {
-                Toasts.success("Inquiry closed.");
-                reload(companyId);
-            }
-            case CompanyInquiryInboxPresenter.ActionOutcome.NotAuthenticated ignored ->
-                Toasts.failure("Your session has expired — please sign in again.");
-            case CompanyInquiryInboxPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not close the inquiry: " + fail.reason());
-        }
+    private void navigateToRespond(String conversationId) {
+        UI.getCurrent().navigate(CompanyInquiryRespondView.class,
+            new RouteParameters("id", conversationId));
     }
 
     /** Topbar company selector — shown only when the member acts for more than one company. */
@@ -286,11 +265,11 @@ public class CompanyInquiryInboxView extends LkPage {
     // -- Display mapping ------------------------------------------------------
 
     /** From the company's vantage point, COMPANY messages are "You"; the other side is the member. */
-    private static List<MdThread.Message> toThreadMessages(List<MessageDTO> messages) {
+    private static List<MdThread.Message> toThreadMessages(ConversationDTO conv) {
         List<MdThread.Message> out = new ArrayList<>();
-        for (MessageDTO m : messages) {
+        for (MessageDTO m : conv.messages()) {
             boolean me = "COMPANY".equals(m.senderType());
-            String from = me ? "You" : "Member";
+            String from = me ? "You" : conv.initiatorDisplayName();
             out.add(new MdThread.Message(from, relativeTime(m.sentAt()), me, m.body()));
         }
         return out;
