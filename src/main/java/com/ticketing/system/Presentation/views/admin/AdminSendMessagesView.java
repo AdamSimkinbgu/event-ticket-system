@@ -73,7 +73,7 @@ public class AdminSendMessagesView extends LkPage {
         subtitle("Send a message to individual members, all members, or all producers.");
 
         add(buildComposer());
-        add(Lk.h2("Sent messages"));
+        add(Lk.h2("Conversations Started"));
         add(historySlot);
         reloadHistory();
     }
@@ -101,8 +101,10 @@ public class AdminSendMessagesView extends LkPage {
         recipientChips.addClassName("md-recipient-chips");
         recipientChips.getStyle().set("display", "flex").set("flex-wrap", "wrap").set("gap", "6px");
 
-        allMembers.onToggle(on -> updateRecipientMode());
-        allProducers.onToggle(on -> updateRecipientMode());
+        // "All members" and "All producers" are mutually exclusive — checking one clears the other.
+        // (LkCheckRow.setChecked does not re-fire onToggle, so this can't loop.)
+        allMembers.onToggle(on -> { if (on) allProducers.setChecked(false); updateRecipientMode(); });
+        allProducers.onToggle(on -> { if (on) allMembers.setChecked(false); updateRecipientMode(); });
 
         LkCol col = new LkCol().gap(14);
         col.add(subject, body, recipientSearch, searchResults, recipientChips,
@@ -234,7 +236,7 @@ public class AdminSendMessagesView extends LkPage {
         }
 
         LkGrid grid = new LkGrid()
-                .col("Sent", "sent")
+                .col("Started", "sent")
                 .col("Subject", "subj")
                 .col("Recipients", "rec", LkGrid.Align.RIGHT);
 

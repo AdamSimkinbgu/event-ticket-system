@@ -4,12 +4,10 @@ import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
 import com.ticketing.system.Core.Application.dto.ShowDateDTO;
 import com.ticketing.system.Presentation.components.buyer.BzPoster;
 import com.ticketing.system.Presentation.components.kit.Lk;
-import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.landing.LandingPresenter;
-import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -43,7 +41,6 @@ public class LandingView extends LkPage {
     public LandingView(LandingPresenter presenter) {
         this.presenter = presenter;
 
-        add(buildHero());
         add(Lk.h2("Browse by category"));
         add(buildCategoryGrid());
         renderCatalogRows();
@@ -132,53 +129,6 @@ public class LandingView extends LkPage {
 
     private static String priceLabel(EventSummaryDTO e) {
         return e.minPrice() > 0 ? "From $" + (long) e.minPrice() : "—";
-    }
-
-    // ---- hero ----
-
-    private Component buildHero() {
-        Div hero = new Div();
-        hero.addClassName("bz-hero");
-        hero.getStyle().set("padding", "clamp(38px, 6vw, 64px) clamp(22px, 4vw, 56px)");
-
-        Div title = new Div();
-        title.addClassName("bz-hero-title");
-        title.getStyle().set("font-size", "clamp(1.8rem, 4vw, 2.6rem)");
-        title.setText("Find your next unforgettable experience.");
-
-        Div sub = new Div();
-        sub.addClassName("bz-hero-sub");
-        sub.setText("Concerts, sports, theatre, conferences — across Israel, all in one place.");
-
-        Div search = new Div();
-        search.addClassName("bz-hero-search");
-        search.add(new LkIcon("search", 17), new Span(" Search events, artists, venues…"));
-
-        LkBtn ctaBrowse = new LkBtn("Browse events")
-            .variant(LkBtn.Variant.primary)
-            .icon(new LkIcon("ticket", 16))
-            .onClick(e -> UI.getCurrent().navigate(BrowseEventsView.class));
-        ctaBrowse.getStyle()
-            .set("background", "#fff").set("color", "#1a5490")
-            .set("border", "none").set("padding", "12px 22px").set("font-weight", "700")
-            .set("box-shadow", "0 4px 14px rgba(0,0,0,0.18)");
-
-        LkBtn ctaSell = new LkBtn("Sell on TicketHub")
-            .variant(LkBtn.Variant.secondary)
-            .icon(new LkIcon("building", 16))
-            .onClick(e -> UI.getCurrent().navigate("login"));
-        ctaSell.getStyle()
-            .set("background", "transparent").set("color", "#fff")
-            .set("border", "1.5px solid rgba(255,255,255,0.6)");
-
-        Div ctaRow = new Div();
-        ctaRow.getStyle()
-            .set("display", "flex").set("gap", "10px").set("flex-wrap", "wrap")
-            .set("margin-top", "18px");
-        ctaRow.add(ctaBrowse, ctaSell);
-
-        hero.add(title, sub, search, ctaRow);
-        return hero;
     }
 
     // ---- category quick-pick grid ----

@@ -17,6 +17,7 @@ import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.views.admin.AdminComplaintQueueView;
 import com.ticketing.system.Presentation.views.admin.AdminComplaintRespondView;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
+import com.ticketing.system.Presentation.views.admin.AdminInboxView;
 import com.ticketing.system.Presentation.views.admin.AdminSendMessagesView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
@@ -46,6 +47,7 @@ import com.ticketing.system.Presentation.views.messaging.SubmitComplaintView;
 import com.ticketing.system.Presentation.presenters.company.ManagerListPresenter;
 import com.ticketing.system.Presentation.presenters.company.OwnerDashboardPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.AdminComplaintQueuePresenter;
+import com.ticketing.system.Presentation.presenters.messaging.AdminInboxPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.AdminSendMessagesPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.CompanyInquiryInboxPresenter;
 import com.ticketing.system.Presentation.presenters.messaging.NewInquiryPresenter;
@@ -344,6 +346,22 @@ class VaadinSmokeTest {
             new AdminComplaintQueuePresenter.Outcome.Success(List.of(conv)));
         assertDoesNotThrow(() -> new AdminComplaintQueueView(presenter),
             "AdminComplaintQueueView failed to construct");
+    }
+
+    @Test
+    void adminInboxViewInstantiates() {
+        // Admin outreach inbox wired to a presenter. A mock presenter returning one DIRECT conversation
+        // with a message exercises the master-list + thread + reply-bar + close build path.
+        AdminInboxPresenter presenter = mock(AdminInboxPresenter.class);
+        ConversationDTO conv = new ConversationDTO(
+            "conv-1", "DIRECT", "OPEN", 1, "ADMIN", 7, "MEMBER",
+            "Heads up", LocalDateTime.now(), LocalDateTime.now(), 0,
+            List.of(new MessageDTO("m-1", 1, "ADMIN", "hi alice", LocalDateTime.now(), false)),
+            "TicketHub Support", "alice");
+        when(presenter.load(any())).thenReturn(
+            new AdminInboxPresenter.Outcome.Success(List.of(conv)));
+        assertDoesNotThrow(() -> new AdminInboxView(presenter),
+            "AdminInboxView failed to construct");
     }
 
     @Test

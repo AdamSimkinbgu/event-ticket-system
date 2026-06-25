@@ -285,6 +285,29 @@ class MessagingServiceTest {
                 () -> service.viewSentOutreach(MEMBER_TOKEN));
     }
 
+    // --- viewAdminInbox ---
+
+    @Test
+    void viewAdminInbox_returnsCallersDirectOutreach_notComplaints() {
+        // The admin starts a DIRECT outreach to a member; a member also files a complaint.
+        service.sendOutreach(ADMIN_TOKEN,
+                new OutreachRequestDTO("Hi", "Body", List.of(MEMBER_ID), false, false));
+        service.submitComplaint(MEMBER_TOKEN, new SubmitComplaintRequestDTO(MEMBER_ID, "C", "c", null));
+
+        List<ConversationDTO> inbox = service.viewAdminInbox(ADMIN_TOKEN);
+
+        // Only the admin's own DIRECT outreach — never complaints (counterparty is the ADMIN_GROUP).
+        assertEquals(1, inbox.size());
+        assertEquals("DIRECT", inbox.get(0).type());
+        assertEquals(MEMBER_ID, inbox.get(0).counterpartyId());
+    }
+
+    @Test
+    void viewAdminInbox_byNonAdmin_rejected() {
+        assertThrows(UnauthorizedActionException.class,
+                () -> service.viewAdminInbox(MEMBER_TOKEN));
+    }
+
     @Test
     void adminOperation_byMemberTokenWhoseIdCollidesWithAnAdmin_rejected() {
         // Member and admin id pools overlap: a member token whose userId happens to equal an admin's

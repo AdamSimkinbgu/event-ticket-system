@@ -324,6 +324,18 @@ public class MessagingService {
                 .toList();
     }
 
+    // Admin Inbox — the calling admin's own DIRECT conversations (outreach they started), newest
+    // first, so they can chat and close each one. Scoped to this admin (findByParticipant is an
+    // exact id/type match), so it never includes another admin's outreach or complaints.
+    public List<ConversationDTO> viewAdminInbox(String token) {
+        int adminId = requireSystemAdmin(token);
+        return conversationRepository.findByParticipant(adminId, ParticipantType.ADMIN).stream()
+                .filter(c -> c.getType() == ConversationType.DIRECT)
+                .sorted(Comparator.comparing(Conversation::getLastMessageAt).reversed())
+                .map(c -> toDTO(c, adminId))
+                .toList();
+    }
+
     // ---------------------------------------------------------------------------
     // Authentication / authorization helpers
     // ---------------------------------------------------------------------------

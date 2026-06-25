@@ -112,6 +112,19 @@ public class LkCard extends Section {
         }
     }
 
+    /**
+     * Clears the card BODY (the default {@link #add} target) without dismantling the card's own
+     * header / body / footer structure. The inherited {@link Section#removeAll()} removes the
+     * internal {@code body} element from the card, so anything added afterwards lands in a detached
+     * body and never renders — which is why a detail panel re-rendered in place (e.g. the messaging
+     * inboxes calling {@code removeAll()} then {@code add(...)}) showed only the header. Views that
+     * truly want to drop the header should call {@code title("")} / {@code subtitle("")} instead.
+     */
+    @Override
+    public void removeAll() {
+        body.removeAll();
+    }
+
     private void ensureHeader() {
         if (headerActive)
             return;
