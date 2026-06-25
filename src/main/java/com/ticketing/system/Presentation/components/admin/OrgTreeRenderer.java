@@ -1,67 +1,69 @@
 package com.ticketing.system.Presentation.components.admin;
 
+import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
+import com.ticketing.system.Core.Domain.users.Permission;
 import com.vaadin.flow.component.Composite;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.ListItem;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.html.UnorderedList;
 
-import java.util.List;
+import java.util.stream.Collectors;
 
 public class OrgTreeRenderer extends Composite<Div> {
 
-    public record Node(String initial, String name, String role, String variant, String sub, List<Node> children) {
-        public Node(String initial, String name, String role, String variant, String sub) {
-            this(initial, name, role, variant, sub, List.of());
-        }
-    }
-
-    public OrgTreeRenderer(Node root) {
-        this(List.of(root));
-    }
-
-    public OrgTreeRenderer(List<Node> roots) {
+    public OrgTreeRenderer(OrganizationalTreeNodeDTO root) {
         Div tree = getContent();
         tree.addClassName("org-chart");
         UnorderedList ul = new UnorderedList();
-        for (Node root : roots) ul.add(buildNode(root));
+        ul.add(buildNode(root));
         tree.add(ul);
     }
 
-    private ListItem buildNode(Node node) {
+    private ListItem buildNode(OrganizationalTreeNodeDTO dto) {
         ListItem li = new ListItem();
+
+        String variant   = dto.isFounder() ? "founder" : dto.role().equals("Owner") ? "owner" : "manager";
+        String roleLabel = dto.isFounder() ? "Founder" : dto.role().equals("Owner") ? "Owner"  : "Manager";
+        String initial   = dto.username().substring(0, 1).toUpperCase();
+        String sub       = dto.isFounder()
+                ? "Company Founder"
+                : dto.grantedPermissions().stream()
+                        .map(Permission::name)
+                        .collect(Collectors.joining(", "));
+
+        boolean composite = !dto.appointedByThisUser().isEmpty();
 
         Div ocCard = new Div();
         ocCard.addClassName("oc-card");
-        ocCard.addClassName("oc-" + node.variant());
+        ocCard.addClassName("oc-" + variant);
 
-        boolean composite = !node.children().isEmpty();
         Span kind = new Span(composite ? "Composite" : "Leaf");
         kind.addClassName("oc-kind");
         kind.addClassName("lk-mono");
 
-        Span avatar = new Span(node.initial());
+        Span avatar = new Span(initial);
         avatar.addClassName("oc-avatar");
-        avatar.addClassName("oc-av-" + node.variant());
+        avatar.addClassName("oc-av-" + variant);
 
-        Div name = new Div(new Span(node.name()));
+        Div name = new Div(new Span(dto.username()));
         name.addClassName("oc-name");
 
-        Span role = new Span(node.role());
+        Span role = new Span(roleLabel);
         role.addClassName("oc-role");
-        role.addClassName("oc-rb-" + node.variant());
+        role.addClassName("oc-rb-" + variant);
 
         ocCard.add(kind, avatar, name, role);
-        if (node.sub() != null && !node.sub().isEmpty()) {
-            Div sub = new Div(new Span(node.sub()));
-            sub.addClassName("oc-sub");
-            ocCard.add(sub);
+        if (!sub.isEmpty()) {
+            Div subDiv = new Div(new Span(sub));
+            subDiv.addClassName("oc-sub");
+            ocCard.add(subDiv);
         }
         li.add(ocCard);
 
         if (composite) {
             UnorderedList kidsUl = new UnorderedList();
-            for (Node child : node.children()) kidsUl.add(buildNode(child));
+            for (OrganizationalTreeNodeDTO child : dto.appointedByThisUser()) kidsUl.add(buildNode(child));
             li.add(kidsUl);
         }
         return li;

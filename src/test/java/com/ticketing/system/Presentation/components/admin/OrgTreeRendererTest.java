@@ -1,102 +1,121 @@
 package com.ticketing.system.Presentation.components.admin;
 
+import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
+import com.ticketing.system.Core.Domain.users.Permission;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit coverage for {@link OrgTreeRenderer} and its nested {@link OrgTreeRenderer.Node} record.
+ * Unit coverage for {@link OrgTreeRenderer}.
  * Pure JUnit — no Spring context needed; Vaadin components can be instantiated headlessly.
  */
 class OrgTreeRendererTest {
 
-    // ── Node record ────────────────────────────────────────────────────────────
+    // ── helpers ────────────────────────────────────────────────────────────────
+
+    private static OrganizationalTreeNodeDTO leaf(int id, String username, String role, boolean isFounder) {
+        return new OrganizationalTreeNodeDTO(id, username, role, isFounder, List.of(), new ArrayList<>());
+    }
+
+    private static OrganizationalTreeNodeDTO node(int id, String username, String role, boolean isFounder,
+                                                   List<Permission> perms,
+                                                   List<OrganizationalTreeNodeDTO> children) {
+        return new OrganizationalTreeNodeDTO(id, username, role, isFounder, perms, new ArrayList<>(children));
+    }
+
+    // ── construction ───────────────────────────────────────────────────────────
 
     @Test
-    void leafConstructor_setsChildrenToEmptyList() {
-        var node = new OrgTreeRenderer.Node("A", "Alice Cohen", "Founder", "founder", "Founded 2024");
-        assertTrue(node.children().isEmpty());
+    void founderLeaf_constructsWithoutError() {
+        OrganizationalTreeNodeDTO founder = leaf(1, "Alice Cohen", "Owner", true);
+        assertDoesNotThrow(() -> new OrgTreeRenderer(founder));
     }
 
     @Test
-    void fullConstructor_storesAllFields() {
-        var child = new OrgTreeRenderer.Node("B", "Bob", "Owner", "owner", "sub");
-        var node  = new OrgTreeRenderer.Node("A", "Alice", "Founder", "founder", "sub", List.of(child));
-
-        assertEquals("A",       node.initial());
-        assertEquals("Alice",   node.name());
-        assertEquals("Founder", node.role());
-        assertEquals("founder", node.variant());
-        assertEquals("sub",     node.sub());
-        assertEquals(1,         node.children().size());
-        assertSame(child,       node.children().get(0));
+    void ownerLeaf_constructsWithoutError() {
+        OrganizationalTreeNodeDTO owner = leaf(2, "Bob Mizrahi", "Owner", false);
+        assertDoesNotThrow(() -> new OrgTreeRenderer(owner));
     }
 
     @Test
-    void leafNode_hasNoChildren() {
-        var node = new OrgTreeRenderer.Node("C", "Carol", "Manager", "manager", "Appointed by Bob");
-        assertTrue(node.children().isEmpty());
+    void managerLeaf_constructsWithoutError() {
+        OrganizationalTreeNodeDTO manager = leaf(3, "Carol Levy", "Manager", false);
+        assertDoesNotThrow(() -> new OrgTreeRenderer(manager));
     }
 
     @Test
-    void compositeNode_reportsAllChildren() {
-        var carol = new OrgTreeRenderer.Node("C", "Carol", "Manager", "manager", "Appointed by Bob");
-        var dave  = new OrgTreeRenderer.Node("D", "Dave",  "Manager", "manager", "Appointed by Bob");
-        var bob   = new OrgTreeRenderer.Node("B", "Bob", "Owner", "owner", "Appointed by Alice", List.of(carol, dave));
-
-        assertEquals(2, bob.children().size());
-        assertEquals("C", bob.children().get(0).initial());
-        assertEquals("D", bob.children().get(1).initial());
-    }
-
-    @Test
-    void nodeEquality_sameFieldsSameChildren_areEqual() {
-        var a = new OrgTreeRenderer.Node("X", "Name", "Role", "variant", "sub", List.of());
-        var b = new OrgTreeRenderer.Node("X", "Name", "Role", "variant", "sub", List.of());
-        assertEquals(a, b);
-    }
-
-    // ── OrgTreeRenderer construction ───────────────────────────────────────────
-
-    @Test
-    void singleRootConstructor_doesNotThrow() {
-        var root = new OrgTreeRenderer.Node("A", "Alice", "Founder", "founder", "Founded 2024");
-        assertDoesNotThrow(() -> new OrgTreeRenderer(root));
-    }
-
-    @Test
-    void listConstructor_doesNotThrow() {
-        var a = new OrgTreeRenderer.Node("A", "Alice", "Founder", "founder", "sub");
-        var b = new OrgTreeRenderer.Node("B", "Bob",   "Owner",   "owner",   "sub");
-        assertDoesNotThrow(() -> new OrgTreeRenderer(List.of(a, b)));
-    }
-
-    @Test
-    void emptyListConstructor_doesNotThrow() {
-        assertDoesNotThrow(() -> new OrgTreeRenderer(List.of()));
-    }
-
-    @Test
-    void content_hasOrgChartClass() {
-        var root = new OrgTreeRenderer.Node("A", "Alice", "Founder", "founder", "sub");
-        var renderer = new OrgTreeRenderer(root);
-        String classes = renderer.getElement().getAttribute("class");
-        assertNotNull(classes, "class attribute must not be null");
-        assertTrue(classes.contains("org-chart"),
-            "wrapper div must carry 'org-chart' so CSS connector-line selectors fire");
+    void compositeOwner_constructsWithoutError() {
+        OrganizationalTreeNodeDTO carol = leaf(3, "Carol Levy", "Manager", false);
+        OrganizationalTreeNodeDTO bob   = node(2, "Bob Mizrahi", "Owner", false, List.of(), List.of(carol));
+        assertDoesNotThrow(() -> new OrgTreeRenderer(bob));
     }
 
     @Test
     void deepTree_constructsWithoutError() {
-        var carol = new OrgTreeRenderer.Node("C", "Carol Levy",   "Manager", "manager", "Appointed by Bob · Manage events");
-        var dave  = new OrgTreeRenderer.Node("D", "Dave Peretz",  "Manager", "manager", "Appointed by Bob · Inquiries");
-        var bob   = new OrgTreeRenderer.Node("B", "Bob Mizrahi",  "Owner",   "owner",   "Appointed by Alice · 2025-01-08", List.of(carol, dave));
-        var frank = new OrgTreeRenderer.Node("F", "Frank Tal",    "Manager", "manager", "Appointed by Eve · Manage events");
-        var eve   = new OrgTreeRenderer.Node("E", "Eve Bar",      "Owner",   "owner",   "Appointed by Alice · 2025-02-14", List.of(frank));
-        var alice = new OrgTreeRenderer.Node("A", "Alice Cohen",  "Founder", "founder", "Founded 2024-12-15", List.of(bob, eve));
-
+        OrganizationalTreeNodeDTO carol = leaf(3, "Carol Levy",  "Manager", false);
+        OrganizationalTreeNodeDTO dave  = leaf(4, "Dave Peretz", "Manager", false);
+        OrganizationalTreeNodeDTO bob   = node(2, "Bob Mizrahi", "Owner", false, List.of(), List.of(carol, dave));
+        OrganizationalTreeNodeDTO frank = leaf(6, "Frank Tal",   "Manager", false);
+        OrganizationalTreeNodeDTO eve   = node(5, "Eve Bar",     "Owner",   false, List.of(), List.of(frank));
+        OrganizationalTreeNodeDTO alice = node(1, "Alice Cohen", "Owner",   true,  List.of(), List.of(bob, eve));
         assertDoesNotThrow(() -> new OrgTreeRenderer(alice));
+    }
+
+    // ── CSS structure ──────────────────────────────────────────────────────────
+
+    @Test
+    void content_hasOrgChartClass() {
+        var renderer = new OrgTreeRenderer(leaf(1, "Alice Cohen", "Owner", true));
+        String classes = renderer.getElement().getAttribute("class");
+        assertNotNull(classes, "class attribute must not be null");
+        assertTrue(classes.contains("org-chart"),
+                "wrapper div must carry 'org-chart' so CSS connector-line selectors fire");
+    }
+
+    // ── variant mapping ────────────────────────────────────────────────────────
+
+    @Test
+    void founder_variantIsFounder() {
+        var renderer = new OrgTreeRenderer(leaf(1, "Alice Cohen", "Owner", true));
+        String html = renderer.getElement().getOuterHTML();
+        assertTrue(html.contains("oc-founder"), "founder node must carry 'oc-founder' variant class");
+    }
+
+    @Test
+    void owner_variantIsOwner() {
+        var renderer = new OrgTreeRenderer(leaf(2, "Bob Mizrahi", "Owner", false));
+        String html = renderer.getElement().getOuterHTML();
+        assertTrue(html.contains("oc-owner"), "owner node must carry 'oc-owner' variant class");
+    }
+
+    @Test
+    void manager_variantIsManager() {
+        var renderer = new OrgTreeRenderer(leaf(3, "Carol Levy", "Manager", false));
+        String html = renderer.getElement().getOuterHTML();
+        assertTrue(html.contains("oc-manager"), "manager node must carry 'oc-manager' variant class");
+    }
+
+    // ── permissions displayed in sub ───────────────────────────────────────────
+
+    @Test
+    void managerWithPermissions_subTextContainsPermissionNames() {
+        OrganizationalTreeNodeDTO manager = new OrganizationalTreeNodeDTO(
+                3, "Carol Levy", "Manager", false,
+                List.of(Permission.MANAGE_INVENTORY, Permission.VIEW_SALES), new ArrayList<>());
+        var renderer = new OrgTreeRenderer(manager);
+        String html = renderer.getElement().getOuterHTML();
+        assertTrue(html.contains("MANAGE_INVENTORY"), "sub text must list granted permissions");
+        assertTrue(html.contains("VIEW_SALES"),        "sub text must list granted permissions");
+    }
+
+    @Test
+    void ownerWithNoPermissions_subIsEmpty() {
+        OrganizationalTreeNodeDTO owner = new OrganizationalTreeNodeDTO(
+                2, "Bob Mizrahi", "Owner", false, List.of(), new ArrayList<>());
+        assertDoesNotThrow(() -> new OrgTreeRenderer(owner));
     }
 }
