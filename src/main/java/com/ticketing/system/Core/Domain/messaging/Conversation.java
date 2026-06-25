@@ -12,6 +12,22 @@ import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionExcepti
 import com.ticketing.system.Core.Domain.exceptions.MessageNotFoundException;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderColumn;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
 // Aggregate root for the centralized messaging subsystem.
 // Replaces the per-User MessageInbox, per-Company Inbox, and the standalone Complaint aggregate.
 //
@@ -19,24 +35,59 @@ import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 // (MEMBER/COMPANY/ADMIN) or a group descriptor (ADMIN_GROUP / SYSTEM).
 //
 // Cross-aggregate references by ID per course rules — never holds direct refs to User / ProductionCompany / Admin.
+// V3: mapped to JPA. conversationId is an ASSIGNED @Id (a UUID); type/status and the two participant
+// types are stored by name. The polymorphic participants stay as plain (id, type) by-id column pairs
+// — never @ManyToOne. @Version drives optimistic locking. messages are owned children
+// (@OneToMany cascade-all + orphan-removal) kept in send order via @OrderColumn, loaded eagerly so a
+// detached Conversation is fully usable. A protected no-arg ctor lets Hibernate hydrate; the public
+// ctor still enforces the invariants.
+@Entity
+@Table(name = "conversations")
 public class Conversation implements InvariantChecked {
 
-    private final String conversationId;
-    private final ConversationType type;
+    @Id
+    private String conversationId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ConversationType type;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private ConversationStatus status;
 
     // Initiator (the party that started the thread).
-    private final int initiatorId;
-    private final ParticipantType initiatorType;
+    @Column(name = "initiator_id", nullable = false)
+    private int initiatorId;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "initiator_type", nullable = false)
+    private ParticipantType initiatorType;
 
     // Counterparty (the recipient — may be a specific entity or a group descriptor).
-    private final int counterpartyId;        // 0 / sentinel when counterpartyType is a group
-    private final ParticipantType counterpartyType;
+    @Column(name = "counterparty_id", nullable = false)
+    private int counterpartyId;        // 0 / sentinel when counterpartyType is a group
+    @Enumerated(EnumType.STRING)
+    @Column(name = "counterparty_type", nullable = false)
+    private ParticipantType counterpartyType;
 
-    private final String subject;
-    private final LocalDateTime createdAt;
+    @Column
+    private String subject;
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt;
+    @Column(name = "last_message_at", nullable = false)
     private LocalDateTime lastMessageAt;
-    private final List<Message> messages;
+
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "conversation_id")
+    @OrderColumn(name = "message_order")
+    @Fetch(FetchMode.SUBSELECT)
+    private List<Message> messages;
+
+    @Version
+    private Long version;
+
+    /** For JPA only — do not call from application code. */
+    protected Conversation() { }
 
     public Conversation(String conversationId, ConversationType type,
                         int initiatorId, ParticipantType initiatorType,

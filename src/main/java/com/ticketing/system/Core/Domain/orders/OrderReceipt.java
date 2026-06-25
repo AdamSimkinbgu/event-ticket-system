@@ -8,23 +8,62 @@ import java.util.Optional;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
+// V3: mapped to JPA. receiptId is an ASSIGNED @Id (minted by nextId(), never @GeneratedValue);
+// userid is a nullable by-id column (member receipts) and guestEmail/guestSessionId identify guest
+// receipts — the member/guest XOR stays enforced in checkInvariants, not at the DB. @Version drives
+// optimistic locking. receiptLines and transactionRecords are owned value lists, each an
+// @ElementCollection of @Embeddable in its own side-table, loaded eagerly so a detached receipt is
+// fully usable. A protected no-arg ctor lets Hibernate hydrate; the factories still enforce the
+// invariants.
+@Entity
+@Table(name = "receipts")
 public class OrderReceipt implements InvariantChecked {
 
-    private final int receiptId;
+    @Id
+    private int receiptId;
 
     // Member receipt identity
-    private final Integer userid;          // nullable for guest receipts, positive integer for member receipts
+    @Column(name = "user_id")
+    private Integer userid;                // nullable for guest receipts, positive integer for member receipts
 
     // Guest receipt identity
-    private final String guestEmail;       // nullable for member receipts, non-null/non-blank for guest receipts
-    private final String guestSessionId;   // nullable for member receipts, non-null/non-blank for guest receipts
+    @Column(name = "guest_email")
+    private String guestEmail;             // nullable for member receipts, non-null/non-blank for guest receipts
+    @Column(name = "guest_session_id")
+    private String guestSessionId;         // nullable for member receipts, non-null/non-blank for guest receipts
 
-    private final List<ReceiptLine> receiptLines;
-    private final List<TransactionRecord> transactionRecords;
-    private final double totalPrice;
-    private final LocalDateTime purchaseTime;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "receipt_lines", joinColumns = @JoinColumn(name = "receipt_id"))
+    private List<ReceiptLine> receiptLines;
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "receipt_transactions", joinColumns = @JoinColumn(name = "receipt_id"))
+    private List<TransactionRecord> transactionRecords;
+
+    @Column(name = "total_price", nullable = false)
+    private double totalPrice;
+
+    @Column(name = "purchase_time", nullable = false)
+    private LocalDateTime purchaseTime;
+
+    @Column(name = "is_refunded", nullable = false)
     private boolean isRefunded = false;
+
+    @Version
+    private Long version;
+
+    /** For JPA only — do not call from application code. */
+    protected OrderReceipt() { }
 
     private OrderReceipt(int receiptId, Integer userid, String guestEmail, String guestSessionId, double totalPrice,
             List<ReceiptLine> receiptLines, List<TransactionRecord> transactionRecords) {
@@ -61,7 +100,9 @@ public class OrderReceipt implements InvariantChecked {
         this.guestEmail = guestEmail;
         this.guestSessionId = guestSessionId;
         this.totalPrice = totalPrice;
-        this.receiptLines = List.copyOf(receiptLines);
+        // Mutable defensive copy — Hibernate manages the @ElementCollection; the getter still
+        // returns an immutable view, so callers cannot mutate the internal list.
+        this.receiptLines = new ArrayList<>(receiptLines);
         this.transactionRecords = new ArrayList<>();
         this.purchaseTime = LocalDateTime.now();
 

@@ -7,17 +7,54 @@ import java.util.List;
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
+// V3: mapped to JPA. userId is an ASSIGNED @Id (minted by IUserRepository.nextId(), never
+// @GeneratedValue); email is unique; @Version drives optimistic locking. companyAppointments are
+// owned children (@OneToMany cascade-all + orphan-removal) loaded eagerly so a detached User is
+// fully usable, exactly like the in-memory version. A protected no-arg ctor lets Hibernate
+// hydrate; the public ctor still enforces the invariants.
+@Entity
+@Table(name = "users")
 public class User implements InvariantChecked {
 
+    @Id
     private int userId;
+
+    @Column(nullable = false)
     private String username;
+
+    @Column(nullable = false, unique = true)
     private String email;
+
+    @Column(nullable = false)
     private String password;
+
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "user_id")
+    @Fetch(FetchMode.SUBSELECT)
     private List<CompanyAppointment> companyAppointments;
     // max num of pending appointments per user is 1 per company
     // max num of active appointments per user is 1 per company (can be either manager or owner, not both)
+    @Column(nullable = false)
     private int age;
 
+    @Version
+    private Long version;
+
+    /** For JPA only — do not call from application code. */
+    protected User() { }
 
     public User(int userId, String username, String email, String password, int age) {
         this.userId = userId;

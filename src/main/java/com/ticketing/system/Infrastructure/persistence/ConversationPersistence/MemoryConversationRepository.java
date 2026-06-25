@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import com.ticketing.system.Core.Domain.messaging.Conversation;
@@ -16,14 +17,16 @@ import com.ticketing.system.Core.Domain.messaging.IConversationRepository;
 import com.ticketing.system.Core.Domain.messaging.ParticipantType;
 
 /**
- * In-memory {@link IConversationRepository} for V1. Lets Spring wire
- * MessagingService.
+ * In-memory {@link IConversationRepository}. Lets Spring wire MessagingService.
+ * {@code @Profile("!jpa")}: the {@code jpa} run/dev profile swaps in
+ * {@link JpaConversationRepository} instead.
  *
  * <p>Read-tracking ({@code countUnreadForMember}) is computed by summing
  * {@link Conversation#unreadCountFor(int)} over the conversations where the
  * member is a participant.
  */
 @Repository
+@Profile("!jpa")
 public class MemoryConversationRepository implements IConversationRepository {
 
     private final Map<String, Conversation> conversationsById = new ConcurrentHashMap<>();

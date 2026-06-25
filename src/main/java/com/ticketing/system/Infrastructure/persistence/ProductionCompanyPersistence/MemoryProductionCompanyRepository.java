@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import com.ticketing.system.Core.Domain.company.CompanyStatus;
@@ -15,10 +16,13 @@ import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 
 /**
- * In-memory {@link IProductionCompanyRepository} for V1. Lets Spring wire
+ * In-memory {@link IProductionCompanyRepository}. Lets Spring wire
  * CatalogService / CompanyManagementService / EventManagementService.
+ * {@code @Profile("!jpa")}: the {@code jpa} run/dev profile swaps in
+ * {@link JpaProductionCompanyRepository} instead.
  */
 @Repository
+@Profile("!jpa")
 public class MemoryProductionCompanyRepository implements IProductionCompanyRepository {
 
     private final Map<Integer, ProductionCompany> companiesById = new ConcurrentHashMap<>();
