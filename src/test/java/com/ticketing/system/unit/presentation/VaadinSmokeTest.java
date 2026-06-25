@@ -7,6 +7,7 @@ import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkConfirm;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkSearchPanel;
+import com.ticketing.system.Presentation.components.kit.LkSideNav;
 import com.ticketing.system.Presentation.components.venue.VkQuantitySelector;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
@@ -65,11 +66,15 @@ import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dto.ConversationDTO;
 import com.ticketing.system.Core.Application.dto.MessageDTO;
 import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
+import com.vaadin.flow.router.Route;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.ActiveProfiles;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -150,6 +155,42 @@ class VaadinSmokeTest {
         // navigating to a route in a browser.
         assertNotNull(MainLayout.class, "MainLayout class did not load");
         assertNotNull(WorkspaceLayout.class, "WorkspaceLayout class did not load");
+    }
+
+    @Test
+    void workspaceDrawerTargetsAreNavigableWithoutParameters() throws Exception {
+        // Regression for the /owner workspace crash. WorkspaceLayout's drawer builds one
+        // RouterLink per entry via LkSideNav.items() -> link.setRoute(target). Vaadin's
+        // RouterLink.setRoute(Class) throws when the target's @Route template carries a
+        // *mandatory* parameter (e.g. "owner/policies/:companyId/:eventId"), and that throw
+        // propagated out of the layout constructor ("Constructor threw exception"), so every
+        // owner route 500'd. A drawer target must be reachable with no params — its @Route
+        // may only contain optional (":x?") or wildcard (":x*") parameter segments.
+        Field field = WorkspaceLayout.class.getDeclaredField("DRAWER_ITEMS");
+        field.setAccessible(true);
+        List<?> entries = (List<?>) field.get(null);
+
+        for (Object entry : entries) {
+            Method itemAccessor = entry.getClass().getDeclaredMethod("item");
+            itemAccessor.setAccessible(true);
+            LkSideNav.Item item = (LkSideNav.Item) itemAccessor.invoke(entry);
+            Class<?> target = item.target();
+
+            Route route = target.getAnnotation(Route.class);
+            assertNotNull(route,
+                target.getSimpleName() + " (a WorkspaceLayout drawer target) has no @Route");
+
+            for (String segment : route.value().split("/")) {
+                if (segment.startsWith(":")) {
+                    assertTrue(segment.endsWith("?") || segment.endsWith("*"),
+                        target.getSimpleName() + " is a WorkspaceLayout drawer target, but its @Route \""
+                            + route.value() + "\" has the mandatory parameter \"" + segment
+                            + "\" — RouterLink.setRoute() throws when the drawer is built. Make the"
+                            + " parameter optional (\"" + segment + "?\") or point the drawer at a"
+                            + " parameterless route.");
+                }
+            }
+        }
     }
 
     @Test
