@@ -139,7 +139,9 @@ class OrgTreePresenterTest {
         when(service.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(7, "Acme")));
         when(service.viewOrganizationalTree(TOKEN, 7)).thenThrow(new RuntimeException("tree error"));
 
-        assertInstanceOf(OrgTreePresenter.Outcome.Failure.class, presenter.load(TOKEN, null));
+        OrgTreePresenter.Outcome.Failure fail =
+                assertInstanceOf(OrgTreePresenter.Outcome.Failure.class, presenter.load(TOKEN, null));
+        assertEquals("tree error", fail.reason());
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

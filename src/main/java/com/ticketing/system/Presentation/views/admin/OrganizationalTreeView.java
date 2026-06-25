@@ -30,32 +30,34 @@ import java.util.List;
 public class OrganizationalTreeView extends LkPage {
 
     private final OrgTreePresenter presenter;
+    private final Div body = new Div();
     private Integer selectedCompanyId = null;
 
     public OrganizationalTreeView(OrgTreePresenter presenter) {
         this.presenter = presenter;
+        title("Organizational Tree");
+        subtitle("Founder → owners → managers hierarchy for the selected company, with audit lines.");
+        add(body);
         render();
     }
 
     private void render() {
-        removeAll();
-        title("Organizational Tree");
-        subtitle("Founder → owners → managers hierarchy for the selected company, with audit lines.");
+        body.removeAll();
 
         switch (presenter.load(AuthSession.token(), selectedCompanyId)) {
             case OrgTreePresenter.Outcome.NotAuthenticated ignored ->
-                add(new LkBanner(LkBanner.Tone.warn, new LkIcon("lock", 16),
+                body.add(new LkBanner(LkBanner.Tone.warn, new LkIcon("lock", 16),
                     "Your session has expired — please sign in again."));
             case OrgTreePresenter.Outcome.NoCompany ignored ->
-                add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 16),
+                body.add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 16),
                     "You have no owned companies."));
             case OrgTreePresenter.Outcome.Failure fail ->
-                add(new LkBanner(LkBanner.Tone.error, new LkIcon("warning", 16),
+                body.add(new LkBanner(LkBanner.Tone.error, new LkIcon("warning", 16),
                     "Could not load the tree: " + fail.reason()));
             case OrgTreePresenter.Outcome.Success ok -> {
-                add(buildFilters(ok.companies(), ok.selected()));
-                add(buildTreeCard(ok.selected().name(), ok.tree()));
-                add(buildLegendCard());
+                body.add(buildFilters(ok.companies(), ok.selected()));
+                body.add(buildTreeCard(ok.selected().name(), ok.tree()));
+                body.add(buildLegendCard());
             }
         }
     }
@@ -64,7 +66,7 @@ public class OrganizationalTreeView extends LkPage {
         LkRow row = new LkRow().gap(8);
 
         List<String> names = companies.stream().map(ProductionCompanyDTO::name).toList();
-        LkFilterChip companyChip = new LkFilterChip("Company", names, false, List.of(selected.name()));
+        LkFilterChip companyChip = new LkFilterChip("Company", names, true, List.of(selected.name()));
         companyChip.onApply(() -> {
             String picked = companyChip.getSelected().stream().findFirst().orElse(selected.name());
             selectedCompanyId = companies.stream()
