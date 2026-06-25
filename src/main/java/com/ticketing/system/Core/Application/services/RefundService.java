@@ -1,6 +1,9 @@
 package com.ticketing.system.Core.Application.services;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 
@@ -9,6 +12,9 @@ import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.Tickets.TicketStatus;
+import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.exceptions.BusinessRuleViolationException;
 import com.ticketing.system.Core.Domain.exceptions.EntityNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
@@ -42,16 +48,19 @@ public class RefundService {
     private final IOrderReceiptRepository orderReceiptRepository;
     private final ITicketRepository ticketRepository;
     private final IPaymentGateway paymentGateway;
+    private final IEventRepository eventRepository;
 
     public RefundService(
             AuthenticationService authenticationService,
             IOrderReceiptRepository orderReceiptRepository,
             ITicketRepository ticketRepository,
-            IPaymentGateway paymentGateway) {
+            IPaymentGateway paymentGateway,
+            IEventRepository eventRepository) {
         this.authenticationService = authenticationService;
         this.orderReceiptRepository = orderReceiptRepository;
         this.ticketRepository = ticketRepository;
         this.paymentGateway = paymentGateway;
+        this.eventRepository = eventRepository;
     }
 
     /**
@@ -103,18 +112,76 @@ public class RefundService {
 
         // PAID/ISSUED tickets become REFUNDED; anything else (e.g. reserved-but-unissued) is voided.
         List<Ticket> tickets = ticketRepository.findByOrderReceiptId(orderId);
+        List<Ticket> refundedTickets = new ArrayList<>();
         for (Ticket ticket : tickets) {
             if (ticket.getStatus() == TicketStatus.PAID || ticket.getStatus() == TicketStatus.ISSUED) {
                 ticket.markRefunded();
+                refundedTickets.add(ticket);
             } else {
                 ticket.markVoided();
             }
             ticketRepository.save(ticket);
         }
 
+        // The refunded seats/places were SOLD — return them to AVAILABLE stock so they're bookable
+        // again. Done after the money refund + ticket flips; a stock-return failure is logged, not
+        // propagated (we never undo a completed refund over an inventory hiccup).
+        returnRefundedInventoryToStock(refundedTickets);
+
         log.info("Member refund completed for order {} — {} refunded (ref {})",
                 orderId, refundResult.totalRefunded(), refundResult.refundTransactionId());
         return refundResult;
+    }
+
+    /** Returns each refunded ticket's seat/place to AVAILABLE, grouped by event then zone. */
+    private void returnRefundedInventoryToStock(List<Ticket> refundedTickets) {
+        Map<Integer, Map<Integer, List<Ticket>>> byEventThenZone = new LinkedHashMap<>();
+        for (Ticket t : refundedTickets) {
+            byEventThenZone
+                    .computeIfAbsent(t.getEventId(), e -> new LinkedHashMap<>())
+                    .computeIfAbsent(t.getZoneId(), z -> new ArrayList<>())
+                    .add(t);
+        }
+
+        for (Map.Entry<Integer, Map<Integer, List<Ticket>>> eventEntry : byEventThenZone.entrySet()) {
+            int eventId = eventEntry.getKey();
+            Event event;
+            try {
+                event = eventRepository.findById(eventId);
+            } catch (RuntimeException e) {
+                log.warn("Refund: could not load event {} to return inventory to stock", eventId, e);
+                continue;
+            }
+            if (event == null) {
+                log.warn("Refund: event {} not found while returning inventory to stock", eventId);
+                continue;
+            }
+
+            boolean anyReturned = false;
+            for (Map.Entry<Integer, List<Ticket>> zoneEntry : eventEntry.getValue().entrySet()) {
+                int zoneId = zoneEntry.getKey();
+                try {
+                    event.returnSoldToStock(zoneId, toSelection(zoneEntry.getValue()));
+                    anyReturned = true;
+                } catch (RuntimeException e) {
+                    log.warn("Refund: failed to return zone {} of event {} to stock", zoneId, eventId, e);
+                }
+            }
+            if (anyReturned) {
+                eventRepository.save(event);
+            }
+        }
+    }
+
+    /** Seated tickets → a seat-label selection; standing tickets → a quantity selection. */
+    private static InventorySelection toSelection(List<Ticket> zoneTickets) {
+        List<String> seatNumbers = zoneTickets.stream()
+                .filter(Ticket::isSeatedTicket)
+                .map(Ticket::getSeatNumber)
+                .toList();
+        return seatNumbers.isEmpty()
+                ? InventorySelection.standing(zoneTickets.size())
+                : InventorySelection.seated(seatNumbers);
     }
 
     private void validateRefundResult(int receiptId, double expectedRefundAmount, RefundResultDTO refundResult) {

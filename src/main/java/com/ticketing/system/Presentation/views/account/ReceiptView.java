@@ -318,12 +318,18 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
 
     private Component buildTicketsCard(PurchaseRecordDTO receipt) {
         LkCard card = new LkCard().pad(0);
-        if (receipt.tickets().isEmpty()) {
-            card.pad(18).add(Lk.muted("No tickets on this order."));
-            return card;
-        }
+        // Refunded / voided tickets aren't usable, so they're not shown here (the receipt header still
+        // reflects the Refunded status, and "Items" keeps the purchase record).
+        boolean anyShown = false;
         for (TicketRecordDTO t : receipt.tickets()) {
+            if (t.currentStatus() == TicketStatus.REFUNDED || t.currentStatus() == TicketStatus.VOIDED) {
+                continue;
+            }
             card.add(buildTicketRow(t));
+            anyShown = true;
+        }
+        if (!anyShown) {
+            card.pad(18).add(Lk.muted("No tickets on this order."));
         }
         return card;
     }

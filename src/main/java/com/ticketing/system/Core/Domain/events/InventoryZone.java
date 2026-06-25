@@ -78,6 +78,13 @@ public abstract class InventoryZone implements InvariantChecked {
 
     public abstract boolean confirmSale(InventorySelection selection);
 
+    /**
+     * Return previously SOLD inventory to AVAILABLE stock (e.g. on a member refund).
+     * Distinct from {@link #release(InventorySelection)}, which only frees RESERVED holds —
+     * a refunded seat/place is SOLD, not held, so it needs its own transition.
+     */
+    public abstract boolean returnSoldToStock(InventorySelection selection);
+
     public abstract int getSoldAmount();
 
     public boolean isStanding() {

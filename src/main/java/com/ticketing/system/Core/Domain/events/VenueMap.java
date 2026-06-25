@@ -255,6 +255,12 @@ public class VenueMap implements InvariantChecked {
         zone.release(selection);
     }
 
+    // Return previously SOLD inventory to AVAILABLE (member refund) — standing + seated.
+    public void returnSoldToStock(int zoneId, InventorySelection selection) {
+        InventoryZone zone = getZone(zoneId);
+        zone.returnSoldToStock(selection);
+    }
+
     // supports both standing and seated zones via the InventorySelection abstraction, simply don't include seat numbers for standing zones.
     public void confirmSale(int zoneId, InventorySelection selection) {
         InventoryZone zone = getZone(zoneId);

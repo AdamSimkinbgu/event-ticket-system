@@ -95,6 +95,29 @@ class EventTest extends BaseDomainTest {
                 null, new DiscountPolicy(0)));
     }
 
+    // Member refund returns SOLD inventory to AVAILABLE and re-opens a sold-out event.
+    @Test
+    void GivenSoldOutEvent_WhenReturnSoldToStock_ThenPlaceFreedAndRevertsToOnSale() {
+        StandingZone z = new StandingZone(ZONE_ID, "GA", 2, 50);
+        VenueMap vm = new VenueMap(1, LOCATION, List.of(z));
+        Event e = track(new Event(EVENT_ID, "Concert", 4.5, ARTISTS, EventCategory.CONCERT, COMPANY_ID,
+                EventStatus.ON_SALE, vm,
+                List.of(new ShowDate(LocalDateTime.now().plusDays(30), LocalDateTime.now().plusDays(30).plusHours(2))),
+                null, new DiscountPolicy(0)));
+
+        // Sell the event out.
+        e.reserveInventory(ZONE_ID, InventorySelection.standing(2, "ord"));
+        e.confirmInventorySale(ZONE_ID, InventorySelection.standing(2, "ord"));
+        assertEquals(EventStatus.SOLD_OUT, e.getStatus());
+
+        // Refund one place — it returns to AVAILABLE and the event re-opens.
+        e.returnSoldToStock(ZONE_ID, InventorySelection.standing(1));
+
+        assertEquals(EventStatus.ON_SALE, e.getStatus());
+        assertEquals(1, z.getSoldAmount());
+        assertEquals(1, z.getAvailableAmount());
+    }
+
     // UC-19 — editDetails applies all five updatable fields while DRAFT or
     // SCHEDULED.
     @Test

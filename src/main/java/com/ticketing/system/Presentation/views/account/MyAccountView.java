@@ -180,8 +180,12 @@ public class MyAccountView extends LkPage {
 
     private Component buildTicketsCard() {
         LkCard card = new LkCard().pad(0);
+        // Refunded / voided tickets are no longer usable, so they drop out of "My Tickets"
+        // (the order still shows as Refunded under "My Orders").
         List<TicketRecordDTO> tickets = history.records().stream()
             .flatMap(r -> r.tickets().stream())
+            .filter(t -> t.currentStatus() != TicketStatus.REFUNDED
+                      && t.currentStatus() != TicketStatus.VOIDED)
             .toList();
         if (tickets.isEmpty()) {
             card.add(Lk.muted("No tickets yet."));

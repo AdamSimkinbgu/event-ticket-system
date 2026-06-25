@@ -466,6 +466,57 @@ public class InventoryZoneTest extends BaseDomainTest {
         assertEquals(SeatStatus.RESERVED, zone.getSeatStatus("A1"));
     }
 
+    // -- returnSoldToStock (member refund: SOLD -> AVAILABLE) -----------------
+
+    @Test
+    void GivenSoldSeats_WhenReturnSoldToStock_ThenSeatsBecomeAvailable() {
+        SeatedZone seatedZone = track(new SeatedZone(1, "Orchestra", 120.0,
+                List.of(new Seat("A1", 0, 0), new Seat("A2", 1, 0))));
+        seatedZone.reserve(InventorySelection.seated(List.of("A1"), "ord"));
+        seatedZone.confirmSale(InventorySelection.seated(List.of("A1"), "ord"));
+
+        seatedZone.returnSoldToStock(InventorySelection.seated(List.of("A1")));
+
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
+        assertEquals(2, seatedZone.getAvailableAmount());
+        assertEquals(0, seatedZone.getSoldAmount());
+    }
+
+    @Test
+    void GivenNonSoldSeat_WhenReturnSoldToStock_ThenThrows() {
+        SeatedZone seatedZone = track(new SeatedZone(1, "Orchestra", 120.0,
+                List.of(new Seat("A1", 0, 0))));
+
+        assertThrows(IllegalStateException.class,
+                () -> seatedZone.returnSoldToStock(InventorySelection.seated(List.of("A1"))));
+
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A1"));
+    }
+
+    @Test
+    void GivenStandingSold_WhenReturnSoldToStock_ThenSoldDecreasesAndAvailableIncreases() {
+        StandingZone standing = track(new StandingZone(1, "General", 100, 50));
+        standing.reserve(InventorySelection.standing(3));
+        standing.confirmSale(InventorySelection.standing(3));
+
+        standing.returnSoldToStock(InventorySelection.standing(2));
+
+        assertEquals(1, standing.getSoldAmount());
+        assertEquals(99, standing.getAvailableAmount());
+    }
+
+    @Test
+    void GivenStandingReturnMoreThanSold_WhenReturnSoldToStock_ThenThrows() {
+        StandingZone standing = track(new StandingZone(1, "General", 100, 50));
+        standing.reserve(InventorySelection.standing(2));
+        standing.confirmSale(InventorySelection.standing(2));
+
+        assertThrows(IllegalStateException.class,
+                () -> standing.returnSoldToStock(InventorySelection.standing(3)));
+
+        assertEquals(2, standing.getSoldAmount());
+    }
+
     // -- grid placement ---------------------------------------------------
 
     @Test
