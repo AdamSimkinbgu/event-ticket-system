@@ -921,8 +921,9 @@ public class EventManagementService {
                 throw new RuntimeException("Company not found");
             }
 
-            company.checkowner(userId);
-
+            User user = userRepository.getUserById(userId);
+            user.requirePermissionInCompany(config.companyId(), Permission.EDIT_POLICIES);
+            
             Event event = eventRepository.findById(config.eventId());
             if (event == null) {
                 throw new RuntimeException("Event not found");

@@ -492,7 +492,8 @@ public class CompanyManagementService {
         if (company == null) {
             throw new CompanyNotFoundException(config.companyId());
         }
-        company.checkowner(userId);
+       User user = userRepository.getUserById(userId);
+        user.requirePermissionInCompany(config.companyId(), Permission.EDIT_POLICIES);
         PurchasePolicy policy = buildPurchasePolicyFromDTO(config.defaultPurchasePolicy());
         company.setPurchasePolicy(policy);
         companyRepository.save(company);
