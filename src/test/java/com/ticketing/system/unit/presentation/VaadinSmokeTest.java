@@ -35,6 +35,8 @@ import com.ticketing.system.Presentation.presenters.catalog.EventDetailsPresente
 import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.ticketing.system.Presentation.views.company.CompanyInquiryInboxView;
 import com.ticketing.system.Presentation.views.company.CompanyInquiryRespondView;
+import com.ticketing.system.Presentation.views.company.EventManagementView;
+import com.ticketing.system.Presentation.presenters.company.EventManagementPresenter;
 import com.ticketing.system.Presentation.views.company.ManagerListView;
 import com.ticketing.system.Presentation.views.company.OwnerDashboardView;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
@@ -277,6 +279,16 @@ class VaadinSmokeTest {
             new SystemAnalyticsPresenter.Outcome.Success(market, analytics));
         assertDoesNotThrow(() -> new SystemAnalyticsView(presenter),
             "SystemAnalyticsView failed to construct");
+    }
+
+    @Test
+    void eventManagementViewInstantiates() {
+        // Owner create/edit-event screen (route owner/events/:eventId). The constructor builds the
+        // whole form (incl. the create-mode Artists field and the side column) but doesn't invoke the
+        // presenter — load/create happen on beforeEnter/click — so a bare mock exercises construction.
+        EventManagementPresenter presenter = mock(EventManagementPresenter.class);
+        assertDoesNotThrow(() -> new EventManagementView(presenter),
+            "EventManagementView failed to construct");
     }
 
     @Test
