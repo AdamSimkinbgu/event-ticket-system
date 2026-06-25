@@ -91,15 +91,13 @@ class EventManagementPresenterTest {
     }
 
     @Test
-    void create_fallsBackToFirstOwnedWhenPreferredNotOwned() {
+    void create_preferredNotOwned_returnsNoCompany() {
+        // A selected company the caller doesn't own must not silently retarget to another company.
         when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(1), company(2)));
-        when(eventService.addEvent(eq(TOKEN), any())).thenReturn(detailWithId("9"));
 
-        createWith(99, futureStart(), futureEnd());
-
-        ArgumentCaptor<EventCreationDTO> captor = ArgumentCaptor.forClass(EventCreationDTO.class);
-        verify(eventService).addEvent(eq(TOKEN), captor.capture());
-        assertEquals(1, captor.getValue().companyId());
+        assertInstanceOf(EventManagementPresenter.CreateOutcome.NoCompany.class,
+                createWith(99, futureStart(), futureEnd()));
+        verifyNoInteractions(eventService);
     }
 
     @Test
@@ -128,6 +126,17 @@ class EventManagementPresenterTest {
 
         assertInstanceOf(EventManagementPresenter.CreateOutcome.NotAuthenticated.class,
                 createWith(null, futureStart(), futureEnd()));
+    }
+
+    @Test
+    void create_blankCategory_returnsInvalidInput() {
+        // Required inputs are validated before any service call, so a null category maps to
+        // InvalidInput (not a leaked NPE → Failure) and touches neither service.
+        EventManagementPresenter.CreateOutcome outcome = presenter.create(TOKEN, 1, "Gala", "desc",
+                null, "Israel", "Tel Aviv", futureStart(), futureEnd(), List.of("Headliner"));
+
+        assertInstanceOf(EventManagementPresenter.CreateOutcome.InvalidInput.class, outcome);
+        verifyNoInteractions(companyService, eventService);
     }
 
     @Test

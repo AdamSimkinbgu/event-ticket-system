@@ -187,7 +187,9 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             Toasts.failure("The end time must be after the start time.");
             return;
         }
-        if (start.getValue().isBefore(LocalDateTime.now())) {
+        // Match the domain ShowDate rule, which rejects a start at or before "now" (not just before).
+        LocalDateTime now = LocalDateTime.now();
+        if (!start.getValue().isAfter(now)) {
             Toasts.failure("The start time must be in the future.");
             return;
         }
@@ -203,7 +205,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
                 UI.getCurrent().navigate("owner/events/" + ok.eventId());
             }
             case EventManagementPresenter.CreateOutcome.NoCompany ignored ->
-                Toasts.failure("You don't have a company to create events under.");
+                Toasts.failure("You can only create events for a company you own.");
             case EventManagementPresenter.CreateOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case EventManagementPresenter.CreateOutcome.InvalidInput bad ->
