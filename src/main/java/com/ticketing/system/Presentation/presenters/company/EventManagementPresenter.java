@@ -1,11 +1,20 @@
 package com.ticketing.system.Presentation.presenters.company;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.ticketing.system.Core.Application.dto.EventCreationDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
+import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
+import com.ticketing.system.Core.Domain.events.EventCategory;
+import com.ticketing.system.Core.Domain.events.Location;
+import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 
@@ -13,10 +22,13 @@ import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 public class EventManagementPresenter {
 
     private final EventManagementService eventService;
+    private final CompanyManagementService companyService;
 
     @Autowired
-    public EventManagementPresenter(EventManagementService eventService) {
+    public EventManagementPresenter(EventManagementService eventService,
+                                    CompanyManagementService companyService) {
         this.eventService = eventService;
+        this.companyService = companyService;
     }
 
     public LoadOutcome load(String token, int eventId) {
@@ -45,6 +57,78 @@ public class EventManagementPresenter {
         }
     }
 
+    /**
+     * Creates a new event in DRAFT state under the caller's company. The company is resolved from
+     * the caller's owned companies — {@code preferredCompanyId} (the workspace's currently selected
+     * company) when it is one of them, otherwise the first owned company (matching how
+     * {@code CompanyEventListPresenter} picks the company for the event list the user came from).
+     * Domain value objects ({@link Location}, {@link ShowDate}) are assembled here so the view stays
+     * free of domain construction.
+     */
+    public CreateOutcome create(String token, Integer preferredCompanyId, String name,
+                                String description, String categoryName, String country, String city,
+                                LocalDateTime starts, LocalDateTime ends, List<String> artists) {
+        if (token == null) return new CreateOutcome.NotAuthenticated();
+
+        // Validate required inputs up front so bad/missing data surfaces as InvalidInput rather than
+        // a leaked NullPointerException (from EventCategory.valueOf / new ShowDate) mapped to Failure.
+        if (isBlank(name))         return new CreateOutcome.InvalidInput("An event title is required.");
+        if (isBlank(categoryName)) return new CreateOutcome.InvalidInput("A category is required.");
+        if (isBlank(country) || isBlank(city))
+                                   return new CreateOutcome.InvalidInput("A country and a city are required.");
+        if (starts == null || ends == null)
+                                   return new CreateOutcome.InvalidInput("A start and an end time are required.");
+        if (artists == null || artists.isEmpty())
+                                   return new CreateOutcome.InvalidInput("At least one artist is required.");
+
+        try {
+            Integer companyId = resolveCompanyId(token, preferredCompanyId);
+            if (companyId == null) return new CreateOutcome.NoCompany();
+
+            EventCreationDTO request = new EventCreationDTO(
+                companyId,
+                name,
+                description,
+                artists,
+                EventCategory.valueOf(categoryName),
+                null,                                   // rating — set later
+                new Location(country, city),
+                List.of(new ShowDate(starts, ends)),
+                null);                                  // purchase policy — inherits company policy
+            EventDetailDTO created = eventService.addEvent(token, request);
+            return new CreateOutcome.Success(created.eventId());
+        } catch (InvalidTokenException e) {
+            return new CreateOutcome.NotAuthenticated();
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return new CreateOutcome.InvalidInput(e.getMessage());
+        } catch (RuntimeException e) {
+            return new CreateOutcome.Failure(e.getMessage());
+        }
+    }
+
+    /**
+     * Resolve the company to create under from the caller's <em>owned</em> companies. When a company
+     * is selected ({@code preferredCompanyId} non-null) it must be one the caller owns — otherwise we
+     * return {@code null} ({@code → NoCompany}) rather than silently retargeting to a different
+     * company (e.g. a manager viewing a company they don't own). With no selection, use the first
+     * owned company. {@code null} when the caller owns none.
+     */
+    private Integer resolveCompanyId(String token, Integer preferredCompanyId) {
+        List<ProductionCompanyDTO> owned = companyService.findOwnedCompanies(token);
+        if (owned.isEmpty()) return null;
+        if (preferredCompanyId != null) {
+            for (ProductionCompanyDTO c : owned) {
+                if (c.companyId() == preferredCompanyId) return preferredCompanyId;
+            }
+            return null;   // selected company isn't owned — don't create under a different one
+        }
+        return owned.get(0).companyId();
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
+    }
+
     public CancelOutcome cancel(String token, int eventId) {
         if (token == null) return new CancelOutcome.NotAuthenticated();
         try {
@@ -68,6 +152,14 @@ public class EventManagementPresenter {
         record Success() implements SaveOutcome {}
         record NotAuthenticated() implements SaveOutcome {}
         record Failure(String reason) implements SaveOutcome {}
+    }
+
+    public sealed interface CreateOutcome {
+        record Success(String eventId) implements CreateOutcome {}
+        record NotAuthenticated() implements CreateOutcome {}
+        record NoCompany() implements CreateOutcome {}
+        record InvalidInput(String reason) implements CreateOutcome {}
+        record Failure(String reason) implements CreateOutcome {}
     }
 
     public sealed interface CancelOutcome {
