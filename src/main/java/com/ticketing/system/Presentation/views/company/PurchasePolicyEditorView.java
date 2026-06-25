@@ -36,7 +36,7 @@ import com.vaadin.flow.router.RouteParameters;
 
 import jakarta.annotation.security.PermitAll;
 
-@Route(value = "owner/policies/:companyId/:eventId", layout = WorkspaceLayout.class)
+@Route(value = "owner/policies/:companyId?/:eventId?", layout = WorkspaceLayout.class)
 @PageTitle("Purchase policies · TicketHub")
 @PermitAll
 @RequireCapability(Capability.EDIT_PURCHASE_POLICIES)
