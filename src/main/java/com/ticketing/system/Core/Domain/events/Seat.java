@@ -4,6 +4,16 @@ import java.time.LocalDateTime;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
 /**
  * A single addressable seat inside a {@link SeatedZone}.
  *
@@ -16,17 +26,47 @@ import com.ticketing.system.Core.Domain.shared.InvariantChecked;
  * which {@code ActiveOrder} holds the reservation, enabling the 3-phase
  * checkout to verify ownership before confirming sale — even after the
  * event lock is released during the payment/issuance phase.
+ *
+ * <p>V3: an owned child {@code @Entity} of a SeatedZone (mapped via its {@code @OneToMany} seat map,
+ * keyed by {@code label}). The {@code @Id} is a DB-generated surrogate because a seat label is only
+ * unique within its zone, not globally; {@code label} stays a column (and the map key). Status is
+ * stored by name; {@code reservedByOrderKey} is a nullable by-id column. {@code @Version} gives each
+ * seat its own optimistic lock so independent seat reservations never false-conflict. Fields are
+ * non-final with a protected no-arg ctor for Hibernate; the public ctor enforces the invariants.
  */
+@Entity
+@Table(name = "seats")
 public class Seat implements InvariantChecked {
 
-    private final String label;
-    private final double x;
-    private final double y;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long seatPk;
+
+    @Column(nullable = false)
+    private String label;
+
+    @Column(name = "x_coord", nullable = false)
+    private double x;
+
+    @Column(name = "y_coord", nullable = false)
+    private double y;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private SeatStatus status;
+
     /** Non-null only while status == RESERVED; identifies the holding ActiveOrder. */
+    @Column(name = "reserved_by_order_key")
     private String reservedByOrderKey;
     /** When the hold expires (informational — enforcement is in the sweep job). */
+    @Column(name = "reserved_until")
     private LocalDateTime reservedUntil; //TODO: when going to checkout, this should be set to {time now} + {reservation timeout period}.
+
+    @Version
+    private Long version;
+
+    /** For JPA only — do not call from application code. */
+    protected Seat() { }
 
     public Seat(String label, double x, double y) {
         this.label = label;

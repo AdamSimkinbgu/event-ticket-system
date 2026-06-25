@@ -4,9 +4,21 @@ import java.time.LocalDateTime;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
+
+// V3: an @Embeddable value object — one row in an Event's show_dates element collection. The
+// future-dated precondition lives only in the public ctor, so Hibernate's no-arg hydrate can load a
+// past show date. A protected no-arg ctor lets Hibernate instantiate it.
+@Embeddable
 public class ShowDate implements InvariantChecked {
+    @Column(name = "start_time", nullable = false)
     private LocalDateTime startTime;
+    @Column(name = "end_time", nullable = false)
     private LocalDateTime endTime;
+
+    /** For JPA only — do not call from application code. */
+    protected ShowDate() { }
 
     public ShowDate(LocalDateTime startTime, LocalDateTime endTime) {
         // validateTimes enforces the construction-time "must be future-dated" precondition,
