@@ -63,13 +63,13 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
     public SupportInboxView(SupportInboxPresenter presenter) {
         this.presenter = presenter;
 
-        title("Support inbox");
+        title("Support Inbox");
         subtitle("Your conversations with organizers and the TicketHub team.");
         actions(
-            new LkBtn("New inquiry").variant(LkBtn.Variant.secondary)
+            new LkBtn("New Inquiry").variant(LkBtn.Variant.secondary)
                 .icon(new LkIcon("comment", 15))
                 .onClick(e -> UI.getCurrent().navigate(NewInquiryView.class)),
-            new LkBtn("Submit complaint").variant(LkBtn.Variant.primary)
+            new LkBtn("Submit Complaint").variant(LkBtn.Variant.primary)
                 .icon(new LkIcon("warning", 15))
                 .onClick(e -> UI.getCurrent().navigate(SubmitComplaintView.class))
         );

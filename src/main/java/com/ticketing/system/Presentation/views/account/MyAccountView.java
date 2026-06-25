@@ -36,7 +36,7 @@ import java.util.List;
 import java.util.Map;
 
 @Route(value = "my-account", layout = MainLayout.class)
-@PageTitle("My account · TicketHub")
+@PageTitle("My Account · TicketHub")
 @PermitAll
 public class MyAccountView extends LkPage {
 
@@ -54,9 +54,9 @@ public class MyAccountView extends LkPage {
         this.sessionIdentity = sessionIdentity;
 
         add(buildHero());
-        add(Lk.h2("My orders"));
+        add(Lk.h2("My Orders"));
         add(buildOrdersCard());
-        add(Lk.h2("My tickets"));
+        add(Lk.h2("My Tickets"));
         add(buildTicketsCard());
     }
 
@@ -142,7 +142,7 @@ public class MyAccountView extends LkPage {
         view.addClickListener(e -> UI.getCurrent().navigate("receipt/" + r.orderReceiptId()));
 
         if (refundEligible(r)) {
-            NativeButton refund = new NativeButton("Request refund");
+            NativeButton refund = new NativeButton("Request Refund");
             refund.addClassName("bz-link");
             refund.getStyle().set("background", "none").set("border", "none").set("padding", "0")
                 .set("cursor", "pointer").set("margin-left", "14px");

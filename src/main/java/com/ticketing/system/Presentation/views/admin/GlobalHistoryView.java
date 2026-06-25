@@ -34,7 +34,7 @@ import java.util.Objects;
 import java.util.Set;
 
 @Route(value = "admin/global-history", layout = PlatformAdminLayout.class)
-@PageTitle("Global purchase history · Admin")
+@PageTitle("Global Purchase History · Admin")
 @PermitAll
 @RequireCapability(Capability.VIEW_GLOBAL_HISTORY)
 public class GlobalHistoryView extends LkPage {
@@ -54,7 +54,7 @@ public class GlobalHistoryView extends LkPage {
     public GlobalHistoryView(GlobalHistoryPresenter presenter) {
         this.records = presenter.loadAllRecords();
 
-        title("Global purchase history");
+        title("Global Purchase History");
         subtitle("Every order across the platform — filter by date, company, event, or status.");
         actions(new LkBtn("Export CSV").variant(LkBtn.Variant.secondary)
             .icon(new LkIcon("chart", 15))

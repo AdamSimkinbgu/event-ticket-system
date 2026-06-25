@@ -37,7 +37,7 @@ import java.util.List;
  * {@link AdminComplaintQueuePresenter} → {@code MessagingService}.
  */
 @Route(value = "admin/complaints/:id/respond", layout = PlatformAdminLayout.class)
-@PageTitle("Respond to complaint · Admin")
+@PageTitle("Respond to Complaint · Admin")
 @PermitAll
 @RequireCapability(Capability.MANAGE_COMPLAINTS)
 public class AdminComplaintRespondView extends LkPage implements BeforeEnterObserver {
@@ -50,7 +50,7 @@ public class AdminComplaintRespondView extends LkPage implements BeforeEnterObse
 
     public AdminComplaintRespondView(AdminComplaintQueuePresenter presenter) {
         this.presenter = presenter;
-        title("Respond to complaint");
+        title("Respond to Complaint");
         add(content);
     }
 

@@ -34,7 +34,7 @@ import java.util.List;
  * {@link AdminInboxPresenter} → {@code MessagingService}.
  */
 @Route(value = "admin/inbox", layout = PlatformAdminLayout.class)
-@PageTitle("Admin inbox · Admin")
+@PageTitle("Admin Inbox · Admin")
 @PermitAll
 @RequireCapability(Capability.BROADCAST_ANNOUNCEMENT)
 public class AdminInboxView extends LkPage {
@@ -52,7 +52,7 @@ public class AdminInboxView extends LkPage {
     public AdminInboxView(AdminInboxPresenter presenter) {
         this.presenter = presenter;
 
-        title("Admin inbox");
+        title("Admin Inbox");
         subtitle("Your conversations with members you've messaged.");
         add(content);
         reload();
@@ -134,7 +134,7 @@ public class AdminInboxView extends LkPage {
         } else {
             Div actionRow = new Div();
             actionRow.addClassName("md-detail-actions");
-            actionRow.add(new LkBtn("Close conversation").variant(LkBtn.Variant.tertiary)
+            actionRow.add(new LkBtn("Close Conversation").variant(LkBtn.Variant.tertiary)
                 .onClick(e -> handleClose()));
             detailCard.add(actionRow);
 

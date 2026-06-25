@@ -101,7 +101,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         add(buildHero());
         add(buildCategoryChips());
         if (!featured.isEmpty()) {
-            add(Lk.h2("Featured this week"));
+            add(Lk.h2("Featured This Week"));
             add(buildPosterGrid(featured));
         }
         add(buildAllEventsHeader());
@@ -135,10 +135,8 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         Div sub = new Div();
         sub.addClassName("bz-hero-sub");
         sub.setText("Concerts, matches, theatre and conferences — across Israel.");
-        Div search = new Div();
-        search.addClassName("bz-hero-search");
-        search.add(new LkIcon("search", 17), new Span(" Search events, artists, venues…"));
-        hero.add(title, sub, search);
+        // Decorative banner only — no search bar (catalog search lives in the filters below).
+        hero.add(title, sub);
         return hero;
     }
 
@@ -193,7 +191,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
 
     private Component buildAllEventsHeader() {
         LkRow row = new LkRow().align("baseline").gap(10);
-        row.add(Lk.h2("All events"));
+        row.add(Lk.h2("All Events"));
         resultsCountSpan = Lk.muted("");
         resultsCountSpan.getStyle().set("font-size", "13.5px");
         row.add(resultsCountSpan);
@@ -212,7 +210,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     private Component buildFilters() {
         LkCard card = new LkCard("Filters").pad(18).flush();
 
-        NativeButton clear = new NativeButton("Clear all");
+        NativeButton clear = new NativeButton("Clear All");
         clear.addClassName("lk-link-btn");
         clear.addClickListener(e -> clearFilters());
         card.headerRight(clear);
@@ -220,7 +218,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         categorySelect = new LkSelect(CAT_ALL, CATEGORIES).label("Category");
         categorySelect.onChange(this::setCategory);
 
-        dateRangeField = new LkDateRangeField().label("Date range");
+        dateRangeField = new LkDateRangeField().label("Date Range");
         dateRangeField.onChange(v -> {
             if (Objects.equals(filterDateRange, v)) return;   // skip redundant re-query (e.g. clearFilters sync)
             filterDateRange = v;
@@ -234,7 +232,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
             runSearch();
         });
 
-        sortSelect = new LkSelect(SORTS.get(0), SORTS).label("Sort by");
+        sortSelect = new LkSelect(SORTS.get(0), SORTS).label("Sort By");
         sortSelect.onChange(v -> {
             if (Objects.equals(filterSort, v)) return;
             filterSort = v;

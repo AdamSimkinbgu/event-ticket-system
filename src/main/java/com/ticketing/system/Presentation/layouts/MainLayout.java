@@ -153,13 +153,13 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
     /** Member-persona account menu — wired to {@link AuthSession} + view routes. */
     private LkAccountMenu buildMemberMenu(String name) {
         LkMenu menu = new LkMenu(
-                new LkMenu.Item("ticket", "My account").onClick(() -> UI.getCurrent().navigate(MyAccountView.class)),
-                new LkMenu.Item("users", "My profile").onClick(() -> UI.getCurrent().navigate(MyProfileView.class)),
-                new LkMenu.Item("crown", "My invitations")
+                new LkMenu.Item("ticket", "My Account").onClick(() -> UI.getCurrent().navigate(MyAccountView.class)),
+                new LkMenu.Item("users", "My Profile").onClick(() -> UI.getCurrent().navigate(MyProfileView.class)),
+                new LkMenu.Item("crown", "My Invitations")
                         .onClick(() -> UI.getCurrent().navigate(MyInvitationsView.class)),
-                new LkMenu.Item("briefcase", "My companies")
+                new LkMenu.Item("briefcase", "My Companies")
                         .onClick(() -> UI.getCurrent().navigate(MyCompaniesView.class)),
-                new LkMenu.Item("comment", "Support inbox")
+                new LkMenu.Item("comment", "Support Inbox")
                         .onClick(() -> UI.getCurrent().navigate(SupportInboxView.class)),
                 new LkMenu.Divider());
 
@@ -168,14 +168,14 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
             menu.add(new LkMenu.Item("building", "Workspace")
                     .onClick(() -> UI.getCurrent().navigate(OwnerDashboardView.class)));
         } else if (Capabilities.has(Capability.REGISTER_COMPANY)) {
-            menu.add(new LkMenu.Item("plus", "Become an organizer")
+            menu.add(new LkMenu.Item("plus", "Become an Organizer")
                     .hint("free")
                     .onClick(() -> UI.getCurrent().navigate(CompanyRegistrationView.class)));
         }
 
         menu.add(
                 new LkMenu.Divider(),
-                new LkMenu.Item("logout", "Sign out").danger().onClick(() -> {
+                new LkMenu.Item("logout", "Sign Out").danger().onClick(() -> {
                     signOutFlow.execute();
                     UI.getCurrent().navigate(LoginView.class);
                 }));

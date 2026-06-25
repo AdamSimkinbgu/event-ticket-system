@@ -26,7 +26,7 @@ import jakarta.annotation.security.PermitAll;
  * so non-owners can reach it as the workspace fallback destination.
  */
 @Route(value = "register-company", layout = MainLayout.class)
-@PageTitle("Register a company · TicketHub")
+@PageTitle("Register a Company · TicketHub")
 @PermitAll
 public class CompanyRegistrationView extends LkPage {
 
@@ -37,7 +37,7 @@ public class CompanyRegistrationView extends LkPage {
 
     public CompanyRegistrationView(CompanyRegistrationPresenter presenter) {
         this.presenter = presenter;
-        title("Register a production company");
+        title("Register a Production Company");
         subtitle("Found a new company — you become its immutable founder.");
         add(buildForm());
     }
@@ -46,7 +46,7 @@ public class CompanyRegistrationView extends LkPage {
         Div narrow = new Div();
         narrow.addClassName("form-narrow");
 
-        LkCard card = new LkCard("Company details").pad(20);
+        LkCard card = new LkCard("Company Details").pad(20);
 
         name.setPlaceholder("e.g. BlueWave Productions");
         name.setRequired(true);
@@ -68,7 +68,7 @@ public class CompanyRegistrationView extends LkPage {
         actions.add(
                 new LkBtn("Cancel").variant(LkBtn.Variant.tertiary)
                         .onClick(e -> UI.getCurrent().navigate(MyCompaniesView.class)),
-                new LkBtn("Register company").variant(LkBtn.Variant.primary)
+                new LkBtn("Register Company").variant(LkBtn.Variant.primary)
                         .icon(new LkIcon("plus", 15))
                         .onClick(e -> attemptRegister()));
         narrow.add(actions);

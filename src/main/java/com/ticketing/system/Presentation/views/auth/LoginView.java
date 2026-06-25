@@ -25,7 +25,7 @@ import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
 @Route(value = "login", layout = MainLayout.class)
-@PageTitle("Sign in · TicketHub")
+@PageTitle("Sign In · TicketHub")
 @AnonymousAllowed
 public class LoginView extends LkAuthCard {
 

@@ -22,7 +22,7 @@ import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
 @Route(value = "owner/owners/appoint", layout = WorkspaceLayout.class)
-@PageTitle("Appoint co-owner · TicketHub")
+@PageTitle("Appoint Co-Owner · TicketHub")
 @PermitAll
 @RequireCapability(Capability.APPOINT_CO_OWNER)
 public class OwnerAppointmentView extends LkPage {
@@ -33,7 +33,7 @@ public class OwnerAppointmentView extends LkPage {
 
     public OwnerAppointmentView(MyCompaniesPresenter membershipPresenter) {
         this.membershipPresenter = membershipPresenter;
-        title("Appoint co-owner");
+        title("Appoint Co-Owner");
         subtitle("Co-owners have full company access, except removing the founder.");
         add(buildForm());
     }
@@ -42,7 +42,7 @@ public class OwnerAppointmentView extends LkPage {
         Div narrow = new Div();
         narrow.addClassName("form-narrow");
 
-        LkCard card = new LkCard("Appoint co-owner").pad(20);
+        LkCard card = new LkCard("Appoint Co-Owner").pad(20);
 
         invitee.setPlaceholder("Who do you want to appoint?");
         invitee.setRequired(true);
@@ -68,7 +68,7 @@ public class OwnerAppointmentView extends LkPage {
         actions.add(
             new LkBtn("Cancel").variant(LkBtn.Variant.tertiary)
                 .onClick(e -> UI.getCurrent().navigate(MyCompaniesView.class)),
-            new LkBtn("Send invitation").variant(LkBtn.Variant.primary)
+            new LkBtn("Send Invitation").variant(LkBtn.Variant.primary)
                 .onClick(e -> sendInvitation())
         );
         narrow.add(actions);

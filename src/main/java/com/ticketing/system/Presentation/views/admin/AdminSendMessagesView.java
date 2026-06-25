@@ -81,7 +81,7 @@ public class AdminSendMessagesView extends LkPage {
     // -- Composer -------------------------------------------------------------
 
     private Component buildComposer() {
-        LkCard card = new LkCard("New message").pad(20);
+        LkCard card = new LkCard("New Message").pad(20);
 
         subject.setPlaceholder("Short, clear headline");
         subject.setWidthFull();

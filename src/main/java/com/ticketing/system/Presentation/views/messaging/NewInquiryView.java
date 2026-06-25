@@ -37,7 +37,7 @@ import java.util.List;
  * {@link NewInquiryPresenter} → {@code MessagingService}.
  */
 @Route(value = "support/inquiry/new", layout = MainLayout.class)
-@PageTitle("New inquiry · TicketHub")
+@PageTitle("New Inquiry · TicketHub")
 @PermitAll
 public class NewInquiryView extends LkPage implements BeforeEnterObserver {
 
@@ -54,7 +54,7 @@ public class NewInquiryView extends LkPage implements BeforeEnterObserver {
 
     public NewInquiryView(NewInquiryPresenter presenter) {
         this.presenter = presenter;
-        title("New inquiry");
+        title("New Inquiry");
         subtitle("Ask a production company a question — their team replies in your Support inbox.");
         add(buildForm());
     }
@@ -75,7 +75,7 @@ public class NewInquiryView extends LkPage implements BeforeEnterObserver {
     private Component buildForm() {
         Div narrow = new Div();
         narrow.addClassName("form-narrow");
-        LkCard card = new LkCard("New inquiry").pad(20);
+        LkCard card = new LkCard("New Inquiry").pad(20);
 
         companySearch.setPlaceholder("Search production companies…");
         companySearch.setWidthFull();

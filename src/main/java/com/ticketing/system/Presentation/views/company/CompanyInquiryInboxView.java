@@ -48,7 +48,7 @@ import java.util.Set;
  * {@code AdminComplaintQueueView} (#269) mirrors this pattern.
  */
 @Route(value = "owner/inquiries", layout = WorkspaceLayout.class)
-@PageTitle("Customer inquiries · TicketHub")
+@PageTitle("Customer Inquiries · TicketHub")
 @PermitAll
 @RequireCapability(Capability.RESPOND_INQUIRIES)
 public class CompanyInquiryInboxView extends LkPage {
@@ -72,7 +72,7 @@ public class CompanyInquiryInboxView extends LkPage {
     public CompanyInquiryInboxView(CompanyInquiryInboxPresenter presenter) {
         this.presenter = presenter;
 
-        title("Customer inquiries");
+        title("Customer Inquiries");
         subtitle("Questions from members about your events and company.");
         add(content);
         reload(CurrentCompanies.currentCompanyId());

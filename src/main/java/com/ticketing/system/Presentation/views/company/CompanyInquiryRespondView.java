@@ -37,7 +37,7 @@ import java.util.List;
  * Backed by {@link CompanyInquiryInboxPresenter} → {@code MessagingService}.
  */
 @Route(value = "owner/inquiries/:id/respond", layout = WorkspaceLayout.class)
-@PageTitle("Respond to inquiry · TicketHub")
+@PageTitle("Respond to Inquiry · TicketHub")
 @PermitAll
 @RequireCapability(Capability.RESPOND_INQUIRIES)
 public class CompanyInquiryRespondView extends LkPage implements BeforeEnterObserver {
@@ -49,7 +49,7 @@ public class CompanyInquiryRespondView extends LkPage implements BeforeEnterObse
 
     public CompanyInquiryRespondView(CompanyInquiryInboxPresenter presenter) {
         this.presenter = presenter;
-        title("Respond to inquiry");
+        title("Respond to Inquiry");
         add(content);
     }
 
@@ -91,9 +91,9 @@ public class CompanyInquiryRespondView extends LkPage implements BeforeEnterObse
             LkRow actions = new LkRow().gap(8).justify("flex-end");
             actions.getStyle().set("margin-top", "12px");
             actions.add(
-                new LkBtn("Back to inquiries").variant(LkBtn.Variant.tertiary)
+                new LkBtn("Back to Inquiries").variant(LkBtn.Variant.tertiary)
                     .onClick(e -> UI.getCurrent().navigate(CompanyInquiryInboxView.class)),
-                new LkBtn("Close inquiry").variant(LkBtn.Variant.secondary)
+                new LkBtn("Close Inquiry").variant(LkBtn.Variant.secondary)
                     .onClick(e -> handleClose()));
             card.add(actions);
         }

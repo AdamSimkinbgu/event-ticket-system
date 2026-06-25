@@ -44,7 +44,7 @@ import java.util.Set;
  * {@code CompanyInquiryInboxView} (#268).
  */
 @Route(value = "admin/complaints", layout = PlatformAdminLayout.class)
-@PageTitle("Complaint queue · Admin")
+@PageTitle("Complaint Queue · Admin")
 @PermitAll
 @RequireCapability(Capability.MANAGE_COMPLAINTS)
 public class AdminComplaintQueueView extends LkPage {
@@ -66,7 +66,7 @@ public class AdminComplaintQueueView extends LkPage {
     public AdminComplaintQueueView(AdminComplaintQueuePresenter presenter) {
         this.presenter = presenter;
 
-        title("Complaint queue");
+        title("Complaint Queue");
         subtitle("Member complaints opened via Conversation type=COMPLAINT.");
         add(content);
         reload();

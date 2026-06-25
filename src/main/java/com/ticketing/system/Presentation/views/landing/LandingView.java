@@ -29,7 +29,7 @@ import java.util.Objects;
  * {@code /} or by clicking the brand in the top bar.
  */
 @Route(value = "", layout = MainLayout.class)
-@PageTitle("TicketHub · Find your next experience")
+@PageTitle("TicketHub · Find Your Next Experience")
 @AnonymousAllowed
 public class LandingView extends LkPage {
 
@@ -41,11 +41,27 @@ public class LandingView extends LkPage {
     public LandingView(LandingPresenter presenter) {
         this.presenter = presenter;
 
-        add(Lk.h2("Browse by category"));
+        add(buildHero());
+        add(Lk.h2("Browse by Category"));
         add(buildCategoryGrid());
         renderCatalogRows();
         add(Lk.h2("Why TicketHub"));
         add(buildFeatures());
+    }
+
+    // ---- hero (decorative banner — no search) ----
+
+    private Component buildHero() {
+        Div hero = new Div();
+        hero.addClassName("bz-hero");
+        Div title = new Div();
+        title.addClassName("bz-hero-title");
+        title.setText("Find your next unforgettable experience.");
+        Div sub = new Div();
+        sub.addClassName("bz-hero-sub");
+        sub.setText("Concerts, sports, theatre, conferences — across Israel, all in one place.");
+        hero.add(title, sub);
+        return hero;
     }
 
     // ---- data-backed catalog rows (V2-LANDING-01) ----
@@ -54,17 +70,17 @@ public class LandingView extends LkPage {
     private void renderCatalogRows() {
         switch (presenter.load()) {
             case LandingPresenter.Outcome.Success ok -> {
-                add(Lk.h2("Featured this week"));
+                add(Lk.h2("Featured This Week"));
                 add(ok.featured().isEmpty() ? emptyFeatured() : posterRow(ok.featured()));
                 // "On sale soon" is a teaser — show it only when there's something coming up.
                 if (!ok.upcoming().isEmpty()) {
-                    add(Lk.h2("On sale soon"));
+                    add(Lk.h2("On Sale Soon"));
                     add(posterRow(ok.upcoming()));
                 }
             }
             // The public root degrades gracefully — an empty state, not an error banner.
             case LandingPresenter.Outcome.Failure ignored -> {
-                add(Lk.h2("Featured this week"));
+                add(Lk.h2("Featured This Week"));
                 add(emptyFeatured());
             }
         }

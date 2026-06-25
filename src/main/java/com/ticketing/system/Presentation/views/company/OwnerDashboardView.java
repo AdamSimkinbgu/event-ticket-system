@@ -80,7 +80,7 @@ public class OwnerDashboardView extends LkPage {
 
     /** Topbar actions: a company selector (only when the member has >1) plus "New event". */
     private Component[] buildActions(List<MyCompanyDTO> companies, MyCompanyDTO selected) {
-        LkBtn newEvent = new LkBtn("New event")
+        LkBtn newEvent = new LkBtn("New Event")
             .variant(LkBtn.Variant.primary)
             .icon(new LkIcon("plus", 15))
             .onClick(e -> UI.getCurrent().navigate(CompanyEventListView.class));

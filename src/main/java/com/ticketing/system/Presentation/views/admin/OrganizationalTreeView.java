@@ -19,7 +19,7 @@ import jakarta.annotation.security.PermitAll;
 import java.util.List;
 
 @Route(value = "admin/org-tree", layout = PlatformAdminLayout.class)
-@PageTitle("Organizational tree · Admin")
+@PageTitle("Organizational Tree · Admin")
 @PermitAll
 @RequireCapability(Capability.VIEW_ORG_TREES)
 public class OrganizationalTreeView extends LkPage {
@@ -31,7 +31,7 @@ public class OrganizationalTreeView extends LkPage {
     }
 
     public OrganizationalTreeView() {
-        title("Organizational tree");
+        title("Organizational Tree");
         subtitle("Founder → owners → managers hierarchy for the selected company, with audit lines.");
 
         add(buildFilters());
@@ -50,7 +50,7 @@ public class OrganizationalTreeView extends LkPage {
     }
 
     private Component buildTreeCard() {
-        LkCard card = new LkCard("Live Nation Israel — appointment hierarchy").pad(20);
+        LkCard card = new LkCard("Live Nation Israel — Appointment Hierarchy").pad(20);
 
         Node carol = new Node("C", "Carol Levy", "Manager", "manager", "Appointed by Bob · Manage events, view sales");
         Node dave  = new Node("D", "Dave Peretz", "Manager", "manager", "Appointed by Bob · Respond to inquiries");

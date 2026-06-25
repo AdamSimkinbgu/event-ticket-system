@@ -70,7 +70,7 @@ public class MyInvitationsView extends LkPage {
     }
 
     private void render(MyInvitationsPresenter.Outcome.Success ok) {
-        content.add(Lk.h2("Pending invitations"));
+        content.add(Lk.h2("Pending Invitations"));
         if (ok.pending().isEmpty()) {
             content.add(banner("You have no pending invitations right now."));
         } else {

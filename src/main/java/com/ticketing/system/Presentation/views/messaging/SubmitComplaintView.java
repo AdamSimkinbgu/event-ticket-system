@@ -26,7 +26,7 @@ import jakarta.annotation.security.PermitAll;
 import java.util.List;
 
 @Route(value = "support/new", layout = MainLayout.class)
-@PageTitle("Submit complaint · TicketHub")
+@PageTitle("Submit Complaint · TicketHub")
 @PermitAll
 public class SubmitComplaintView extends LkPage {
 
@@ -40,7 +40,7 @@ public class SubmitComplaintView extends LkPage {
     public SubmitComplaintView(SubmitComplaintPresenter presenter) {
         this.presenter = presenter;
 
-        title("Submit a complaint");
+        title("Submit a Complaint");
         subtitle("Tell us what went wrong — an admin will respond shortly.");
         add(buildForm());
     }
@@ -49,7 +49,7 @@ public class SubmitComplaintView extends LkPage {
         Div narrow = new Div();
         narrow.addClassName("form-narrow");
 
-        LkCard card = new LkCard("New complaint").pad(20);
+        LkCard card = new LkCard("New Complaint").pad(20);
 
         about.label("About");
         subject.setPlaceholder("Brief summary of the issue");
@@ -71,7 +71,7 @@ public class SubmitComplaintView extends LkPage {
         actions.add(
             new LkBtn("Cancel").variant(LkBtn.Variant.tertiary)
                 .onClick(e -> UI.getCurrent().navigate(SupportInboxView.class)),
-            new LkBtn("Submit complaint").variant(LkBtn.Variant.primary)
+            new LkBtn("Submit Complaint").variant(LkBtn.Variant.primary)
                 .onClick(e -> submit())
         );
         card.add(actions);

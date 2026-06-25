@@ -83,7 +83,7 @@ public class SystemAnalyticsView extends LkPage {
         marketDetail.getStyle().set("display", "block").set("margin-top", "10px")
             .set("color", "var(--muted, #6b7280)").set("font-size", "13px");
 
-        LkCard card = new LkCard("Market status").pad(20);
+        LkCard card = new LkCard("Market Status").pad(20);
         card.add(controls, marketDetail);
         return card;
     }

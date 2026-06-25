@@ -148,7 +148,7 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
 
         // Signed-in members can open an inquiry with the organizer, pre-filling this event's company.
         if (sessionIdentity.isMember() && detail.companyId() != null) {
-            LkBtn ask = new LkBtn("Ask the organizer")
+            LkBtn ask = new LkBtn("Ask the Organizer")
                 .variant(LkBtn.Variant.secondary)
                 .icon(new LkIcon("comment", 15))
                 .onClick(e -> UI.getCurrent().navigate(NewInquiryView.class,
@@ -167,7 +167,7 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
         Div split = new Div();
         split.addClassName("bz-evt-split");
 
-        LkCard mapCard = new LkCard("Pick your area")
+        LkCard mapCard = new LkCard("Pick Your Area")
             .subtitle("Tap a zone to choose seats or quantity")
             .pad(16);
 
@@ -289,7 +289,7 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
         selectedLine = new Span();
         updateSelectedLine();
 
-        chooseBtn = new LkBtn("Choose tickets →")
+        chooseBtn = new LkBtn("Choose Tickets →")
             .variant(LkBtn.Variant.primary)
             .size(LkBtn.Size.l)
             .full()
@@ -312,16 +312,16 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
         EventStatus status = detail == null ? null : detail.status();
         if (status == EventStatus.CANCELED) {
             chooseBtn.setEnabled(false);
-            chooseBtn.label("Event cancelled");
+            chooseBtn.label("Event Cancelled");
         } else if (status == EventStatus.COMPLETED) {
             chooseBtn.setEnabled(false);
-            chooseBtn.label("Event ended");
+            chooseBtn.label("Event Ended");
         } else if (status == EventStatus.SOLD_OUT || firstSelectableZoneId() == null) {
             chooseBtn.setEnabled(false);
-            chooseBtn.label("Sold out");
+            chooseBtn.label("Sold Out");
         } else {
             chooseBtn.setEnabled(true);
-            chooseBtn.label("Choose tickets →");
+            chooseBtn.label("Choose Tickets →");
         }
     }
 

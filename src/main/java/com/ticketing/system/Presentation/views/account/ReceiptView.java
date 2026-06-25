@@ -128,7 +128,7 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
     private Component buildHeaderActions(PurchaseRecordDTO receipt) {
         LkRow actions = new LkRow().gap(8);
         if (refundEligible(receipt)) {
-            actions.add(new LkBtn("Request refund").variant(LkBtn.Variant.primary)
+            actions.add(new LkBtn("Request Refund").variant(LkBtn.Variant.primary)
                     .icon(new LkIcon("card", 15))
                     .onClick(e -> openRefund(receipt)));
         }
@@ -136,7 +136,7 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
                 new LkBtn("Print").variant(LkBtn.Variant.secondary)
                         .icon(new LkIcon("copy", 15))
                         .onClick(e -> UI.getCurrent().getPage().executeJs("window.print()")),
-                new LkBtn("Email receipt").variant(LkBtn.Variant.tertiary)
+                new LkBtn("Email Receipt").variant(LkBtn.Variant.tertiary)
                         .onClick(e -> Toasts.success("Receipt resent to your account email (mock).")));
         return actions;
     }

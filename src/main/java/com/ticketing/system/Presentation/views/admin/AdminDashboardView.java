@@ -18,7 +18,7 @@ import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
 @Route(value = "admin", layout = PlatformAdminLayout.class)
-@PageTitle("Admin workspace · Event Ticket Platform")
+@PageTitle("Admin Workspace · Event Ticket Platform")
 @PermitAll
 @RequireCapability(Capability.ADMIN_WORKSPACE)
 public class AdminDashboardView extends LkPage {
@@ -28,7 +28,7 @@ public class AdminDashboardView extends LkPage {
     public AdminDashboardView(AdminDashboardPresenter presenter) {
         this.presenter = presenter;
 
-        title("Admin workspace");
+        title("Admin Workspace");
         subtitle("Cross-company moderation, broadcasts, and platform analytics.");
 
         add(buildStats());
@@ -80,7 +80,7 @@ public class AdminDashboardView extends LkPage {
                 AdminComplaintQueueView.class)
         );
 
-        LkCard card = new LkCard("Admin tools").pad(20);
+        LkCard card = new LkCard("Admin Tools").pad(20);
         card.add(tiles);
         return card;
     }
