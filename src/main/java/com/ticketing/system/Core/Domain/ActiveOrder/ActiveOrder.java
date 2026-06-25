@@ -256,8 +256,7 @@ public class ActiveOrder implements InvariantChecked {
                 CartLineItem item = items.get(i);
                 if (item.geteventId() == eventId &&
                         item.getzoneId() == zoneId &&
-                        item.getSeatNumber() == null && // only match standing tickets
-                        !item.isExpired()) {
+                        item.getSeatNumber() == null) { // only match standing tickets; expired included (R1: manual removal)
                     items.remove(i);
                     removedCount++;
                     i--; // adjust index after removal
@@ -283,10 +282,10 @@ public class ActiveOrder implements InvariantChecked {
 
             // start removals
             for (String seatNumber : seatNumbers) {
+                // expired included (R1: a buyer may manually remove an expired seat line).
                 boolean removed = items.removeIf(item -> item.geteventId() == eventId &&
                         item.getzoneId() == zoneId &&
-                        seatNumber.equals(item.getSeatNumber()) &&
-                        !item.isExpired());
+                        seatNumber.equals(item.getSeatNumber()));
 
                 if (!removed) {
                     // check just in case even though we already checked that the seat numbers do exist, to avoid silent failures if there's a bug in the validation logic.
@@ -375,10 +374,10 @@ public class ActiveOrder implements InvariantChecked {
     public void validateContainsSeats(int eventId, int zoneId, List<String> seatNumbers) {
         synchronized (itemsLock) {
             for (String seatNumber : seatNumbers) {
+                // expired included (R1: validation for manual removal of an expired seat line).
                 boolean exists = items.stream().anyMatch(item -> item.geteventId() == eventId &&
                         item.getzoneId() == zoneId &&
-                        seatNumber.equals(item.getSeatNumber()) &&
-                        !item.isExpired());
+                        seatNumber.equals(item.getSeatNumber()));
 
                 if (!exists) {
                     throw new IllegalArgumentException("Active order does not contain seat: " + seatNumber);
@@ -397,8 +396,7 @@ public class ActiveOrder implements InvariantChecked {
         for (CartLineItem item : items) {
             if (item.geteventId() == eventId &&
                     item.getzoneId() == zoneId &&
-                    item.getSeatNumber() == null && // only count standing tickets
-                    !item.isExpired()) {
+                    item.getSeatNumber() == null) { // only count standing tickets; expired included (R1)
                 count = count + 1;
             }
         }
@@ -656,9 +654,10 @@ public class ActiveOrder implements InvariantChecked {
 
 
 
+    // Removal-path helper: expired items are included so a buyer can manually remove an expired line (R1).
     private boolean hasReservationForEventWithoutLock(int eventId) {
         for (CartLineItem item : items) {
-            if (item.geteventId() == eventId && !item.isExpired()) {
+            if (item.geteventId() == eventId) {
                 return true;
             }
         }

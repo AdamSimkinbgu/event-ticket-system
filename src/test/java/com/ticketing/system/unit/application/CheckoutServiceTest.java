@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -2508,6 +2509,125 @@ private AtomicBoolean trackReceiptSave() {
         assertEquals(first.totalCharged(), second.totalCharged());
         assertEquals(first.issuedTicketIds(), second.issuedTicketIds());
         verify(mockPaymentGateway, times(1)).charge(any());
+    }
+
+    // --- C3: partial multi-event confirm is compensated (no SOLD stranded) ---
+
+    // Confirming SOLD across multiple events is not a single atomic step. If the second confirm throws
+    // after the first committed, the first must be returned to stock (SOLD -> AVAILABLE), not left SOLD,
+    // and the buyer must be refunded. End state: no inventory SOLD anywhere, both zones available again.
+    @Test
+    void GivenConfirmFailsMidwayAcrossEvents_WhenCheckout_ThenConfirmedSaleCompensatedAndBuyerRefunded() {
+        ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+        String orderKey = activeOrder.getOrderKey();
+
+        StandingZone zone1 = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+        StandingZone zone3 = new StandingZone(ZONE_ID_3, "BALCONY", 5, 200.0);
+        zone1.reserve(InventorySelection.standing(1, orderKey));
+        zone3.reserve(InventorySelection.standing(1, orderKey));
+
+        activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
+        activeOrder.addStandingReservation(EVENT_ID_2, ZONE_ID_3, 1, 200.0, LocalDateTime.now());
+
+        when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+        when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
+        when(mockEventRepo.findById(EVENT_ID_2)).thenReturn(event2);
+        when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone1);
+        when(event2.getVenueMap().getZone(ZONE_ID_3)).thenReturn(zone3);
+        when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
+        when(event2.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(200.0);
+
+        PaymentResultDTO paymentResult = new PaymentResultDTO(PAYMENT_TRANSACTION_ID, "gateway", 300.0, "ILS",
+                LocalDateTime.now());
+        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
+        when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(new IssuanceResultDTO(
+                ISSUANCE_TRANSACTION_ID, "issuer", LocalDateTime.now(),
+                List.of(new BarcodeDTO(TICKET_ID_1, "b1", "QR"), new BarcodeDTO(TICKET_ID_3, "b2", "QR"))));
+
+        // First confirm (whichever event the grouping visits first) commits SOLD; the second throws.
+        AtomicInteger confirmCalls = new AtomicInteger();
+        doAnswer(inv -> {
+            if (confirmCalls.incrementAndGet() >= 2) {
+                throw new RuntimeException("confirm boom");
+            }
+            int zoneId = inv.getArgument(0);
+            InventorySelection sel = inv.getArgument(1);
+            if (zoneId == ZONE_ID_1) {
+                zone1.confirmSale(sel);
+            } else {
+                zone3.confirmSale(sel);
+            }
+            return null;
+        }).when(event1).confirmInventorySale(anyInt(), any());
+        doAnswer(inv -> {
+            if (confirmCalls.incrementAndGet() >= 2) {
+                throw new RuntimeException("confirm boom");
+            }
+            int zoneId = inv.getArgument(0);
+            InventorySelection sel = inv.getArgument(1);
+            if (zoneId == ZONE_ID_1) {
+                zone1.confirmSale(sel);
+            } else {
+                zone3.confirmSale(sel);
+            }
+            return null;
+        }).when(event2).confirmInventorySale(anyInt(), any());
+
+        // Compensation (SOLD -> AVAILABLE) and rollback release delegate to the real zones.
+        doAnswer(inv -> { zone1.returnSoldToStock(inv.getArgument(1)); return true; })
+                .when(event1).returnSoldToStock(eq(ZONE_ID_1), any());
+        doAnswer(inv -> { zone3.returnSoldToStock(inv.getArgument(1)); return true; })
+                .when(event2).returnSoldToStock(eq(ZONE_ID_3), any());
+        when(event1.releaseInventory(eq(ZONE_ID_1), any()))
+                .thenAnswer(inv -> { zone1.release(inv.getArgument(1)); return true; });
+        when(event2.releaseInventory(eq(ZONE_ID_3), any()))
+                .thenAnswer(inv -> { zone3.release(inv.getArgument(1)); return true; });
+
+        assertThrows(RuntimeException.class, () ->
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN));
+
+        // No inventory left SOLD: the confirmed zone was compensated, the other was released.
+        assertEquals(0, zone1.getSoldAmount());
+        assertEquals(0, zone3.getSoldAmount());
+        assertEquals(5, zone1.getAvailableAmount());
+        assertEquals(5, zone3.getAvailableAmount());
+        // Buyer is refunded (the sale never committed).
+        verify(mockPaymentGateway).refund(PAYMENT_TRANSACTION_ID, 300.0);
+    }
+
+    // --- C1: idempotent retry survives the market closing ---
+
+    // A completed purchase must be returned idempotently even if the market has since closed — the cache
+    // lookup runs before the market gate, so the retry returns the cached receipt instead of throwing.
+    @Test
+    void GivenCompletedCheckout_WhenMarketClosesThenSameKeyRetry_ThenReturnsCachedResultNotMarketClosed() {
+        PaymentResultDTO paymentResult = new PaymentResultDTO(PAYMENT_TRANSACTION_ID, "gateway", 100.0, "ILS",
+                LocalDateTime.now());
+        IssuanceResultDTO issuanceResult = new IssuanceResultDTO(ISSUANCE_TRANSACTION_ID, "issuer",
+                LocalDateTime.now(), List.of(new BarcodeDTO(TICKET_ID_1, "barcode-value-1", "QR")));
+
+        when(mockOrder.validateCanCheckout()).thenReturn(true);
+        when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
+        when(mockOrder.buy()).thenReturn(List.of(itemEvent1Zone1));
+        when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
+        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
+        when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+        StandingZone zone1 = new StandingZone(ZONE_ID_1, "General", 100, 100.0);
+        zone1.reserve(InventorySelection.standing(1));
+        when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone1);
+
+        CheckoutResultDTO first = checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY,
+                PAYMENT_METHOD_TOKEN);
+
+        // The market closes after the purchase completed.
+        when(mockSystemAdminService.isMarketOpen()).thenReturn(false);
+
+        // The idempotent retry must still return the cached receipt, not throw MarketNotOpenException.
+        CheckoutResultDTO retry = checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY,
+                PAYMENT_METHOD_TOKEN);
+
+        assertEquals(first, retry);
+        verify(mockPaymentGateway, times(1)).charge(any()); // no second charge
     }
 
 }
