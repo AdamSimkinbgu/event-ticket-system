@@ -2,15 +2,12 @@ package com.ticketing.system.Presentation.views.catalog;
 
 import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
-import com.ticketing.system.Presentation.components.buyer.BzPoster;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
-import com.ticketing.system.Presentation.components.kit.LkChip;
 import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkDateRangeField;
 import com.ticketing.system.Presentation.components.kit.LkGrid;
-import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkSelect;
@@ -80,7 +77,6 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
 
     // ---- ui references for re-render / reset ----
 
-    private final Map<LkChip, String> chipToCategory = new LinkedHashMap<>();
     private LkSelect categorySelect;
     private LkSelect regionSelect;
     private LkSelect sortSelect;
@@ -94,19 +90,14 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         this.presenter = presenter;
         this.identity = identity;
 
-        // One unfiltered server query seeds the "Featured this week" strip + the first grid render.
-        List<EventRow> featured = presenter.search(identity.credential(), CatalogSearchFiltersDTO.empty())
+        // One unfiltered server query seeds the initial "All Events" grid render.
+        List<EventRow> allEvents = presenter.search(identity.credential(), CatalogSearchFiltersDTO.empty())
                 .stream().map(BrowseEventsView::toRow).toList();
 
         add(buildHero());
-        add(buildCategoryChips());
-        if (!featured.isEmpty()) {
-            add(Lk.h2("Featured This Week"));
-            add(buildPosterGrid(featured));
-        }
         add(buildAllEventsHeader());
         add(buildBrowseSplit());
-        renderGrid(featured.stream().sorted(comparatorFor(filterSort)).toList());
+        renderGrid(allEvents.stream().sorted(comparatorFor(filterSort)).toList());
     }
 
     /**
@@ -140,51 +131,15 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         return hero;
     }
 
-    // ---- category chips (synced with sidebar select) ----
-
-    private Component buildCategoryChips() {
-        LkRow row = new LkRow().gap(8);
-        addChip(row, null, "All", CAT_ALL, true);
-        addChip(row, "music", "Concerts", "Concerts", false);
-        addChip(row, "trophy", "Sports", "Sports", false);
-        addChip(row, "theater", "Theatre", "Theatre", false);
-        addChip(row, "music", "Festivals", "Festivals", false);
-        addChip(row, "mic", "Comedy", "Comedy", false);
-        row.getStyle().set("margin", "4px 0 2px");
-        return row;
-    }
-
-    private void addChip(LkRow row, String iconName, String label, String category, boolean active) {
-        LkChip chip = new LkChip(label);
-        if (iconName != null)
-            chip.getElement().insertChild(0, new LkIcon(iconName, 15).getElement());
-        if (active)
-            chip.active();
-        chip.getElement().addEventListener("click", e -> setCategory(category));
-        chipToCategory.put(chip, category);
-        row.add(chip);
-    }
+    // ---- category selection (driven by the sidebar select / ?category= deep-link) ----
 
     private void setCategory(String category) {
         if (filterCategory.equals(category))
             return;
         filterCategory = category;
-        chipToCategory.forEach((chip, cat) -> chip.active(cat.equals(category)));
         if (categorySelect != null)
             categorySelect.setValue(category);
         runSearch();
-    }
-
-    // ---- featured posters ----
-
-    private Component buildPosterGrid(List<EventRow> featured) {
-        Div grid = new Div();
-        grid.addClassName("bz-poster-grid");
-        featured.stream().limit(4).forEach(ev ->
-                grid.add(new BzPoster(ev.category, ev.name, ev.venue + " · " + ev.date,
-                        "From $" + (ev.priceCents / 100))
-                        .onClick(() -> UI.getCurrent().navigate("events/" + ev.id))));
-        return grid;
     }
 
     // ---- "All events" header with live result count ----
@@ -302,7 +257,6 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         filterPriceMin = null;
         filterPriceMax = null;
 
-        chipToCategory.forEach((chip, cat) -> chip.active(cat.equals(CAT_ALL)));
         categorySelect.setValue(CAT_ALL);
         regionSelect.setValue(REGION_ALL);
         sortSelect.setValue(SORTS.get(0));
