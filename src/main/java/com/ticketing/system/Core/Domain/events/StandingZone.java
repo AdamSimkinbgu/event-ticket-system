@@ -3,6 +3,16 @@ package com.ticketing.system.Core.Domain.events;
 import java.util.HashMap;
 import java.util.Map;
 
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.DiscriminatorValue;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.MapKeyColumn;
+import jakarta.persistence.Transient;
+
 /**
  * Counter-based zone — no addressable seats, just "N tickets available".
  *
@@ -15,16 +25,28 @@ import java.util.Map;
  * the reservation is stored under the sentinel key {@code "anonymous"}.
  * All synchronization happens via a private {@code inventoryLock}.
  */
+@Entity
+@DiscriminatorValue("STANDING")
 public class StandingZone extends InventoryZone {
 
+    @Column(nullable = false)
     private int capacity;
     /** Maps orderKey → quantity reserved by that order. used for tracking reservations per order. */
-    private final Map<String, Integer> reservedByOrderKey = new HashMap<>();
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "standing_zone_reservations", joinColumns = @JoinColumn(name = "zone_pk"))
+    @MapKeyColumn(name = "order_key")
+    @Column(name = "quantity")
+    private Map<String, Integer> reservedByOrderKey = new HashMap<>();
+    @Column(name = "sold_amount", nullable = false)
     private int soldAmount;
+    @Transient
     private final Object inventoryLock = new Object();
 
     /** Sentinel used when no order key is provided (backwards-compatible callers). */
     private static final String ANONYMOUS_KEY = "anonymous";
+
+    /** For JPA only — do not call from application code. */
+    protected StandingZone() { }
 
     public StandingZone(int id, String name, int capacity, double price) {
         super(id, name, price);

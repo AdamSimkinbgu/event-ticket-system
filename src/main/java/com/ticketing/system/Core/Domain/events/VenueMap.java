@@ -6,19 +6,51 @@ import java.util.ArrayList;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+
+// V3: an owned @Entity of Event (mapped via Event's @OneToOne). Assigned int @Id (minted by
+// IEventRepository.nextVenueMapId()). location is an @Embedded value (nullable). The polymorphic
+// inventoryZones are owned children (@OneToMany cascade-all + orphan-removal) loaded eagerly. A
+// protected no-arg ctor lets Hibernate hydrate.
+@Entity
+@Table(name = "venue_maps")
 public class VenueMap implements InvariantChecked {
 
     /** Default venue canvas grid when none is specified. */
     public static final int DEFAULT_GRID_ROWS = 3;
     public static final int DEFAULT_GRID_COLS = 3;
 
+    @Id
     private int id;
+    @Embedded
     private Location location;
-    private final List<InventoryZone> inventoryZones;
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "venue_map_id")
+    @Fetch(FetchMode.SUBSELECT)
+    private List<InventoryZone> inventoryZones;
+    @Column(name = "next_zone_id")
     private int nextZoneId;
     // Venue canvas grid: zones snap to cells of this gridRows × gridCols layout.
+    @Column(name = "grid_rows")
     private int gridRows;
+    @Column(name = "grid_cols")
     private int gridCols;
+
+    /** For JPA only — do not call from application code. */
+    protected VenueMap() {
+        this.inventoryZones = new ArrayList<>();
+    }
 
     public VenueMap(int id, Location location, List<InventoryZone> inventoryZones) {
         this(id, location, inventoryZones, DEFAULT_GRID_ROWS, DEFAULT_GRID_COLS);

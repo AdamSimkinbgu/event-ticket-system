@@ -10,6 +10,16 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.DiscriminatorValue;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.MapKey;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.Transient;
+
 
 /**
  * Zone with addressable, named seats. Replaces the bare counter of
@@ -24,21 +34,32 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * Adding/removing seats from a SeatedZone after tickets are issued, so after ON_SALE turned on is
  * intentionally not supported — cannot change zones or their internals after event goes ON_SALE.
  */
+@Entity
+@DiscriminatorValue("SEATED")
 public class SeatedZone extends InventoryZone {
 
-    private final ConcurrentHashMap<String, Seat> seats;
-    private final ConcurrentHashMap<String, ReentrantLock> seatLocks;
+    // Owned seat catalogue, keyed by label. High-churn seat status rules out @ElementCollection, so
+    // Seat is a child @Entity; cascade-all + orphan-removal persist/delete seats with the zone.
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "zone_pk")
+    @MapKey(name = "label")
+    private Map<String, Seat> seats = new ConcurrentHashMap<>();
+    // Per-seat locks and the layout lock are runtime concurrency guards, never persisted. seatLocks
+    // is rebuilt from the loaded seat labels by rebuildSeatLocks() (@PostLoad), restoring the
+    // seats↔locks 1:1 invariant.
+    @Transient
+    private final ConcurrentHashMap<String, ReentrantLock> seatLocks = new ConcurrentHashMap<>();
+    @Transient
     private final ReentrantReadWriteLock layoutLock = new ReentrantReadWriteLock();
 
-
+    /** For JPA only — do not call from application code. */
+    protected SeatedZone() { }
 
     public SeatedZone(int id, String name, double price, List<Seat> initialSeats) {
         super(id, name, price);
         if (initialSeats == null) {
             throw new IllegalArgumentException("initialSeats must not be null");
         }
-        this.seats = new ConcurrentHashMap<>();
-        this.seatLocks = new ConcurrentHashMap<>();
         for (Seat seat : initialSeats) {
             if (this.seats.containsKey(seat.getLabel())) {
                 throw new IllegalArgumentException("Duplicate seat label: " + seat.getLabel());
@@ -47,6 +68,14 @@ public class SeatedZone extends InventoryZone {
             this.seatLocks.put(seat.getLabel(), new ReentrantLock());
         }
         checkInvariants();
+    }
+
+    /** Restores the seats↔seatLocks 1:1 invariant after Hibernate loads the seat map. */
+    @PostLoad
+    void rebuildSeatLocks() {
+        for (String label : seats.keySet()) {
+            seatLocks.putIfAbsent(label, new ReentrantLock());
+        }
     }
 
     /** Snapshot of the seats — modifications to the returned list don't affect the zone. */
@@ -120,10 +149,12 @@ public class SeatedZone extends InventoryZone {
         try {
             // Acquire all locks in sorted order to prevent deadlock with concurrent reservers.
             for (String label : sorted) {
-                ReentrantLock lock = seatLocks.get(label);
-                if (lock == null) {
+                if (!seats.containsKey(label)) {
                     throw new IllegalArgumentException("Seat not found in zone: " + label);
                 }
+                // seatLocks is transient (never persisted); @PostLoad can run before the EAGER seats
+                // collection loads, so create the lock on demand if missing — seats is the source of truth.
+                ReentrantLock lock = seatLocks.computeIfAbsent(label, k -> new ReentrantLock());
                 lock.lock();
                 acquired.add(lock);
             }
@@ -176,10 +207,12 @@ public class SeatedZone extends InventoryZone {
 
         try {
             for (String label : sorted) {
-                ReentrantLock lock = seatLocks.get(label);
-                if (lock == null) {
+                if (!seats.containsKey(label)) {
                     throw new IllegalArgumentException("Seat not found in zone: " + label);
                 }
+                // seatLocks is transient (never persisted); @PostLoad can run before the EAGER seats
+                // collection loads, so create the lock on demand if missing — seats is the source of truth.
+                ReentrantLock lock = seatLocks.computeIfAbsent(label, k -> new ReentrantLock());
                 lock.lock();
                 acquired.add(lock);
             }
@@ -235,10 +268,12 @@ public class SeatedZone extends InventoryZone {
 
         try {
             for (String label : sorted) {
-                ReentrantLock lock = seatLocks.get(label);
-                if (lock == null) {
+                if (!seats.containsKey(label)) {
                     throw new IllegalArgumentException("Seat not found in zone: " + label);
                 }
+                // seatLocks is transient (never persisted); @PostLoad can run before the EAGER seats
+                // collection loads, so create the lock on demand if missing — seats is the source of truth.
+                ReentrantLock lock = seatLocks.computeIfAbsent(label, k -> new ReentrantLock());
                 lock.lock();
                 acquired.add(lock);
             }
@@ -446,11 +481,12 @@ public class SeatedZone extends InventoryZone {
         if (seatLocks == null) {
             throw new IllegalStateException("SeatedZone invariant violated: seatLocks map must not be null");
         }
-        // Every seat needs a matching lock entry (1:1 correspondence) and vice-versa.
-        Set<String> seatKeys = seats.keySet();
-        Set<String> lockKeys = seatLocks.keySet();
-        if (!seatKeys.equals(lockKeys)) {
-            throw new IllegalStateException("SeatedZone invariant violated: seats and seatLocks key sets disagree");
+        // seatLocks is transient runtime state (never persisted). @PostLoad can run before the EAGER
+        // seat collection is populated, so reconcile the locks with the seats (the source of truth)
+        // here rather than failing — each seat ends up with exactly one lock.
+        seatLocks.keySet().retainAll(seats.keySet());
+        for (String seatLabel : seats.keySet()) {
+            seatLocks.putIfAbsent(seatLabel, new ReentrantLock());
         }
         // Per-seat sanity: label matches map key and seat satisfies its own invariants.
         for (Map.Entry<String, Seat> entry : seats.entrySet()) {

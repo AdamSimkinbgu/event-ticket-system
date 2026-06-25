@@ -14,9 +14,11 @@ import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@Profile("!jpa")
 public class MemoryEventRepository implements IEventRepository {
 
     private final ConcurrentHashMap<Integer, Event> events = new ConcurrentHashMap<>();

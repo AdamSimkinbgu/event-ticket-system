@@ -21,6 +21,10 @@ public class DiscountPolicy implements InvariantChecked { //? Note: but not in i
         }
     }
 
+    public double getDiscountPercentage() {
+        return discountPercentage;
+    }
+
     public double apply(double price) {
         return price * (1 - discountPercentage / 100);
     }
