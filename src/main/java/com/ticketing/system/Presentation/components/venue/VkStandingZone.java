@@ -5,13 +5,18 @@ import com.vaadin.flow.component.html.Span;
 
 /**
  * Standing-zone occupancy bar — name + price + filled bar with tone +
- * "X / Y taken · Z left" meta line. Ports the React {@code StandingZone}.
+ * "X sold · Y held · Z left" meta line. The bar fill and "left" reflect BOTH
+ * sold and reserved (held) tickets, so the true free space is shown. Ports the
+ * React {@code StandingZone}.
  */
 public class VkStandingZone extends Div {
 
-    public VkStandingZone(String name, int sold, int capacity, String price) {
+    public VkStandingZone(String name, int sold, int reserved, int capacity, String price) {
         addClassName("vk-standing");
-        int pct = capacity > 0 ? (int) Math.round(100.0 * sold / capacity) : 0;
+        // Occupied = sold + currently-held; "left" is the true available count.
+        int occupied = sold + reserved;
+        int left = Math.max(0, capacity - occupied);
+        int pct = capacity > 0 ? (int) Math.round(100.0 * occupied / capacity) : 0;
         String tone = pct >= 90 ? "danger" : pct >= 70 ? "warn" : "ok";
 
         Div head = new Div();
@@ -32,7 +37,7 @@ public class VkStandingZone extends Div {
 
         Div meta = new Div();
         meta.addClassName("vk-standing-meta");
-        meta.setText(String.format("%,d / %,d taken · %,d left", sold, capacity, capacity - sold));
+        meta.setText(String.format("%,d sold · %,d held · %,d left", sold, reserved, left));
 
         add(head, bar, meta);
     }

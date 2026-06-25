@@ -238,8 +238,8 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
 
         LkCard card = new LkCard("General Admission · Standing").pad(18);
         LkCol col = new LkCol().gap(16);
-        col.add(new VkStandingZone(zone.getName(), zone.getSoldAmount(), zone.getCapacity(),
-                money(zonePrice) + " each"));
+        col.add(new VkStandingZone(zone.getName(), zone.getSoldAmount(), zone.getReservedAmount(),
+                zone.getCapacity(), money(zonePrice) + " each"));
 
         qtySelector = new VkQuantitySelector(
                 Math.max(0, zone.getAvailableAmount()),

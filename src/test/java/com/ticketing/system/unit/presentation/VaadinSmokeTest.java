@@ -11,6 +11,7 @@ import com.ticketing.system.Presentation.components.venue.VkQuantitySelector;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
 import com.ticketing.system.Presentation.components.venue.VkSeatedZonePicker;
+import com.ticketing.system.Presentation.components.venue.VkStandingZone;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.layouts.MainLayout;
@@ -446,6 +447,8 @@ class VaadinSmokeTest {
             "VkQuantitySelector (positive available) failed");
         assertDoesNotThrow(() -> new VkQuantitySelector(0, 9000, null),
             "VkQuantitySelector (sold out) failed");
+        assertDoesNotThrow(() -> new VkStandingZone("GA", 12, 3, 100, "$45"),
+            "VkStandingZone failed");
     }
 
     @Test
