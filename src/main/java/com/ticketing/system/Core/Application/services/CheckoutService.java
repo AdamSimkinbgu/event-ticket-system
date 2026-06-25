@@ -151,7 +151,6 @@ public class CheckoutService {
         PaymentResultDTO paymentResult = null;
         double totalPrice = 0.0;
         boolean inventorySaleConfirmed = false;
-        boolean phase1Complete = false;
         boolean checkoutSucceeded = false;
         List<ReceiptLine> receiptLinesToNotifyAfterUnlock = null;
 
@@ -199,7 +198,6 @@ public class CheckoutService {
             activeOrderRepository.save(order);
 
             activeOrderRepository.unlock(orderLockKey);
-            phase1Complete = true;
 
             // ---------------------------------------------------------------
             // Phase 2: no domain locks — slow external calls - cart is frozen here,
@@ -270,7 +268,7 @@ public class CheckoutService {
 
         } catch (Exception e) {
             handleCheckoutFailure(order, userId, orderLockKey, paymentResult, totalPrice, inventorySaleConfirmed,
-                    phase1Complete, e);
+                    e);
             // failure handling does not mutate inventory without locks
             // checkout failure handling will: reset CHECKOUT_IN_PROGRESS safely, refund
             // payment if needed, not release inventory without locks, not clear the cart
@@ -313,7 +311,6 @@ public class CheckoutService {
         PaymentResultDTO paymentResult = null;
         double totalPrice = 0.0;
         boolean inventorySaleConfirmed = false;
-        boolean phase1Complete = false;
 
         String orderLockKey = null;
         List<Integer> lockedEventIds = List.of();
@@ -346,7 +343,6 @@ public class CheckoutService {
             activeOrderRepository.save(order);
 
             activeOrderRepository.unlock(orderLockKey);
-            phase1Complete = true;
 
             // ---------------------------------------------------------------
             // Phase 2: no domain locks — slow external calls
@@ -414,7 +410,7 @@ public class CheckoutService {
 
         } catch (Exception e) {
             handleGuestCheckoutFailure(order, guestSessionId, orderLockKey, paymentResult, totalPrice,
-                    inventorySaleConfirmed, phase1Complete, e);
+                    inventorySaleConfirmed, e);
             throw new RuntimeException("Checkout failed, tickets returned to stock", e);
         } finally {
             unlockEvents(lockedEventIds);
@@ -1089,7 +1085,6 @@ public class CheckoutService {
             PaymentResultDTO paymentResult,
             double totalPrice,
             boolean inventorySaleConfirmed,
-            boolean phase1Complete,
             Exception originalFailure) {
         log.error(
                 "Checkout failed. userId={}, totalPrice={}, paymentDone={}, inventorySaleConfirmed={}",
@@ -1099,18 +1094,11 @@ public class CheckoutService {
                 inventorySaleConfirmed,
                 originalFailure);
 
-        resetCheckoutStatusAfterFailure(orderLockKey, phase1Complete, inventorySaleConfirmed);
-
-        // Only roll back inventory/cart when the sale was NOT confirmed. Once
-        // confirmInventorySale
-        // has run, the inventory is SOLD and the order is still CHECKOUT_IN_PROGRESS,
-        // so a release
-        // would throw (nothing is RESERVED any more) and clear() would throw
-        // (ensureModifiable).
-        // Mirrors handleGuestCheckoutFailure.
-        if (!inventorySaleConfirmed) {
-            safelyReturnTicketsToStock(order);
-        }
+        // Reset the CHECKOUT_IN_PROGRESS status, return the reserved inventory to stock, and clear the cart
+        // atomically under one lock scope. The guard inside the helper skips the rollback once the sale is
+        // confirmed SOLD (a release would throw and the order is still CHECKOUT_IN_PROGRESS). Mirrors
+        // handleGuestCheckoutFailure.
+        rollbackReservedInventoryAtomically(orderLockKey, order, inventorySaleConfirmed);
 
         if (inventorySaleConfirmed) {
             log.error(
@@ -1150,7 +1138,6 @@ public class CheckoutService {
             PaymentResultDTO paymentResult,
             double totalPrice,
             boolean inventorySaleConfirmed,
-            boolean phase1Complete,
             Exception originalFailure) {
         log.error(
                 "Guest checkout failed. guestSessionId={}, totalPrice={}, paymentDone={}, inventorySaleConfirmed={}",
@@ -1160,11 +1147,8 @@ public class CheckoutService {
                 inventorySaleConfirmed,
                 originalFailure);
 
-        resetCheckoutStatusAfterFailure(orderLockKey, phase1Complete, inventorySaleConfirmed);
-
-        if (!inventorySaleConfirmed) {
-            safelyReturnTicketsToStock(order);
-        }
+        // Roll back inventory + cart + status atomically under one lock scope (see handleCheckoutFailure).
+        rollbackReservedInventoryAtomically(orderLockKey, order, inventorySaleConfirmed);
 
         if (inventorySaleConfirmed) {
             log.error(
@@ -1177,26 +1161,52 @@ public class CheckoutService {
         }
     }
 
-    // helper
-    private void resetCheckoutStatusAfterFailure(
+    // Atomic checkout-failure rollback: under a single order-write-lock + event-read-lock scope, reset the
+    // CHECKOUT_IN_PROGRESS status, return the reserved inventory to stock, and clear the cart. Folding these
+    // into one lock scope closes the window where a concurrent op (checkout retry, add-to-cart, expiry sweep)
+    // could interleave between the status reset and the cart clear, and lets eventRepository.save run under the
+    // event lock it requires. Reentrant-safe: in a Phase-3 failure the main flow already holds these locks, so
+    // re-acquiring just bumps the hold count and the matching unlocks restore it.
+    private void rollbackReservedInventoryAtomically(
             String orderLockKey,
-            boolean phase1Complete,
+            ActiveOrder fallbackOrder,
             boolean inventorySaleConfirmed) {
-        if (!phase1Complete || inventorySaleConfirmed || orderLockKey == null) {
+        // Skip when the sale already committed (inventory is SOLD — a release would throw while the order is
+        // still CHECKOUT_IN_PROGRESS) or there is no key to lock by (failure before Phase 1 acquired the order,
+        // so nothing was reserved for this checkout to roll back). A Phase-1 validation failure still rolls
+        // back: the status reset below is guarded by isCheckoutInProgress(), so it is simply skipped while the
+        // reserved tickets are still returned to stock and the cart is cleared.
+        if (inventorySaleConfirmed || orderLockKey == null) {
             return;
         }
 
         activeOrderRepository.lockForUpdate(orderLockKey);
+        List<Integer> lockedEventIds = List.of();
         try {
-            ActiveOrder orderToReset = getOrderByLockKey(orderLockKey);
-
-            if (orderToReset != null && orderToReset.isCheckoutInProgress()) {
-                orderToReset.cancelCheckoutInProgress();
-                activeOrderRepository.save(orderToReset);
+            // Re-fetch under the lock; never trust the possibly-stale main-flow reference.
+            ActiveOrder order = getOrderByLockKey(orderLockKey);
+            if (order == null) {
+                order = fallbackOrder;
             }
-        } catch (RuntimeException resetFailure) {
-            log.warn("Could not reset checkout-in-progress state for orderLockKey={}", orderLockKey, resetFailure);
+            if (order == null) {
+                return;
+            }
+
+            // Lock the order's events (sorted, for consistent ordering) so releaseInventory + save are legal.
+            lockedEventIds = extractSortedEventIds(order.getItems());
+            lockEvents(lockedEventIds);
+
+            // Reset status FIRST so the order becomes modifiable (clear() refuses while CHECKOUT_IN_PROGRESS),
+            // then return reserved inventory to stock and clear the cart — all under the held locks.
+            if (order.isCheckoutInProgress()) {
+                order.cancelCheckoutInProgress();
+            }
+            returnTicketsToStock(order);
+        } catch (RuntimeException rollbackFailure) {
+            // Already in the failure path — log, never mask the original checkout failure.
+            log.error("Atomic checkout rollback failed for orderLockKey={}", orderLockKey, rollbackFailure);
         } finally {
+            unlockEvents(lockedEventIds);
             activeOrderRepository.unlock(orderLockKey);
         }
     }
@@ -1213,27 +1223,6 @@ public class CheckoutService {
         }
 
         throw new IllegalArgumentException("Unknown order lock key format: " + orderLockKey);
-    }
-
-    // We attempt to return reserved tickets back to stock during a checkout
-    // rollback. This is done as a safety measure in case the checkout process fails
-    // before we confirm the inventory sale, allowing us to release the reserved
-    // tickets so they can be purchased by other customers. We wrap this in a
-    // try-catch block to ensure that if any exceptions occur during the rollback
-    // (e.g. database issues, event not found), we log the error but do not let it
-    // propagate further since we are already in an error handling flow and we want
-    // to avoid masking the original failure with additional exceptions from the
-    // rollback process.
-    private void safelyReturnTicketsToStock(ActiveOrder order) {
-        if (order == null) {
-            return;
-        }
-
-        try {
-            returnTicketsToStock(order);
-        } catch (RuntimeException rollbackFailure) {
-            log.error("Failed to return reserved tickets to stock during checkout rollback", rollbackFailure);
-        }
     }
 
     // We return the reserved tickets back to stock by iterating through the items
