@@ -81,35 +81,48 @@ public class RefundService {
         }
         int userId = authenticationService.extractUserId(token);
 
-        OrderReceipt receipt = orderReceiptRepository.findByOrderReceiptId(orderId)
-                .orElseThrow(() -> new EntityNotFoundException("OrderReceipt", orderId));
+        RefundResultDTO refundResult;
+        // Serialize the eligibility check + gateway refund + receipt flip per receipt under the receipt
+        // lock. Without it, two concurrent requests (double-click / retry) could both pass wasRefunded()
+        // and both call paymentGateway.refund() — refunding the buyer twice. Fetching inside the lock
+        // means the loser sees isRefunded=true (happens-before via the same lock) and bails.
+        orderReceiptRepository.lockForUpdate(orderId);
+        try {
+            OrderReceipt receipt = orderReceiptRepository.findByOrderReceiptId(orderId)
+                    .orElseThrow(() -> new EntityNotFoundException("OrderReceipt", orderId));
 
-        Integer holderUserId = receipt.getHolderUserId();
-        if (holderUserId == null || holderUserId != userId) {
-            throw new UnauthorizedActionException("refund order " + orderId, userId);
+            Integer holderUserId = receipt.getHolderUserId();
+            if (holderUserId == null || holderUserId != userId) {
+                throw new UnauthorizedActionException("refund order " + orderId, userId);
+            }
+
+            if (receipt.wasRefunded()) {
+                throw new BusinessRuleViolationException("Order " + orderId + " has already been refunded");
+            }
+
+            double refundAmount = receipt.getTotalAmount();
+            // Charge the gateway BEFORE touching domain state — we never want a receipt marked refunded
+            // while the gateway disagrees.
+            int paymentTransactionId = receipt.getPaymentTransactionId()
+                    .orElseThrow(() -> new RefundFailedException(orderId, "receipt does not contain a payment transaction"));
+
+            refundResult = paymentGateway.refund(paymentTransactionId, refundAmount);
+            validateRefundResult(orderId, refundAmount, refundResult);
+
+            receipt.markRefunded(TransactionRecord.refund(
+                    refundResult.refundTransactionId(),
+                    paymentGateway.getId(),
+                    refundResult.totalRefunded(),
+                    receipt.getPaymentCurrency(),
+                    refundResult.refundedAt()));
+            orderReceiptRepository.save(receipt);
+        } finally {
+            orderReceiptRepository.unlock(orderId);
         }
 
-        if (receipt.wasRefunded()) {
-            throw new BusinessRuleViolationException("Order " + orderId + " has already been refunded");
-        }
-
-        double refundAmount = receipt.getTotalAmount();
-        // Charge the gateway BEFORE touching domain state — we never want a receipt marked refunded
-        // while the gateway disagrees.
-        int paymentTransactionId = receipt.getPaymentTransactionId()
-                .orElseThrow(() -> new RefundFailedException(orderId, "receipt does not contain a payment transaction"));
-
-        RefundResultDTO refundResult = paymentGateway.refund(paymentTransactionId, refundAmount);
-        validateRefundResult(orderId, refundAmount, refundResult);
-
-        receipt.markRefunded(TransactionRecord.refund(
-                refundResult.refundTransactionId(),
-                paymentGateway.getId(),
-                refundResult.totalRefunded(),
-                receipt.getPaymentCurrency(),
-                refundResult.refundedAt()));
-        orderReceiptRepository.save(receipt);
-
+        // The money refund + receipt flip have committed under the lock; the remaining ticket flips and
+        // inventory return run outside it (best-effort, idempotent-by-state). A second concurrent request
+        // already bailed on wasRefunded() above, so only this caller reaches here.
         // PAID/ISSUED tickets become REFUNDED; anything else (e.g. reserved-but-unissued) is voided.
         List<Ticket> tickets = ticketRepository.findByOrderReceiptId(orderId);
         List<Ticket> refundedTickets = new ArrayList<>();

@@ -4,7 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +19,8 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.ticketing.system.Core.Application.dto.PaymentRequestDTO;
+import com.ticketing.system.Core.Application.dto.PaymentResultDTO;
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
@@ -31,6 +39,7 @@ import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
+import com.ticketing.system.Infrastructure.persistence.OrderReceiptPersistence.MemoryOrderReceiptRepository;
 
 @ExtendWith(MockitoExtension.class)
 class RefundServiceTest {
@@ -214,5 +223,64 @@ class RefundServiceTest {
 
         assertThat(receipt.wasRefunded()).isFalse();
         Mockito.verify(orderReceiptRepository, Mockito.never()).save(Mockito.any());
+    }
+
+    // X1 regression: two concurrent refund requests for the same order must not both reach the gateway.
+    // Uses the real MemoryOrderReceiptRepository so the per-receipt lock actually serializes the calls;
+    // the loser must see the order already refunded and bail. Deterministic given the lock (one wins,
+    // one throws BusinessRuleViolationException) regardless of thread timing.
+    @Test
+    void givenConcurrentRefundRequests_whenRequestRefund_thenGatewayRefundsExactlyOnce() throws Exception {
+        IOrderReceiptRepository realReceiptRepo = new MemoryOrderReceiptRepository();
+        OrderReceipt receipt = memberReceiptWithCharge(USER_ID);
+        realReceiptRepo.save(receipt); // id == ORDER_ID
+
+        AtomicInteger refundCalls = new AtomicInteger();
+        IPaymentGateway countingGateway = new IPaymentGateway() {
+            @Override public String getId() { return "stub"; }
+            @Override public boolean verifyConnection() { return true; }
+            @Override public PaymentResultDTO charge(PaymentRequestDTO r) { throw new UnsupportedOperationException(); }
+            @Override public RefundResultDTO refund(int txId, double amount) {
+                refundCalls.incrementAndGet();
+                return new RefundResultDTO("refund-" + txId, String.valueOf(txId), amount, WHEN, List.of(), List.of());
+            }
+        };
+
+        AuthenticationService auth = Mockito.mock(AuthenticationService.class);
+        Mockito.when(auth.validateToken(VALID_TOKEN)).thenReturn(true);
+        Mockito.when(auth.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        ITicketRepository ticketRepo = Mockito.mock(ITicketRepository.class);
+        Mockito.when(ticketRepo.findByOrderReceiptId(ORDER_ID)).thenReturn(List.of());
+        IEventRepository eventRepo = Mockito.mock(IEventRepository.class);
+
+        RefundService concurrentService = new RefundService(auth, realReceiptRepo, ticketRepo, countingGateway, eventRepo);
+
+        int threads = 2;
+        CyclicBarrier barrier = new CyclicBarrier(threads);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        AtomicInteger succeeded = new AtomicInteger();
+        AtomicInteger alreadyRefunded = new AtomicInteger();
+        List<Future<?>> futures = new ArrayList<>();
+        for (int i = 0; i < threads; i++) {
+            futures.add(pool.submit(() -> {
+                barrier.await();
+                try {
+                    concurrentService.requestRefund(VALID_TOKEN, ORDER_ID, "x");
+                    succeeded.incrementAndGet();
+                } catch (BusinessRuleViolationException expected) {
+                    alreadyRefunded.incrementAndGet();
+                }
+                return null;
+            }));
+        }
+        for (Future<?> f : futures) {
+            f.get();
+        }
+        pool.shutdownNow();
+
+        assertThat(refundCalls.get()).isEqualTo(1);
+        assertThat(succeeded.get()).isEqualTo(1);
+        assertThat(alreadyRefunded.get()).isEqualTo(1);
+        assertThat(receipt.wasRefunded()).isTrue();
     }
 }

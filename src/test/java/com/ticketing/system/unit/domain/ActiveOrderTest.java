@@ -275,4 +275,35 @@ class ActiveOrderTest extends BaseDomainTest {
         assertTrue(item.getRemainingTime().getSeconds() > 590);
     }
 
+    // R1: a buyer must be able to manually remove an EXPIRED standing line (previously the !isExpired
+    // filter made expired lines invisible to removal, so they could only be cleared by the sweeper).
+    @Test
+    void GivenExpiredStandingLine_WhenRemoveStandingSpots_ThenLineRemoved() {
+        ActiveOrder order = track(new ActiveOrder(USER_ID));
+        order.addStandingReservation(EVENT_ID, ZONE_ID, 2, 50.0, LocalDateTime.now().minusMinutes(30));
+
+        // Precondition: the lines are genuinely expired.
+        assertTrue(order.getItems().get(0).isExpired());
+
+        order.removeStandingSpots(EVENT_ID, ZONE_ID, 2);
+
+        assertEquals(0, order.countTickets(EVENT_ID, ZONE_ID));
+        assertTrue(order.isEmpty());
+    }
+
+    // R1: same for an expired SEATED line.
+    @Test
+    void GivenExpiredSeatedLine_WhenRemoveSeats_ThenSeatRemoved() {
+        ActiveOrder order = track(new ActiveOrder(USER_ID));
+        order.addSeatedReservation(EVENT_ID, ZONE_ID, List.of("A1", "A2"), 120.0,
+                LocalDateTime.now().minusMinutes(30));
+
+        assertTrue(order.getItems().get(0).isExpired());
+
+        order.removeSeats(EVENT_ID, ZONE_ID, List.of("A1"));
+
+        assertEquals(List.of("A2"),
+                order.getItems().stream().map(CartLineItem::getSeatNumber).toList());
+    }
+
 }

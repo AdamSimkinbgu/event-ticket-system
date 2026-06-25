@@ -108,8 +108,14 @@ public class SessionAndOrderSweeper {
     public int sweepExpiredOrders() {
         List<ActiveOrder> expired = activeOrderRepository.findExpired();
         for (ActiveOrder order : expired) {
-            releaseTicketsToInventory(order);
-            eventPublisher.publishEvent(new OrderExpiredEvent(order.getUserId(), order.getSessionId()));
+            // requireStillExpired=true: only release/delete if the cart is still expired when we lock it
+            // (a buyer may have manually removed the expired line since findExpired() scanned). Publish the
+            // OrderExpired event only when we actually released, so a salvaged cart doesn't trigger a
+            // spurious "your order expired" notification.
+            boolean released = releaseTicketsToInventory(order, true);
+            if (released) {
+                eventPublisher.publishEvent(new OrderExpiredEvent(order.getUserId(), order.getSessionId()));
+            }
         }
         return expired.size();
     }
@@ -125,7 +131,9 @@ public class SessionAndOrderSweeper {
             return;
         Optional<ActiveOrder> cartOpt = activeOrderRepository.getBySessionId(session.getSessionId());
         if (cartOpt.isPresent()) {
-            releaseTicketsToInventory(cartOpt.get());
+            // requireStillExpired=false: the guest's session has ended, so release the attached cart
+            // regardless of whether its line items have hit their own TTL yet.
+            releaseTicketsToInventory(cartOpt.get(), false);
         }
     }
 
@@ -144,7 +152,7 @@ public class SessionAndOrderSweeper {
      * Checkout failure already resets the order back to PRE_CHECKOUT.
      * Then the sweeper can clean it later if it is still expired.
      */
-    private void releaseTicketsToInventory(ActiveOrder order) {
+    private boolean releaseTicketsToInventory(ActiveOrder order, boolean requireStillExpired) {
         // Derive the same lock key that ReservationService / CheckoutService use.
         String orderLockKey = order.isMember()
                 ? "user:" + order.getUserId()
@@ -169,7 +177,17 @@ public class SessionAndOrderSweeper {
             // (10 min after the last item was added), but this is an acceptable tradeoff to avoid disrupting active checkouts.
             if (order.isCheckoutInProgress()) {
                 log.info("Skipping expired active order {} because checkout is in progress", orderLockKey);
-                return;
+                return false;
+            }
+
+            // Order-expiry path only: re-validate expiry under the lock. A buyer may have manually removed
+            // the expired line (R1) — or renewed the timers — between findExpired() and acquiring this lock,
+            // leaving a healthy cart we must not destroy. The session-expiry path passes false (a guest's
+            // attached cart is released when the session ends, regardless of item expiry).
+            if (requireStillExpired && !order.isEmpty() && !order.hasExpiredItem()) {
+                log.info("Skipping active order {} — items no longer expired (raced with manual removal/renew)",
+                        orderLockKey);
+                return false;
             }
 
             // Acquire locks for all events in the order in a consistent order to prevent deadlocks with concurrent checkouts/reservations.
@@ -199,7 +217,11 @@ public class SessionAndOrderSweeper {
                         log.warn("Event with ID {} not found while releasing tickets for order of user id {}. Skipping.", eventEntry.getKey(), order.getUserId());
                         continue;
                     }
-                    // For each zone in the event, determine how many tickets to release
+                    // For each zone, release seated/standing independently. Each release is guarded so one
+                    // failure (e.g. a double-release race with abandonActiveOrder, or an event mid-edit)
+                    // can't abort cleanup of the remaining zones/events or the rest of the sweep tick. The
+                    // event is saved only if at least one release in it actually succeeded.
+                    boolean anyReleased = false;
                     for (Map.Entry<Integer, List<CartLineItem>> zoneEntry : eventEntry.getValue().entrySet()) {
                         int zoneId = zoneEntry.getKey();
                         List<CartLineItem> items = zoneEntry.getValue();
@@ -211,19 +233,29 @@ public class SessionAndOrderSweeper {
 
                         String orderKey = order.getOrderKey();
                         int standingCount = (int) items.stream().filter(i -> i.getSeatNumber() == null).count();
-                        if (standingCount > 0) {
-                            event.releaseInventory(zoneId, InventorySelection.standing(standingCount, orderKey));
-                        }
-                        if (!seatNumbers.isEmpty()) {
-                            event.releaseInventory(zoneId, InventorySelection.seated(seatNumbers, orderKey));
+                        try {
+                            if (standingCount > 0) {
+                                event.releaseInventory(zoneId, InventorySelection.standing(standingCount, orderKey));
+                                anyReleased = true;
+                            }
+                            if (!seatNumbers.isEmpty()) {
+                                event.releaseInventory(zoneId, InventorySelection.seated(seatNumbers, orderKey));
+                                anyReleased = true;
+                            }
+                        } catch (RuntimeException zoneReleaseFailure) {
+                            log.warn("Sweeper: failed to release zone {} of event {} for order {}; continuing",
+                                    zoneId, eventEntry.getKey(), orderLockKey, zoneReleaseFailure);
                         }
                     }
 
-                    eventRepository.save(event);
+                    if (anyReleased) {
+                        eventRepository.save(event);
+                    }
                 }
                 // Delete the order inside the lock so no other thread can observe
                 // it after the inventory has already been released.
                 activeOrderRepository.delete(order);
+                return true;
             } finally {
                 // Unlock events in reverse order of acquisition.
                 for (int i = sortedEventIds.size() - 1; i >= 0; i--) {
