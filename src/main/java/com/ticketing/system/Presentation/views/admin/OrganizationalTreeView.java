@@ -1,17 +1,22 @@
 package com.ticketing.system.Presentation.views.admin;
 
+import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
+import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Presentation.components.admin.OrgTreeRenderer;
+import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkFilterChip;
+import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.PlatformAdminLayout;
+import com.ticketing.system.Presentation.presenters.admin.OrgTreePresenter;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.ListItem;
 import com.vaadin.flow.component.html.Span;
-import com.vaadin.flow.component.html.UnorderedList;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
@@ -24,88 +29,66 @@ import java.util.List;
 @RequireCapability(Capability.VIEW_ORG_TREES)
 public class OrganizationalTreeView extends LkPage {
 
-    private record Node(String initial, String name, String role, String variant, String sub, List<Node> children) {
-        Node(String initial, String name, String role, String variant, String sub) {
-            this(initial, name, role, variant, sub, List.of());
+    private final OrgTreePresenter presenter;
+    private final Div body = new Div();
+    private Integer selectedCompanyId = null;
+
+    public OrganizationalTreeView(OrgTreePresenter presenter) {
+        this.presenter = presenter;
+        title("Organizational Tree");
+        subtitle("Founder → owners → managers hierarchy for the selected company, with audit lines.");
+        add(body);
+        render();
+    }
+
+    private void render() {
+        body.removeAll();
+
+        switch (presenter.load(AuthSession.token(), selectedCompanyId)) {
+            case OrgTreePresenter.Outcome.NotAuthenticated ignored ->
+                body.add(new LkBanner(LkBanner.Tone.warn, new LkIcon("lock", 16),
+                    "Your session has expired — please sign in again."));
+            case OrgTreePresenter.Outcome.NoCompany ignored ->
+                body.add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 16),
+                    "You have no owned companies."));
+            case OrgTreePresenter.Outcome.Failure fail ->
+                body.add(new LkBanner(LkBanner.Tone.error, new LkIcon("warning", 16),
+                    "Could not load the tree: " + fail.reason()));
+            case OrgTreePresenter.Outcome.Success ok -> {
+                body.add(buildFilters(ok.companies(), ok.selected()));
+                body.add(buildTreeCard(ok.selected().name(), ok.tree()));
+                body.add(buildLegendCard());
+            }
         }
     }
 
-    public OrganizationalTreeView() {
-        title("Organizational Tree");
-        subtitle("Founder → owners → managers hierarchy for the selected company, with audit lines.");
-
-        add(buildFilters());
-        add(buildTreeCard());
-        add(buildLegendCard());
-    }
-
-    private Component buildFilters() {
+    private Component buildFilters(List<ProductionCompanyDTO> companies, ProductionCompanyDTO selected) {
         LkRow row = new LkRow().gap(8);
+
+        List<String> names = companies.stream().map(ProductionCompanyDTO::name).toList();
+        LkFilterChip companyChip = new LkFilterChip("Company", names, true, List.of(selected.name()));
+        companyChip.onApply(() -> {
+            String picked = companyChip.getSelected().stream().findFirst().orElse(selected.name());
+            selectedCompanyId = companies.stream()
+                    .filter(c -> c.name().equals(picked))
+                    .map(ProductionCompanyDTO::companyId)
+                    .findFirst()
+                    .orElse(selected.companyId());
+            render();
+        });
+
         row.add(
-            new LkFilterChip("Company", List.of("Live Nation Israel", "Coca-Cola Arena", "Shuni Productions"),
-                false, List.of("Live Nation Israel")),
-            new LkFilterChip("Roles",   List.of("Founder", "Owners", "Managers"), true, List.of("Founder", "Owners", "Managers"))
+            companyChip,
+            new LkFilterChip("Roles", List.of("Founder", "Owners", "Managers"), true,
+                List.of("Founder", "Owners", "Managers"))
         );
         return row;
     }
 
-    private Component buildTreeCard() {
-        LkCard card = new LkCard("Live Nation Israel — Appointment Hierarchy").pad(20);
-
-        Node carol = new Node("C", "Carol Levy", "Manager", "manager", "Appointed by Bob · Manage events, view sales");
-        Node dave  = new Node("D", "Dave Peretz", "Manager", "manager", "Appointed by Bob · Respond to inquiries");
-        Node bob   = new Node("B", "Bob Mizrahi", "Owner",   "owner",   "Appointed by Alice · 2025-01-08", List.of(carol, dave));
-        Node frank = new Node("F", "Frank Tal",  "Manager", "manager", "Appointed by Eve · Manage events, edit policies");
-        Node eve   = new Node("E", "Eve Bar",    "Owner",   "owner",   "Appointed by Alice · 2025-02-14", List.of(frank));
-        Node alice = new Node("A", "Alice Cohen", "Founder", "founder", "Founded 2024-12-15 · Live Nation Israel", List.of(bob, eve));
-
-        Div tree = new Div();
-        tree.addClassName("org-chart");
-        UnorderedList ul = new UnorderedList();
-        ul.add(buildNode(alice));
-        tree.add(ul);
-
-        card.add(tree);
+    private Component buildTreeCard(String companyName, OrganizationalTreeNodeDTO root) {
+        LkCard card = new LkCard(companyName + " — Appointment Hierarchy").pad(20);
+        card.add(new OrgTreeRenderer(root));
         return card;
-    }
-
-    private ListItem buildNode(Node node) {
-        ListItem li = new ListItem();
-
-        Div ocCard = new Div();
-        ocCard.addClassName("oc-card");
-        ocCard.addClassName("oc-" + node.variant());
-
-        boolean composite = !node.children().isEmpty();
-        Span kind = new Span(composite ? "Composite" : "Leaf");
-        kind.addClassName("oc-kind");
-        kind.addClassName("lk-mono");
-
-        Span avatar = new Span(node.initial());
-        avatar.addClassName("oc-avatar");
-        avatar.addClassName("oc-av-" + node.variant());
-
-        Div name = new Div(new Span(node.name()));
-        name.addClassName("oc-name");
-
-        Span role = new Span(node.role());
-        role.addClassName("oc-role");
-        role.addClassName("oc-rb-" + node.variant());
-
-        ocCard.add(kind, avatar, name, role);
-        if (node.sub() != null && !node.sub().isEmpty()) {
-            Div sub = new Div(new Span(node.sub()));
-            sub.addClassName("oc-sub");
-            ocCard.add(sub);
-        }
-        li.add(ocCard);
-
-        if (composite) {
-            UnorderedList kidsUl = new UnorderedList();
-            for (Node child : node.children()) kidsUl.add(buildNode(child));
-            li.add(kidsUl);
-        }
-        return li;
     }
 
     private Component buildLegendCard() {
