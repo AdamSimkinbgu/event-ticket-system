@@ -145,30 +145,33 @@ public class RefundService {
 
         for (Map.Entry<Integer, Map<Integer, List<Ticket>>> eventEntry : byEventThenZone.entrySet()) {
             int eventId = eventEntry.getKey();
-            Event event;
+            // Hold the buyer lock around load -> mutate -> save (MemoryEventRepository.save requires the
+            // caller to hold the event lock — same pattern as ReservationService.reserve /
+            // CheckoutService.returnTicketsToStock). The whole per-event block is best-effort: any failure
+            // is logged and swallowed, because the gateway refund and the receipt/ticket flips have already
+            // committed — an inventory-return hiccup must never make the refund report failure.
             try {
-                event = eventRepository.findById(eventId);
-            } catch (RuntimeException e) {
-                log.warn("Refund: could not load event {} to return inventory to stock", eventId, e);
-                continue;
-            }
-            if (event == null) {
-                log.warn("Refund: event {} not found while returning inventory to stock", eventId);
-                continue;
-            }
-
-            boolean anyReturned = false;
-            for (Map.Entry<Integer, List<Ticket>> zoneEntry : eventEntry.getValue().entrySet()) {
-                int zoneId = zoneEntry.getKey();
+                eventRepository.lockForBuyerOperation(eventId);
                 try {
-                    event.returnSoldToStock(zoneId, toSelection(zoneEntry.getValue()));
-                    anyReturned = true;
-                } catch (RuntimeException e) {
-                    log.warn("Refund: failed to return zone {} of event {} to stock", zoneId, eventId, e);
+                    Event event = eventRepository.findById(eventId);
+                    boolean anyReturned = false;
+                    for (Map.Entry<Integer, List<Ticket>> zoneEntry : eventEntry.getValue().entrySet()) {
+                        int zoneId = zoneEntry.getKey();
+                        try {
+                            event.returnSoldToStock(zoneId, toSelection(zoneEntry.getValue()));
+                            anyReturned = true;
+                        } catch (RuntimeException e) {
+                            log.warn("Refund: failed to return zone {} of event {} to stock", zoneId, eventId, e);
+                        }
+                    }
+                    if (anyReturned) {
+                        eventRepository.save(event);
+                    }
+                } finally {
+                    eventRepository.unlockBuyerOperation(eventId);
                 }
-            }
-            if (anyReturned) {
-                eventRepository.save(event);
+            } catch (RuntimeException e) {
+                log.warn("Refund: failed to return event {} inventory to stock", eventId, e);
             }
         }
     }

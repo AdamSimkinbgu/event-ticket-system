@@ -114,9 +114,43 @@ class RefundServiceTest {
         service.requestRefund(VALID_TOKEN, ORDER_ID, "Can't attend");
 
         Mockito.verify(ticket).markRefunded();
-        // The refunded seat is returned to the event's stock, and the event is persisted.
+        // The refunded seat is returned to the event's stock, and the event is persisted...
         Mockito.verify(event).returnSoldToStock(Mockito.eq(ZONE_ID), Mockito.any());
         Mockito.verify(eventRepository).save(event);
+        // ...under the buyer lock (MemoryEventRepository.save requires the caller to hold it).
+        Mockito.verify(eventRepository).lockForBuyerOperation(EVENT_ID);
+        Mockito.verify(eventRepository).unlockBuyerOperation(EVENT_ID);
+    }
+
+    @Test
+    void givenInventoryReturnFails_whenRequestRefund_thenRefundStillSucceeds() {
+        // Regression: a failure while returning inventory to stock (e.g. the event-lock guard, as in
+        // issue's "Event must be locked before saving") must NOT propagate — the gateway refund and the
+        // receipt/ticket flips have already committed, so the refund must still report success.
+        OrderReceipt receipt = memberReceiptWithCharge(USER_ID);
+        RefundResultDTO result = gatewayResult();
+        Mockito.when(authenticationService.validateToken(VALID_TOKEN)).thenReturn(true);
+        Mockito.when(authenticationService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        Mockito.when(orderReceiptRepository.findByOrderReceiptId(ORDER_ID)).thenReturn(java.util.Optional.of(receipt));
+        Mockito.when(paymentGateway.refund(PAYMENT_TX, TOTAL)).thenReturn(result);
+        Mockito.when(paymentGateway.getId()).thenReturn("stub");
+        Mockito.when(ticketRepository.findByOrderReceiptId(ORDER_ID)).thenReturn(List.of(ticket));
+        Mockito.when(ticket.getStatus()).thenReturn(TicketStatus.PAID);
+        Mockito.when(ticket.getEventId()).thenReturn(EVENT_ID);
+        Mockito.when(ticket.getZoneId()).thenReturn(ZONE_ID);
+        Mockito.when(ticket.isSeatedTicket()).thenReturn(true);
+        Mockito.when(ticket.getSeatNumber()).thenReturn("A9");
+        Mockito.when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+        Mockito.doThrow(new IllegalStateException("Event " + EVENT_ID + " must be locked before saving"))
+                .when(eventRepository).save(event);
+
+        RefundResultDTO returned = service.requestRefund(VALID_TOKEN, ORDER_ID, "Can't attend");
+
+        assertThat(returned).isSameAs(result);
+        assertThat(receipt.wasRefunded()).isTrue();
+        Mockito.verify(ticket).markRefunded();
+        // Even though the save blew up, the lock was still released.
+        Mockito.verify(eventRepository).unlockBuyerOperation(EVENT_ID);
     }
 
     @Test
