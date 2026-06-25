@@ -1,5 +1,8 @@
 package com.ticketing.system.Presentation.views.admin;
 
+import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
+import com.ticketing.system.Core.Domain.users.Permission;
+import com.ticketing.system.Presentation.components.admin.OrgTreeRenderer;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkFilterChip;
 import com.ticketing.system.Presentation.components.kit.LkPage;
@@ -9,13 +12,12 @@ import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.ListItem;
 import com.vaadin.flow.component.html.Span;
-import com.vaadin.flow.component.html.UnorderedList;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Route(value = "admin/org-tree", layout = PlatformAdminLayout.class)
@@ -23,12 +25,6 @@ import java.util.List;
 @PermitAll
 @RequireCapability(Capability.VIEW_ORG_TREES)
 public class OrganizationalTreeView extends LkPage {
-
-    private record Node(String initial, String name, String role, String variant, String sub, List<Node> children) {
-        Node(String initial, String name, String role, String variant, String sub) {
-            this(initial, name, role, variant, sub, List.of());
-        }
-    }
 
     public OrganizationalTreeView() {
         title("Organizational Tree");
@@ -44,68 +40,32 @@ public class OrganizationalTreeView extends LkPage {
         row.add(
             new LkFilterChip("Company", List.of("Live Nation Israel", "Coca-Cola Arena", "Shuni Productions"),
                 false, List.of("Live Nation Israel")),
-            new LkFilterChip("Roles",   List.of("Founder", "Owners", "Managers"), true, List.of("Founder", "Owners", "Managers"))
+            new LkFilterChip("Roles", List.of("Founder", "Owners", "Managers"), true, List.of("Founder", "Owners", "Managers"))
         );
         return row;
     }
 
+    // Stub data — will be replaced when wired to CompanyManagementService.viewOrganizationalTree()
     private Component buildTreeCard() {
         LkCard card = new LkCard("Live Nation Israel — Appointment Hierarchy").pad(20);
 
-        Node carol = new Node("C", "Carol Levy", "Manager", "manager", "Appointed by Bob · Manage events, view sales");
-        Node dave  = new Node("D", "Dave Peretz", "Manager", "manager", "Appointed by Bob · Respond to inquiries");
-        Node bob   = new Node("B", "Bob Mizrahi", "Owner",   "owner",   "Appointed by Alice · 2025-01-08", List.of(carol, dave));
-        Node frank = new Node("F", "Frank Tal",  "Manager", "manager", "Appointed by Eve · Manage events, edit policies");
-        Node eve   = new Node("E", "Eve Bar",    "Owner",   "owner",   "Appointed by Alice · 2025-02-14", List.of(frank));
-        Node alice = new Node("A", "Alice Cohen", "Founder", "founder", "Founded 2024-12-15 · Live Nation Israel", List.of(bob, eve));
+        OrganizationalTreeNodeDTO carol = new OrganizationalTreeNodeDTO(3, "Carol Levy",  "Manager", false,
+                List.of(Permission.MANAGE_INVENTORY, Permission.VIEW_SALES), new ArrayList<>());
+        OrganizationalTreeNodeDTO dave  = new OrganizationalTreeNodeDTO(4, "Dave Peretz", "Manager", false,
+                List.of(Permission.RESPOND_TO_INQUIRIES), new ArrayList<>());
+        OrganizationalTreeNodeDTO bob   = new OrganizationalTreeNodeDTO(2, "Bob Mizrahi", "Owner",   false,
+                List.of(), new ArrayList<>(List.of(carol, dave)));
 
-        Div tree = new Div();
-        tree.addClassName("org-chart");
-        UnorderedList ul = new UnorderedList();
-        ul.add(buildNode(alice));
-        tree.add(ul);
+        OrganizationalTreeNodeDTO frank = new OrganizationalTreeNodeDTO(6, "Frank Tal",   "Manager", false,
+                List.of(Permission.MANAGE_INVENTORY, Permission.EDIT_POLICIES), new ArrayList<>());
+        OrganizationalTreeNodeDTO eve   = new OrganizationalTreeNodeDTO(5, "Eve Bar",     "Owner",   false,
+                List.of(), new ArrayList<>(List.of(frank)));
 
-        card.add(tree);
+        OrganizationalTreeNodeDTO alice = new OrganizationalTreeNodeDTO(1, "Alice Cohen", "Owner",   true,
+                List.of(), new ArrayList<>(List.of(bob, eve)));
+
+        card.add(new OrgTreeRenderer(alice));
         return card;
-    }
-
-    private ListItem buildNode(Node node) {
-        ListItem li = new ListItem();
-
-        Div ocCard = new Div();
-        ocCard.addClassName("oc-card");
-        ocCard.addClassName("oc-" + node.variant());
-
-        boolean composite = !node.children().isEmpty();
-        Span kind = new Span(composite ? "Composite" : "Leaf");
-        kind.addClassName("oc-kind");
-        kind.addClassName("lk-mono");
-
-        Span avatar = new Span(node.initial());
-        avatar.addClassName("oc-avatar");
-        avatar.addClassName("oc-av-" + node.variant());
-
-        Div name = new Div(new Span(node.name()));
-        name.addClassName("oc-name");
-
-        Span role = new Span(node.role());
-        role.addClassName("oc-role");
-        role.addClassName("oc-rb-" + node.variant());
-
-        ocCard.add(kind, avatar, name, role);
-        if (node.sub() != null && !node.sub().isEmpty()) {
-            Div sub = new Div(new Span(node.sub()));
-            sub.addClassName("oc-sub");
-            ocCard.add(sub);
-        }
-        li.add(ocCard);
-
-        if (composite) {
-            UnorderedList kidsUl = new UnorderedList();
-            for (Node child : node.children()) kidsUl.add(buildNode(child));
-            li.add(kidsUl);
-        }
-        return li;
     }
 
     private Component buildLegendCard() {
