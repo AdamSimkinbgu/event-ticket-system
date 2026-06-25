@@ -113,9 +113,11 @@ class OrgTreeRendererTest {
     }
 
     @Test
-    void ownerWithNoPermissions_subIsEmpty() {
+    void owner_doesNotRenderSubTextBlock() {
         OrganizationalTreeNodeDTO owner = new OrganizationalTreeNodeDTO(
                 2, "Bob Mizrahi", "Owner", false, List.of(), new ArrayList<>());
-        assertDoesNotThrow(() -> new OrgTreeRenderer(owner));
+        var renderer = new OrgTreeRenderer(owner);
+        assertFalse(renderer.getElement().getOuterHTML().contains("oc-sub"),
+                "owner node must not render a sub-text block regardless of permissions list");
     }
 }
