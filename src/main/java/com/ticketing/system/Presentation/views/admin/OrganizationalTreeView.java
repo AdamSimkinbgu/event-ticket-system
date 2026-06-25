@@ -1,5 +1,7 @@
 package com.ticketing.system.Presentation.views.admin;
 
+import com.ticketing.system.Presentation.components.admin.OrgTreeRenderer;
+import com.ticketing.system.Presentation.components.admin.OrgTreeRenderer.Node;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkFilterChip;
 import com.ticketing.system.Presentation.components.kit.LkPage;
@@ -9,9 +11,7 @@ import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.ListItem;
 import com.vaadin.flow.component.html.Span;
-import com.vaadin.flow.component.html.UnorderedList;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
@@ -23,12 +23,6 @@ import java.util.List;
 @PermitAll
 @RequireCapability(Capability.VIEW_ORG_TREES)
 public class OrganizationalTreeView extends LkPage {
-
-    private record Node(String initial, String name, String role, String variant, String sub, List<Node> children) {
-        Node(String initial, String name, String role, String variant, String sub) {
-            this(initial, name, role, variant, sub, List.of());
-        }
-    }
 
     public OrganizationalTreeView() {
         title("Organizational Tree");
@@ -59,53 +53,8 @@ public class OrganizationalTreeView extends LkPage {
         Node eve   = new Node("E", "Eve Bar",    "Owner",   "owner",   "Appointed by Alice · 2025-02-14", List.of(frank));
         Node alice = new Node("A", "Alice Cohen", "Founder", "founder", "Founded 2024-12-15 · Live Nation Israel", List.of(bob, eve));
 
-        Div tree = new Div();
-        tree.addClassName("org-chart");
-        UnorderedList ul = new UnorderedList();
-        ul.add(buildNode(alice));
-        tree.add(ul);
-
-        card.add(tree);
+        card.add(new OrgTreeRenderer(alice));
         return card;
-    }
-
-    private ListItem buildNode(Node node) {
-        ListItem li = new ListItem();
-
-        Div ocCard = new Div();
-        ocCard.addClassName("oc-card");
-        ocCard.addClassName("oc-" + node.variant());
-
-        boolean composite = !node.children().isEmpty();
-        Span kind = new Span(composite ? "Composite" : "Leaf");
-        kind.addClassName("oc-kind");
-        kind.addClassName("lk-mono");
-
-        Span avatar = new Span(node.initial());
-        avatar.addClassName("oc-avatar");
-        avatar.addClassName("oc-av-" + node.variant());
-
-        Div name = new Div(new Span(node.name()));
-        name.addClassName("oc-name");
-
-        Span role = new Span(node.role());
-        role.addClassName("oc-role");
-        role.addClassName("oc-rb-" + node.variant());
-
-        ocCard.add(kind, avatar, name, role);
-        if (node.sub() != null && !node.sub().isEmpty()) {
-            Div sub = new Div(new Span(node.sub()));
-            sub.addClassName("oc-sub");
-            ocCard.add(sub);
-        }
-        li.add(ocCard);
-
-        if (composite) {
-            UnorderedList kidsUl = new UnorderedList();
-            for (Node child : node.children()) kidsUl.add(buildNode(child));
-            li.add(kidsUl);
-        }
-        return li;
     }
 
     private Component buildLegendCard() {
