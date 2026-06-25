@@ -27,6 +27,7 @@ import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.ticketing.system.Presentation.views.catalog.EventDetailsView;
 import com.ticketing.system.Presentation.presenters.admin.AdminDashboardPresenter;
 import com.ticketing.system.Presentation.presenters.admin.GlobalHistoryPresenter;
+import com.ticketing.system.Presentation.presenters.admin.OrgTreePresenter;
 import com.ticketing.system.Presentation.presenters.admin.SystemAnalyticsPresenter;
 import com.ticketing.system.Presentation.presenters.catalog.BrowseEventsPresenter;
 import com.ticketing.system.Presentation.presenters.catalog.EventDetailsPresenter;
@@ -205,7 +206,10 @@ class VaadinSmokeTest {
         // No-arg PlatformAdminLayout views. Sign-in is now the unified LoginView
         // (which is exercised by the buyer-side construction path). AdminDashboardView
         // now takes a presenter, so it has its own test below.
-        assertDoesNotThrow(OrganizationalTreeView::new,  "OrganizationalTreeView failed to construct");
+        OrgTreePresenter orgTreePresenter = mock(OrgTreePresenter.class);
+        when(orgTreePresenter.load(any(), any())).thenReturn(new OrgTreePresenter.Outcome.NotAuthenticated());
+        assertDoesNotThrow(() -> new OrganizationalTreeView(orgTreePresenter),
+            "OrganizationalTreeView failed to construct");
     }
 
     @Test

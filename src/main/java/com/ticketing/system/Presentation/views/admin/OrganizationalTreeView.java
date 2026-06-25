@@ -1,15 +1,19 @@
 package com.ticketing.system.Presentation.views.admin;
 
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
-import com.ticketing.system.Core.Domain.users.Permission;
+import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Presentation.components.admin.OrgTreeRenderer;
+import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkFilterChip;
+import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.PlatformAdminLayout;
+import com.ticketing.system.Presentation.presenters.admin.OrgTreePresenter;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
+import com.ticketing.system.Presentation.session.AuthSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
@@ -17,7 +21,6 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Route(value = "admin/org-tree", layout = PlatformAdminLayout.class)
@@ -26,45 +29,65 @@ import java.util.List;
 @RequireCapability(Capability.VIEW_ORG_TREES)
 public class OrganizationalTreeView extends LkPage {
 
-    public OrganizationalTreeView() {
+    private final OrgTreePresenter presenter;
+    private final Div body = new Div();
+    private Integer selectedCompanyId = null;
+
+    public OrganizationalTreeView(OrgTreePresenter presenter) {
+        this.presenter = presenter;
         title("Organizational Tree");
         subtitle("Founder → owners → managers hierarchy for the selected company, with audit lines.");
-
-        add(buildFilters());
-        add(buildTreeCard());
-        add(buildLegendCard());
+        add(body);
+        render();
     }
 
-    private Component buildFilters() {
+    private void render() {
+        body.removeAll();
+
+        switch (presenter.load(AuthSession.token(), selectedCompanyId)) {
+            case OrgTreePresenter.Outcome.NotAuthenticated ignored ->
+                body.add(new LkBanner(LkBanner.Tone.warn, new LkIcon("lock", 16),
+                    "Your session has expired — please sign in again."));
+            case OrgTreePresenter.Outcome.NoCompany ignored ->
+                body.add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 16),
+                    "You have no owned companies."));
+            case OrgTreePresenter.Outcome.Failure fail ->
+                body.add(new LkBanner(LkBanner.Tone.error, new LkIcon("warning", 16),
+                    "Could not load the tree: " + fail.reason()));
+            case OrgTreePresenter.Outcome.Success ok -> {
+                body.add(buildFilters(ok.companies(), ok.selected()));
+                body.add(buildTreeCard(ok.selected().name(), ok.tree()));
+                body.add(buildLegendCard());
+            }
+        }
+    }
+
+    private Component buildFilters(List<ProductionCompanyDTO> companies, ProductionCompanyDTO selected) {
         LkRow row = new LkRow().gap(8);
+
+        List<String> names = companies.stream().map(ProductionCompanyDTO::name).toList();
+        LkFilterChip companyChip = new LkFilterChip("Company", names, true, List.of(selected.name()));
+        companyChip.onApply(() -> {
+            String picked = companyChip.getSelected().stream().findFirst().orElse(selected.name());
+            selectedCompanyId = companies.stream()
+                    .filter(c -> c.name().equals(picked))
+                    .map(ProductionCompanyDTO::companyId)
+                    .findFirst()
+                    .orElse(selected.companyId());
+            render();
+        });
+
         row.add(
-            new LkFilterChip("Company", List.of("Live Nation Israel", "Coca-Cola Arena", "Shuni Productions"),
-                false, List.of("Live Nation Israel")),
-            new LkFilterChip("Roles", List.of("Founder", "Owners", "Managers"), true, List.of("Founder", "Owners", "Managers"))
+            companyChip,
+            new LkFilterChip("Roles", List.of("Founder", "Owners", "Managers"), true,
+                List.of("Founder", "Owners", "Managers"))
         );
         return row;
     }
 
-    // Stub data — will be replaced when wired to CompanyManagementService.viewOrganizationalTree()
-    private Component buildTreeCard() {
-        LkCard card = new LkCard("Live Nation Israel — Appointment Hierarchy").pad(20);
-
-        OrganizationalTreeNodeDTO carol = new OrganizationalTreeNodeDTO(3, "Carol Levy",  "Manager", false,
-                List.of(Permission.MANAGE_INVENTORY, Permission.VIEW_SALES), new ArrayList<>());
-        OrganizationalTreeNodeDTO dave  = new OrganizationalTreeNodeDTO(4, "Dave Peretz", "Manager", false,
-                List.of(Permission.RESPOND_TO_INQUIRIES), new ArrayList<>());
-        OrganizationalTreeNodeDTO bob   = new OrganizationalTreeNodeDTO(2, "Bob Mizrahi", "Owner",   false,
-                List.of(), new ArrayList<>(List.of(carol, dave)));
-
-        OrganizationalTreeNodeDTO frank = new OrganizationalTreeNodeDTO(6, "Frank Tal",   "Manager", false,
-                List.of(Permission.MANAGE_INVENTORY, Permission.EDIT_POLICIES), new ArrayList<>());
-        OrganizationalTreeNodeDTO eve   = new OrganizationalTreeNodeDTO(5, "Eve Bar",     "Owner",   false,
-                List.of(), new ArrayList<>(List.of(frank)));
-
-        OrganizationalTreeNodeDTO alice = new OrganizationalTreeNodeDTO(1, "Alice Cohen", "Owner",   true,
-                List.of(), new ArrayList<>(List.of(bob, eve)));
-
-        card.add(new OrgTreeRenderer(alice));
+    private Component buildTreeCard(String companyName, OrganizationalTreeNodeDTO root) {
+        LkCard card = new LkCard(companyName + " — Appointment Hierarchy").pad(20);
+        card.add(new OrgTreeRenderer(root));
         return card;
     }
 
