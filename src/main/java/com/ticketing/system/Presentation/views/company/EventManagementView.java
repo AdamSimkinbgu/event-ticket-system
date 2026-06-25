@@ -20,6 +20,7 @@ import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.session.CurrentCompanies;
 import com.ticketing.system.Presentation.views.admin.CompanySalesView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -35,6 +36,7 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -49,6 +51,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     private final Select<String> category = new Select<>();
     private final TextField country = new TextField("Country");
     private final TextField city = new TextField("City");
+    private final TextField artists = new TextField("Artists");
     private final DateTimePicker start = new DateTimePicker("Starts");
     private final DateTimePicker end = new DateTimePicker("Ends");
     private final TextArea description = new TextArea("Description");
@@ -57,6 +60,10 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     private final Div statusSlot = new Div();
 
     private final EventManagementPresenter presenter;
+    /** The primary action button — relabelled "Create Event" in create mode. */
+    private LkBtn saveBtn;
+    /** Linked editors / status / danger zone — hidden in create mode (they need a saved event). */
+    private Component sideCol;
     private String eventId = null;   // "new"/null = create flow
     /** The event's full schedule as loaded — kept so an edit to the first show preserves the rest. */
     private List<ShowDate> loadedShowDates = List.of();
@@ -65,11 +72,12 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
         this.presenter = presenter;
         title("Edit Event");
         subtitle("Configure event details.");
+        saveBtn = new LkBtn("Save Changes").variant(LkBtn.Variant.primary)
+            .onClick(e -> saveEvent());
         actions(
             new LkBtn("Discard").variant(LkBtn.Variant.tertiary)
                 .onClick(e -> UI.getCurrent().navigate(CompanyEventListView.class)),
-            new LkBtn("Save Changes").variant(LkBtn.Variant.primary)
-                .onClick(e -> saveEvent())
+            saveBtn
         );
         add(buildSplit());
     }
@@ -77,7 +85,16 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
         eventId = event.getRouteParameters().get("eventId").orElse(null);
-        if (eventId != null && !"new".equals(eventId)) {
+        boolean createMode = eventId == null || "new".equals(eventId);
+        if (createMode) {
+            title("Create Event");
+            subtitle("Create the event as a draft, then configure its venue and publish it.");
+            saveBtn.label("Create Event");
+            artists.setReadOnly(false);
+            // Linked editors, status and the danger zone all act on a persisted event.
+            sideCol.setVisible(false);
+        } else {
+            artists.setReadOnly(true);
             loadEvent(eventId);
         }
     }
@@ -98,6 +115,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     private void applyEvent(EventDetailDTO ev) {
         title.setValue(ev.name() != null ? ev.name() : "");
         category.setValue(ev.category() != null ? ev.category().name() : null);
+        artists.setValue(ev.artistsNames() == null ? "" : String.join(", ", ev.artistsNames()));
         if (ev.location() != null) {
             country.setValue(ev.location().country() != null ? ev.location().country() : "");
             city.setValue(ev.location().city() != null ? ev.location().city() : "");
@@ -130,7 +148,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
 
     private void saveEvent() {
         if ("new".equals(eventId) || eventId == null) {
-            Toasts.warn("Creating a new event is a separate flow.");
+            createEvent();
             return;
         }
         switch (presenter.save(AuthSession.token(),
@@ -149,6 +167,61 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             case EventManagementPresenter.SaveOutcome.Failure fail ->
                 Toasts.failure("Could not save event: " + fail.reason());
         }
+    }
+
+    /** Create flow (eventId == "new"): validate locally, then hand off to the presenter. */
+    private void createEvent() {
+        String name = blankToNull(title.getValue());
+        if (name == null) { Toasts.failure("Please enter a title."); return; }
+        if (category.getValue() == null) { Toasts.failure("Please choose a category."); return; }
+
+        String co = country.getValue() == null ? "" : country.getValue().trim();
+        String ci = city.getValue() == null ? "" : city.getValue().trim();
+        if (co.isBlank() || ci.isBlank()) { Toasts.failure("Please enter both a country and a city."); return; }
+
+        if (start.getValue() == null || end.getValue() == null) {
+            Toasts.failure("Please set both a start and an end time.");
+            return;
+        }
+        if (!end.getValue().isAfter(start.getValue())) {
+            Toasts.failure("The end time must be after the start time.");
+            return;
+        }
+        if (start.getValue().isBefore(LocalDateTime.now())) {
+            Toasts.failure("The start time must be in the future.");
+            return;
+        }
+
+        List<String> artistList = parseArtists(artists.getValue());
+        if (artistList.isEmpty()) { Toasts.failure("Please list at least one artist."); return; }
+
+        switch (presenter.create(AuthSession.token(), CurrentCompanies.currentCompanyId(),
+                name, blankToNull(description.getValue()), category.getValue(),
+                co, ci, start.getValue(), end.getValue(), artistList)) {
+            case EventManagementPresenter.CreateOutcome.Success ok -> {
+                Toasts.success("Event created as a draft — configure the venue map and publish when ready.");
+                UI.getCurrent().navigate("owner/events/" + ok.eventId());
+            }
+            case EventManagementPresenter.CreateOutcome.NoCompany ignored ->
+                Toasts.failure("You don't have a company to create events under.");
+            case EventManagementPresenter.CreateOutcome.NotAuthenticated ignored ->
+                Toasts.failure("Your session has expired — please sign in again.");
+            case EventManagementPresenter.CreateOutcome.InvalidInput bad ->
+                Toasts.failure(bad.reason());
+            case EventManagementPresenter.CreateOutcome.Failure fail ->
+                Toasts.failure("Could not create event: " + fail.reason());
+        }
+    }
+
+    /** Split a comma-separated artists field into a trimmed, blank-free list. */
+    private static List<String> parseArtists(String csv) {
+        if (csv == null || csv.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(csv.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
     }
 
     /** Location is country+city in the domain; both are required, so only send it when both are present. */
@@ -186,7 +259,8 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     private Component buildSplit() {
         Div split = new Div();
         split.addClassName("ow-edit-split");
-        split.add(buildDetailsCard(), buildSideCol());
+        sideCol = buildSideCol();
+        split.add(buildDetailsCard(), sideCol);
         return split;
     }
 
@@ -203,6 +277,9 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
         country.setWidthFull();
         city.setWidthFull();
 
+        artists.setWidthFull();
+        artists.setHelperText("Comma-separated");
+
         start.setWidthFull();
         end.setWidthFull();
 
@@ -214,7 +291,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
                 .set("display", "grid")
                 .set("grid-template-columns", "repeat(auto-fit, minmax(min(100%, 220px), 1fr))")
                 .set("gap", "14px");
-        grid.add(title, category, country, city, start, end);
+        grid.add(title, category, country, city, artists, start, end);
 
         LkCol col = new LkCol().gap(14);
         col.add(grid, description);
