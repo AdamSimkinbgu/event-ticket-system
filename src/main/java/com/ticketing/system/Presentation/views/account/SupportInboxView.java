@@ -110,16 +110,16 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
             return;
         }
 
-        // Selection priority: ?c= focus (once), then the previously selected thread, then the first
-        // selectable (non-locked) one. Locked threads (admin-closed outreach) can't be opened.
+        // Selection priority: ?c= focus (once), then the previously selected thread, then the first.
+        // Closed admin outreach stays selectable so the member can still read it (the reply bar is hidden).
         int selIdx = -1;
         if (focusId != null) {
             selIdx = indexOf(focusId);
             focusId = null;
         }
         if (selIdx < 0) selIdx = indexOf(selectedId);
-        if (selIdx < 0 || isLocked(list.get(selIdx))) selIdx = firstSelectableIndex(list);
-        selectedId = selIdx < 0 ? null : list.get(selIdx).conversationId();
+        if (selIdx < 0) selIdx = 0;
+        selectedId = list.get(selIdx).conversationId();
 
         Div split = new Div();
         split.addClassName("md-split");
@@ -133,14 +133,13 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
         for (ConversationDTO c : conversations) {
             MdConvRow row = new MdConvRow(iconFor(c.type()), c.subject(), whoFor(c),
                 relativeTime(c.lastMessageAt()), unreadBadge(c.unreadCountForViewer()));
+            if (c.conversationId().equals(selectedId)) row.active();
+            row.onSelect(() -> selectById(c.conversationId()));
             if (isLocked(c)) {
-                // Admin closed this outreach — the member can see it but can't reopen or chat until
-                // the admin starts a new conversation (a disabled NativeButton ignores clicks).
-                row.setEnabled(false);
-                row.getStyle().set("opacity", "0.55");
-            } else {
-                if (c.conversationId().equals(selectedId)) row.active();
-                row.onSelect(() -> selectById(c.conversationId()));
+                // Admin closed this outreach: still selectable/readable, just dimmed as a "closed" cue.
+                // renderDetail() hides the reply bar for terminal threads, so the member can read the
+                // history but can't reply until the admin starts a new conversation.
+                row.getStyle().set("opacity", "0.7");
             }
             convRows.add(row);
             card.add(row);
@@ -186,6 +185,10 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
             MdReplyBar reply = new MdReplyBar();
             reply.onSend(this::handleReply);
             detailCard.add(reply);
+        } else {
+            // Closed inquiry / admin outreach — read-only history, no reply bar.
+            detailCard.add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 17),
+                "This conversation has been closed — you can read the history, but replies are no longer accepted."));
         }
     }
 
@@ -225,15 +228,7 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
         return idx < 0 ? null : conversations.get(idx);
     }
 
-    /** First conversation the member can actually open (skips locked admin-closed outreach), or -1. */
-    private int firstSelectableIndex(List<ConversationDTO> list) {
-        for (int i = 0; i < list.size(); i++) {
-            if (!isLocked(list.get(i))) return i;
-        }
-        return -1;
-    }
-
-    /** A closed admin → member outreach thread: shown but non-clickable for the member. */
+    /** A closed admin → member outreach thread: read-only for the member (readable, but no reply). */
     private static boolean isLocked(ConversationDTO c) {
         return "DIRECT".equals(c.type()) && isTerminal(c.status());
     }
