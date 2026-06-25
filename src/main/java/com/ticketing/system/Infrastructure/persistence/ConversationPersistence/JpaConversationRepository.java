@@ -61,8 +61,18 @@ public class JpaConversationRepository implements IConversationRepository {
     }
 
     @Override
+    public List<Conversation> findMemberInbox(int memberId) {
+        return data.findMemberInbox(memberId);
+    }
+
+    @Override
     public List<Conversation> findByType(ConversationType type) {
         return data.findByType(type);
+    }
+
+    @Override
+    public List<Conversation> findByTypeAndInitiatorType(ConversationType type, ParticipantType initiatorType) {
+        return data.findByTypeAndInitiatorType(type, initiatorType);
     }
 
     @Override
