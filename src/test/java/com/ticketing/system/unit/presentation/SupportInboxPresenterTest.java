@@ -43,7 +43,8 @@ class SupportInboxPresenterTest {
             initiatorType.equals("MEMBER") ? 1 : 0, initiatorType,
             initiatorType.equals("MEMBER") ? 0 : 1,
             initiatorType.equals("MEMBER") ? "ADMIN_GROUP" : "MEMBER",
-            "Subject " + id, LocalDateTime.now(), LocalDateTime.now(), 0, List.of());
+            "Subject " + id, LocalDateTime.now(), LocalDateTime.now(), 0, List.of(),
+            "alice", "TicketHub Support");
     }
 
     // -- load -----------------------------------------------------------------
@@ -57,19 +58,20 @@ class SupportInboxPresenterTest {
     }
 
     @Test
-    void load_keepsOnlyMemberInitiatedOutgoingThreads() {
+    void load_returnsAllConversationsFromService() {
         ConversationDTO complaint = conversation("c1", "COMPLAINT", "MEMBER");
         ConversationDTO inquiry = conversation("c2", "INQUIRY", "MEMBER");
-        ConversationDTO announcement = conversation("c3", "ANNOUNCEMENT", "ADMIN");
+        ConversationDTO outreach = conversation("c3", "DIRECT", "ADMIN");   // admin → member, member is counterparty
         when(service.viewMyConversations(TOKEN))
-            .thenReturn(List.of(complaint, inquiry, announcement));
+            .thenReturn(List.of(complaint, inquiry, outreach));
 
         SupportInboxPresenter.Outcome outcome = presenter.load(TOKEN);
 
         SupportInboxPresenter.Outcome.Success ok =
             assertInstanceOf(SupportInboxPresenter.Outcome.Success.class, outcome);
-        // The admin-initiated announcement is filtered out; outgoing threads remain.
-        assertEquals(List.of(complaint, inquiry), ok.conversations());
+        // The service (findMemberInbox) already scopes the inbox; the presenter does not filter,
+        // so admin → member outreach (DIRECT) surfaces alongside the member's own threads.
+        assertEquals(List.of(complaint, inquiry, outreach), ok.conversations());
     }
 
     @Test

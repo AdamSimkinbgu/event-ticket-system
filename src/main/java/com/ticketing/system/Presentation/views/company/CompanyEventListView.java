@@ -31,7 +31,7 @@ import java.util.List;
 import java.util.Map;
 
 @Route(value = "owner/events", layout = WorkspaceLayout.class)
-@PageTitle("My events · TicketHub")
+@PageTitle("My Events · TicketHub")
 @PermitAll
 @RequireCapability(Capability.VIEW_COMPANY_EVENTS)
 public class CompanyEventListView extends LkPage {
@@ -42,12 +42,12 @@ public class CompanyEventListView extends LkPage {
 
         public CompanyEventListView(CompanyEventListPresenter presenter) {
         this.presenter = presenter;
-        title("My events");
+        title("My Events");
         subtitle("All events under the selected company.");
         actions(
-            new LkBtn("Bulk export").variant(LkBtn.Variant.secondary)
+            new LkBtn("Bulk Export").variant(LkBtn.Variant.secondary)
                 .onClick(e -> Toasts.success("Event list exported to CSV (mock).")),
-            new LkBtn("New event").variant(LkBtn.Variant.primary)
+            new LkBtn("New Event").variant(LkBtn.Variant.primary)
                 .icon(new LkIcon("plus", 15))
                 .onClick(e -> UI.getCurrent().navigate("owner/events/new"))
         );

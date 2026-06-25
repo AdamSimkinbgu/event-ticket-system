@@ -69,6 +69,20 @@ public class CompanyInquiryInboxPresenter {
         }
     }
 
+    /** Loads a single inquiry thread for the dedicated respond page. */
+    public SingleOutcome loadOne(String token, String conversationId) {
+        if (token == null) {
+            return new SingleOutcome.NotAuthenticated();
+        }
+        try {
+            return new SingleOutcome.Success(messagingService.viewConversation(token, conversationId));
+        } catch (InvalidTokenException e) {
+            return new SingleOutcome.NotAuthenticated();
+        } catch (RuntimeException e) {
+            return new SingleOutcome.Failure(e.getMessage());
+        }
+    }
+
     /** Appends a reply to {@code conversationId} on behalf of the signed-in company. */
     public ActionOutcome reply(String token, String conversationId, String body) {
         if (token == null) {
@@ -113,6 +127,13 @@ public class CompanyInquiryInboxPresenter {
         record NotAuthenticated() implements Outcome { }
         record NoCompany() implements Outcome { }
         record Failure(String reason) implements Outcome { }
+    }
+
+    /** Sealed outcome for loading a single inquiry thread (respond page). */
+    public sealed interface SingleOutcome {
+        record Success(ConversationDTO conversation) implements SingleOutcome { }
+        record NotAuthenticated() implements SingleOutcome { }
+        record Failure(String reason) implements SingleOutcome { }
     }
 
     /** Result of a reply / close the view reacts to. */

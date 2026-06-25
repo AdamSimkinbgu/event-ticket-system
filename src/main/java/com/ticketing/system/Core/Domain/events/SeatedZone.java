@@ -313,6 +313,54 @@ public class SeatedZone extends InventoryZone {
 
 
 
+    /**
+     * Return previously SOLD seats to AVAILABLE (member refund). Same locking discipline as
+     * {@link #release}, but each seat must be SOLD — a sold seat carries no order-key hold, so
+     * there is no ownership check.
+     *
+     * @throws IllegalStateException if any seat is not SOLD
+     */
+    @Override
+    public boolean returnSoldToStock(InventorySelection selection) {
+        if (!selection.isSeatedSelection()) {
+            throw new IllegalArgumentException("Seated zone requires selected seat numbers");
+        }
+
+        List<String> sorted = validateAndSortLabels(selection.getSeatNumbers());
+
+        layoutLock.readLock().lock();
+        List<ReentrantLock> acquired = new ArrayList<>();
+        try {
+            for (String label : sorted) {
+                ReentrantLock lock = seatLocks.get(label);
+                if (lock == null) {
+                    throw new IllegalArgumentException("Seat not found in zone: " + label);
+                }
+                lock.lock();
+                acquired.add(lock);
+            }
+            for (String label : sorted) {
+                Seat seat = seats.get(label);
+                if (seat.getStatus() != SeatStatus.SOLD) {
+                    throw new IllegalStateException(
+                            "Seat " + label + " is not SOLD (status: " + seat.getStatus() + ")");
+                }
+            }
+            for (String label : sorted) {
+                seats.get(label).setStatus(SeatStatus.AVAILABLE);
+            }
+            checkInvariants();
+        } finally {
+            for (ReentrantLock lock : acquired) {
+                lock.unlock();
+            }
+            layoutLock.readLock().unlock();
+        }
+
+        return true;
+    }
+
+
     private List<String> validateAndSortLabels(List<String> labels) {
         if (labels == null || labels.isEmpty()) {
             throw new IllegalArgumentException("labels must be non-empty");

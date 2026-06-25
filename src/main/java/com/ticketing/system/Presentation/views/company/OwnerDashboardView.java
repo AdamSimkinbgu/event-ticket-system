@@ -80,7 +80,7 @@ public class OwnerDashboardView extends LkPage {
 
     /** Topbar actions: a company selector (only when the member has >1) plus "New event". */
     private Component[] buildActions(List<MyCompanyDTO> companies, MyCompanyDTO selected) {
-        LkBtn newEvent = new LkBtn("New event")
+        LkBtn newEvent = new LkBtn("New Event")
             .variant(LkBtn.Variant.primary)
             .icon(new LkIcon("plus", 15))
             .onClick(e -> UI.getCurrent().navigate(CompanyEventListView.class));
@@ -147,8 +147,8 @@ public class OwnerDashboardView extends LkPage {
                 CompanyEventListView.class));
 
         if (Capabilities.has(Capability.RESPOND_INQUIRIES))
-            tiles.add(tile("comment", "Member Inquiries",
-                "Respond to questions about your events and mark resolved.",
+            tiles.add(tile("comment", "Customer Inquiries",
+                "View member inquiries (with their username) and respond in a chat thread.",
                 CompanyInquiryInboxView.class));
 
         if (Capabilities.has(Capability.VIEW_COMPANY_SALES))

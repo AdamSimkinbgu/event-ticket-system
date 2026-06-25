@@ -205,7 +205,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
                 empty.setText("No items in cart. Add tickets from Browse first.");
             } else {
                 empty.setText("Sign in to view your saved cart, or browse events as a guest.");
-                LkBtn signInBtn = new LkBtn("Sign in")
+                LkBtn signInBtn = new LkBtn("Sign In")
                         .variant(LkBtn.Variant.primary)
                         .onClick(e -> UI.getCurrent().navigate("login"));
                 signInBtn.getStyle().set("margin-top", "10px");
@@ -275,7 +275,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
 
     private Component buildOrderColumn() {
         LkCol col = new LkCol().gap(14);
-        LkCard orderCard = new LkCard("Your order").pad(0);
+        LkCard orderCard = new LkCard("Your Order").pad(0);
 
         linesContainer.addClassName("bz-order-lines");
         orderCard.add(linesContainer);
@@ -304,7 +304,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
         totals.add(summaryRow("Total",    totalSpan, true));
         foot.add(totals);
 
-        editCartBtn = new LkBtn("Edit cart")
+        editCartBtn = new LkBtn("Edit Cart")
                 .variant(LkBtn.Variant.tertiary)
                 .size(LkBtn.Size.s)
                 .onClick(e -> UI.getCurrent().navigate("cart"));

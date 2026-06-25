@@ -5,9 +5,7 @@ import com.ticketing.system.Presentation.components.NotificationBellComponent;
 import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
-import com.ticketing.system.Presentation.components.kit.LkSearchPanel;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
-import com.ticketing.system.Presentation.presenters.catalog.SearchPresenter;
 import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.SignOutFlow;
@@ -67,14 +65,12 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
     private LkTopBar topBar;
     private final SignOutFlow signOutFlow;
     private final SessionIdentity identity;
-    private final SearchPresenter searchPresenter;
 
     public MainLayout(ReservationService reservationService, SignOutFlow signOutFlow,
-            SessionIdentity identity, SearchPresenter searchPresenter) {
+            SessionIdentity identity) {
         this.reservationService = reservationService;
         this.signOutFlow = signOutFlow;
         this.identity = identity;
-        this.searchPresenter = searchPresenter;
         rebuildTopBar(null);
     }
 
@@ -141,7 +137,6 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         LkTopBar bar = new LkTopBar(LkTopBar.Variant.MAIN)
                 .brand("TicketHub", LandingView.class)
                 .nav(nav, activeLabel)
-                .search(buildSearchPanel())
                 .cart(CartView.class, cartSize, cartDeadlineMs)
                 .bell(new NotificationBellComponent());
 
@@ -155,34 +150,16 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         addToNavbar(topBar);
     }
 
-    /**
-     * Live top-bar search panel (#281). Backs the kit {@link LkSearchPanel} with
-     * {@link SearchPresenter}: the debounced input runs a catalog search via the
-     * current
-     * credential, each row records the query as a recent search and opens the
-     * event's detail page.
-     */
-    private LkSearchPanel buildSearchPanel() {
-        return new LkSearchPanel(
-                searchPresenter.recents(),
-                query -> searchPresenter.search(identity.credential(), query).stream()
-                        .map(r -> new LkSearchPanel.Row(r.type(), r.title(), r.subtitle(), () -> {
-                            searchPresenter.record(query);
-                            UI.getCurrent().navigate("events/" + r.eventId());
-                        }))
-                        .toList());
-    }
-
     /** Member-persona account menu — wired to {@link AuthSession} + view routes. */
     private LkAccountMenu buildMemberMenu(String name) {
         LkMenu menu = new LkMenu(
-                new LkMenu.Item("ticket", "My account").onClick(() -> UI.getCurrent().navigate(MyAccountView.class)),
-                new LkMenu.Item("users", "My profile").onClick(() -> UI.getCurrent().navigate(MyProfileView.class)),
-                new LkMenu.Item("crown", "My invitations")
+                new LkMenu.Item("ticket", "My Account").onClick(() -> UI.getCurrent().navigate(MyAccountView.class)),
+                new LkMenu.Item("users", "My Profile").onClick(() -> UI.getCurrent().navigate(MyProfileView.class)),
+                new LkMenu.Item("crown", "My Invitations")
                         .onClick(() -> UI.getCurrent().navigate(MyInvitationsView.class)),
-                new LkMenu.Item("briefcase", "My companies")
+                new LkMenu.Item("briefcase", "My Companies")
                         .onClick(() -> UI.getCurrent().navigate(MyCompaniesView.class)),
-                new LkMenu.Item("comment", "Support inbox")
+                new LkMenu.Item("comment", "Support Inbox")
                         .onClick(() -> UI.getCurrent().navigate(SupportInboxView.class)),
                 new LkMenu.Divider());
 
@@ -191,14 +168,14 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
             menu.add(new LkMenu.Item("building", "Workspace")
                     .onClick(() -> UI.getCurrent().navigate(OwnerDashboardView.class)));
         } else if (Capabilities.has(Capability.REGISTER_COMPANY)) {
-            menu.add(new LkMenu.Item("plus", "Become an organizer")
+            menu.add(new LkMenu.Item("plus", "Become an Organizer")
                     .hint("free")
                     .onClick(() -> UI.getCurrent().navigate(CompanyRegistrationView.class)));
         }
 
         menu.add(
                 new LkMenu.Divider(),
-                new LkMenu.Item("logout", "Sign out").danger().onClick(() -> {
+                new LkMenu.Item("logout", "Sign Out").danger().onClick(() -> {
                     signOutFlow.execute();
                     UI.getCurrent().navigate(LoginView.class);
                 }));

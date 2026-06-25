@@ -15,6 +15,7 @@ import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.ShowDate;
 import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
+import com.ticketing.system.Core.Application.dto.CompanySummaryDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventSummaryDTO;
 import com.ticketing.system.Core.Application.dto.SearchResultDTO;
@@ -263,6 +264,20 @@ public class CatalogService {
         }
         log.info("Top-bar search for '{}' returning {} results", q, results.size());
         return results;
+    }
+
+    //* Active production companies whose name contains the (case-insensitive) query substring,
+    //* sorted by name. Backs the member "New Inquiry" company picker (II.3.10). A blank query
+    //* returns all active companies so the picker can show an initial list. No credential needed —
+    //* company names are public (same audience as browse).
+    public List<CompanySummaryDTO> searchCompaniesByName(String substring) {
+        String needle = substring == null ? "" : substring.trim().toLowerCase();
+        return productionCompanyRepository.findActive().stream()
+                .filter(c -> needle.isEmpty()
+                        || (c.getName() != null && c.getName().toLowerCase().contains(needle)))
+                .sorted(Comparator.comparing(ProductionCompany::getName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+                .map(c -> new CompanySummaryDTO(c.getCompanyId(), c.getName(), c.getRating()))
+                .toList();
     }
 
     // *HELPER METHOD* — "city, country" label for an event's venue, or null if it has no location.

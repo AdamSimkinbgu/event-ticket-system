@@ -171,6 +171,31 @@ public class StandingZone extends InventoryZone {
         }
     }
 
+    /**
+     * Return previously SOLD places to AVAILABLE (member refund) by decrementing the sold counter.
+     * Distinct from {@link #release}, which frees RESERVED holds.
+     *
+     * @throws IllegalStateException if more places are returned than are currently sold
+     */
+    @Override
+    public boolean returnSoldToStock(InventorySelection selection) {
+        if (!selection.isStandingSelection()) {
+            throw new IllegalArgumentException("Standing zone cannot return specific seats");
+        }
+        int quantity = selection.getQuantity();
+
+        synchronized (inventoryLock) {
+            validatePositiveQuantity(quantity);
+            if (soldAmount < quantity) {
+                throw new IllegalStateException(
+                        "Cannot return " + quantity + " tickets to stock; only " + soldAmount + " sold");
+            }
+            soldAmount -= quantity;
+            checkInvariants();
+            return true;
+        }
+    }
+
     @Override
     public int getCapacity() {
         synchronized (inventoryLock) {

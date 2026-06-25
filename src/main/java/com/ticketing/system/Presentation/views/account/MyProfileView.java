@@ -19,12 +19,12 @@ import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
 @Route(value = "my-profile", layout = MainLayout.class)
-@PageTitle("My profile · TicketHub")
+@PageTitle("My Profile · TicketHub")
 @PermitAll
 public class MyProfileView extends LkPage {
 
     public MyProfileView() {
-        title("My profile");
+        title("My Profile");
         subtitle("Your account details.");
         add(buildSplit());
     }
@@ -56,14 +56,14 @@ public class MyProfileView extends LkPage {
         LkCol fields = new LkCol().gap(14);
         fields.add(new LkField().label("Username").value("alex.morgan"));
         fields.add(new LkField().label("Email").value("alex.morgan@email.com"));
-        fields.add(new LkField().label("Member since").value("15 Dec 2024"));
+        fields.add(new LkField().label("Member Since").value("15 Dec 2024"));
 
         LkRow actions = new LkRow().gap(8);
         actions.getStyle().set("margin-top", "16px");
         actions.add(
-            new LkBtn("Edit profile").variant(LkBtn.Variant.secondary)
+            new LkBtn("Edit Profile").variant(LkBtn.Variant.secondary)
                 .onClick(e -> Toasts.warn("Profile editing is exempt in Tier C (II.3.4).")),
-            new LkBtn("Change password").variant(LkBtn.Variant.tertiary)
+            new LkBtn("Change Password").variant(LkBtn.Variant.tertiary)
                 .onClick(e -> Toasts.warn("Password change wires with V2-AUTH-02."))
         );
 
@@ -79,7 +79,7 @@ public class MyProfileView extends LkPage {
         Span pDesc = Lk.muted("Notifications, language, and privacy settings.");
         pDesc.getStyle().set("font-size", "13.5px");
         p.add(pDesc);
-        p.add(new LkBtn("Manage preferences").variant(LkBtn.Variant.secondary).full()
+        p.add(new LkBtn("Manage Preferences").variant(LkBtn.Variant.secondary).full()
             .onClick(e -> Toasts.warn("Preferences screen — wired by V2-MEM-04.")));
         prefs.add(p);
 
@@ -88,7 +88,7 @@ public class MyProfileView extends LkPage {
         Span sDesc = new Span("Signed in on 2 devices.");
         sDesc.getStyle().set("font-size", "13.5px");
         s.add(sDesc);
-        s.add(new LkBtn("Sign out everywhere").variant(LkBtn.Variant.tertiary).full()
+        s.add(new LkBtn("Sign Out Everywhere").variant(LkBtn.Variant.tertiary).full()
             .onClick(e -> Toasts.warn("Multi-device session control — V2-AUTH-02.")));
         sessions.add(s);
 

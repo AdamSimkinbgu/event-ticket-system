@@ -26,14 +26,14 @@ import java.util.List;
 import java.util.Map;
 
 @Route(value = "my-companies", layout = MainLayout.class)
-@PageTitle("My companies · TicketHub")
+@PageTitle("My Companies · TicketHub")
 @PermitAll
 public class MyCompaniesView extends LkPage {
 
     public MyCompaniesView(MyCompaniesPresenter membershipPresenter) {
-        title("My companies");
+        title("My Companies");
         subtitle("Companies where you are a founder, owner, or manager.");
-        actions(new LkBtn("Register a company")
+        actions(new LkBtn("Register a Company")
             .variant(LkBtn.Variant.primary)
             .icon(new LkIcon("plus", 15))
             .onClick(e -> UI.getCurrent().navigate(CompanyRegistrationView.class)));
@@ -83,7 +83,7 @@ public class MyCompaniesView extends LkPage {
             .set("display", "block").set("margin", "8px auto 18px");
 
         empty.add(iconWrap, title, body,
-            new LkBtn("Register your first company")
+            new LkBtn("Register Your First Company")
                 .variant(LkBtn.Variant.primary)
                 .icon(new LkIcon("plus", 15))
                 .onClick(e -> UI.getCurrent().navigate(CompanyRegistrationView.class)));

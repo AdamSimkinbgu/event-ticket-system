@@ -22,7 +22,7 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
  * member pool. Members reach their own form at {@code /login}.
  */
 @Route(value = "admin/sign-in", layout = MainLayout.class)
-@PageTitle("Admin sign in · TicketHub")
+@PageTitle("Admin Sign In · TicketHub")
 @AnonymousAllowed
 public class AdminLoginView extends LkAuthCard {
 

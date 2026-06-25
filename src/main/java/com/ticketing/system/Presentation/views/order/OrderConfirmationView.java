@@ -28,7 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Route(value = "order-confirmed", layout = MainLayout.class)
-@PageTitle("Order confirmed · TicketHub")
+@PageTitle("Order Confirmed · TicketHub")
 @AnonymousAllowed
 public class OrderConfirmationView extends LkPage implements BeforeEnterObserver {
 
@@ -94,7 +94,7 @@ public class OrderConfirmationView extends LkPage implements BeforeEnterObserver
     }
 
     private Component buildTicketsCard() {
-        LkCard card = new LkCard("Your tickets").pad(0);
+        LkCard card = new LkCard("Your Tickets").pad(0);
 
         LkGrid grid = new LkGrid()
             .col("Ticket ID",  "ticketId")
@@ -134,10 +134,10 @@ public class OrderConfirmationView extends LkPage implements BeforeEnterObserver
 
     private Component buildActions() {
         LkRow row = new LkRow().gap(10);
-        row.add(new LkBtn("View my tickets")
+        row.add(new LkBtn("View My Tickets")
             .variant(LkBtn.Variant.primary)
             .onClick(e -> UI.getCurrent().navigate(MyAccountView.class)));
-        row.add(new LkBtn("Browse more events")
+        row.add(new LkBtn("Browse More Events")
             .variant(LkBtn.Variant.secondary)
             .onClick(e -> UI.getCurrent().navigate(BrowseEventsView.class)));
         return row;

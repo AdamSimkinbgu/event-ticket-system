@@ -31,7 +31,7 @@ import java.util.List;
 import java.util.Map;
 
 @Route(value = "owner/sales", layout = WorkspaceLayout.class)
-@PageTitle("Company sales · TicketHub")
+@PageTitle("Company Sales · TicketHub")
 @PermitAll
 @RequireCapability(Capability.VIEW_COMPANY_SALES)
 public class CompanySalesView extends LkPage {
@@ -39,7 +39,7 @@ public class CompanySalesView extends LkPage {
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("d MMM yyyy");
 
     public CompanySalesView(CompanySalesPresenter presenter) {
-        title("Company sales history");
+        title("Company Sales History");
         actions(new LkBtn("Export CSV").variant(LkBtn.Variant.secondary)
             .icon(new LkIcon("chart", 15))
             .onClick(e -> Toasts.success("Export CSV — no streaming endpoint yet.")));

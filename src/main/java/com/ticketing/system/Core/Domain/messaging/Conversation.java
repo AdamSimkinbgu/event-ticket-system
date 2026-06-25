@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.ticketing.system.Core.Domain.exceptions.BusinessRuleViolationException;
 import com.ticketing.system.Core.Domain.exceptions.ConversationClosedException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidParticipantException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
@@ -31,7 +32,7 @@ import jakarta.persistence.Version;
 // Replaces the per-User MessageInbox, per-Company Inbox, and the standalone Complaint aggregate.
 //
 // Two-party model: an initiator and a counterparty. Either side can be a specific entity
-// (MEMBER/COMPANY/ADMIN) or a broadcast descriptor (ADMIN_GROUP / BROADCAST_MEMBERS / SYSTEM).
+// (MEMBER/COMPANY/ADMIN) or a group descriptor (ADMIN_GROUP / SYSTEM).
 //
 // Cross-aggregate references by ID per course rules — never holds direct refs to User / ProductionCompany / Admin.
 // V3: mapped to JPA. conversationId is an ASSIGNED @Id (a UUID); type/status and the two participant
@@ -142,6 +143,21 @@ public class Conversation implements InvariantChecked {
     public void addMessage(int senderId, ParticipantType senderType, String body) {
         if (isClosed()) {
             throw new ConversationClosedException(conversationId);
+        }
+        // One-shot complaint: a COMPLAINT carries the member's single opening message and accepts
+        // exactly one admin reply (which resolves it). The member can never reply, and a second
+        // admin reply is rejected — enforced here so no service path can bypass it.
+        if (type == ConversationType.COMPLAINT) {
+            if (senderType != ParticipantType.ADMIN) {
+                throw new BusinessRuleViolationException(
+                        "Complaints accept only a single admin response; the member cannot reply");
+            }
+            boolean alreadyAnswered = messages.stream()
+                    .anyMatch(m -> m.getSenderType() == ParticipantType.ADMIN);
+            if (alreadyAnswered) {
+                throw new BusinessRuleViolationException(
+                        "Complaint " + conversationId + " has already received its admin response");
+            }
         }
         if (!involvesParticipant(senderId, senderType)) {
             throw new InvalidParticipantException(senderId, conversationId);

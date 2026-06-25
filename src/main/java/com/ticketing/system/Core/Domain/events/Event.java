@@ -143,6 +143,20 @@ public class Event implements InvariantChecked {
         return true;
     }
 
+    /**
+     * Return previously SOLD inventory to AVAILABLE stock (member refund). Mirrors
+     * {@link #releaseInventory} but acts on SOLD seats/places rather than RESERVED holds,
+     * and likewise re-opens a sold-out event once a place frees up.
+     */
+    public boolean returnSoldToStock(int zoneId, InventorySelection selection) {
+        validateInventoryAction(selection);
+        this.venueMap.returnSoldToStock(zoneId, selection);
+        if (status == EventStatus.SOLD_OUT && venueMap.hasAvailableInventory()) {
+            revertToOnSale();
+        }
+        return true;
+    }
+
     public void confirmInventorySale(int zoneId, InventorySelection selection) {
         validateCanConfirmSale(selection);
         this.venueMap.confirmSale(zoneId, selection);

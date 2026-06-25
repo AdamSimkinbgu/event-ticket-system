@@ -21,9 +21,25 @@ public interface SpringDataConversationRepository extends JpaRepository<Conversa
 
     List<Conversation> findByType(ConversationType type);
 
+    List<Conversation> findByTypeAndInitiatorType(ConversationType type, ParticipantType initiatorType);
+
     List<Conversation> findByTypeAndStatus(ConversationType type, ConversationStatus status);
 
     List<Conversation> findByCounterpartyTypeAndCounterpartyId(ParticipantType counterpartyType, int counterpartyId);
+
+    /**
+     * Member Support Inbox: INQUIRY / COMPLAINT the member initiated, plus DIRECT outreach where the
+     * member is the counterparty. Mirrors {@code MemoryConversationRepository.findMemberInbox}.
+     */
+    @Query("select c from Conversation c where "
+            + "((c.type = com.ticketing.system.Core.Domain.messaging.ConversationType.INQUIRY "
+            + "  or c.type = com.ticketing.system.Core.Domain.messaging.ConversationType.COMPLAINT) "
+            + " and c.initiatorType = com.ticketing.system.Core.Domain.messaging.ParticipantType.MEMBER "
+            + " and c.initiatorId = :memberId) "
+            + "or (c.type = com.ticketing.system.Core.Domain.messaging.ConversationType.DIRECT "
+            + " and c.counterpartyType = com.ticketing.system.Core.Domain.messaging.ParticipantType.MEMBER "
+            + " and c.counterpartyId = :memberId)")
+    List<Conversation> findMemberInbox(@Param("memberId") int memberId);
 
     /** Conversations where the participant is the initiator or the counterparty. */
     @Query("select c from Conversation c where "

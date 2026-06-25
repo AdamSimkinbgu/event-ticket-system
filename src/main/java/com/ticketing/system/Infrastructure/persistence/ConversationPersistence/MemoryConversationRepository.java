@@ -64,10 +64,39 @@ public class MemoryConversationRepository implements IConversationRepository {
     }
 
     @Override
+    public List<Conversation> findMemberInbox(int memberId) {
+        List<Conversation> result = new ArrayList<>();
+        for (Conversation c : conversationsById.values()) {
+            boolean inquiryByMember = c.getType() == ConversationType.INQUIRY
+                    && c.getInitiatorType() == ParticipantType.MEMBER
+                    && c.getInitiatorId() == memberId;
+            boolean complaintByMember = c.getType() == ConversationType.COMPLAINT
+                    && c.getInitiatorType() == ParticipantType.MEMBER
+                    && c.getInitiatorId() == memberId;
+            boolean directToMember = c.getType() == ConversationType.DIRECT
+                    && c.getCounterpartyType() == ParticipantType.MEMBER
+                    && c.getCounterpartyId() == memberId;
+            if (inquiryByMember || complaintByMember || directToMember) {
+                result.add(c);
+            }
+        }
+        return result;
+    }
+
+    @Override
     public List<Conversation> findByType(ConversationType type) {
         List<Conversation> result = new ArrayList<>();
         for (Conversation c : conversationsById.values()) {
             if (c.getType() == type) result.add(c);
+        }
+        return result;
+    }
+
+    @Override
+    public List<Conversation> findByTypeAndInitiatorType(ConversationType type, ParticipantType initiatorType) {
+        List<Conversation> result = new ArrayList<>();
+        for (Conversation c : conversationsById.values()) {
+            if (c.getType() == type && c.getInitiatorType() == initiatorType) result.add(c);
         }
         return result;
     }

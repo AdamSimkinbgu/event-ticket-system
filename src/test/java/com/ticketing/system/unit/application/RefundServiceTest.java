@@ -20,6 +20,8 @@ import com.ticketing.system.Core.Application.services.RefundService;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
 import com.ticketing.system.Core.Domain.Tickets.TicketStatus;
+import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.exceptions.BusinessRuleViolationException;
 import com.ticketing.system.Core.Domain.exceptions.EntityNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
@@ -37,7 +39,9 @@ class RefundServiceTest {
     @Mock IOrderReceiptRepository orderReceiptRepository;
     @Mock ITicketRepository ticketRepository;
     @Mock IPaymentGateway paymentGateway;
+    @Mock IEventRepository eventRepository;
     @Mock Ticket ticket;
+    @Mock Event event;
 
     RefundService service;
 
@@ -46,13 +50,16 @@ class RefundServiceTest {
     static final int    USER_ID       = 42;
     static final int    OTHER_USER    = 99;
     static final int    ORDER_ID      = 7;
+    static final int    EVENT_ID      = 10;
+    static final int    ZONE_ID       = 3;
     static final int    PAYMENT_TX    = 555;
     static final double TOTAL         = 150.00;
     static final LocalDateTime WHEN   = LocalDateTime.of(2026, 6, 1, 12, 0);
 
     @BeforeEach
     void setUp() {
-        service = new RefundService(authenticationService, orderReceiptRepository, ticketRepository, paymentGateway);
+        service = new RefundService(authenticationService, orderReceiptRepository, ticketRepository,
+                paymentGateway, eventRepository);
     }
 
     private static OrderReceipt memberReceiptWithCharge(int userId) {
@@ -85,6 +92,65 @@ class RefundServiceTest {
         Mockito.verify(ticket).markRefunded();
         Mockito.verify(ticketRepository).save(ticket);
         Mockito.verify(orderReceiptRepository).save(receipt);
+    }
+
+    @Test
+    void givenSeatedPaidOrder_whenRequestRefund_thenSeatReturnedToStock() {
+        OrderReceipt receipt = memberReceiptWithCharge(USER_ID);
+        RefundResultDTO result = gatewayResult();
+        Mockito.when(authenticationService.validateToken(VALID_TOKEN)).thenReturn(true);
+        Mockito.when(authenticationService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        Mockito.when(orderReceiptRepository.findByOrderReceiptId(ORDER_ID)).thenReturn(java.util.Optional.of(receipt));
+        Mockito.when(paymentGateway.refund(PAYMENT_TX, TOTAL)).thenReturn(result);
+        Mockito.when(paymentGateway.getId()).thenReturn("stub");
+        Mockito.when(ticketRepository.findByOrderReceiptId(ORDER_ID)).thenReturn(List.of(ticket));
+        Mockito.when(ticket.getStatus()).thenReturn(TicketStatus.PAID);
+        Mockito.when(ticket.getEventId()).thenReturn(EVENT_ID);
+        Mockito.when(ticket.getZoneId()).thenReturn(ZONE_ID);
+        Mockito.when(ticket.isSeatedTicket()).thenReturn(true);
+        Mockito.when(ticket.getSeatNumber()).thenReturn("A9");
+        Mockito.when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+
+        service.requestRefund(VALID_TOKEN, ORDER_ID, "Can't attend");
+
+        Mockito.verify(ticket).markRefunded();
+        // The refunded seat is returned to the event's stock, and the event is persisted...
+        Mockito.verify(event).returnSoldToStock(Mockito.eq(ZONE_ID), Mockito.any());
+        Mockito.verify(eventRepository).save(event);
+        // ...under the buyer lock (MemoryEventRepository.save requires the caller to hold it).
+        Mockito.verify(eventRepository).lockForBuyerOperation(EVENT_ID);
+        Mockito.verify(eventRepository).unlockBuyerOperation(EVENT_ID);
+    }
+
+    @Test
+    void givenInventoryReturnFails_whenRequestRefund_thenRefundStillSucceeds() {
+        // Regression: a failure while returning inventory to stock (e.g. the event-lock guard, as in
+        // issue's "Event must be locked before saving") must NOT propagate — the gateway refund and the
+        // receipt/ticket flips have already committed, so the refund must still report success.
+        OrderReceipt receipt = memberReceiptWithCharge(USER_ID);
+        RefundResultDTO result = gatewayResult();
+        Mockito.when(authenticationService.validateToken(VALID_TOKEN)).thenReturn(true);
+        Mockito.when(authenticationService.extractUserId(VALID_TOKEN)).thenReturn(USER_ID);
+        Mockito.when(orderReceiptRepository.findByOrderReceiptId(ORDER_ID)).thenReturn(java.util.Optional.of(receipt));
+        Mockito.when(paymentGateway.refund(PAYMENT_TX, TOTAL)).thenReturn(result);
+        Mockito.when(paymentGateway.getId()).thenReturn("stub");
+        Mockito.when(ticketRepository.findByOrderReceiptId(ORDER_ID)).thenReturn(List.of(ticket));
+        Mockito.when(ticket.getStatus()).thenReturn(TicketStatus.PAID);
+        Mockito.when(ticket.getEventId()).thenReturn(EVENT_ID);
+        Mockito.when(ticket.getZoneId()).thenReturn(ZONE_ID);
+        Mockito.when(ticket.isSeatedTicket()).thenReturn(true);
+        Mockito.when(ticket.getSeatNumber()).thenReturn("A9");
+        Mockito.when(eventRepository.findById(EVENT_ID)).thenReturn(event);
+        Mockito.doThrow(new IllegalStateException("Event " + EVENT_ID + " must be locked before saving"))
+                .when(eventRepository).save(event);
+
+        RefundResultDTO returned = service.requestRefund(VALID_TOKEN, ORDER_ID, "Can't attend");
+
+        assertThat(returned).isSameAs(result);
+        assertThat(receipt.wasRefunded()).isTrue();
+        Mockito.verify(ticket).markRefunded();
+        // Even though the save blew up, the lock was still released.
+        Mockito.verify(eventRepository).unlockBuyerOperation(EVENT_ID);
     }
 
     @Test

@@ -1,5 +1,9 @@
 package com.ticketing.system.Core.Application.services;
 
+import java.util.Comparator;
+import java.util.List;
+
+import com.ticketing.system.Core.Application.dto.MemberSearchResultDTO;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import org.springframework.stereotype.Service;
 
@@ -31,5 +35,20 @@ public class MemberQueryService {
     public boolean usernameExists(String username) {
         if (username == null || username.isBlank()) return false;
         return userRepository.existsByUsername(username.trim());
+    }
+
+    /**
+     * Members whose username contains the given (case-insensitive) substring, sorted by
+     * username. Blank input yields an empty list. Backs the admin "Send Messages" recipient
+     * search (II.6.3.2) — returns only id + username, never a domain object.
+     */
+    public List<MemberSearchResultDTO> searchByUsername(String substring) {
+        if (substring == null || substring.isBlank()) return List.of();
+        String needle = substring.trim().toLowerCase();
+        return userRepository.findAll().stream()
+                .filter(u -> u.getUsername() != null && u.getUsername().toLowerCase().contains(needle))
+                .map(u -> new MemberSearchResultDTO(u.getUserId(), u.getUsername()))
+                .sorted(Comparator.comparing(MemberSearchResultDTO::username, String.CASE_INSENSITIVE_ORDER))
+                .toList();
     }
 }

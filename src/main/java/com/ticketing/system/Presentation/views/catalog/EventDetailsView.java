@@ -18,6 +18,7 @@ import com.ticketing.system.Presentation.components.venue.VkVenueMap;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.catalog.EventDetailsPresenter;
 import com.ticketing.system.Presentation.session.SessionIdentity;
+import com.ticketing.system.Presentation.views.messaging.NewInquiryView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -25,6 +26,7 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
+import com.vaadin.flow.router.QueryParameters;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
@@ -144,6 +146,17 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
             meta.add(desc);
         }
 
+        // Signed-in members can open an inquiry with the organizer, pre-filling this event's company.
+        if (sessionIdentity.isMember() && detail.companyId() != null) {
+            LkBtn ask = new LkBtn("Ask the Organizer")
+                .variant(LkBtn.Variant.secondary)
+                .icon(new LkIcon("comment", 15))
+                .onClick(e -> UI.getCurrent().navigate(NewInquiryView.class,
+                    QueryParameters.of("company", detail.companyId())));
+            ask.getStyle().set("margin-top", "10px").set("align-self", "flex-start");
+            meta.add(ask);
+        }
+
         hero.add(poster, meta);
         return hero;
     }
@@ -154,7 +167,7 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
         Div split = new Div();
         split.addClassName("bz-evt-split");
 
-        LkCard mapCard = new LkCard("Pick your area")
+        LkCard mapCard = new LkCard("Pick Your Area")
             .subtitle("Tap a zone to choose seats or quantity")
             .pad(16);
 
@@ -276,7 +289,7 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
         selectedLine = new Span();
         updateSelectedLine();
 
-        chooseBtn = new LkBtn("Choose tickets →")
+        chooseBtn = new LkBtn("Choose Tickets →")
             .variant(LkBtn.Variant.primary)
             .size(LkBtn.Size.l)
             .full()
@@ -299,16 +312,16 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
         EventStatus status = detail == null ? null : detail.status();
         if (status == EventStatus.CANCELED) {
             chooseBtn.setEnabled(false);
-            chooseBtn.label("Event cancelled");
+            chooseBtn.label("Event Cancelled");
         } else if (status == EventStatus.COMPLETED) {
             chooseBtn.setEnabled(false);
-            chooseBtn.label("Event ended");
+            chooseBtn.label("Event Ended");
         } else if (status == EventStatus.SOLD_OUT || firstSelectableZoneId() == null) {
             chooseBtn.setEnabled(false);
-            chooseBtn.label("Sold out");
+            chooseBtn.label("Sold Out");
         } else {
             chooseBtn.setEnabled(true);
-            chooseBtn.label("Choose tickets →");
+            chooseBtn.label("Choose Tickets →");
         }
     }
 

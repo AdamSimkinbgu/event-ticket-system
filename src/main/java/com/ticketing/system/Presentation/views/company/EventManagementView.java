@@ -40,7 +40,7 @@ import java.util.Arrays;
 import java.util.List;
 
 @Route(value = "owner/events/:eventId", layout = WorkspaceLayout.class)
-@PageTitle("Edit event · TicketHub")
+@PageTitle("Edit Event · TicketHub")
 @PermitAll
 @RequireCapability(Capability.EDIT_COMPANY_EVENTS)
 public class EventManagementView extends LkPage implements BeforeEnterObserver {
@@ -63,12 +63,12 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
 
     public EventManagementView(EventManagementPresenter presenter) {
         this.presenter = presenter;
-        title("Edit event");
+        title("Edit Event");
         subtitle("Configure event details.");
         actions(
             new LkBtn("Discard").variant(LkBtn.Variant.tertiary)
                 .onClick(e -> UI.getCurrent().navigate(CompanyEventListView.class)),
-            new LkBtn("Save changes").variant(LkBtn.Variant.primary)
+            new LkBtn("Save Changes").variant(LkBtn.Variant.primary)
                 .onClick(e -> saveEvent())
         );
         add(buildSplit());
@@ -191,7 +191,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     }
 
     private Component buildDetailsCard() {
-        LkCard card = new LkCard("Event details").pad(20).flush();
+        LkCard card = new LkCard("Event Details").pad(20).flush();
 
         title.setRequired(true);
         title.setWidthFull();
@@ -234,7 +234,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     }
 
     private Component buildLinkedEditorsCard() {
-        LkCard card = new LkCard("Linked editors").pad(14);
+        LkCard card = new LkCard("Linked Editors").pad(14);
         LkCol col = new LkCol().gap(8);
         col.add(
                 linkRow("ticket", "Venue map + zones", this::openVenueEditor),
@@ -269,11 +269,11 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     }
 
     private Component buildDangerCard() {
-        LkCard card = new LkCard("Danger zone").pad(14).danger();
+        LkCard card = new LkCard("Danger Zone").pad(14).danger();
         Span warn = new Span("Cancelling refunds every ticket holder and notifies them.");
         warn.getStyle().set("font-size", "13px").set("display", "block").set("margin-bottom", "10px");
         card.add(warn);
-        card.add(new LkBtn("Cancel this event").variant(LkBtn.Variant.error).full()
+        card.add(new LkBtn("Cancel This Event").variant(LkBtn.Variant.error).full()
                 .icon(new LkIcon("warning", 16))
                 .onClick(e -> cancelEvent()));
         return card;
