@@ -1,4 +1,4 @@
-package com.ticketing.system.Presentation.views.admin;
+package com.ticketing.system.Presentation.views.company;
 
 import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
