@@ -14,11 +14,19 @@ public interface IConversationRepository extends IRepository<Conversation, Strin
 
     Optional<Conversation> findById(String conversationId);
 
-    // "My conversations" view — used by member inbox, company support inbox, admin queue.
+    // "My conversations" view — used by company support inbox.
     List<Conversation> findByParticipant(int participantId, ParticipantType participantType);
+
+    // Member Support Inbox: INQUIRY / COMPLAINT the member initiated, plus DIRECT admin outreach
+    // where the member is the counterparty. Excludes inquiries TO a company the member owns
+    // (those are company-counterparty threads and belong in the company "Customer Inquiries" view).
+    List<Conversation> findMemberInbox(int memberId);
 
     // Admin-side typed queries (II.6.3.1 — find all complaints).
     List<Conversation> findByType(ConversationType type);
+
+    // Admin outreach history (II.6.3.2) — DIRECT conversations the admin initiated.
+    List<Conversation> findByTypeAndInitiatorType(ConversationType type, ParticipantType initiatorType);
 
     // Company-side support inbox (II.4.4) — conversations where the company is counterparty.
     List<Conversation> findByCompanyAsCounterparty(int companyId);

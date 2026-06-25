@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import com.ticketing.system.Core.Domain.messaging.Conversation;
@@ -16,14 +17,16 @@ import com.ticketing.system.Core.Domain.messaging.IConversationRepository;
 import com.ticketing.system.Core.Domain.messaging.ParticipantType;
 
 /**
- * In-memory {@link IConversationRepository} for V1. Lets Spring wire
- * MessagingService.
+ * In-memory {@link IConversationRepository}. Lets Spring wire MessagingService.
+ * {@code @Profile("!jpa")}: the {@code jpa} run/dev profile swaps in
+ * {@link JpaConversationRepository} instead.
  *
  * <p>Read-tracking ({@code countUnreadForMember}) is computed by summing
  * {@link Conversation#unreadCountFor(int)} over the conversations where the
  * member is a participant.
  */
 @Repository
+@Profile("!jpa")
 public class MemoryConversationRepository implements IConversationRepository {
 
     private final Map<String, Conversation> conversationsById = new ConcurrentHashMap<>();
@@ -61,10 +64,39 @@ public class MemoryConversationRepository implements IConversationRepository {
     }
 
     @Override
+    public List<Conversation> findMemberInbox(int memberId) {
+        List<Conversation> result = new ArrayList<>();
+        for (Conversation c : conversationsById.values()) {
+            boolean inquiryByMember = c.getType() == ConversationType.INQUIRY
+                    && c.getInitiatorType() == ParticipantType.MEMBER
+                    && c.getInitiatorId() == memberId;
+            boolean complaintByMember = c.getType() == ConversationType.COMPLAINT
+                    && c.getInitiatorType() == ParticipantType.MEMBER
+                    && c.getInitiatorId() == memberId;
+            boolean directToMember = c.getType() == ConversationType.DIRECT
+                    && c.getCounterpartyType() == ParticipantType.MEMBER
+                    && c.getCounterpartyId() == memberId;
+            if (inquiryByMember || complaintByMember || directToMember) {
+                result.add(c);
+            }
+        }
+        return result;
+    }
+
+    @Override
     public List<Conversation> findByType(ConversationType type) {
         List<Conversation> result = new ArrayList<>();
         for (Conversation c : conversationsById.values()) {
             if (c.getType() == type) result.add(c);
+        }
+        return result;
+    }
+
+    @Override
+    public List<Conversation> findByTypeAndInitiatorType(ConversationType type, ParticipantType initiatorType) {
+        List<Conversation> result = new ArrayList<>();
+        for (Conversation c : conversationsById.values()) {
+            if (c.getType() == type && c.getInitiatorType() == initiatorType) result.add(c);
         }
         return result;
     }

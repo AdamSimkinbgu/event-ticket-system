@@ -41,7 +41,7 @@ class SubmitComplaintPresenterTest {
             id, "COMPLAINT", "OPEN",
             1, "MEMBER", 0, "ADMIN_GROUP",
             "Refund delay", LocalDateTime.now(), LocalDateTime.now(),
-            0, List.of());
+            0, List.of(), "alice", "TicketHub Support");
     }
 
     @Test

@@ -12,11 +12,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
-import com.ticketing.system.Core.Application.dto.AnnouncementRequestDTO;
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Application.dto.CompanyRegistrationDTO;
 import com.ticketing.system.Core.Application.dto.ConversationDTO;
 import com.ticketing.system.Core.Application.dto.LoginRequestDTO;
+import com.ticketing.system.Core.Application.dto.OutreachRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.dto.RespondToComplaintRequestDTO;
 import com.ticketing.system.Core.Application.dto.SendMessageRequestDTO;
@@ -28,6 +28,7 @@ import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.MessagingService;
 import com.ticketing.system.Core.Domain.Admin.Admin;
 import com.ticketing.system.Core.Domain.Admin.IAdminRepository;
+import com.ticketing.system.Core.Domain.exceptions.BusinessRuleViolationException;
 import com.ticketing.system.Core.Domain.exceptions.ConversationClosedException;
 import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 
@@ -37,10 +38,10 @@ import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 // Requirement coverage:
 //   II.3.10  — member contacts a company; company replies
 //   II.3.3   — member submits a complaint (+ empty-body rejection)
-//   II.6.3.1 — admin complaint queue (view all, respond+resolve, non-admin rejected)
+//   II.6.3.1 — admin complaint queue (view all, respond+resolve one-shot, non-admin rejected)
 //   II.4.4   — company support inbox
-//   II.6.3.2 — admin announcement broadcast to all members
-//   cross    — closed-thread guard, participant-scoped inbox
+//   II.6.3.2 — admin proactive outreach (DIRECT chat to targeted members)
+//   cross    — closed-thread guard, participant-scoped inbox, member can't reply to a complaint
 //
 // The "test" context is shared across methods, so every persona/company uses a unique name and
 // assertions are written to tolerate co-resident data (membership by id, not absolute totals).
@@ -148,8 +149,8 @@ class MessagingAcceptanceTest {
         assertEquals("RESOLVED", reloaded.status());
         assertEquals(2, reloaded.messages().size());
 
-        // RESOLVED is terminal — no further replies accepted.
-        assertThrows(ConversationClosedException.class,
+        // One-shot complaint — the member can never reply (rejected on the chat path).
+        assertThrows(BusinessRuleViolationException.class,
                 () -> messagingService.sendMessage(member.token(),
                         new SendMessageRequestDTO(complaint.conversationId(), 0, null, "still here?")));
     }
@@ -183,20 +184,42 @@ class MessagingAcceptanceTest {
                 () -> messagingService.viewCompanyInbox(outsider.token(), companyId));
     }
 
-    // II.6.3.2 — Admin announcements
+    // II.6.3.2 — Admin proactive outreach (targeted members) lands as a two-way DIRECT chat
     @Test
-    void GivenAdmin_WhenAnnounce_ThenAllMembersReceive() {
-        AuthTokenDTO admin = registerAdmin("ann.admin.a");
-        AuthTokenDTO m1 = registerMember("ann.member.1");
-        AuthTokenDTO m2 = registerMember("ann.member.2");
+    void GivenAdmin_WhenOutreach_ThenTargetedMembersReceive() {
+        AuthTokenDTO admin = registerAdmin("out.admin.a");
+        AuthTokenDTO m1 = registerMember("out.member.1");
+        AuthTokenDTO m2 = registerMember("out.member.2");
         String subject = "System maintenance window";
 
-        messagingService.announce(admin.token(), new AnnouncementRequestDTO(
-                admin.userId(), subject, "We will be down 02:00–03:00.", "ALL_MEMBERS", List.of(), List.of()));
+        messagingService.sendOutreach(admin.token(), new OutreachRequestDTO(
+                subject, "We will be down 02:00–03:00.",
+                List.of(m1.userId(), m2.userId()), false, false));
 
-        // Both members must find the broadcast in their own inboxes.
-        assertTrue(hasAnnouncement(m1, subject), "member 1 must receive the broadcast");
-        assertTrue(hasAnnouncement(m2, subject), "member 2 must receive the broadcast");
+        // Both targeted members find the message in their own Support inbox as a DIRECT thread.
+        assertTrue(hasOutreach(m1, subject), "member 1 must receive the outreach");
+        assertTrue(hasOutreach(m2, subject), "member 2 must receive the outreach");
+
+        // It's a two-way chat — the member can reply to the admin.
+        ConversationDTO thread = messagingService.viewMyConversations(m1.token()).stream()
+                .filter(c -> "DIRECT".equals(c.type()) && subject.equals(c.subject()))
+                .findFirst().orElseThrow();
+        messagingService.sendMessage(m1.token(),
+                new SendMessageRequestDTO(thread.conversationId(), 0, null, "Thanks for the heads up."));
+        assertEquals(2, messagingService.viewConversation(m1.token(), thread.conversationId()).messages().size());
+    }
+
+    // Cross-flow — a member cannot reply to their own complaint (one-shot)
+    @Test
+    void GivenComplaint_WhenMemberTriesReply_ThenRejected() {
+        AuthTokenDTO member = registerMember("noreply.member.a");
+
+        ConversationDTO complaint = messagingService.submitComplaint(member.token(),
+                new SubmitComplaintRequestDTO(member.userId(), "Issue", "Something went wrong.", null));
+
+        assertThrows(BusinessRuleViolationException.class,
+                () -> messagingService.sendMessage(member.token(),
+                        new SendMessageRequestDTO(complaint.conversationId(), 0, null, "any update?")));
     }
 
     // Cross-flow
@@ -264,13 +287,12 @@ class MessagingAcceptanceTest {
     }
 
     private StartConversationRequestDTO inquiry(AuthTokenDTO member, int companyId, String subject, String body) {
-        return new StartConversationRequestDTO(member.userId(), "MEMBER", companyId, "COMPANY",
-                "INQUIRY", subject, body);
+        return new StartConversationRequestDTO(companyId, subject, body);
     }
 
-    private boolean hasAnnouncement(AuthTokenDTO member, String subject) {
+    private boolean hasOutreach(AuthTokenDTO member, String subject) {
         return messagingService.viewMyConversations(member.token()).stream()
-                .anyMatch(c -> "ANNOUNCEMENT".equals(c.type()) && subject.equals(c.subject()));
+                .anyMatch(c -> "DIRECT".equals(c.type()) && subject.equals(c.subject()));
     }
 
     private static boolean containsConversation(List<ConversationDTO> list, String conversationId) {

@@ -11,6 +11,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -26,6 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
 import com.ticketing.system.Core.Application.dto.BarcodeDTO;
 import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
@@ -403,6 +405,44 @@ void GivenPaymentFails_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
     assertEquals(5, zone.getAvailableAmount());
     assertEquals(0, zone.getReservedAmount());
 }
+
+    // Regression for the non-atomic rollback (atomic checkout-failure rollback): on a Phase-2 payment failure
+    // the inventory return must run UNDER the event lock, so eventRepository.save is legal (never throws the
+    // "Event must be locked before saving" guard) and the loop reaches the cart clear. We assert the lock is
+    // held across the save via Mockito InOrder: lockForBuyerOperation -> save -> unlockBuyerOperation.
+    @Test
+    void GivenPaymentFails_WhenCheckout_ThenInventoryReturnedUnderEventLock() {
+        ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+        String orderKey = activeOrder.getOrderKey();
+        InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+        zone.reserve(InventorySelection.standing(1, orderKey));
+        activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
+
+        when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+        when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
+        when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone);
+        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
+        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(null);   // Phase-2 payment failure
+        when(event1.releaseInventory(ZONE_ID_1, InventorySelection.standing(1))).thenAnswer(invocation -> {
+            zone.release(invocation.getArgument(1));
+            return true;
+        });
+
+        assertThrows(RuntimeException.class, () ->
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN));
+
+        // Inventory + cart were rolled back...
+        assertEquals(0, activeOrder.countTickets(EVENT_ID_1, ZONE_ID_1));
+        assertEquals(5, zone.getAvailableAmount());
+
+        // ...with the event lock held across the save (and released after), proving the save can't hit the
+        // "must be locked" guard and the loop reaches the cart clear.
+        InOrder inOrder = inOrder(mockEventRepo);
+        inOrder.verify(mockEventRepo).lockForBuyerOperation(EVENT_ID_1);
+        inOrder.verify(mockEventRepo).save(event1);
+        inOrder.verify(mockEventRepo).unlockBuyerOperation(EVENT_ID_1);
+    }
+
     @Test
 void GivenTicketIssuanceFailsAfterPayment_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);

@@ -1,6 +1,6 @@
 package com.ticketing.system.Infrastructure.dev.seed.scenario;
 
-import com.ticketing.system.Core.Application.dto.AnnouncementRequestDTO;
+import com.ticketing.system.Core.Application.dto.OutreachRequestDTO;
 import com.ticketing.system.Core.Application.dto.AppointmentResponseDTO;
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
@@ -37,8 +37,6 @@ import com.ticketing.system.Core.Domain.events.EventCategory;
 import com.ticketing.system.Core.Domain.events.EventStatus;
 import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.events.ShowDate;
-import com.ticketing.system.Core.Domain.messaging.ConversationType;
-import com.ticketing.system.Core.Domain.messaging.ParticipantType;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Permission;
 import com.ticketing.system.Core.Domain.users.User;
@@ -344,9 +342,7 @@ public final class ScenarioOps {
         String from = cmd.requirePos(0, "member alias");
         String company = cmd.requirePos(1, "company alias");
         messaging.startConversation(ctx.token(from), new StartConversationRequestDTO(
-                ctx.userId(from), ParticipantType.MEMBER.name(),
-                ctx.companyId(company), ParticipantType.COMPANY.name(),
-                ConversationType.INQUIRY.name(),
+                ctx.companyId(company),
                 cmd.named("subject", "Inquiry"), cmd.named("body", "Hello, I have a question.")));
     }
 
@@ -357,16 +353,18 @@ public final class ScenarioOps {
                 cmd.named("body", "I have an issue that needs attention."), null));
     }
 
+    // Admin proactive outreach (II.6.3.2). 'audience' is kept for scenario back-compat:
+    // anything containing "PRODUCER" targets all producers; otherwise all members.
     private void announce(ScenarioCommand cmd, ScenarioContext ctx) {
         ScenarioContext.Principal admin = ctx.principal(cmd.requirePos(0, "admin alias"));
         if (admin.token == null) {
             throw new IllegalStateException("announce needs an admin logged in via 'login-admin'");
         }
-        messaging.announce(admin.token, new AnnouncementRequestDTO(
-                admin.userId, cmd.named("title", "Announcement"),
-                cmd.named("body", "Platform announcement."),
-                ParticipantType.valueOf(cmd.named("audience", "BROADCAST_MEMBERS")).name(),
-                List.of(), List.of()));
+        boolean allProducers = cmd.named("audience", "BROADCAST_MEMBERS").toUpperCase().contains("PRODUCER");
+        messaging.sendOutreach(admin.token, new OutreachRequestDTO(
+                cmd.named("title", "Message"),
+                cmd.named("body", "Platform message."),
+                List.of(), !allProducers, allProducers));
     }
 
     // -- assertions / skips ----------------------------------------------

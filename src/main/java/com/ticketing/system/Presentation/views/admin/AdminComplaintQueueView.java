@@ -11,7 +11,6 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.messaging.MdConvRow;
-import com.ticketing.system.Presentation.components.messaging.MdReplyBar;
 import com.ticketing.system.Presentation.components.messaging.MdThread;
 import com.ticketing.system.Presentation.layouts.PlatformAdminLayout;
 import com.ticketing.system.Presentation.presenters.messaging.AdminComplaintQueuePresenter;
@@ -19,9 +18,11 @@ import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.router.RouteParameters;
 import jakarta.annotation.security.PermitAll;
 
 import java.time.Duration;
@@ -43,7 +44,7 @@ import java.util.Set;
  * {@code CompanyInquiryInboxView} (#268).
  */
 @Route(value = "admin/complaints", layout = PlatformAdminLayout.class)
-@PageTitle("Complaint queue · Admin")
+@PageTitle("Complaint Queue · Admin")
 @PermitAll
 @RequireCapability(Capability.MANAGE_COMPLAINTS)
 public class AdminComplaintQueueView extends LkPage {
@@ -65,7 +66,7 @@ public class AdminComplaintQueueView extends LkPage {
     public AdminComplaintQueueView(AdminComplaintQueuePresenter presenter) {
         this.presenter = presenter;
 
-        title("Complaint queue");
+        title("Complaint Queue");
         subtitle("Member complaints opened via Conversation type=COMPLAINT.");
         add(content);
         reload();
@@ -124,7 +125,7 @@ public class AdminComplaintQueueView extends LkPage {
         LkCard card = new LkCard("Complaints").pad(8);
         convRows.clear();
         for (ConversationDTO c : complaints) {
-            MdConvRow row = new MdConvRow("warning", c.subject(), "Member",
+            MdConvRow row = new MdConvRow("warning", c.subject(), c.initiatorDisplayName(),
                 relativeTime(c.lastMessageAt()), unreadBadge(c.unreadCountForViewer()));
             if (c.conversationId().equals(selectedId)) row.active();
             row.onSelect(() -> selectById(c.conversationId()));
@@ -158,45 +159,27 @@ public class AdminComplaintQueueView extends LkPage {
         if (conv == null) return;
 
         detailCard.title(conv.subject());
-        detailCard.subtitle("Member · " + humanizeStatus(conv.status()));
-        detailCard.add(new MdThread(toThreadMessages(conv.messages())));
+        detailCard.subtitle(conv.initiatorDisplayName() + " · " + humanizeStatus(conv.status()));
+        // The thread shows the member's full complaint description (its first message) and the
+        // admin's response once resolved.
+        detailCard.add(new MdThread(toThreadMessages(conv)));
 
-        // Terminal complaints (RESOLVED / CLOSED) accept no further messages and can't be re-resolved.
+        // Complaints are one-shot: a non-terminal complaint gets a single "Resolve" action that
+        // opens the dedicated respond page (no inline back-and-forth).
         if (!isTerminal(conv.status())) {
             Div actionRow = new Div();
             actionRow.addClassName("md-detail-actions");
-            actionRow.add(new LkBtn("Mark resolved").variant(LkBtn.Variant.tertiary)
-                .onClick(e -> handleResolve()));
+            actionRow.add(new LkBtn("Resolve").variant(LkBtn.Variant.primary)
+                .icon(new LkIcon("arrowRight", 15))
+                .onClick(e -> navigateToRespond()));
             detailCard.add(actionRow);
-
-            MdReplyBar reply = new MdReplyBar();
-            reply.onSend(this::handleReply);
-            detailCard.add(reply);
         }
     }
 
-    private void handleReply(String text) {
-        switch (presenter.reply(AuthSession.token(), selectedId, text)) {
-            case AdminComplaintQueuePresenter.ActionOutcome.Success ignored ->
-                reload(); // refresh thread, ordering, status, and unread badges
-            case AdminComplaintQueuePresenter.ActionOutcome.NotAuthenticated ignored ->
-                Toasts.failure("Your session has expired — please sign in again.");
-            case AdminComplaintQueuePresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not send your reply: " + fail.reason());
-        }
-    }
-
-    private void handleResolve() {
-        switch (presenter.resolve(AuthSession.token(), selectedId)) {
-            case AdminComplaintQueuePresenter.ActionOutcome.Success ignored -> {
-                Toasts.success("Complaint marked resolved.");
-                reload();
-            }
-            case AdminComplaintQueuePresenter.ActionOutcome.NotAuthenticated ignored ->
-                Toasts.failure("Your session has expired — please sign in again.");
-            case AdminComplaintQueuePresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not resolve the complaint: " + fail.reason());
-        }
+    private void navigateToRespond() {
+        if (selectedId == null) return;
+        UI.getCurrent().navigate(AdminComplaintRespondView.class,
+            new RouteParameters("id", selectedId));
     }
 
     private void showBanner(String message) {
@@ -227,11 +210,11 @@ public class AdminComplaintQueueView extends LkPage {
     // -- Display mapping ------------------------------------------------------
 
     /** From the admin's vantage point, ADMIN messages are "You"; the other side is the member. */
-    private static List<MdThread.Message> toThreadMessages(List<MessageDTO> messages) {
+    private static List<MdThread.Message> toThreadMessages(ConversationDTO conv) {
         List<MdThread.Message> out = new ArrayList<>();
-        for (MessageDTO m : messages) {
+        for (MessageDTO m : conv.messages()) {
             boolean me = "ADMIN".equals(m.senderType());
-            String from = me ? "You" : "Member";
+            String from = me ? "You" : conv.initiatorDisplayName();
             out.add(new MdThread.Message(from, relativeTime(m.sentAt()), me, m.body()));
         }
         return out;

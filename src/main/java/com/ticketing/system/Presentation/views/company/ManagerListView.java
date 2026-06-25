@@ -54,7 +54,7 @@ public class ManagerListView extends LkPage {
 
         title("Managers");
         subtitle("Roster and permissions for your production company.");
-        actions(new LkBtn("Invite manager")
+        actions(new LkBtn("Invite Manager")
             .variant(LkBtn.Variant.primary)
             .icon(new LkIcon("plus", 15))
             .onClick(e -> UI.getCurrent().navigate(ManagerInvitationView.class)));
@@ -78,9 +78,9 @@ public class ManagerListView extends LkPage {
     }
 
     private void renderRosters(ManagerListPresenter.Outcome.Success ok) {
-        content.add(Lk.h2("Active managers"));
+        content.add(Lk.h2("Active Managers"));
         content.add(buildActiveCard(ok.activeManagers()));
-        content.add(Lk.h2("Pending invitations"));
+        content.add(Lk.h2("Pending Invitations"));
         content.add(buildPendingCard(ok.pendingInvitations()));
     }
 

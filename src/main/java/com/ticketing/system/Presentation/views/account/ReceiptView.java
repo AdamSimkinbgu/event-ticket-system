@@ -128,7 +128,7 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
     private Component buildHeaderActions(PurchaseRecordDTO receipt) {
         LkRow actions = new LkRow().gap(8);
         if (refundEligible(receipt)) {
-            actions.add(new LkBtn("Request refund").variant(LkBtn.Variant.primary)
+            actions.add(new LkBtn("Request Refund").variant(LkBtn.Variant.primary)
                     .icon(new LkIcon("card", 15))
                     .onClick(e -> openRefund(receipt)));
         }
@@ -136,7 +136,7 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
                 new LkBtn("Print").variant(LkBtn.Variant.secondary)
                         .icon(new LkIcon("copy", 15))
                         .onClick(e -> UI.getCurrent().getPage().executeJs("window.print()")),
-                new LkBtn("Email receipt").variant(LkBtn.Variant.tertiary)
+                new LkBtn("Email Receipt").variant(LkBtn.Variant.tertiary)
                         .onClick(e -> Toasts.success("Receipt resent to your account email (mock).")));
         return actions;
     }
@@ -318,12 +318,18 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
 
     private Component buildTicketsCard(PurchaseRecordDTO receipt) {
         LkCard card = new LkCard().pad(0);
-        if (receipt.tickets().isEmpty()) {
-            card.pad(18).add(Lk.muted("No tickets on this order."));
-            return card;
-        }
+        // Refunded / voided tickets aren't usable, so they're not shown here (the receipt header still
+        // reflects the Refunded status, and "Items" keeps the purchase record).
+        boolean anyShown = false;
         for (TicketRecordDTO t : receipt.tickets()) {
+            if (t.currentStatus() == TicketStatus.REFUNDED || t.currentStatus() == TicketStatus.VOIDED) {
+                continue;
+            }
             card.add(buildTicketRow(t));
+            anyShown = true;
+        }
+        if (!anyShown) {
+            card.pad(18).add(Lk.muted("No tickets on this order."));
         }
         return card;
     }

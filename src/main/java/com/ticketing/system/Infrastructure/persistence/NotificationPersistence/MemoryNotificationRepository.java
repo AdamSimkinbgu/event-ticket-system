@@ -5,18 +5,22 @@ import com.ticketing.system.Core.Domain.notifications.INotificationRepository;
 import com.ticketing.system.Core.Domain.notifications.Notification;
 import com.ticketing.system.Core.Domain.notifications.NotificationStatus;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 
 @Repository
+@Profile("!jpa")
 public class MemoryNotificationRepository implements INotificationRepository {
-    private final Map<String, Notification> storage = new HashMap<>();
+    // ConcurrentHashMap (not HashMap) for thread-safe concurrent access, matching the
+    // other Memory repositories — notifications are written and read from many threads.
+    private final Map<String, Notification> storage = new ConcurrentHashMap<>();
     private final AtomicInteger idSequence = new AtomicInteger(1);
     private final RepositoryLocks<String> locks = new RepositoryLocks<>();
 
@@ -38,6 +42,9 @@ public class MemoryNotificationRepository implements INotificationRepository {
 
     @Override
     public Notification findById(String id) {
+        if (id == null) {
+            return null;
+        }
         return storage.get(id);
     }
 

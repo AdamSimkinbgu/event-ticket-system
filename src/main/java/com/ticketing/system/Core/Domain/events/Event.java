@@ -2,6 +2,7 @@
 package com.ticketing.system.Core.Domain.events;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
@@ -13,21 +14,70 @@ import com.ticketing.system.Core.Domain.policies.purchase.AndPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchaseContext;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicyJsonConverter;
 
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
+// V3: aggregate root mapped to JPA. Assigned int @Id (minted by nextId()); comapnyid is a by-id
+// column; category/status stored by name; @Version drives the event-level optimistic lock
+// (structural/lifecycle edits) while Seat and InventoryZone carry their own @Version so independent
+// buyer reservations never false-conflict. artistsNames and showDates (@Embeddable) are element
+// collections; venueMap is an owned @OneToOne (nullable in DRAFT); the policies are stored as JSON.
+// A protected no-arg ctor lets Hibernate hydrate; the public ctors enforce the invariants.
 @Slf4j
+@Entity
+@Table(name = "events")
 public class Event implements InvariantChecked {
-    private final int id;
+    @Id
+    private int id;
+    @Column(nullable = false)
     private String name;
+    @Column
     private String description;
-    private final Double rating;
-    private final List<String> artistsNames;
+    @Column
+    private Double rating;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @jakarta.persistence.CollectionTable(name = "event_artists", joinColumns = @JoinColumn(name = "event_id"))
+    @Column(name = "artist_name")
+    private List<String> artistsNames;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private EventCategory category;
-    private final int comapnyid;
+    @Column(name = "company_id", nullable = false)
+    private int comapnyid;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private EventStatus status;
+    @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "venue_map_id")
     private VenueMap venueMap;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @jakarta.persistence.CollectionTable(name = "event_show_dates", joinColumns = @JoinColumn(name = "event_id"))
     private List<ShowDate> showDates;
+    @Convert(converter = PurchasePolicyJsonConverter.class)
+    @Column(name = "purchase_policy", columnDefinition = "text", nullable = false)
     private PurchasePolicy purchasePolicy;
-    private final DiscountPolicy discountPolicy;
+    @Convert(converter = DiscountPolicyJsonConverter.class)
+    @Column(name = "discount_policy", columnDefinition = "text")
+    private DiscountPolicy discountPolicy;
+
+    @Version
+    private Long version;
+
+    /** For JPA only — do not call from application code. */
+    protected Event() { }
 
     // Description-less constructor — kept for existing callers/tests. Delegates with a null
     // description (description is optional and carries no invariant).
@@ -48,12 +98,12 @@ public class Event implements InvariantChecked {
         this.name = name;
         this.description = description;
         this.rating = rating;
-        this.artistsNames = artistsNames == null ? null : List.copyOf(artistsNames);
+        this.artistsNames = artistsNames == null ? null : new ArrayList<>(artistsNames);
         this.category = category;
         this.comapnyid = comapnyid;
         this.status = status;
         this.venueMap = venueMap;
-        this.showDates = showDates == null ? null : List.copyOf(showDates);
+        this.showDates = showDates == null ? null : new ArrayList<>(showDates);
         // purchasePolicy defaults to NoPurchasePolicy when not supplied.
         this.purchasePolicy = PurchasePolicy == null ? new NoPurchasePolicy() : PurchasePolicy;
         // Discount Policies are not currently in the implementation plan so in the creation of the event we manually,
@@ -87,6 +137,20 @@ public class Event implements InvariantChecked {
         this.venueMap.releaseInventory(zoneId, selection);
         // Releasing inventory (manual removal, checkout rollback, or expiry sweep) re-opens
         // a sold-out event for sale again.
+        if (status == EventStatus.SOLD_OUT && venueMap.hasAvailableInventory()) {
+            revertToOnSale();
+        }
+        return true;
+    }
+
+    /**
+     * Return previously SOLD inventory to AVAILABLE stock (member refund). Mirrors
+     * {@link #releaseInventory} but acts on SOLD seats/places rather than RESERVED holds,
+     * and likewise re-opens a sold-out event once a place frees up.
+     */
+    public boolean returnSoldToStock(int zoneId, InventorySelection selection) {
+        validateInventoryAction(selection);
+        this.venueMap.returnSoldToStock(zoneId, selection);
         if (status == EventStatus.SOLD_OUT && venueMap.hasAvailableInventory()) {
             revertToOnSale();
         }

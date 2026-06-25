@@ -6,13 +6,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 
 /**
- * In-memory {@link IActiveOrderRepository} for V1.
+ * In-memory {@link IActiveOrderRepository}. {@code @Profile("!jpa")}: the {@code jpa} run/dev
+ * profile swaps in {@link JpaActiveOrderRepository} instead.
  *
  * <p>
  * Storage is a single {@link CopyOnWriteArrayList} of carts; lookups scan.
@@ -22,6 +24,7 @@ import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
  * Guest-turned-Member cart over a prior orphaned Member cart).
  */
 @Repository
+@Profile("!jpa")
 public class MemoryActiveOrderRepository implements IActiveOrderRepository {
 
     private final List<ActiveOrder> carts = new CopyOnWriteArrayList<>();

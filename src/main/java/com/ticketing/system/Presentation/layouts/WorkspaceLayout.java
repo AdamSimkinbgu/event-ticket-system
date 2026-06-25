@@ -58,7 +58,7 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
         new DrawerEntry(new LkSideNav.Item("comment",   "Inquiries",         CompanyInquiryInboxView.class),  Capability.RESPOND_INQUIRIES),
         new DrawerEntry(new LkSideNav.Item("chart",     "Company Sales",     CompanySalesView.class),         Capability.VIEW_COMPANY_SALES),
         new DrawerEntry(new LkSideNav.Item("users",     "Managers",          ManagerListView.class),          Capability.APPOINT_MANAGER),
-        new DrawerEntry(new LkSideNav.Item("crown",     "Appoint Co-owner",  OwnerAppointmentView.class),     Capability.APPOINT_CO_OWNER),
+        new DrawerEntry(new LkSideNav.Item("crown",     "Appoint Co-Owner",  OwnerAppointmentView.class),     Capability.APPOINT_CO_OWNER),
         new DrawerEntry(new LkSideNav.Item("policy",    "Purchase Policies", PurchasePolicyEditorView.class), Capability.EDIT_PURCHASE_POLICIES)
     );
 
@@ -69,7 +69,7 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
         CompanyInquiryInboxView.class,  "Inquiries",
         CompanySalesView.class,         "Company Sales",
         ManagerListView.class,          "Managers",
-        OwnerAppointmentView.class,     "Appoint Co-owner",
+        OwnerAppointmentView.class,     "Appoint Co-Owner",
         PurchasePolicyEditorView.class, "Purchase Policies"
     );
 
@@ -119,14 +119,14 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
 
     private LkAccountMenu buildOwnerMenu(String name) {
         LkMenu menu = new LkMenu(
-            new LkMenu.Item("ticket",    "My account").onClick(() -> UI.getCurrent().navigate(MyAccountView.class)),
-            new LkMenu.Item("users",     "My profile").onClick(() -> UI.getCurrent().navigate(MyProfileView.class)),
-            new LkMenu.Item("crown",     "My invitations").onClick(() -> UI.getCurrent().navigate(MyInvitationsView.class)),
-            new LkMenu.Item("briefcase", "My companies").onClick(() -> UI.getCurrent().navigate(MyCompaniesView.class)),
+            new LkMenu.Item("ticket",    "My Account").onClick(() -> UI.getCurrent().navigate(MyAccountView.class)),
+            new LkMenu.Item("users",     "My Profile").onClick(() -> UI.getCurrent().navigate(MyProfileView.class)),
+            new LkMenu.Item("crown",     "My Invitations").onClick(() -> UI.getCurrent().navigate(MyInvitationsView.class)),
+            new LkMenu.Item("briefcase", "My Companies").onClick(() -> UI.getCurrent().navigate(MyCompaniesView.class)),
             new LkMenu.Divider(),
-            new LkMenu.Item("arrowLeft", "Back to buyer site").onClick(() -> UI.getCurrent().navigate(BrowseEventsView.class)),
+            new LkMenu.Item("arrowLeft", "Back to Buyer Site").onClick(() -> UI.getCurrent().navigate(BrowseEventsView.class)),
             new LkMenu.Divider(),
-            new LkMenu.Item("logout",    "Sign out").danger().onClick(() -> {
+            new LkMenu.Item("logout",    "Sign Out").danger().onClick(() -> {
                 signOutFlow.execute();
                 UI.getCurrent().navigate(LoginView.class);
             })

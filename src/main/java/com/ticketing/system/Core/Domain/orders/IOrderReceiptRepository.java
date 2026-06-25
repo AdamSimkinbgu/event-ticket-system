@@ -1,7 +1,6 @@
 package com.ticketing.system.Core.Domain.orders;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import com.ticketing.system.Core.Application.dto.GlobalHistoryFiltersDTO;
@@ -30,6 +29,4 @@ public interface IOrderReceiptRepository extends IRepository<OrderReceipt, Integ
     List<OrderReceipt> findGlobal(GlobalHistoryFiltersDTO filters);
 
     List<OrderReceipt> findByEventId(int eventId);
-    
-    Map<Integer, OrderReceipt> getReceiptsById();
 }

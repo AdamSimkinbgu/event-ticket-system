@@ -49,7 +49,7 @@ public class CartView extends LkPage {
             }
         }
 
-        title("Your cart");
+        title("Your Cart");
         renderHeaderSubtitle();
         add(buildSplit());
     }
@@ -189,7 +189,7 @@ public class CartView extends LkPage {
         col.add(Lk.divider());
         col.add(totalRow("Total", total));
 
-        proceedBtn = new LkBtn("Proceed to checkout →")
+        proceedBtn = new LkBtn("Proceed to Checkout →")
             .variant(LkBtn.Variant.primary)
             .size(LkBtn.Size.l)
             .full()

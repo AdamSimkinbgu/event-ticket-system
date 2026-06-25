@@ -6,8 +6,9 @@ import com.ticketing.system.Presentation.components.kit.LkSideNav;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
 import com.ticketing.system.Presentation.security.SignOutFlow;
 import com.ticketing.system.Presentation.session.AuthSession;
-import com.ticketing.system.Presentation.views.admin.AdminAnnouncementsView;
 import com.ticketing.system.Presentation.views.admin.AdminComplaintQueueView;
+import com.ticketing.system.Presentation.views.admin.AdminInboxView;
+import com.ticketing.system.Presentation.views.admin.AdminSendMessagesView;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.admin.GlobalHistoryView;
 import com.ticketing.system.Presentation.views.admin.OrganizationalTreeView;
@@ -36,11 +37,11 @@ import java.util.Map;
 public class PlatformAdminLayout extends AppLayout implements AfterNavigationObserver {
 
     private static final Map<Class<?>, String> ADMIN_LABELS = Map.of(
-        AdminDashboardView.class,      "Admin workspace",
+        AdminDashboardView.class,      "Admin Workspace",
         SystemAnalyticsView.class,     "System Analytics",
         GlobalHistoryView.class,       "Global History",
         OrganizationalTreeView.class,  "Organizational Tree",
-        AdminAnnouncementsView.class,  "Announcements",
+        AdminSendMessagesView.class,   "Send Messages",
         AdminComplaintQueueView.class, "Complaint Queue"
     );
 
@@ -64,9 +65,9 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
         if (topBar != null) topBar.getElement().removeFromParent();
         String name = AuthSession.isAdmin() ? AuthSession.displayName() : "Admin";
         topBar = new LkTopBar(LkTopBar.Variant.PLATFORM)
-            .brand("Event Ticket Platform", " · Admin", LandingView.class)
-            .rightLink("Back to site", "arrowLeft", LandingView.class)
-            .rightAction("Analytics", "chart", SystemAnalyticsView.class)
+            // No navigation target — the brand is inert; "Back to Site" (right) is the way out.
+            .brand("Event Ticket Platform", " · Admin")
+            .rightLink("Back to Site", "arrowLeft", LandingView.class)
             .bellDefault(true)
             .account(initials(name), name, buildAdminMenu(name), "#fff", "#c2410c");
         addToNavbar(topBar);
@@ -74,11 +75,11 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
 
     private void buildDrawerOnce() {
         adminNav = new LkSideNav("Admin").items(List.of(
-            new LkSideNav.Item("building", "Admin workspace",     AdminDashboardView.class),
+            new LkSideNav.Item("building", "Admin Workspace",     AdminDashboardView.class),
             new LkSideNav.Item("chart",    "System Analytics",    SystemAnalyticsView.class),
             new LkSideNav.Item("chart",    "Global History",      GlobalHistoryView.class),
             new LkSideNav.Item("org",      "Organizational Tree", OrganizationalTreeView.class),
-            new LkSideNav.Item("comment",  "Announcements",       AdminAnnouncementsView.class),
+            new LkSideNav.Item("comment",  "Send Messages",       AdminSendMessagesView.class),
             new LkSideNav.Item("warning",  "Complaint Queue",     AdminComplaintQueueView.class)
         ), null).platform();
 
@@ -89,12 +90,13 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
 
     private LkAccountMenu buildAdminMenu(String name) {
         LkMenu menu = new LkMenu(
-            new LkMenu.Item("gear",      "Admin settings"),
-            new LkMenu.Item("chart",     "Platform analytics").onClick(() -> UI.getCurrent().navigate(SystemAnalyticsView.class)),
+            new LkMenu.Item("gear",      "Admin Settings"),
+            new LkMenu.Item("chart",     "System Analytics").onClick(() -> UI.getCurrent().navigate(SystemAnalyticsView.class)),
+            new LkMenu.Item("comment",   "Admin Inbox").onClick(() -> UI.getCurrent().navigate(AdminInboxView.class)),
             new LkMenu.Divider(),
-            new LkMenu.Item("arrowLeft", "Back to site").onClick(() -> UI.getCurrent().navigate(LandingView.class)),
+            new LkMenu.Item("arrowLeft", "Back to Site").onClick(() -> UI.getCurrent().navigate(LandingView.class)),
             new LkMenu.Divider(),
-            new LkMenu.Item("logout",    "Sign out").danger().onClick(() -> {
+            new LkMenu.Item("logout",    "Sign Out").danger().onClick(() -> {
                 signOutFlow.execute();
                 UI.getCurrent().navigate(LoginView.class);
             })

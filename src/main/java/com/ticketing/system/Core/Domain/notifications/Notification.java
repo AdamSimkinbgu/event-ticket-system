@@ -8,29 +8,68 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
 // Aggregate root for the Notification aggregate (UC-35 / UC-36 / UC-37 design walkthrough).
 // Promoted from a sub-entity of User to its own aggregate so high-volume PENDING storage
 // and login-time delivery don't drag the User aggregate.
 //
 // Cross-aggregate references by ID per course rules:
 //   recipientUserId — User aggregate
+// V3: mapped to JPA. The String @Id is ASSIGNED by the application (a UUID), never
+// @GeneratedValue; recipientUserId is a plain by-id column (never @ManyToOne); the two
+// enums are stored by name (@Enumerated STRING); @Version drives optimistic locking. The
+// data payload is stored as one JSON text column via NotificationDataJsonConverter rather
+// than an @ElementCollection side table. Fields are non-final with a protected no-arg ctor
+// so Hibernate can hydrate; the public ctors still enforce the invariants.
+@Entity
+@Table(name = "notifications")
 public class Notification implements InvariantChecked {
 
-    private final String id;
-    private final int recipientUserId;
-    private final NotificationType type;
+    @Id
+    private String id;
+
+    @Column(name = "recipient_user_id", nullable = false)
+    private int recipientUserId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private NotificationType type;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private NotificationStatus status;
-    private final String message;
-    private final LocalDateTime createdAt;
+
+    @Column
+    private String message;
+
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt;
     /**
      * Structured payload — type-specific key/value data the recipient (or UI) can
      * render. E.g. PURCHASE_CONFIRMED carries {@code orderId}, {@code total},
      * {@code eventName}; EVENT_CANCELLED carries {@code eventId}, {@code reason}.
      * The {@link #message} stays the human-readable summary; {@code data} is the
      * machine-readable companion. Never null — empty map for notifications with
-     * no extra context.
+     * no extra context. Persisted as one JSON text column (see
+     * {@link NotificationDataJsonConverter}).
      */
-    private final Map<String, Object> data;
+    @Convert(converter = NotificationDataJsonConverter.class)
+    @Column(name = "data", columnDefinition = "text", nullable = false)
+    private Map<String, Object> data;
+
+    @Version
+    private Long version;
+
+    /** For JPA only — do not call from application code. */
+    protected Notification() { }
 
     /**
      * Backward-compatible 6-arg constructor — leaves {@link #data} as an empty map.

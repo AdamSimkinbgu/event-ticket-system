@@ -40,7 +40,7 @@ import com.vaadin.flow.router.RouteParameters;
 import jakarta.annotation.security.PermitAll;
 
 @Route(value = "owner/policies/:companyId/:eventId", layout = WorkspaceLayout.class)
-@PageTitle("Purchase policies · TicketHub")
+@PageTitle("Purchase Policies · TicketHub")
 @PermitAll
 @RequireCapability(Capability.EDIT_PURCHASE_POLICIES)
 public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObserver {
@@ -135,7 +135,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
             catch (NumberFormatException ignored) { }
         });
 
-        title("Purchase policies");
+        title("Purchase Policies");
         subtitle("Click a node to edit it · drag the canvas to pan · scroll to zoom.");
 
         add(buildScopeToolbar());
@@ -229,10 +229,10 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
         Div seg = new Div();
         seg.addClassName("pe-seg");
 
-        NativeButton companyBtn = new NativeButton("Company-level");
+        NativeButton companyBtn = new NativeButton("Company-Level");
         companyBtn.addClassName("pe-seg-opt");
 
-        NativeButton eventBtn = new NativeButton("Event-level");
+        NativeButton eventBtn = new NativeButton("Event-Level");
         eventBtn.addClassName("pe-seg-opt");
         eventBtn.addClassName("on");
 
@@ -531,7 +531,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
         bar.addClassName("pe-actionbar");
 
         Div left = new Div(); left.addClassName("l");
-        left.add(new LkBtn("Discard changes").variant(LkBtn.Variant.tertiary)
+        left.add(new LkBtn("Discard Changes").variant(LkBtn.Variant.tertiary)
             .onClick(e -> {
                 Toasts.warn("Changes discarded.");
                 UI.getCurrent().navigate(CompanyEventListView.class);
@@ -539,10 +539,10 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
 
         Div right = new Div(); right.addClassName("r");
         right.add(
-            new LkBtn("Test against a buyer").variant(LkBtn.Variant.secondary)
+            new LkBtn("Test Against a Buyer").variant(LkBtn.Variant.secondary)
                 .icon(new LkIcon("flask", 16))
                 .onClick(e -> Toasts.warn("Test-against-a-buyer dialog (V2-PEDIT-02).")),
-            new LkBtn("Save policy").variant(LkBtn.Variant.primary)
+            new LkBtn("Save Policy").variant(LkBtn.Variant.primary)
                 .onClick(e -> savePolicy())
         );
 

@@ -2,6 +2,17 @@ package com.ticketing.system.Core.Domain.events;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.DiscriminatorColumn;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Inheritance;
+import jakarta.persistence.InheritanceType;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
 /**
  * Abstract base for all inventory-zone types inside a {@link VenueMap}.
  *
@@ -25,20 +36,47 @@ import com.ticketing.system.Core.Domain.shared.InvariantChecked;
  * Seated-zone callers must downcast or use the typed
  * {@link SeatedZone#reserveSeats(java.util.List)} / {@link SeatedZone#releaseSeats(java.util.List)} methods.
  */
+// V3: JOINED inheritance — InventoryZone is the parent table, SeatedZone/StandingZone get their own
+// joined tables (keeps their NOT-NULL subclass constraints, which SINGLE_TABLE would forbid). The
+// @Id is a DB-generated surrogate because the domain zone id is only unique within a VenueMap, not
+// globally; the domain id stays a column (zone_number). @Version gives each zone its own optimistic
+// lock (counter updates on a StandingZone bump it; structural seat changes on a SeatedZone bump it).
+// A protected no-arg ctor lets Hibernate hydrate the subclasses.
+@Entity
+@Table(name = "inventory_zones")
+@Inheritance(strategy = InheritanceType.JOINED)
+@DiscriminatorColumn(name = "zone_type")
 public abstract class InventoryZone implements InvariantChecked {
 
-    protected final int id;
-    protected final String name;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long zonePk;
+
+    @Column(name = "zone_number", nullable = false)
+    protected int id;
+    @Column(nullable = false)
+    protected String name;
+    @Column(nullable = false)
     protected double price;
 
     // Grid placement on the VenueMap canvas: 1-based start cell + cell spans.
     // gridRowSpan == 0 means "not explicitly placed" → the preview falls back to
     // auto-layout. Bounds against the grid size and non-overlap with other zones
     // are enforced by VenueMap.placeZoneOnGrid (which holds the whole map).
+    @Column(name = "grid_row")
     private int gridRow;
+    @Column(name = "grid_col")
     private int gridCol;
+    @Column(name = "grid_row_span")
     private int gridRowSpan;
+    @Column(name = "grid_col_span")
     private int gridColSpan;
+
+    @Version
+    private Long version;
+
+    /** For JPA only — do not call from application code. */
+    protected InventoryZone() { }
 
     protected InventoryZone(int id, String name, double price) {
         // Invariants (name non-blank, price >= 0) are enforced by the concrete
@@ -77,6 +115,13 @@ public abstract class InventoryZone implements InvariantChecked {
     public abstract boolean release(InventorySelection selection);
 
     public abstract boolean confirmSale(InventorySelection selection);
+
+    /**
+     * Return previously SOLD inventory to AVAILABLE stock (e.g. on a member refund).
+     * Distinct from {@link #release(InventorySelection)}, which only frees RESERVED holds —
+     * a refunded seat/place is SOLD, not held, so it needs its own transition.
+     */
+    public abstract boolean returnSoldToStock(InventorySelection selection);
 
     public abstract int getSoldAmount();
 
