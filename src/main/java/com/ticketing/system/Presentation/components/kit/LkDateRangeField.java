@@ -1,6 +1,5 @@
 package com.ticketing.system.Presentation.components.kit;
 
-import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.NativeLabel;
 import com.vaadin.flow.component.html.Span;
 
@@ -15,7 +14,8 @@ import java.util.function.Consumer;
 public class LkDateRangeField extends NativeLabel {
 
     private static final List<String> PRESETS = List.of(
-        "Any time", "Today", "This weekend", "Next 7 days", "Next 30 days", "This month", "Next 3 months"
+        "Any time", "Today", "This weekend", "Next 7 days", "Next 30 days", "This month", "Next 3 months",
+        "Custom range"
     );
 
     private final Span labelSpan = new Span();
@@ -89,19 +89,5 @@ public class LkDateRangeField extends NativeLabel {
             });
             menu.add(item);
         }
-        menu.add(new LkMenu.Divider());
-        menu.add(new LkMenu.Label("Custom range"));
-        Div rangeRow = new Div();
-        rangeRow.addClassName("lk-daterow");
-        Span start = new Span("Start date");
-        start.addClassName("lk-input");
-        start.addClassName("lk-mini");
-        Span sep = new Span("→");
-        sep.addClassName("lk-daterow-sep");
-        Span end = new Span("End date");
-        end.addClassName("lk-input");
-        end.addClassName("lk-mini");
-        rangeRow.add(start, sep, end);
-        menu.add(rangeRow);
     }
 }
