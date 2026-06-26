@@ -367,8 +367,12 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
                 null, null, null, null);
     }
 
-    /** City (if selected) beats country so the DB predicate is as narrow as possible. */
     private String locationFilter() {
+        return locationFilter(filterCity, filterCountry);
+    }
+
+    /** City (if selected) beats country so the DB predicate is as narrow as possible. */
+    static String locationFilter(String filterCity, String filterCountry) {
         if (!CITY_ALL.equals(filterCity))       return filterCity;
         if (!COUNTRY_ALL.equals(filterCountry)) return filterCountry;
         return null;
@@ -489,7 +493,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
 
     // ---- helpers ----
 
-    private static List<String> cityOptionsFor(String country) {
+    static List<String> cityOptionsFor(String country) {
         List<String> cities = CITIES_BY_COUNTRY.get(country);
         if (cities == null) return List.of(CITY_ALL);
         List<String> opts = new ArrayList<>(cities.size() + 1);
