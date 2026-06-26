@@ -82,6 +82,25 @@ public class LkSelect extends NativeLabel {
         return currentValue;
     }
 
+    /**
+     * Replace the option list and reset the displayed value to the first option.
+     * Does NOT fire onChange — used for dependent selects (e.g. city driven by country).
+     */
+    public LkSelect setOptions(List<String> newOptions) {
+        this.options = newOptions;
+        this.currentValue = newOptions.isEmpty() ? "" : newOptions.get(0);
+        valueSpan.setText(currentValue);
+        rebuildOptions(this.options);
+        return this;
+    }
+
+    /** Toggle interactive state. Disabled select is visually muted and non-clickable. */
+    public LkSelect enabled(boolean enabled) {
+        trigger.getStyle().set("pointer-events", enabled ? "auto" : "none");
+        trigger.getStyle().set("opacity",         enabled ? "1"    : "0.45");
+        return this;
+    }
+
     private void rebuildOptions(List<String> options) {
         menu.removeAll();
         for (String opt : options) {
