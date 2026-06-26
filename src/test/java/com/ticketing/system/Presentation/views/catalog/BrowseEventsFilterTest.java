@@ -117,4 +117,30 @@ class BrowseEventsFilterTest {
     void cityOptionsFor_allCountries_returnsOnlyAllCities() {
         assertEquals(List.of("All cities"), BrowseEventsView.cityOptionsFor("All countries"));
     }
+
+    // ── isValidCustomRange ────────────────────────────────────────────────────
+
+    @Test
+    void isValidCustomRange_fromBeforeTo_isValid() {
+        assertTrue(BrowseEventsView.isValidCustomRange(LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30)));
+    }
+
+    @Test
+    void isValidCustomRange_sameDay_isValid() {
+        LocalDate day = LocalDate.of(2026, 6, 15);
+        assertTrue(BrowseEventsView.isValidCustomRange(day, day));
+    }
+
+    @Test
+    void isValidCustomRange_fromAfterTo_isInvalid() {
+        assertFalse(BrowseEventsView.isValidCustomRange(LocalDate.of(2026, 6, 30), LocalDate.of(2026, 6, 1)));
+    }
+
+    @Test
+    void isValidCustomRange_openBounds_areValid() {
+        // a single open-ended bound (or none) is a legitimate query, not an inversion
+        assertTrue(BrowseEventsView.isValidCustomRange(null, LocalDate.of(2026, 6, 1)));
+        assertTrue(BrowseEventsView.isValidCustomRange(LocalDate.of(2026, 6, 1), null));
+        assertTrue(BrowseEventsView.isValidCustomRange(null, null));
+    }
 }

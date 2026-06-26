@@ -94,10 +94,20 @@ public class LkSelect extends NativeLabel {
         return this;
     }
 
-    /** Toggle interactive state. Disabled select is visually muted and non-clickable. */
+    /**
+     * Toggle interactive state. A disabled select is visually muted, non-clickable, removed from the
+     * tab order, and exposes {@code aria-disabled} so assistive tech reports it.
+     */
     public LkSelect enabled(boolean enabled) {
         trigger.getStyle().set("pointer-events", enabled ? "auto" : "none");
         trigger.getStyle().set("opacity",         enabled ? "1"    : "0.45");
+        if (enabled) {
+            trigger.getElement().setAttribute("tabindex", "0");
+            trigger.getElement().removeAttribute("aria-disabled");
+        } else {
+            trigger.getElement().removeAttribute("tabindex");
+            trigger.getElement().setAttribute("aria-disabled", "true");
+        }
         return this;
     }
 

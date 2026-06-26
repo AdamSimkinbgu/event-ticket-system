@@ -202,22 +202,27 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
             if (Objects.equals(filterDateRange, v)) return;
             filterDateRange = v;
             customRangeRow.setVisible("Custom range".equals(v));
-            if (!"Custom range".equals(v)) runSearch();
+            // Returning to "Custom range" with the pickers already populated must re-query;
+            // every other preset queries immediately.
+            if ("Custom range".equals(v)) runCustomSearchIfValid();
+            else runSearch();
         });
 
-        // Custom date pickers (shown only when "Custom range" is selected)
+        // Custom date pickers (shown only when "Custom range" is selected). Each picker bounds the
+        // other (min/max) so an inverted range can't be entered, then re-queries — clearing a date
+        // re-queries with that bound left open rather than leaving the grid stale.
         customFromPicker = new DatePicker();
         customFromPicker.setPlaceholder("Start date");
         customFromPicker.addValueChangeListener(e -> {
-            if (customFromPicker.getValue() != null && customToPicker.getValue() != null)
-                runSearch();
+            customToPicker.setMin(e.getValue());   // null clears the constraint
+            runCustomSearchIfValid();
         });
 
         customToPicker = new DatePicker();
         customToPicker.setPlaceholder("End date");
         customToPicker.addValueChangeListener(e -> {
-            if (customFromPicker.getValue() != null && customToPicker.getValue() != null)
-                runSearch();
+            customFromPicker.setMax(e.getValue());
+            runCustomSearchIfValid();
         });
 
         customRangeRow = new Div();
@@ -343,6 +348,17 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
                 .sorted(comparatorFor(filterSort))
                 .toList();
         renderGrid(rows);
+    }
+
+    /**
+     * Re-query for the custom-range flow: only while "Custom range" is the active preset, and only
+     * when the picker values aren't inverted (an inverted range is rejected server-side and would
+     * surface as a confusing empty grid). Either bound may be open (null).
+     */
+    private void runCustomSearchIfValid() {
+        if (!"Custom range".equals(filterDateRange)) return;
+        if (isValidCustomRange(customFromPicker.getValue(), customToPicker.getValue()))
+            runSearch();
     }
 
     private CatalogSearchFiltersDTO currentFilters() {
@@ -500,6 +516,11 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         opts.add(CITY_ALL);
         opts.addAll(cities);
         return opts;
+    }
+
+    /** A custom range is searchable unless it's the from&gt;to inversion; an open bound (null) is fine. */
+    static boolean isValidCustomRange(LocalDate from, LocalDate to) {
+        return from == null || to == null || !from.isAfter(to);
     }
 
     private static Div labelledWrap(String labelText, Component field) {
