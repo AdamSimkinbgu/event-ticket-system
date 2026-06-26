@@ -152,7 +152,12 @@ public class Notification implements InvariantChecked {
 
     // Lifecycle transition: invoked when the user opens the notification in the UI.
     public void markRead() {
-        throw new UnsupportedOperationException("not implemented");
+        if (status != NotificationStatus.DELIVERED) {
+            throw new IllegalStateException(
+                    "Cannot mark as read a notification that is not DELIVERED. Current status: " + status);
+        }
+        this.status = NotificationStatus.READ;
+        checkInvariants();
     }
 
     // State checks.

@@ -50,7 +50,17 @@ public class NotificationBellComponent extends Span {
             bell.add(badge);
         }
 
-        add(new LkPopover(bell, LkNotifPanel.fromDTOs(notifs))
+        Runnable onMarkAll = () -> {
+            NotificationSession.markAllRead();
+            refresh();
+        };
+
+        java.util.function.Consumer<String> onMarkOne = notifId -> {
+            NotificationSession.markRead(notifId);
+            refresh();
+        };
+
+        add(new LkPopover(bell, LkNotifPanel.fromDTOs(notifs, onMarkAll, onMarkOne))
                 .position(PopoverPosition.BOTTOM_END));
     }
 }

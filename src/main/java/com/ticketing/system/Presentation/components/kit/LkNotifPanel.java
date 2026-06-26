@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Notification dropdown panel — header + scrollable list + footer link.
@@ -18,17 +19,22 @@ import java.util.Map;
  */
 public class LkNotifPanel extends Div {
 
-    public record Item(String iconName, String title, String body, String time, boolean unread) { }
+    public record Item(String notificationId, String iconName, String title, String body, String time, boolean unread) { }
+
+    private final NativeButton markAll;
 
     public LkNotifPanel(String headerTitle, List<Item> items, String footerLabel) {
+        this(headerTitle, items, footerLabel, null);
+    }
+
+    public LkNotifPanel(String headerTitle, List<Item> items, String footerLabel, Consumer<String> onRowClick) {
         addClassName("lk-notif");
 
         Div head = new Div();
         head.addClassName("lk-notif-h");
         Span title = new Span();
         title.getElement().setProperty("innerHTML", "<b>" + escape(headerTitle) + "</b>");
-        // TODO(#225): wire to NotificationService.markAllRead() once Notification.markRead() is implemented.
-        NativeButton markAll = new NativeButton("Mark All Read");
+        markAll = new NativeButton("Mark All Read");
         markAll.addClassName("lk-link-btn");
         head.add(title, markAll);
         add(head);
@@ -57,6 +63,10 @@ public class LkNotifPanel extends Div {
                 dot.addClassName("lk-notif-dot");
                 row.add(dot);
             }
+            if (onRowClick != null && it.notificationId() != null && !it.notificationId().isEmpty()) {
+                String nid = it.notificationId();
+                row.addClickListener(e -> onRowClick.accept(nid));
+            }
             list.add(row);
         }
         add(list);
@@ -66,23 +76,28 @@ public class LkNotifPanel extends Div {
         add(foot);
     }
 
+    public LkNotifPanel onMarkAllRead(Runnable handler) {
+        markAll.addClickListener(e -> handler.run());
+        return this;
+    }
+
     public static LkNotifPanel buyer() {
         return new LkNotifPanel("Notifications", List.of(
-            new Item("ticket", "Your Coldplay seats are confirmed", "Receipt #TKT-20847 · $504.00 paid", "2m", true),
-            new Item("clock",  "Cart expiring soon",                "Hapoel TLV · 2 tickets release in 2 min", "5m", true),
-            new Item("star",   "Price drop on a watched event",     "Mashina · 35-Year Tour — now from $150", "1h", true),
-            new Item("card",   "Refund processed",                  "Othello at Habima · $120.00 returned", "Yesterday", false),
-            new Item("bell",   "New from Live Nation Israel",       "Eden Hason · Live — on sale now", "2d", false)
+            new Item("", "ticket", "Your Coldplay seats are confirmed", "Receipt #TKT-20847 · $504.00 paid", "2m", true),
+            new Item("", "clock",  "Cart expiring soon",                "Hapoel TLV · 2 tickets release in 2 min", "5m", true),
+            new Item("", "star",   "Price drop on a watched event",     "Mashina · 35-Year Tour — now from $150", "1h", true),
+            new Item("", "card",   "Refund processed",                  "Othello at Habima · $120.00 returned", "Yesterday", false),
+            new Item("", "bell",   "New from Live Nation Israel",       "Eden Hason · Live — on sale now", "2d", false)
         ), "View all notifications");
     }
 
     public static LkNotifPanel admin() {
         return new LkNotifPanel("Admin alerts", List.of(
-            new Item("comment",  "5 open complaints",          "Oldest is 2 days old — review the queue",        "2d", true),
-            new Item("chart",    "Daily sales report ready",   "Yesterday: $48,250 across 12 companies",         "6h", true),
-            new Item("building", "New company registration",   "BlueWave Productions awaiting review",           "8h", true),
-            new Item("policy",   "Policy flagged for review",  "Coldplay · MOTS age-gate needs a check",         "1d", true),
-            new Item("warning",  "Refund spike detected",      "Othello at Habima — 14 refunds in 1h",           "1d", true)
+            new Item("", "comment",  "5 open complaints",          "Oldest is 2 days old — review the queue",        "2d", true),
+            new Item("", "chart",    "Daily sales report ready",   "Yesterday: $48,250 across 12 companies",         "6h", true),
+            new Item("", "building", "New company registration",   "BlueWave Productions awaiting review",           "8h", true),
+            new Item("", "policy",   "Policy flagged for review",  "Coldplay · MOTS age-gate needs a check",         "1d", true),
+            new Item("", "warning",  "Refund spike detected",      "Othello at Habima — 14 refunds in 1h",           "1d", true)
         ), "View admin activity feed");
     }
 
@@ -123,14 +138,17 @@ public class LkNotifPanel extends Div {
     );
 
     /** Build a real notification panel from the DTOs delivered on login (UC-37). */
-    public static LkNotifPanel fromDTOs(List<NotificationDTO> notifications) {
+    public static LkNotifPanel fromDTOs(List<NotificationDTO> notifications,
+                                         Runnable onMarkAllRead,
+                                         Consumer<String> onRowClick) {
         if (notifications == null || notifications.isEmpty()) {
             return new LkNotifPanel("Notifications", List.of(
-                new Item("bell", "You're all caught up", "No new notifications", "", false)
+                new Item("", "bell", "You're all caught up", "No new notifications", "", false)
             ), "View all notifications");
         }
         List<Item> items = notifications.stream()
             .map(n -> new Item(
+                n.notificationId(),
                 TYPE_ICON.getOrDefault(n.type(), "bell"),
                 TYPE_TITLE.getOrDefault(n.type(), "Notification"),
                 n.message() == null ? "" : n.message(),
@@ -138,7 +156,9 @@ public class LkNotifPanel extends Div {
                 !"READ".equals(n.status())
             ))
             .toList();
-        return new LkNotifPanel("Notifications", items, "View all notifications");
+        LkNotifPanel panel = new LkNotifPanel("Notifications", items, "View all notifications", onRowClick);
+        if (onMarkAllRead != null) panel.onMarkAllRead(onMarkAllRead);
+        return panel;
     }
 
     private static String relativeTime(LocalDateTime createdAt) {

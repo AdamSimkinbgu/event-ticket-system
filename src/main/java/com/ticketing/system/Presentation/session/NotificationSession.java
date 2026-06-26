@@ -45,6 +45,24 @@ public final class NotificationSession {
                 .count();
     }
 
+    /** Mark one notification READ in the session snapshot. */
+    public static void markRead(String notificationId) {
+        List<NotificationDTO> updated = getAll().stream()
+                .map(n -> notificationId.equals(n.notificationId())
+                        ? new NotificationDTO(n.notificationId(), n.type(), "READ", n.message(), n.createdAt())
+                        : n)
+                .toList();
+        store(updated);
+    }
+
+    /** Mark every notification in the session snapshot READ. */
+    public static void markAllRead() {
+        List<NotificationDTO> updated = getAll().stream()
+                .map(n -> new NotificationDTO(n.notificationId(), n.type(), "READ", n.message(), n.createdAt()))
+                .toList();
+        store(updated);
+    }
+
     /** Clear the inbox — call this on sign-out. */
     public static void clear() {
         VaadinSession s = VaadinSession.getCurrent();
