@@ -208,7 +208,6 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         // Custom date pickers (shown only when "Custom range" is selected)
         customFromPicker = new DatePicker();
         customFromPicker.setPlaceholder("Start date");
-        customFromPicker.getStyle().set("flex", "1 1 0");
         customFromPicker.addValueChangeListener(e -> {
             if (customFromPicker.getValue() != null && customToPicker.getValue() != null)
                 runSearch();
@@ -216,14 +215,15 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
 
         customToPicker = new DatePicker();
         customToPicker.setPlaceholder("End date");
-        customToPicker.getStyle().set("flex", "1 1 0");
         customToPicker.addValueChangeListener(e -> {
             if (customFromPicker.getValue() != null && customToPicker.getValue() != null)
                 runSearch();
         });
 
         customRangeRow = new Div();
-        customRangeRow.getStyle().set("display", "flex").set("gap", "8px");
+        customRangeRow.getStyle().set("display", "flex").set("flex-direction", "column").set("gap", "8px");
+        customFromPicker.getStyle().set("width", "100%");
+        customToPicker.getStyle().set("width", "100%");
         customRangeRow.add(customFromPicker, customToPicker);
         customRangeRow.setVisible(false);
 
