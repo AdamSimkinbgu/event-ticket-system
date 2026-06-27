@@ -123,7 +123,7 @@ public class CompanyEventListView extends LkPage {
             iconBtn("map",     "Venue map",     () -> UI.getCurrent().navigate("owner/venue/" + ev.eventId())),
             iconBtn("policy",  "Policies",      () -> UI.getCurrent().navigate(PurchasePolicyEditorView.class)),
             iconBtn("chart",   "Sales",         () -> UI.getCurrent().navigate(CompanySalesView.class)),
-            iconBtn("status",  "Change status", () -> openStatusDialog(ev)),
+            iconBtn("gear",    "Change status", () -> openStatusDialog(ev)),
             iconBtn("warning", "Cancel event",  () -> openCancelDialog(ev))
         );
         row.put("act", actions);
@@ -164,6 +164,7 @@ public class CompanyEventListView extends LkPage {
         Select<EventStatus> select = new Select<>();
         select.setItems(allowed);
         select.setItemLabelGenerator(s -> switch (s) {
+            case SCHEDULED -> "Mark as Scheduled";
             case ON_SALE -> "Publish (On Sale)";
             default -> s.name();
         });
@@ -194,6 +195,7 @@ public class CompanyEventListView extends LkPage {
 
     private static List<EventStatus> allowedTransitions(EventStatus current) {
         return switch (current) {
+            case DRAFT -> List.of(EventStatus.SCHEDULED);
             case SCHEDULED -> List.of(EventStatus.ON_SALE);
             default -> List.of();
         };

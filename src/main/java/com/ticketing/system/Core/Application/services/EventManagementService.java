@@ -745,6 +745,7 @@ public class EventManagementService {
             User user = userRepository.getUserById(userId);
             user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
             switch (targetStatus) {
+                case SCHEDULED -> event.transitionToScheduled();
                 case ON_SALE -> event.transitionToOnSale();
                 default -> throw new IllegalArgumentException("Cannot manually set status to " + targetStatus);
             }

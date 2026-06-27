@@ -154,6 +154,16 @@ class CompanyEventListPresenterTest {
     }
 
     @Test
+    void changeEventStatus_toScheduled_callsServiceAndReturnsSuccess() {
+        doNothing().when(eventService).changeEventStatus(TOKEN, EVENT_ID, EventStatus.SCHEDULED);
+
+        assertInstanceOf(CompanyEventListPresenter.ActionOutcome.Success.class,
+                presenter.changeEventStatus(TOKEN, EVENT_ID, EventStatus.SCHEDULED));
+
+        verify(eventService).changeEventStatus(eq(TOKEN), eq(EVENT_ID), eq(EventStatus.SCHEDULED));
+    }
+
+    @Test
     void changeEventStatus_serviceThrowsRuntime_returnsFailureWithMessage() {
         doThrow(new RuntimeException("invalid transition"))
                 .when(eventService).changeEventStatus(TOKEN, EVENT_ID, EventStatus.ON_SALE);
