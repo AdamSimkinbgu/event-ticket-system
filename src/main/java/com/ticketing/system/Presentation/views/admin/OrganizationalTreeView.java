@@ -44,13 +44,13 @@ public class OrganizationalTreeView extends LkPage {
     private void render() {
         body.removeAll();
 
-        switch (presenter.load(AuthSession.token(), selectedCompanyId)) {
+        switch (presenter.load(AuthSession.token(), selectedCompanyId, AuthSession.isAdmin())) {
             case OrgTreePresenter.Outcome.NotAuthenticated ignored ->
                 body.add(new LkBanner(LkBanner.Tone.warn, new LkIcon("lock", 16),
                     "Your session has expired — please sign in again."));
             case OrgTreePresenter.Outcome.NoCompany ignored ->
                 body.add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 16),
-                    "You have no owned companies."));
+                    "No companies exist in the system yet."));
             case OrgTreePresenter.Outcome.Failure fail ->
                 body.add(new LkBanner(LkBanner.Tone.error, new LkIcon("warning", 16),
                     "Could not load the tree: " + fail.reason()));

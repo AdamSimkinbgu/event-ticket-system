@@ -588,6 +588,28 @@ public class CompanyManagementService {
         return buildOrganizationalTree(companyId, company.getFounderId());
     }
 
+    // Admin-only: list every company in the system regardless of ownership.
+    public List<ProductionCompanyDTO> adminListAllCompanies(String token) {
+        if (token == null || !sessionManager.isAdminToken(token)) {
+            throw new RuntimeException("Admin token required");
+        }
+        return companyRepository.findAll().stream()
+                .map(c -> new ProductionCompanyDTO(
+                        c.getCompanyId(), c.getName(), c.getDescription(),
+                        c.getStatus().name(), c.getFounderId()))
+                .toList();
+    }
+
+    // Admin-only: build org tree for any company, bypassing the ownership check.
+    public OrganizationalTreeNodeDTO adminViewOrgTree(String token, int companyId) {
+        if (token == null || !sessionManager.isAdminToken(token)) {
+            throw new RuntimeException("Admin token required");
+        }
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        log.info("Admin viewing organizational tree for company {}", companyId);
+        return buildOrganizationalTree(companyId, company.getFounderId());
+    }
+
     // *HELPER METHOD* — BFS build of the organizational tree for UC-25
     // (viewOrganizationalTree).
     private OrganizationalTreeNodeDTO buildOrganizationalTree(int companyId, int founderId) {
