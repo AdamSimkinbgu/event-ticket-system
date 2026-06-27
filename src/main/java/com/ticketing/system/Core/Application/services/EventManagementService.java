@@ -735,6 +735,26 @@ public class EventManagementService {
         }
     }
 
+    // Owner/Manager changes an event's status to a target state (non-cancel transitions only).
+    // Cancel with refund pipeline uses cancelEventAndRefund.
+    public void changeEventStatus(String token, int eventId, EventStatus targetStatus) {
+        int userId = validateTokenAndGetUserId(token);
+        eventRepository.lockForUpdate(eventId);
+        try {
+            Event event = eventRepository.findById(eventId);
+            User user = userRepository.getUserById(userId);
+            user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+            switch (targetStatus) {
+                case ON_SALE -> event.transitionToOnSale();
+                default -> throw new IllegalArgumentException("Cannot manually set status to " + targetStatus);
+            }
+            eventRepository.save(event);
+            log.info("Event {} status changed to {} by user {}", eventId, targetStatus, userId);
+        } finally {
+            eventRepository.unlock(eventId);
+        }
+    }
+
     // UC-19 — soft cancel; fires EventCancelled domain event for UC-4 refund
     // pipeline.
     public void cancelEventAndRefund(String token, int eventId) {

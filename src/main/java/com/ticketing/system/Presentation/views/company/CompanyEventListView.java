@@ -21,7 +21,9 @@ import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.admin.CompanySalesView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
@@ -35,7 +37,7 @@ import java.util.Map;
 @PermitAll
 @RequireCapability(Capability.VIEW_COMPANY_EVENTS)
 public class CompanyEventListView extends LkPage {
-    
+
     private final CompanyEventListPresenter presenter;
     private final LkCard eventsCard = new LkCard().pad(0);
 
@@ -53,7 +55,7 @@ public class CompanyEventListView extends LkPage {
         );
         add(buildFilters());
         add(eventsCard);
-        Span hint = Lk.muted("Row actions → Edit metadata · Venue map · Policies · Sales · Cancel.");
+        Span hint = Lk.muted("Row actions → Edit metadata · Venue map · Policies · Sales · Status · Cancel.");
         hint.getStyle().set("font-size", "12.5px");
         add(hint);
         reload();
@@ -121,10 +123,80 @@ public class CompanyEventListView extends LkPage {
             iconBtn("map",     "Venue map",     () -> UI.getCurrent().navigate("owner/venue/" + ev.eventId())),
             iconBtn("policy",  "Policies",      () -> UI.getCurrent().navigate(PurchasePolicyEditorView.class)),
             iconBtn("chart",   "Sales",         () -> UI.getCurrent().navigate(CompanySalesView.class)),
-            iconBtn("warning", "Cancel event",  () -> Toasts.warn("Cancel-event dialog — V2-CADMIN-EVT-CANCEL."))
+            iconBtn("status",  "Change status", () -> openStatusDialog(ev)),
+            iconBtn("warning", "Cancel event",  () -> openCancelDialog(ev))
         );
         row.put("act", actions);
         grid.row(row);
+    }
+
+    private void openCancelDialog(EventDetailDTO ev) {
+        ConfirmDialog dialog = new ConfirmDialog();
+        dialog.setHeader("Cancel \"" + escape(ev.name()) + "\"?");
+        dialog.setText("This will refund all ticket holders and permanently cancel the event. This cannot be undone.");
+        dialog.setCancelable(true);
+        dialog.setCancelText("Keep event");
+        dialog.setConfirmText("Cancel event");
+        dialog.setConfirmButtonTheme("error primary");
+        dialog.addConfirmListener(ignored -> {
+            int eventId = ev.eventId();
+            switch (presenter.cancelEvent(AuthSession.token(), eventId)) {
+                case CompanyEventListPresenter.ActionOutcome.Success ignored2 -> {
+                    Toasts.success("Event canceled and refunds issued.");
+                    reload();
+                }
+                case CompanyEventListPresenter.ActionOutcome.NotAuthenticated ignored2 ->
+                    Toasts.warn("Session expired — please sign in again.");
+                case CompanyEventListPresenter.ActionOutcome.Failure fail ->
+                    Toasts.error("Cancel failed: " + fail.reason());
+            }
+        });
+        dialog.open();
+    }
+
+    private void openStatusDialog(EventDetailDTO ev) {
+        List<EventStatus> allowed = allowedTransitions(ev.status());
+        if (allowed.isEmpty()) {
+            Toasts.warn("No status transitions available for a " + ev.status().name() + " event.");
+            return;
+        }
+
+        Select<EventStatus> select = new Select<>();
+        select.setItems(allowed);
+        select.setItemLabelGenerator(s -> switch (s) {
+            case ON_SALE -> "Publish (On Sale)";
+            default -> s.name();
+        });
+        select.setPlaceholder("Select new status…");
+
+        ConfirmDialog dialog = new ConfirmDialog();
+        dialog.setHeader("Change status — " + escape(ev.name()));
+        dialog.add(select);
+        dialog.setCancelable(true);
+        dialog.setCancelText("Cancel");
+        dialog.setConfirmText("Apply");
+        dialog.addConfirmListener(ignored -> {
+            EventStatus target = select.getValue();
+            if (target == null) return;
+            switch (presenter.changeEventStatus(AuthSession.token(), ev.eventId(), target)) {
+                case CompanyEventListPresenter.ActionOutcome.Success ignored2 -> {
+                    Toasts.success("Event status changed to " + target.name() + ".");
+                    reload();
+                }
+                case CompanyEventListPresenter.ActionOutcome.NotAuthenticated ignored2 ->
+                    Toasts.warn("Session expired — please sign in again.");
+                case CompanyEventListPresenter.ActionOutcome.Failure fail ->
+                    Toasts.error("Status change failed: " + fail.reason());
+            }
+        });
+        dialog.open();
+    }
+
+    private static List<EventStatus> allowedTransitions(EventStatus current) {
+        return switch (current) {
+            case SCHEDULED -> List.of(EventStatus.ON_SALE);
+            default -> List.of();
+        };
     }
 
     private static LkIconBtn iconBtn(String iconName, String tooltip, Runnable r) {
