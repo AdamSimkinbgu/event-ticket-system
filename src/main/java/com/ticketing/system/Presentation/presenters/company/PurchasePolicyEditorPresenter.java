@@ -9,7 +9,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.system.Core.Application.dto.CompanyPolicyConfigDTO;
+import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
+import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
@@ -20,10 +22,10 @@ import com.ticketing.system.Presentation.session.SessionIdentity;
  * MVP presenter for the purchase-policy editor.
  *
  * <p>Owns ALL policy logic and the editable model ({@link Node}/{@link Group}/{@link Rule}):
- * identity, load/save, DTO&lt;-&gt;model conversion, structural mutations, the D3 tree JSON,
- * the plain-English description, and validation. Stays stateless (like CheckoutPresenter) —
- * the view holds a single {@link Group} root as its UI state and only renders what the
- * presenter returns; it performs no logic itself.
+ * identity, context resolution (which companies/events the owner can edit), load/save,
+ * DTO&lt;-&gt;model conversion, structural mutations, the D3 tree JSON, the plain-English
+ * description, and validation. Stays stateless (like CheckoutPresenter) — the view holds a
+ * single {@link Group} root as its UI state and only renders what the presenter returns.
  */
 @Component
 public class PurchasePolicyEditorPresenter {
@@ -48,7 +50,38 @@ public class PurchasePolicyEditorPresenter {
 
     public record Identity(String memberToken) { }
 
-  
+   
+
+    public ContextOutcome resolveContext(String token) {
+        if (token == null) return new ContextOutcome.NotAuthenticated();
+        try {
+            List<ProductionCompanyDTO> companies = companyManagementService.findOwnedCompanies(token);
+            if (companies.isEmpty()) return new ContextOutcome.NoCompany();
+            return new ContextOutcome.Ready(companies);
+        } catch (InvalidTokenException e) {
+            return new ContextOutcome.NotAuthenticated();
+        } catch (RuntimeException e) {
+            return new ContextOutcome.Failure(e.getMessage());
+        }
+    }
+
+    /** Events belonging to a company; empty (never null) if the call fails. */
+    public List<EventDetailDTO> listEvents(String token, int companyId) {
+        if (token == null || companyId <= 0) return List.of();
+        try {
+            return eventManagementService.listEventsForCompany(token, companyId);
+        } catch (RuntimeException e) {
+            return List.of();
+        }
+    }
+
+    public sealed interface ContextOutcome {
+        record Ready(List<ProductionCompanyDTO> companies) implements ContextOutcome { }
+        record NotAuthenticated() implements ContextOutcome { }
+        record NoCompany() implements ContextOutcome { }
+        record Failure(String reason) implements ContextOutcome { }
+    }
+
 
     public enum Op { AND, OR }
 

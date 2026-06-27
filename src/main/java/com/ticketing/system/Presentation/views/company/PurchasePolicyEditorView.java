@@ -1,6 +1,18 @@
 package com.ticketing.system.Presentation.views.company;
 
+import java.util.List;
+
+import com.ticketing.system.Core.Application.dto.EventDetailDTO;
+import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Presentation.components.Toasts;
+import com.ticketing.system.Presentation.components.kit.LkBanner;
+import com.ticketing.system.Presentation.components.kit.LkBtn;
+import com.ticketing.system.Presentation.components.kit.LkIcon;
+import com.ticketing.system.Presentation.components.kit.LkPage;
+import com.ticketing.system.Presentation.components.policy.PolicyTreeMap;
+import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter;
+import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter.ContextOutcome;
 import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter.Group;
 import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter.LoadOutcome;
 import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter.Node;
@@ -9,13 +21,6 @@ import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditor
 import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter.RuleType;
 import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter.SaveOutcome;
 import com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter.Validity;
-import com.ticketing.system.Presentation.components.Toasts;
-import com.ticketing.system.Presentation.components.kit.LkBanner;
-import com.ticketing.system.Presentation.components.kit.LkBtn;
-import com.ticketing.system.Presentation.components.kit.LkIcon;
-import com.ticketing.system.Presentation.components.kit.LkPage;
-import com.ticketing.system.Presentation.components.policy.PolicyTreeMap;
-import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.vaadin.flow.component.Component;
@@ -45,37 +50,31 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
     private final PurchasePolicyEditorPresenter presenter;
 
     private Group   root;
+    private String  memberToken;
     private int     companyId    = -1;
     private int     eventId      = -1;
-    private boolean isEventLevel = true;
-    private String  memberToken;
+    private boolean isEventLevel = false;          // default: company-level (fixes the old mislabel)
 
-    private Span          plainEnglishText;
-    private PolicyTreeMap mapPanel;
-    private Span          validityBadge;
-    private Span          scopeContextLabel;
-    private final Div     loadErrorSlot = new Div();
+    private Integer routeCompanyId;                // optional deep-link from the URL
+    private Integer routeEventId;
+
+    private Span                          plainEnglishText;
+    private PolicyTreeMap                 mapPanel;
+    private Span                          validityBadge;
+    private Span                          scopeContextLabel;
+    private final Div                     loadErrorSlot = new Div();
+    private Select<ProductionCompanyDTO>  companySelect;
+    private Select<EventDetailDTO>        eventSelect;
+    private NativeButton                  companyBtn;
+    private NativeButton                  eventBtn;
 
     public PurchasePolicyEditorView(PurchasePolicyEditorPresenter presenter) {
         this.presenter = presenter;
         this.root = presenter.emptyPolicy();
-    }
 
-
-    @Override
-    public void beforeEnter(BeforeEnterEvent event) {
-        RouteParameters params = event.getRouteParameters();
-        params.get("companyId").ifPresent(id -> {
-            try { this.companyId = Integer.parseInt(id); } catch (NumberFormatException ignored) { }
-        });
-        params.get("eventId").ifPresent(id -> {
-            try { this.eventId = Integer.parseInt(id); } catch (NumberFormatException ignored) { }
-        });
-
-        resolveIdentity();
-
+        // Build the static UI exactly once, in the constructor — beforeEnter() only loads data.
         title("Purchase policies");
-        subtitle("Click a node to edit it · drag the canvas to pan · scroll to zoom.");
+        subtitle("Pick a company (and optionally an event), then build the rules · click a node to edit · drag to pan · scroll to zoom.");
 
         add(buildScopeToolbar());
         add(loadErrorSlot);
@@ -83,59 +82,168 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
         add(buildCanvas());
         add(buildActionBar());
         add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 18),
-            "Validation rejects empty groups and circular nesting before a policy can be saved."));
-
-        loadExistingPolicy();
-        rebuildTree();
+            "Validation rejects empty groups and non-numeric values before a policy can be saved."));
     }
 
-    private void resolveIdentity() {
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        RouteParameters params = event.getRouteParameters();
+        this.routeCompanyId = parseOpt(params.get("companyId").orElse(null));
+        this.routeEventId   = parseOpt(params.get("eventId").orElse(null));
+
         this.memberToken = presenter.resolveIdentity().memberToken();
+
+        initContext();
+    }
+
+    // ---------------------------------------------------------------------
+    // Context: resolve the owner's companies, then drive the selectors
+    // ---------------------------------------------------------------------
+
+    private void initContext() {
+        loadErrorSlot.removeAll();
+        switch (presenter.resolveContext(memberToken)) {
+            case ContextOutcome.NotAuthenticated na ->
+                disableEditing("Please sign in again to edit policies.");
+            case ContextOutcome.NoCompany nc ->
+                disableEditing("You don't own a company yet — register one to set purchase policies.");
+            case ContextOutcome.Failure f ->
+                showLoadError("Could not load your companies: " + f.reason(), this::initContext);
+            case ContextOutcome.Ready ready ->
+                populateCompanies(ready.companies());
+        }
+    }
+
+    private void populateCompanies(List<ProductionCompanyDTO> companies) {
+        companySelect.setEnabled(true);
+        companySelect.setItems(companies);
+
+        ProductionCompanyDTO chosen = companies.get(0);
+        if (routeCompanyId != null) {
+            for (ProductionCompanyDTO c : companies) {
+                if (c.companyId() == routeCompanyId) { chosen = c; break; }
+            }
+        }
+        companySelect.setValue(chosen);   // fires onCompanyChosen()
+    }
+
+    private void onCompanyChosen(ProductionCompanyDTO c) {
+        if (c == null) return;
+        this.companyId = c.companyId();
+
+        List<EventDetailDTO> events = presenter.listEvents(memberToken, companyId);
+        eventSelect.setItems(events);
+
+        EventDetailDTO preselect = null;
+        if (routeEventId != null) {
+            for (EventDetailDTO ev : events) {
+                if (parseId(ev.eventId()) == routeEventId) { preselect = ev; break; }
+            }
+            routeEventId = null;          // consume the deep-link once
+        }
+
+        if (preselect != null) {
+            isEventLevel = true;
+            setScopeButtons();
+            eventSelect.setEnabled(true);
+            eventSelect.setValue(preselect);   // fires onEventChosen() → loads the event policy
+        } else {
+            isEventLevel = false;
+            setScopeButtons();
+            eventSelect.setEnabled(false);
+            eventSelect.clear();
+            this.eventId = -1;
+            loadExistingPolicy();
+            rebuildTree();
+        }
+    }
+
+    private void onEventChosen(EventDetailDTO ev) {
+        if (ev == null) return;
+        this.eventId = parseId(ev.eventId());
+        if (isEventLevel) {
+            loadExistingPolicy();
+            rebuildTree();
+        }
+    }
+
+    private void disableEditing(String message) {
+        companySelect.setItems(List.of());
+        companySelect.setEnabled(false);
+        eventSelect.setItems(List.of());
+        eventSelect.setEnabled(false);
+        this.companyId = -1;
+        this.eventId = -1;
+        this.root = presenter.emptyPolicy();
+        loadErrorSlot.add(new LkBanner(LkBanner.Tone.error, new LkIcon("alert-circle", 16), message));
+        rebuildTree();
     }
 
     private void loadExistingPolicy() {
         loadErrorSlot.removeAll();
-        if (companyId <= 0) return;
+        if (companyId <= 0 || (isEventLevel && eventId <= 0)) {
+            this.root = presenter.emptyPolicy();
+            return;
+        }
         switch (presenter.load(memberToken, companyId, eventId, isEventLevel)) {
             case LoadOutcome.Success s -> this.root = s.root();
-            case LoadOutcome.NotAuthenticated na -> Toasts.warn("Please sign in again to edit policies.");
+            case LoadOutcome.NotAuthenticated na -> {
+                this.root = presenter.emptyPolicy();
+                Toasts.warn("Please sign in again to edit policies.");
+            }
             case LoadOutcome.Failure f -> {
-                LkBanner err = new LkBanner(LkBanner.Tone.error,
-                    new LkIcon("alert-circle", 16),
-                    "Could not load existing policy: " + f.reason());
-                LkBtn retry = new LkBtn("Retry").variant(LkBtn.Variant.secondary);
-                retry.addClickListener(ev -> { loadExistingPolicy(); rebuildTree(); });
-                err.setAction(retry);
-                loadErrorSlot.add(err);
+                this.root = presenter.emptyPolicy();
+                showLoadError("Could not load existing policy: " + f.reason(),
+                    () -> { loadExistingPolicy(); rebuildTree(); });
             }
         }
     }
 
+    private void showLoadError(String message, Runnable retry) {
+        LkBanner err = new LkBanner(LkBanner.Tone.error, new LkIcon("alert-circle", 16), message);
+        LkBtn retryBtn = new LkBtn("Retry").variant(LkBtn.Variant.secondary);
+        retryBtn.addClickListener(ev -> retry.run());
+        err.setAction(retryBtn);
+        loadErrorSlot.add(err);
+    }
+
+    // ---------------------------------------------------------------------
+    // Scope toolbar (company picker · scope toggle · event picker · status)
+    // ---------------------------------------------------------------------
 
     private Component buildScopeToolbar() {
         Div bar = new Div(); bar.addClassName("pe-toolbar");
 
         Div scope = new Div(); scope.addClassName("pe-scope");
+
+        companySelect = new Select<>();
+        companySelect.setLabel("Company");
+        companySelect.setItemLabelGenerator(ProductionCompanyDTO::name);
+        companySelect.setWidth("220px");
+        companySelect.setEnabled(false);
+        companySelect.addValueChangeListener(e -> onCompanyChosen(e.getValue()));
+        scope.add(companySelect);
+
         Span lbl = new Span("Scope"); lbl.addClassName("pe-scope-label");
         scope.add(lbl);
 
         Div seg = new Div(); seg.addClassName("pe-seg");
-        NativeButton companyBtn = new NativeButton("Company-level"); companyBtn.addClassName("pe-seg-opt");
-        NativeButton eventBtn   = new NativeButton("Event-level");   eventBtn.addClassName("pe-seg-opt");
-        if (isEventLevel) eventBtn.addClassName("on"); else companyBtn.addClassName("on");
-
-        companyBtn.addClickListener(e -> {
-            isEventLevel = false;
-            companyBtn.addClassName("on"); eventBtn.removeClassName("on");
-            loadExistingPolicy(); rebuildTree();
-        });
-        eventBtn.addClickListener(e -> {
-            isEventLevel = true;
-            eventBtn.addClassName("on"); companyBtn.removeClassName("on");
-            loadExistingPolicy(); rebuildTree();
-        });
+        companyBtn = new NativeButton("Company-level"); companyBtn.addClassName("pe-seg-opt");
+        eventBtn   = new NativeButton("Event-level");   eventBtn.addClassName("pe-seg-opt");
+        setScopeButtons();
+        companyBtn.addClickListener(e -> selectCompanyScope());
+        eventBtn.addClickListener(e -> selectEventScope());
         seg.add(companyBtn, eventBtn);
         scope.add(seg);
+
+        eventSelect = new Select<>();
+        eventSelect.setLabel("Event");
+        eventSelect.setItemLabelGenerator(EventDetailDTO::name);
+        eventSelect.setPlaceholder("Choose an event");
+        eventSelect.setWidth("220px");
+        eventSelect.setEnabled(false);
+        eventSelect.addValueChangeListener(e -> onEventChosen(e.getValue()));
+        scope.add(eventSelect);
 
         Div ctx = new Div(); ctx.addClassName("pe-scope-ctx");
         ctx.add(new LkIcon("ticket", 16));
@@ -151,11 +259,49 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
         return bar;
     }
 
+    private void selectCompanyScope() {
+        isEventLevel = false;
+        setScopeButtons();
+        eventSelect.setEnabled(false);
+        loadExistingPolicy();
+        rebuildTree();
+    }
+
+    private void selectEventScope() {
+        isEventLevel = true;
+        setScopeButtons();
+        eventSelect.setEnabled(true);
+        if (eventId > 0) loadExistingPolicy();
+        else             this.root = presenter.emptyPolicy();
+        rebuildTree();
+    }
+
+    private void setScopeButtons() {
+        if (isEventLevel) { eventBtn.addClassName("on"); companyBtn.removeClassName("on"); }
+        else              { companyBtn.addClassName("on"); eventBtn.removeClassName("on"); }
+    }
+
     private void refreshScope() {
         if (scopeContextLabel == null) return;
-        scopeContextLabel.setText(isEventLevel
-            ? (eventId   > 0 ? "Event #"   + eventId   : "Event-level")
-            : (companyId > 0 ? "Company #" + companyId : "Company-level"));
+        if (isEventLevel) {
+            scopeContextLabel.setText(eventId > 0
+                ? "Event: " + currentEventName()
+                : "Event-level — choose an event");
+        } else {
+            scopeContextLabel.setText(companyId > 0
+                ? "Company: " + currentCompanyName()
+                : "No company selected");
+        }
+    }
+
+    private String currentCompanyName() {
+        ProductionCompanyDTO c = companySelect.getValue();
+        return c != null ? c.name() : ("#" + companyId);
+    }
+
+    private String currentEventName() {
+        EventDetailDTO ev = eventSelect.getValue();
+        return ev != null ? ev.name() : ("#" + eventId);
     }
 
     private void updateValidity() {
@@ -352,13 +498,27 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
     }
 
     private void savePolicy() {
-        if (companyId <= 0) { Toasts.failure("No company selected."); return; }
-        if (isEventLevel && eventId <= 0) { Toasts.failure("No event selected."); return; }
+        if (companyId <= 0) { Toasts.failure("Choose a company first."); return; }
+        if (isEventLevel && eventId <= 0) { Toasts.failure("Choose an event, or switch to Company-level."); return; }
         switch (presenter.save(memberToken, companyId, eventId, isEventLevel, root)) {
-            case SaveOutcome.Success s        -> Toasts.success("Policy saved.");
-            case SaveOutcome.NotAuthenticated na -> Toasts.failure("Please sign in again to save.");
-            case SaveOutcome.Invalid inv      -> Toasts.warn(inv.reason());
-            case SaveOutcome.Failure f        -> Toasts.failure("Failed to save: " + f.reason());
+            case SaveOutcome.Success s           -> Toasts.success("Policy saved.");
+            case SaveOutcome.NotAuthenticated na  -> Toasts.failure("Please sign in again to save.");
+            case SaveOutcome.Invalid inv         -> Toasts.warn(inv.reason());
+            case SaveOutcome.Failure f           -> Toasts.failure("Failed to save: " + f.reason());
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------------
+
+    private static Integer parseOpt(String s) {
+        if (s == null) return null;
+        try { return Integer.parseInt(s); } catch (NumberFormatException e) { return null; }
+    }
+
+    private static int parseId(String s) {
+        if (s == null) return -1;
+        try { return Integer.parseInt(s); } catch (NumberFormatException e) { return -1; }
     }
 }
