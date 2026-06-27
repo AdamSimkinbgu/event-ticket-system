@@ -139,7 +139,7 @@ public class CompanyEventListView extends LkPage {
         dialog.setConfirmText("Cancel event");
         dialog.setConfirmButtonTheme("error primary");
         dialog.addConfirmListener(ignored -> {
-            int eventId = ev.eventId();
+            int eventId = Integer.parseInt(ev.eventId());
             switch (presenter.cancelEvent(AuthSession.token(), eventId)) {
                 case CompanyEventListPresenter.ActionOutcome.Success ignored2 -> {
                     Toasts.success("Event canceled and refunds issued.");
@@ -148,7 +148,7 @@ public class CompanyEventListView extends LkPage {
                 case CompanyEventListPresenter.ActionOutcome.NotAuthenticated ignored2 ->
                     Toasts.warn("Session expired — please sign in again.");
                 case CompanyEventListPresenter.ActionOutcome.Failure fail ->
-                    Toasts.error("Cancel failed: " + fail.reason());
+                    Toasts.failure("Cancel failed: " + fail.reason());
             }
         });
         dialog.open();
@@ -178,7 +178,7 @@ public class CompanyEventListView extends LkPage {
         dialog.addConfirmListener(ignored -> {
             EventStatus target = select.getValue();
             if (target == null) return;
-            switch (presenter.changeEventStatus(AuthSession.token(), ev.eventId(), target)) {
+            switch (presenter.changeEventStatus(AuthSession.token(), Integer.parseInt(ev.eventId()), target)) {
                 case CompanyEventListPresenter.ActionOutcome.Success ignored2 -> {
                     Toasts.success("Event status changed to " + target.name() + ".");
                     reload();
@@ -186,7 +186,7 @@ public class CompanyEventListView extends LkPage {
                 case CompanyEventListPresenter.ActionOutcome.NotAuthenticated ignored2 ->
                     Toasts.warn("Session expired — please sign in again.");
                 case CompanyEventListPresenter.ActionOutcome.Failure fail ->
-                    Toasts.error("Status change failed: " + fail.reason());
+                    Toasts.failure("Status change failed: " + fail.reason());
             }
         });
         dialog.open();
