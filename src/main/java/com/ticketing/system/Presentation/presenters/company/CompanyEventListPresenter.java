@@ -52,6 +52,18 @@ public class CompanyEventListPresenter {
         }
     }
 
+    public ActionOutcome deleteEvent(String token, int eventId) {
+        if (token == null) return new ActionOutcome.NotAuthenticated();
+        try {
+            eventService.deleteEvent(token, eventId);
+            return new ActionOutcome.Success();
+        } catch (InvalidTokenException e) {
+            return new ActionOutcome.NotAuthenticated();
+        } catch (RuntimeException e) {
+            return new ActionOutcome.Failure(e.getMessage());
+        }
+    }
+
     public ActionOutcome changeEventStatus(String token, int eventId, EventStatus targetStatus) {
         if (token == null) return new ActionOutcome.NotAuthenticated();
         try {

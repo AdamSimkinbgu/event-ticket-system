@@ -126,6 +126,9 @@ public class CompanyEventListView extends LkPage {
             iconBtn("gear",    "Change status", () -> openStatusDialog(ev)),
             iconBtn("warning", "Cancel event",  () -> openCancelDialog(ev))
         );
+        if (ev.status() == EventStatus.CANCELED) {
+            actions.add(iconBtn("trash", "Remove event", () -> openDeleteDialog(ev)));
+        }
         row.put("act", actions);
         grid.row(row);
     }
@@ -149,6 +152,29 @@ public class CompanyEventListView extends LkPage {
                     Toasts.warn("Session expired — please sign in again.");
                 case CompanyEventListPresenter.ActionOutcome.Failure fail ->
                     Toasts.failure("Cancel failed: " + fail.reason());
+            }
+        });
+        dialog.open();
+    }
+
+    private void openDeleteDialog(EventDetailDTO ev) {
+        ConfirmDialog dialog = new ConfirmDialog();
+        dialog.setHeader("Remove \"" + escape(ev.name()) + "\"?");
+        dialog.setText("The event record will be permanently deleted. This cannot be undone.");
+        dialog.setCancelable(true);
+        dialog.setCancelText("Keep");
+        dialog.setConfirmText("Remove");
+        dialog.setConfirmButtonTheme("error primary");
+        dialog.addConfirmListener(ignored -> {
+            switch (presenter.deleteEvent(AuthSession.token(), Integer.parseInt(ev.eventId()))) {
+                case CompanyEventListPresenter.ActionOutcome.Success ignored2 -> {
+                    Toasts.success("Event removed.");
+                    reload();
+                }
+                case CompanyEventListPresenter.ActionOutcome.NotAuthenticated ignored2 ->
+                    Toasts.warn("Session expired — please sign in again.");
+                case CompanyEventListPresenter.ActionOutcome.Failure fail ->
+                    Toasts.failure("Remove failed: " + fail.reason());
             }
         });
         dialog.open();

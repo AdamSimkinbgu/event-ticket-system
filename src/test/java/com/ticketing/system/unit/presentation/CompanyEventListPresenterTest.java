@@ -125,6 +125,45 @@ class CompanyEventListPresenterTest {
         assertEquals("refund failed", fail.reason());
     }
 
+    // ── deleteEvent ───────────────────────────────────────────────────────────
+
+    @Test
+    void deleteEvent_nullToken_returnsNotAuthenticated() {
+        assertInstanceOf(CompanyEventListPresenter.ActionOutcome.NotAuthenticated.class,
+                presenter.deleteEvent(null, EVENT_ID));
+        verifyNoInteractions(eventService);
+    }
+
+    @Test
+    void deleteEvent_invalidToken_returnsNotAuthenticated() {
+        doThrow(new InvalidTokenException("bad")).when(eventService).deleteEvent(TOKEN, EVENT_ID);
+
+        assertInstanceOf(CompanyEventListPresenter.ActionOutcome.NotAuthenticated.class,
+                presenter.deleteEvent(TOKEN, EVENT_ID));
+    }
+
+    @Test
+    void deleteEvent_success_callsServiceAndReturnsSuccess() {
+        doNothing().when(eventService).deleteEvent(TOKEN, EVENT_ID);
+
+        assertInstanceOf(CompanyEventListPresenter.ActionOutcome.Success.class,
+                presenter.deleteEvent(TOKEN, EVENT_ID));
+
+        verify(eventService).deleteEvent(TOKEN, EVENT_ID);
+    }
+
+    @Test
+    void deleteEvent_notCanceled_returnsFailureWithMessage() {
+        doThrow(new IllegalStateException("Only CANCELED events can be deleted"))
+                .when(eventService).deleteEvent(TOKEN, EVENT_ID);
+
+        CompanyEventListPresenter.ActionOutcome.Failure fail =
+                assertInstanceOf(CompanyEventListPresenter.ActionOutcome.Failure.class,
+                        presenter.deleteEvent(TOKEN, EVENT_ID));
+
+        assertEquals("Only CANCELED events can be deleted", fail.reason());
+    }
+
     // ── changeEventStatus ─────────────────────────────────────────────────────
 
     @Test

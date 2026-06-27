@@ -735,6 +735,24 @@ public class EventManagementService {
         }
     }
 
+    // Permanently removes a CANCELED event. Only callable by a user with CONFIGURE_VENUE.
+    public void deleteEvent(String token, int eventId) {
+        int userId = validateTokenAndGetUserId(token);
+        eventRepository.lockForUpdate(eventId);
+        try {
+            Event event = eventRepository.findById(eventId);
+            User user = userRepository.getUserById(userId);
+            user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+            if (event.getStatus() != EventStatus.CANCELED) {
+                throw new IllegalStateException("Only CANCELED events can be deleted");
+            }
+            eventRepository.delete(eventId);
+            log.info("Event {} deleted by user {}", eventId, userId);
+        } finally {
+            eventRepository.unlock(eventId);
+        }
+    }
+
     // Owner/Manager changes an event's status to a target state (non-cancel transitions only).
     // Cancel with refund pipeline uses cancelEventAndRefund.
     public void changeEventStatus(String token, int eventId, EventStatus targetStatus) {

@@ -65,6 +65,11 @@ public class MemoryEventRepository implements IEventRepository {
     }
 
     @Override
+    public void delete(int eventId) {
+        events.remove(eventId);
+    }
+
+    @Override
     public boolean save(Event event) {
         // New events (not yet in the map) may be saved without a lock — no other
         // thread can know the ID before the first save completes.
