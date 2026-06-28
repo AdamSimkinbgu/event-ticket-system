@@ -17,10 +17,12 @@ import com.ticketing.system.Presentation.presenters.catalog.BrowseEventsPresente
 import com.ticketing.system.Presentation.session.SessionIdentity;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.NativeButton;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.textfield.IntegerField;
+import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
@@ -33,6 +35,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -57,30 +60,46 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     private final BrowseEventsPresenter presenter;
     private final SessionIdentity identity;
 
-    private static final String CAT_ALL = "All categories";
-    private static final String REGION_ALL = "All regions";
-    private static final String DATE_ANY = "Any time";
-    private static final List<String> CATEGORIES = List.of(CAT_ALL, "Concerts", "Sports", "Theatre", "Festivals", "Comedy");
-    private static final List<String> REGIONS = List.of(REGION_ALL, "Tel Aviv", "Jerusalem", "Haifa", "Caesarea",
-            "Be'er Sheva");
+    private static final String CAT_ALL     = "All categories";
+    private static final String COUNTRY_ALL = "All countries";
+    private static final String CITY_ALL    = "All cities";
+    private static final String DATE_ANY    = "Any time";
+
+    private static final List<String> CATEGORIES = List.of(
+            CAT_ALL, "Concerts", "Sports", "Theatre", "Festivals", "Comedy");
+
+    private static final Map<String, List<String>> CITIES_BY_COUNTRY = Map.of(
+            "Israel", List.of("Tel Aviv", "Jerusalem", "Haifa", "Caesarea", "Be'er Sheva"),
+            "USA",    List.of("New York", "Los Angeles", "Chicago"),
+            "UK",     List.of("London", "Manchester", "Birmingham"));
+
+    private static final List<String> COUNTRIES = List.of(COUNTRY_ALL, "Israel", "USA", "UK");
+
     private static final List<String> SORTS = List.of(
             "Date · soonest", "Date · latest", "Price · low to high", "Price · high to low", "Popularity");
 
     // ---- filter state ----
 
-    private String filterCategory = CAT_ALL;
-    private String filterRegion = REGION_ALL;
+    private String filterCategory  = CAT_ALL;
+    private String filterCountry   = COUNTRY_ALL;
+    private String filterCity      = CITY_ALL;
+    private String filterArtist    = "";
     private String filterDateRange = DATE_ANY;
-    private String filterSort = SORTS.get(0);
+    private String filterSort      = SORTS.get(0);
     private Integer filterPriceMin = null;
     private Integer filterPriceMax = null;
 
     // ---- ui references for re-render / reset ----
 
     private LkSelect categorySelect;
-    private LkSelect regionSelect;
+    private LkSelect countrySelect;
+    private LkSelect citySelect;
     private LkSelect sortSelect;
     private LkDateRangeField dateRangeField;
+    private DatePicker customFromPicker;
+    private DatePicker customToPicker;
+    private Div customRangeRow;
+    private TextField artistField;
     private IntegerField priceMin;
     private IntegerField priceMax;
     private Div gridSlot;
@@ -90,7 +109,6 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         this.presenter = presenter;
         this.identity = identity;
 
-        // One unfiltered server query seeds the initial "All Events" grid render.
         List<EventRow> allEvents = presenter.search(identity.credential(), CatalogSearchFiltersDTO.empty())
                 .stream().map(BrowseEventsView::toRow).toList();
 
@@ -100,18 +118,12 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         renderGrid(allEvents.stream().sorted(comparatorFor(filterSort)).toList());
     }
 
-    /**
-     * Apply a {@code ?category=...} query parameter (e.g. when arriving from a category card on the
-     * landing page) by pre-selecting the matching chip + sidebar Category select, which re-runs the
-     * server-side filtered query.
-     */
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
         List<String> values = event.getLocation().getQueryParameters()
             .getParameters().getOrDefault("category", List.of());
         if (values.isEmpty()) return;
         String category = values.get(0);
-        // Only honor a known category (else the chips/select would mismatch).
         if (CATEGORIES.contains(category)) setCategory(category);
     }
 
@@ -126,19 +138,16 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         Div sub = new Div();
         sub.addClassName("bz-hero-sub");
         sub.setText("Concerts, matches, theatre and conferences — across Israel.");
-        // Decorative banner only — no search bar (catalog search lives in the filters below).
         hero.add(title, sub);
         return hero;
     }
 
-    // ---- category selection (driven by the sidebar select / ?category= deep-link) ----
+    // ---- category selection ----
 
     private void setCategory(String category) {
-        if (filterCategory.equals(category))
-            return;
+        if (filterCategory.equals(category)) return;
         filterCategory = category;
-        if (categorySelect != null)
-            categorySelect.setValue(category);
+        if (categorySelect != null) categorySelect.setValue(category);
         runSearch();
     }
 
@@ -170,23 +179,79 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         clear.addClickListener(e -> clearFilters());
         card.headerRight(clear);
 
+        // Category
         categorySelect = new LkSelect(CAT_ALL, CATEGORIES).label("Category");
         categorySelect.onChange(this::setCategory);
 
+        // Artist
+        artistField = new TextField();
+        artistField.setPlaceholder("e.g. Taylor Swift");
+        artistField.setValueChangeMode(ValueChangeMode.LAZY);
+        artistField.getStyle().set("width", "100%");
+        artistField.addValueChangeListener(e -> {
+            String v = e.getValue() == null ? "" : e.getValue();
+            if (Objects.equals(filterArtist, v)) return;
+            filterArtist = v;
+            runSearch();
+        });
+        Div artistWrap = labelledWrap("Artist", artistField);
+
+        // Date range — "Custom range" preset reveals the pickers below
         dateRangeField = new LkDateRangeField().label("Date Range");
         dateRangeField.onChange(v -> {
-            if (Objects.equals(filterDateRange, v)) return;   // skip redundant re-query (e.g. clearFilters sync)
+            if (Objects.equals(filterDateRange, v)) return;
             filterDateRange = v;
+            customRangeRow.setVisible("Custom range".equals(v));
+            // Returning to "Custom range" with the pickers already populated must re-query;
+            // every other preset queries immediately.
+            if ("Custom range".equals(v)) runCustomSearchIfValid();
+            else runSearch();
+        });
+
+        // Custom date pickers (shown only when "Custom range" is selected). Each picker bounds the
+        // other (min/max) so an inverted range can't be entered, then re-queries — clearing a date
+        // re-queries with that bound left open rather than leaving the grid stale.
+        customFromPicker = new DatePicker();
+        customFromPicker.setPlaceholder("Start date");
+        customFromPicker.addValueChangeListener(e -> {
+            customToPicker.setMin(e.getValue());   // null clears the constraint
+            runCustomSearchIfValid();
+        });
+
+        customToPicker = new DatePicker();
+        customToPicker.setPlaceholder("End date");
+        customToPicker.addValueChangeListener(e -> {
+            customFromPicker.setMax(e.getValue());
+            runCustomSearchIfValid();
+        });
+
+        customRangeRow = new Div();
+        customRangeRow.getStyle().set("display", "flex").set("flex-direction", "column").set("gap", "8px");
+        customFromPicker.getStyle().set("width", "100%");
+        customToPicker.getStyle().set("width", "100%");
+        customRangeRow.add(customFromPicker, customToPicker);
+        customRangeRow.setVisible(false);
+
+        // Country → City (dependent selects)
+        countrySelect = new LkSelect(COUNTRY_ALL, COUNTRIES).label("Country");
+        countrySelect.onChange(v -> {
+            if (Objects.equals(filterCountry, v)) return;
+            filterCountry = v;
+            filterCity = CITY_ALL;
+            citySelect.setOptions(cityOptionsFor(v));
+            citySelect.enabled(!COUNTRY_ALL.equals(v));
             runSearch();
         });
 
-        regionSelect = new LkSelect(REGION_ALL, REGIONS).label("Region");
-        regionSelect.onChange(v -> {
-            if (Objects.equals(filterRegion, v)) return;
-            filterRegion = v;
+        citySelect = new LkSelect(CITY_ALL, List.of(CITY_ALL)).label("City");
+        citySelect.enabled(false);
+        citySelect.onChange(v -> {
+            if (Objects.equals(filterCity, v)) return;
+            filterCity = v;
             runSearch();
         });
 
+        // Sort
         sortSelect = new LkSelect(SORTS.get(0), SORTS).label("Sort By");
         sortSelect.onChange(v -> {
             if (Objects.equals(filterSort, v)) return;
@@ -195,18 +260,13 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         });
 
         LkCol col = new LkCol().gap(16);
-        col.add(categorySelect, dateRangeField, buildPriceRange(), regionSelect, sortSelect);
+        col.add(categorySelect, artistWrap, dateRangeField, customRangeRow,
+                buildPriceRange(), countrySelect, citySelect, sortSelect);
         card.add(col);
         return card;
     }
 
     private Component buildPriceRange() {
-        Div wrap = new Div();
-        Span label = new Span("Price range");
-        label.addClassName("lk-label");
-        label.getStyle().set("display", "block").set("margin-bottom", "6px");
-        wrap.add(label);
-
         priceMin = new IntegerField();
         priceMin.setPlaceholder("Min");
         priceMin.setMin(0);
@@ -235,6 +295,11 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
             runSearch();
         });
 
+        Div wrap = new Div();
+        Span label = new Span("Price range");
+        label.addClassName("lk-label");
+        label.getStyle().set("display", "block").set("margin-bottom", "6px");
+        wrap.add(label);
         LkRow row = new LkRow().gap(8);
         row.add(priceMin, priceMax);
         wrap.add(row);
@@ -250,17 +315,26 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     // ---- reset ----
 
     private void clearFilters() {
-        filterCategory = CAT_ALL;
-        filterRegion = REGION_ALL;
+        // Reset state first — onChange handlers short-circuit when value == filterXxx.
+        filterCategory  = CAT_ALL;
+        filterCountry   = COUNTRY_ALL;
+        filterCity      = CITY_ALL;
+        filterArtist    = "";
         filterDateRange = DATE_ANY;
-        filterSort = SORTS.get(0);
-        filterPriceMin = null;
-        filterPriceMax = null;
+        filterSort      = SORTS.get(0);
+        filterPriceMin  = null;
+        filterPriceMax  = null;
 
         categorySelect.setValue(CAT_ALL);
-        regionSelect.setValue(REGION_ALL);
-        sortSelect.setValue(SORTS.get(0));
+        countrySelect.setValue(COUNTRY_ALL);
+        citySelect.setOptions(List.of(CITY_ALL));
+        citySelect.enabled(false);
+        artistField.clear();
         dateRangeField.setValue(DATE_ANY);
+        customRangeRow.setVisible(false);
+        customFromPicker.clear();
+        customToPicker.clear();
+        sortSelect.setValue(SORTS.get(0));
         priceMin.clear();
         priceMax.clear();
         runSearch();
@@ -268,7 +342,6 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
 
     // ---- server-side search + render ----
 
-    /** Build the filter DTO from current chip/select state, query the server, sort, render. */
     private void runSearch() {
         List<EventRow> rows = presenter.search(identity.credential(), currentFilters()).stream()
                 .map(BrowseEventsView::toRow)
@@ -277,31 +350,60 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         renderGrid(rows);
     }
 
-    private CatalogSearchFiltersDTO currentFilters() {
-        DateWindow dw = dateWindow(filterDateRange, LocalDate.now());
-        return new CatalogSearchFiltersDTO(
-                null,                                       // eventName
-                null,                                       // artistName
-                categoryFilterValue(filterCategory),        // category (enum name, or null = all)
-                null,                                       // keywords
-                filterPriceMin == null ? null : filterPriceMin.doubleValue(),
-                filterPriceMax == null ? null : filterPriceMax.doubleValue(),
-                dw.from(),
-                dw.to(),
-                REGION_ALL.equals(filterRegion) ? null : filterRegion,   // location (city/country substring)
-                null, null, null, null);                    // event/company rating filters unused here
+    /**
+     * Re-query for the custom-range flow: only while "Custom range" is the active preset, and only
+     * when the picker values aren't inverted (an inverted range is rejected server-side and would
+     * surface as a confusing empty grid). Either bound may be open (null).
+     */
+    private void runCustomSearchIfValid() {
+        if (!"Custom range".equals(filterDateRange)) return;
+        if (isValidCustomRange(customFromPicker.getValue(), customToPicker.getValue()))
+            runSearch();
     }
 
-    /** UI category label → EventCategory enum name for the server filter (null = no category filter). */
+    private CatalogSearchFiltersDTO currentFilters() {
+        LocalDate from, to;
+        if ("Custom range".equals(filterDateRange)) {
+            from = customFromPicker.getValue();
+            to   = customToPicker.getValue();
+        } else {
+            DateWindow dw = dateWindow(filterDateRange, LocalDate.now());
+            from = dw.from();
+            to   = dw.to();
+        }
+        return new CatalogSearchFiltersDTO(
+                null,
+                filterArtist.isBlank() ? null : filterArtist,
+                categoryFilterValue(filterCategory),
+                null,
+                filterPriceMin == null ? null : filterPriceMin.doubleValue(),
+                filterPriceMax == null ? null : filterPriceMax.doubleValue(),
+                from, to,
+                locationFilter(),
+                null, null, null, null);
+    }
+
+    private String locationFilter() {
+        return locationFilter(filterCity, filterCountry);
+    }
+
+    /** City (if selected) beats country so the DB predicate is as narrow as possible. */
+    static String locationFilter(String filterCity, String filterCountry) {
+        if (!CITY_ALL.equals(filterCity))       return filterCity;
+        if (!COUNTRY_ALL.equals(filterCountry)) return filterCountry;
+        return null;
+    }
+
+    /** UI category label → EventCategory enum name (null = no filter). */
     static String categoryFilterValue(String label) {
         if (label == null) return null;
         return switch (label) {
-            case "Concerts"  -> "CONCERT";   // seed concerts use CONCERT (enum also has the unused MUSIC)
+            case "Concerts"  -> "CONCERT";
             case "Sports"    -> "SPORTS";
             case "Theatre"   -> "THEATER";
             case "Festivals" -> "FESTIVAL";
             case "Comedy"    -> "COMEDY";
-            default          -> null;        // "All categories" / unknown
+            default          -> null;
         };
     }
 
@@ -314,11 +416,11 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
                 LocalDate sat = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY));
                 yield new DateWindow(sat, sat.plusDays(1));
             }
-            case "Next 7 days" -> new DateWindow(today, today.plusDays(7));
-            case "Next 30 days" -> new DateWindow(today, today.plusDays(30));
-            case "This month" -> new DateWindow(today, today.with(TemporalAdjusters.lastDayOfMonth()));
+            case "Next 7 days"   -> new DateWindow(today, today.plusDays(7));
+            case "Next 30 days"  -> new DateWindow(today, today.plusDays(30));
+            case "This month"    -> new DateWindow(today, today.with(TemporalAdjusters.lastDayOfMonth()));
             case "Next 3 months" -> new DateWindow(today, today.plusMonths(3));
-            default -> new DateWindow(null, null);   // "Any time"
+            default              -> new DateWindow(null, null); // "Any time" and "Custom range"
         };
     }
 
@@ -339,10 +441,21 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         s.append(n).append(" event").append(n == 1 ? "" : "s");
         if (!CAT_ALL.equals(filterCategory))
             s.append(" · ").append(filterCategory.toLowerCase());
-        if (!REGION_ALL.equals(filterRegion))
-            s.append(" in ").append(filterRegion);
-        if (!DATE_ANY.equals(filterDateRange))
-            s.append(" · ").append(filterDateRange.toLowerCase());
+        if (!filterArtist.isBlank())
+            s.append(" · ").append(filterArtist);
+        if (!CITY_ALL.equals(filterCity))
+            s.append(" in ").append(filterCity);
+        else if (!COUNTRY_ALL.equals(filterCountry))
+            s.append(" in ").append(filterCountry);
+        if (!DATE_ANY.equals(filterDateRange)) {
+            if ("Custom range".equals(filterDateRange)
+                    && customFromPicker.getValue() != null && customToPicker.getValue() != null) {
+                s.append(" · ").append(customFromPicker.getValue())
+                 .append(" → ").append(customToPicker.getValue());
+            } else if (!"Custom range".equals(filterDateRange)) {
+                s.append(" · ").append(filterDateRange.toLowerCase());
+            }
+        }
         if (filterPriceMin != null || filterPriceMax != null) {
             s.append(" · $")
                     .append(filterPriceMin == null ? "0" : filterPriceMin)
@@ -368,7 +481,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     }
 
     private void addRow(LkGrid grid, EventRow ev) {
-        Map<String, Object> row = new LinkedHashMap<>();
+        LinkedHashMap<String, Object> row = new LinkedHashMap<>();
         Span name = new Span();
         name.getElement().setProperty("innerHTML", "<b>" + escape(ev.name) + "</b>");
         row.put("name", name);
@@ -394,7 +507,30 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         return empty;
     }
 
-    // ---- DTO → row mapping + sort ----
+    // ---- helpers ----
+
+    static List<String> cityOptionsFor(String country) {
+        List<String> cities = CITIES_BY_COUNTRY.get(country);
+        if (cities == null) return List.of(CITY_ALL);
+        List<String> opts = new ArrayList<>(cities.size() + 1);
+        opts.add(CITY_ALL);
+        opts.addAll(cities);
+        return opts;
+    }
+
+    /** A custom range is searchable unless it's the from&gt;to inversion; an open bound (null) is fine. */
+    static boolean isValidCustomRange(LocalDate from, LocalDate to) {
+        return from == null || to == null || !from.isAfter(to);
+    }
+
+    private static Div labelledWrap(String labelText, Component field) {
+        Div wrap = new Div();
+        Span label = new Span(labelText);
+        label.addClassName("lk-label");
+        label.getStyle().set("display", "block").set("margin-bottom", "6px");
+        wrap.add(label, field);
+        return wrap;
+    }
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("d MMM");
 
@@ -410,18 +546,16 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     }
 
     private static Comparator<EventRow> comparatorFor(String sort) {
-        // Undated (TBA) events sort last in BOTH date views — so reverse the value order, not the
-        // whole comparator (bySoonest.reversed() would flip nullsLast and float TBA events to the top).
         Comparator<EventRow> bySoonest = Comparator.comparing(EventRow::startsAt,
                 Comparator.nullsLast(Comparator.naturalOrder()));
         Comparator<EventRow> byLatest = Comparator.comparing(EventRow::startsAt,
                 Comparator.nullsLast(Comparator.reverseOrder()));
         return switch (sort) {
-            case "Date · latest" -> byLatest;
+            case "Date · latest"       -> byLatest;
             case "Price · low to high" -> Comparator.comparingInt(EventRow::priceCents);
             case "Price · high to low" -> Comparator.comparingInt(EventRow::priceCents).reversed();
-            case "Popularity" -> Comparator.comparing(EventRow::id);
-            default -> bySoonest; // soonest
+            case "Popularity"          -> Comparator.comparing(EventRow::id);
+            default                    -> bySoonest;
         };
     }
 
@@ -429,11 +563,11 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         if (enumName == null) return "Other";
         return switch (enumName.toUpperCase()) {
             case "CONCERT", "MUSIC" -> "Concerts";
-            case "SPORTS" -> "Sports";
-            case "THEATER" -> "Theatre";
-            case "FESTIVAL" -> "Festivals";
-            case "COMEDY" -> "Comedy";
-            default -> "Other";
+            case "SPORTS"           -> "Sports";
+            case "THEATER"          -> "Theatre";
+            case "FESTIVAL"         -> "Festivals";
+            case "COMEDY"           -> "Comedy";
+            default                 -> "Other";
         };
     }
 

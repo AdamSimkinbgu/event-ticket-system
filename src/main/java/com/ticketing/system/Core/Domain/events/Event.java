@@ -28,6 +28,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import jakarta.persistence.Version;
 
 // V3: aggregate root mapped to JPA. Assigned int @Id (minted by nextId()); comapnyid is a by-id
@@ -57,9 +58,12 @@ public class Event implements InvariantChecked {
     private EventCategory category;
     @Column(name = "company_id", nullable = false)
     private int comapnyid;
+    // volatile: status is read by buyer operations (reserve/release/confirm) holding only the SHARED
+    // event read lock, while markSoldOut()/revertToOnSale() write it. volatile gives those readers
+    // visibility; statusLock (below) makes the auto-transition read-modify-write atomic.
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private EventStatus status;
+    private volatile EventStatus status;
     @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @JoinColumn(name = "venue_map_id")
     private VenueMap venueMap;
@@ -75,6 +79,12 @@ public class Event implements InvariantChecked {
 
     @Version
     private Long version;
+
+    // Runtime monitor guarding the ON_SALE<->SOLD_OUT auto-transitions so concurrent buyer operations
+    // (which hold only the shared event read lock) can't race the status read-modify-write. @Transient:
+    // never persisted; re-created by the field initializer on JPA hydrate (same pattern as seat locks).
+    @Transient
+    private final Object statusLock = new Object();
 
     /** For JPA only — do not call from application code. */
     protected Event() { }
@@ -125,9 +135,12 @@ public class Event implements InvariantChecked {
     public boolean reserveInventory(int zoneId, InventorySelection selection) {
         validateCanReserve(selection);
         this.venueMap.reserveInventory(zoneId, selection);
-        // When the last available place/seat is taken, the event sells out automatically.
-        if (status == EventStatus.ON_SALE && !venueMap.hasAvailableInventory()) {
-            markSoldOut();
+        // When the last available place/seat is taken, the event sells out automatically. Guarded by
+        // statusLock so concurrent buyer reservations can't race this read-modify-write of status.
+        synchronized (statusLock) {
+            if (status == EventStatus.ON_SALE && !venueMap.hasAvailableInventory()) {
+                markSoldOut();
+            }
         }
         return true;
     }
@@ -136,9 +149,11 @@ public class Event implements InvariantChecked {
         validateInventoryAction(selection);
         this.venueMap.releaseInventory(zoneId, selection);
         // Releasing inventory (manual removal, checkout rollback, or expiry sweep) re-opens
-        // a sold-out event for sale again.
-        if (status == EventStatus.SOLD_OUT && venueMap.hasAvailableInventory()) {
-            revertToOnSale();
+        // a sold-out event for sale again. Guarded by statusLock (see reserveInventory).
+        synchronized (statusLock) {
+            if (status == EventStatus.SOLD_OUT && venueMap.hasAvailableInventory()) {
+                revertToOnSale();
+            }
         }
         return true;
     }
@@ -151,8 +166,11 @@ public class Event implements InvariantChecked {
     public boolean returnSoldToStock(int zoneId, InventorySelection selection) {
         validateInventoryAction(selection);
         this.venueMap.returnSoldToStock(zoneId, selection);
-        if (status == EventStatus.SOLD_OUT && venueMap.hasAvailableInventory()) {
-            revertToOnSale();
+        // Guarded by statusLock (see reserveInventory).
+        synchronized (statusLock) {
+            if (status == EventStatus.SOLD_OUT && venueMap.hasAvailableInventory()) {
+                revertToOnSale();
+            }
         }
         return true;
     }
@@ -453,30 +471,38 @@ public class Event implements InvariantChecked {
     // ON_SALE -> SOLD_OUT when no AVAILABLE tickets remain.
     // Auto-fired from reserveInventory; safe to call directly (idempotent when already SOLD_OUT).
     public void markSoldOut() {
-        if (status == EventStatus.SOLD_OUT) {
-            return;
-        }
+        // statusLock makes this read-modify-write atomic against concurrent buyer ops; reentrant when
+        // called from reserveInventory's guarded block on the same thread.
+        synchronized (statusLock) {
+            if (status == EventStatus.SOLD_OUT) {
+                return;
+            }
 
-        if (status != EventStatus.ON_SALE) {
-            throw new InvalidStateTransitionException("Event", status.name(), EventStatus.SOLD_OUT.name());
-        }
+            if (status != EventStatus.ON_SALE) {
+                throw new InvalidStateTransitionException("Event", status.name(), EventStatus.SOLD_OUT.name());
+            }
 
-        this.status = EventStatus.SOLD_OUT;
+            this.status = EventStatus.SOLD_OUT;
+        }
     }
 
 
     // SOLD_OUT -> ON_SALE when availability reappears (a reservation is released).
     // Auto-fired from releaseInventory; safe to call directly (idempotent when already ON_SALE).
     public void revertToOnSale() {
-        if (status == EventStatus.ON_SALE) {
-            return;
-        }
+        // statusLock makes this read-modify-write atomic against concurrent buyer ops; reentrant when
+        // called from releaseInventory/returnSoldToStock's guarded block on the same thread.
+        synchronized (statusLock) {
+            if (status == EventStatus.ON_SALE) {
+                return;
+            }
 
-        if (status != EventStatus.SOLD_OUT) {
-            throw new InvalidStateTransitionException("Event", status.name(), EventStatus.ON_SALE.name());
-        }
+            if (status != EventStatus.SOLD_OUT) {
+                throw new InvalidStateTransitionException("Event", status.name(), EventStatus.ON_SALE.name());
+            }
 
-        this.status = EventStatus.ON_SALE;
+            this.status = EventStatus.ON_SALE;
+        }
     }
 
     
