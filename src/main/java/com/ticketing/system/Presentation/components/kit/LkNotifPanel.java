@@ -84,6 +84,12 @@ public class LkNotifPanel extends Div {
         return this;
     }
 
+    /** Hide the "Mark All Read" action — used when there is nothing to mark. */
+    public LkNotifPanel hideMarkAll() {
+        markAll.setVisible(false);
+        return this;
+    }
+
     public static LkNotifPanel buyer() {
         return new LkNotifPanel("Notifications", List.of(
             new Item("", "ticket", "Your Coldplay seats are confirmed", "Receipt #TKT-20847 · $504.00 paid", "2m", true, null),
@@ -147,7 +153,7 @@ public class LkNotifPanel extends Div {
         if (notifications == null || notifications.isEmpty()) {
             return new LkNotifPanel("Notifications", List.of(
                 new Item("", "bell", "You're all caught up", "No new notifications", "", false, null)
-            ), "View all notifications");
+            ), "View all notifications").hideMarkAll();
         }
         List<Item> items = notifications.stream()
             .map(n -> new Item(
