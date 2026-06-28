@@ -10,8 +10,20 @@ import com.vaadin.flow.component.html.UnorderedList;
 
 import java.util.stream.Collectors;
 
+/**
+ * Vaadin component that renders a company's organizational tree (UC-25) as a
+ * nested {@code <ul>} of styled "org cards", recursing through each node's
+ * appointees. Each card shows the member's avatar, name, role and (for managers)
+ * their granted permissions, and is tagged Composite or Leaf by whether the node
+ * has appointees.
+ */
 public class OrgTreeRenderer extends Composite<Div> {
 
+    /**
+     * Builds the rendered tree rooted at the given node.
+     *
+     * @param root the founder/root node of the organizational tree
+     */
     public OrgTreeRenderer(OrganizationalTreeNodeDTO root) {
         Div tree = getContent();
         tree.addClassName("org-chart");
@@ -20,6 +32,12 @@ public class OrgTreeRenderer extends Composite<Div> {
         tree.add(ul);
     }
 
+    /**
+     * Recursively builds the list item for one node and its appointees.
+     *
+     * @param dto the node to render
+     * @return the list item (card plus a nested list of appointees, if any)
+     */
     private ListItem buildNode(OrganizationalTreeNodeDTO dto) {
         ListItem li = new ListItem();
 
