@@ -275,7 +275,7 @@ public final class ScenarioOps {
 
         EventDetailDTO created = eventService.addEvent(token, new EventCreationDTO(
                 companyId, name, name + " — seeded event", List.of(headliner(name)), category,
-                null, new Location("Israel", city), List.of(show), nonePolicy()));
+                cmd.doubleNamed("rating"), new Location("Israel", city), List.of(show), nonePolicy()));
         int eventId = Integer.parseInt(created.eventId());
         eventService.configureVenueMap(token, companyId, buildVenueMap(created.eventId(), city + " venue", zones));
         if (cmd.boolNamed("publish", false)) {

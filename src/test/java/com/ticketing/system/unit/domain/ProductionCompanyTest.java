@@ -1,5 +1,6 @@
 package com.ticketing.system.unit.domain;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -72,6 +73,36 @@ class ProductionCompanyTest extends BaseDomainTest {
         @Test
         public void GivenUserIsNotOwner_WhenCheckOwner_ThenThrowException() {
                 assertThrows(UnauthorizedActionException.class, () -> company.checkowner(TARGET_USER_ID));
+        }
+
+        ////////////////////////////////////////////////////////////////// Rating invariant
+
+        @Test
+        public void GivenRatingAboveFive_WhenConstruct_ThenThrowException() {
+                // A throwing constructor produces no object — nothing to track().
+                assertThrows(IllegalStateException.class, () -> new ProductionCompany(
+                                COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 6.0));
+        }
+
+        @Test
+        public void GivenNegativeRating_WhenConstruct_ThenThrowException() {
+                assertThrows(IllegalStateException.class, () -> new ProductionCompany(
+                                COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, -1.0));
+        }
+
+        @Test
+        public void GivenNullRating_WhenConstruct_ThenSucceeds() {
+                // The main-code path (registerCompany) constructs with a null rating — must stay valid.
+                assertDoesNotThrow(() -> track(new ProductionCompany(
+                                COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, null)));
+        }
+
+        @Test
+        public void GivenBoundaryRatings_WhenConstruct_ThenSucceeds() {
+                assertDoesNotThrow(() -> track(new ProductionCompany(
+                                COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 0.0)));
+                assertDoesNotThrow(() -> track(new ProductionCompany(
+                                COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, 5.0)));
         }
 
 }

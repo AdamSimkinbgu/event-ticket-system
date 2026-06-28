@@ -474,7 +474,7 @@ public class CompanyManagementService {
                     request.getName().trim(),
                     CompanyStatus.ACTIVE,
                     request.getDescription().trim(),
-                    null);
+                    0.0);
 
             // IProductionCompanyRepository.save returns void; the new instance IS the saved
             // one.

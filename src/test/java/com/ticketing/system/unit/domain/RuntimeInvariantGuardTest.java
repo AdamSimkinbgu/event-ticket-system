@@ -131,4 +131,16 @@ class RuntimeInvariantGuardTest extends BaseDomainTest {
         // Rolled back: the ticket keeps its original positive id.
         assertEquals(5, ticket.getId());
     }
+
+    @Test
+    void setRating_outOfRange_throwsAndRollsBack() {
+        ProductionCompany company = track(new ProductionCompany(
+                COMPANY_ID, OWNER_ID, "Acme", CompanyStatus.ACTIVE, "desc", 4.5));
+
+        // Rating must stay within 0–5 — an out-of-range value must be rejected.
+        assertThrows(IllegalStateException.class, () -> company.setRating(6.0));
+
+        // Rolled back: the company keeps its original valid rating.
+        assertEquals(4.5, company.getRating());
+    }
 }

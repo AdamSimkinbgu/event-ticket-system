@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -694,7 +695,7 @@ class EventManagementServiceTest {
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
                 when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-                when(mockEventRepo.findByCompanyId(COMPANY_ID)).thenReturn(List.of(event));
+                when(mockEventRepo.searchByCompanyAll(eq(COMPANY_ID), any())).thenReturn(List.of(event));
 
                 List<EventDetailDTO> result = eventService.listEventsForCompany(OWNER_TOKEN, COMPANY_ID);
 
@@ -720,7 +721,7 @@ class EventManagementServiceTest {
                 when(sessionManager.extractUserId(OWNER_TOKEN)).thenReturn(OWNER_ID);
                 when(userRepository.getUserById(OWNER_ID)).thenReturn(ownerUser);
                 when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
-                when(mockEventRepo.findByCompanyId(COMPANY_ID)).thenReturn(List.of());
+                when(mockEventRepo.searchByCompanyAll(eq(COMPANY_ID), any())).thenReturn(List.of());
 
                 List<EventDetailDTO> result = eventService.listEventsForCompany(OWNER_TOKEN, COMPANY_ID);
 

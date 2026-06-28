@@ -21,6 +21,7 @@ import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Application.dto.EventCreationDTO;
+import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
@@ -174,6 +175,13 @@ public class EventManagementService {
     // II.4.1.1 — Owner lists all events under their company.
     @Transactional(readOnly = true)
     public List<EventDetailDTO> listEventsForCompany(String token, int companyId) {
+        return listEventsForCompany(token, companyId, CatalogSearchFiltersDTO.empty());
+    }
+
+    // II.4.1.1 — Owner lists their company's events narrowed by the catalogue filters (company-rating
+    // filters don't apply to a single company, so they're stripped).
+    @Transactional(readOnly = true)
+    public List<EventDetailDTO> listEventsForCompany(String token, int companyId, CatalogSearchFiltersDTO filters) {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
         if (user == null) {
@@ -186,10 +194,9 @@ public class EventManagementService {
         }
 
         user.requirePermissionInCompany(companyId, Permission.MANAGE_INVENTORY);
-        
 
         EventMapper mapper = new EventMapper();
-        return eventRepository.findByCompanyId(companyId).stream()
+        return eventRepository.searchByCompanyAll(companyId, filters.withoutCompanyRating()).stream()
             .map(e -> mapper.toEventDetailDTO(e, company.getName()))
             .toList();
     }

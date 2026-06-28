@@ -129,4 +129,12 @@ public class JpaEventRepository implements IEventRepository {
                 .and((root, query, cb) -> cb.equal(root.get("status"), EventStatus.ON_SALE));
         return data.findAll(spec);
     }
+
+    @Override
+    public List<Event> searchByCompanyAll(int companyId, CatalogSearchFiltersDTO filters) {
+        // "comapnyid" is the Event field name (a domain typo) — see SpringDataEventRepository.
+        Specification<Event> spec = EventSearchSpecification.from(filters)
+                .and((root, query, cb) -> cb.equal(root.get("comapnyid"), companyId));
+        return data.findAll(spec);
+    }
 }

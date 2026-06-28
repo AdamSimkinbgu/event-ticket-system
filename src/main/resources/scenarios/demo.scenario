@@ -32,9 +32,9 @@ confirm bob live
 open-company carol habima "Habima Theatre" "Israel's national theatre"
 
 # --- events (published, on sale) ---
-add-event alice live   coldplay seated:3x8@220 seated:4x10@140 standing:250@90 name="Coldplay" category=CONCERT days=20 publish=true
-add-event alice live   beyonce  standing:200@320 standing:500@180             name="Beyonce"  category=CONCERT days=35 publish=true
-add-event carol habima othello  seated:4x10@200 seated:3x10@130               name="Othello"  category=THEATER days=14 publish=true
+add-event alice live   coldplay seated:3x8@220 seated:4x10@140 standing:250@90 name="Coldplay" category=CONCERT days=20 rating=4.8 publish=true
+add-event alice live   beyonce  standing:200@320 standing:500@180             name="Beyonce"  category=CONCERT days=35 rating=4.9 publish=true
+add-event carol habima othello  seated:4x10@200 seated:3x10@130               name="Othello"  category=THEATER days=14 rating=4.6 publish=true
 
 # --- purchases: member standing, member seated, and a guest ---
 reserve carol coldplay standing qty=2

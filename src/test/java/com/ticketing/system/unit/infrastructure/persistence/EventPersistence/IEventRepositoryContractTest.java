@@ -302,6 +302,43 @@ public abstract class IEventRepositoryContractTest {
         assertTrue(result.isEmpty());
     }
 
+    // === searchAll — event rating range ===
+
+    @Test
+    void givenEventRatingAtOrAboveMin_whensearchAll_thenReturnsMatchingEvent() {
+        eventRepo.save(buildEvent(1, "Top Rated", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(2, "Low Rated", 2.0, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
+                null, null, null, null, null, null, null, null, null, 4.0, null, null, null));
+
+        assertEquals(1, result.size());
+        assertEquals("Top Rated", result.get(0).getName());
+    }
+
+    @Test
+    void givenEventRatingAboveMax_whensearchAll_thenReturnsEmpty() {
+        eventRepo.save(buildEvent(1, "Top Rated", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
+                null, null, null, null, null, null, null, null, null, null, 4.0, null, null));
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void givenEventRatingWithinRange_whensearchAll_thenReturnsOnlyEventInBand() {
+        eventRepo.save(buildEvent(1, "Mid Rated", 3.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(2, "Low Rated", 1.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(3, "Top Rated", 5.0, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
+                null, null, null, null, null, null, null, null, null, 3.0, 4.0, null, null));
+
+        assertEquals(1, result.size());
+        assertEquals("Mid Rated", result.get(0).getName());
+    }
+
     // === searchAll — all-null filters ===
 
     @Test
@@ -313,5 +350,32 @@ public abstract class IEventRepositoryContractTest {
                 null, null, null, null, null, null, null, null, null, null, null, null, null));
 
         assertEquals(2, result.size());
+    }
+
+    // === searchByCompanyAll — company scope (all statuses) + filters ===
+
+    @Test
+    void givenEventsForMultipleCompanies_whenSearchByCompanyAll_thenReturnsOnlyThatCompanyAllStatuses() {
+        eventRepo.save(buildEvent(1, "Draft One", 4.5, 10, EventStatus.DRAFT, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(2, "Live One", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(3, "Other Co", 4.5, 20, EventStatus.ON_SALE, EventCategory.CONCERT));
+
+        List<Event> result = eventRepo.searchByCompanyAll(10, CatalogSearchFiltersDTO.empty());
+
+        assertEquals(2, result.size());
+        assertTrue(result.stream().allMatch(e -> e.getCompanyId() == 10));
+    }
+
+    @Test
+    void givenCompanyEvents_whenSearchByCompanyAllWithNameFilter_thenFiltersWithinThatCompany() {
+        eventRepo.save(buildEvent(1, "Jazz Night", 4.5, 10, EventStatus.DRAFT, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(2, "Rock Show", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(3, "Jazz Night", 4.5, 20, EventStatus.ON_SALE, EventCategory.CONCERT));
+
+        List<Event> result = eventRepo.searchByCompanyAll(10, new CatalogSearchFiltersDTO(
+                "Jazz", null, null, null, null, null, null, null, null, null, null, null, null));
+
+        assertEquals(1, result.size());
+        assertEquals(1, result.get(0).getId());
     }
 }

@@ -279,8 +279,16 @@ public class ProductionCompany implements InvariantChecked {
     }
 
     public void setRating(Double rating) {
+        // Validate-before-commit: roll back if the new rating is out of range, so a rejected
+        // call never leaves the company with a corrupted rating.
+        Double previous = this.rating;
         this.rating = rating;
-        checkInvariants();
+        try {
+            checkInvariants();
+        } catch (RuntimeException ex) {
+            this.rating = previous;
+            throw ex;
+        }
     }
 
     // UC-18 — Founder is the original creator, immutable for the lifetime of the
@@ -318,6 +326,10 @@ public class ProductionCompany implements InvariantChecked {
         }
         if (name == null || name.isBlank()) {
             throw new IllegalStateException("ProductionCompany invariant violated: name must be non-blank");
+        }
+        if (rating != null && (rating < 0 || rating > 5)) {
+            throw new IllegalStateException(
+                    "ProductionCompany invariant violated: rating must be between 0 and 5 (was " + rating + ")");
         }
         if (companyStatus == null) {
             throw new IllegalStateException("ProductionCompany invariant violated: status must not be null");

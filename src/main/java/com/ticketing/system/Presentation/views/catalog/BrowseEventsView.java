@@ -22,6 +22,7 @@ import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.NativeButton;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.textfield.IntegerField;
+import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.BeforeEnterEvent;
@@ -30,17 +31,14 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.TemporalAdjusters;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 @Route(value = "browse", layout = MainLayout.class)
 @PageTitle("Browse Events · TicketHub")
@@ -51,29 +49,22 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
 
     private record EventRow(String name, String category, String venue,
             String date, LocalDateTime startsAt, int priceCents,
-            LkStatusDot.Tone tone, String status, String id) {
+            LkStatusDot.Tone tone, String status, String id,
+            Double rating, List<String> artists) {
     }
-
-    /** A resolved from/to date range for a date-range preset; either bound may be null (unbounded). */
-    record DateWindow(LocalDate from, LocalDate to) { }
 
     private final BrowseEventsPresenter presenter;
     private final SessionIdentity identity;
 
-    private static final String CAT_ALL     = "All categories";
-    private static final String COUNTRY_ALL = "All countries";
-    private static final String CITY_ALL    = "All cities";
-    private static final String DATE_ANY    = "Any time";
+    // Filter option lists + label→value mappings live in CatalogFilterSupport (shared with the owner
+    // event list); these aliases keep the in-view references terse.
+    private static final String CAT_ALL     = CatalogFilterSupport.CAT_ALL;
+    private static final String COUNTRY_ALL = CatalogFilterSupport.COUNTRY_ALL;
+    private static final String CITY_ALL    = CatalogFilterSupport.CITY_ALL;
+    private static final String DATE_ANY    = CatalogFilterSupport.DATE_ANY;
 
-    private static final List<String> CATEGORIES = List.of(
-            CAT_ALL, "Concerts", "Sports", "Theatre", "Festivals", "Comedy");
-
-    private static final Map<String, List<String>> CITIES_BY_COUNTRY = Map.of(
-            "Israel", List.of("Tel Aviv", "Jerusalem", "Haifa", "Caesarea", "Be'er Sheva"),
-            "USA",    List.of("New York", "Los Angeles", "Chicago"),
-            "UK",     List.of("London", "Manchester", "Birmingham"));
-
-    private static final List<String> COUNTRIES = List.of(COUNTRY_ALL, "Israel", "USA", "UK");
+    private static final List<String> CATEGORIES = CatalogFilterSupport.CATEGORIES;
+    private static final List<String> COUNTRIES  = CatalogFilterSupport.COUNTRIES;
 
     private static final List<String> SORTS = List.of(
             "Date · soonest", "Date · latest", "Price · low to high", "Price · high to low", "Popularity");
@@ -84,10 +75,16 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     private String filterCountry   = COUNTRY_ALL;
     private String filterCity      = CITY_ALL;
     private String filterArtist    = "";
+    private String filterEventName = "";
+    private String filterKeywords  = "";
     private String filterDateRange = DATE_ANY;
     private String filterSort      = SORTS.get(0);
     private Integer filterPriceMin = null;
     private Integer filterPriceMax = null;
+    private Double filterMinEventRating   = null;
+    private Double filterMaxEventRating   = null;
+    private Double filterMinCompanyRating = null;
+    private Double filterMaxCompanyRating = null;
 
     // ---- ui references for re-render / reset ----
 
@@ -100,8 +97,14 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     private DatePicker customToPicker;
     private Div customRangeRow;
     private TextField artistField;
+    private TextField eventNameField;
+    private TextField keywordsField;
     private IntegerField priceMin;
     private IntegerField priceMax;
+    private NumberField eventRatingMin;
+    private NumberField eventRatingMax;
+    private NumberField companyRatingMin;
+    private NumberField companyRatingMax;
     private Div gridSlot;
     private Span resultsCountSpan;
 
@@ -183,6 +186,32 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         categorySelect = new LkSelect(CAT_ALL, CATEGORIES).label("Category");
         categorySelect.onChange(this::setCategory);
 
+        // Event name — case-insensitive substring on the event name.
+        eventNameField = new TextField();
+        eventNameField.setPlaceholder("e.g. Coldplay");
+        eventNameField.setValueChangeMode(ValueChangeMode.LAZY);
+        eventNameField.getStyle().set("width", "100%");
+        eventNameField.addValueChangeListener(e -> {
+            String v = e.getValue() == null ? "" : e.getValue();
+            if (Objects.equals(filterEventName, v)) return;
+            filterEventName = v;
+            runSearch();
+        });
+        Div eventNameWrap = labelledWrap("Event name", eventNameField);
+
+        // Keywords — matches the event name OR any artist in the line-up.
+        keywordsField = new TextField();
+        keywordsField.setPlaceholder("Search name or artist");
+        keywordsField.setValueChangeMode(ValueChangeMode.LAZY);
+        keywordsField.getStyle().set("width", "100%");
+        keywordsField.addValueChangeListener(e -> {
+            String v = e.getValue() == null ? "" : e.getValue();
+            if (Objects.equals(filterKeywords, v)) return;
+            filterKeywords = v;
+            runSearch();
+        });
+        Div keywordsWrap = labelledWrap("Keywords", keywordsField);
+
         // Artist
         artistField = new TextField();
         artistField.setPlaceholder("e.g. Taylor Swift");
@@ -238,7 +267,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
             if (Objects.equals(filterCountry, v)) return;
             filterCountry = v;
             filterCity = CITY_ALL;
-            citySelect.setOptions(cityOptionsFor(v));
+            citySelect.setOptions(CatalogFilterSupport.cityOptionsFor(v));
             citySelect.enabled(!COUNTRY_ALL.equals(v));
             runSearch();
         });
@@ -260,8 +289,9 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         });
 
         LkCol col = new LkCol().gap(16);
-        col.add(categorySelect, artistWrap, dateRangeField, customRangeRow,
-                buildPriceRange(), countrySelect, citySelect, sortSelect);
+        col.add(categorySelect, eventNameWrap, keywordsWrap, artistWrap, dateRangeField, customRangeRow,
+                buildPriceRange(), buildEventRatingRange(), buildCompanyRatingRange(),
+                countrySelect, citySelect, sortSelect);
         card.add(col);
         return card;
     }
@@ -306,6 +336,59 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         return wrap;
     }
 
+    private Component buildEventRatingRange() {
+        eventRatingMin = ratingField("Min", v -> {
+            if (Objects.equals(filterMinEventRating, v)) return;
+            filterMinEventRating = v;
+            runSearch();
+        });
+        eventRatingMax = ratingField("Max", v -> {
+            if (Objects.equals(filterMaxEventRating, v)) return;
+            filterMaxEventRating = v;
+            runSearch();
+        });
+        return ratingRangeWrap("Event rating", eventRatingMin, eventRatingMax);
+    }
+
+    private Component buildCompanyRatingRange() {
+        companyRatingMin = ratingField("Min", v -> {
+            if (Objects.equals(filterMinCompanyRating, v)) return;
+            filterMinCompanyRating = v;
+            runSearch();
+        });
+        companyRatingMax = ratingField("Max", v -> {
+            if (Objects.equals(filterMaxCompanyRating, v)) return;
+            filterMaxCompanyRating = v;
+            runSearch();
+        });
+        return ratingRangeWrap("Organizer rating", companyRatingMin, companyRatingMax);
+    }
+
+    /** A 0–5 rating bound input (NumberField, half-star step) wired to {@code onChange}. */
+    private static NumberField ratingField(String placeholder, Consumer<Double> onChange) {
+        NumberField f = new NumberField();
+        f.setPlaceholder(placeholder);
+        f.setMin(0);
+        f.setMax(5);
+        f.setStep(0.5);
+        f.setValueChangeMode(ValueChangeMode.LAZY);
+        f.getStyle().set("flex", "1 1 0");
+        f.addValueChangeListener(e -> onChange.accept(e.getValue()));
+        return f;
+    }
+
+    private static Component ratingRangeWrap(String labelText, NumberField min, NumberField max) {
+        Div wrap = new Div();
+        Span label = new Span(labelText);
+        label.addClassName("lk-label");
+        label.getStyle().set("display", "block").set("margin-bottom", "6px");
+        wrap.add(label);
+        LkRow row = new LkRow().gap(8);
+        row.add(min, max);
+        wrap.add(row);
+        return wrap;
+    }
+
     private Component buildGridSlot() {
         gridSlot = new Div();
         gridSlot.getStyle().set("min-width", "0").set("width", "100%");
@@ -320,16 +403,24 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         filterCountry   = COUNTRY_ALL;
         filterCity      = CITY_ALL;
         filterArtist    = "";
+        filterEventName = "";
+        filterKeywords  = "";
         filterDateRange = DATE_ANY;
         filterSort      = SORTS.get(0);
         filterPriceMin  = null;
         filterPriceMax  = null;
+        filterMinEventRating   = null;
+        filterMaxEventRating   = null;
+        filterMinCompanyRating = null;
+        filterMaxCompanyRating = null;
 
         categorySelect.setValue(CAT_ALL);
         countrySelect.setValue(COUNTRY_ALL);
         citySelect.setOptions(List.of(CITY_ALL));
         citySelect.enabled(false);
         artistField.clear();
+        eventNameField.clear();
+        keywordsField.clear();
         dateRangeField.setValue(DATE_ANY);
         customRangeRow.setVisible(false);
         customFromPicker.clear();
@@ -337,6 +428,10 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         sortSelect.setValue(SORTS.get(0));
         priceMin.clear();
         priceMax.clear();
+        eventRatingMin.clear();
+        eventRatingMax.clear();
+        companyRatingMin.clear();
+        companyRatingMax.clear();
         runSearch();
     }
 
@@ -357,7 +452,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
      */
     private void runCustomSearchIfValid() {
         if (!"Custom range".equals(filterDateRange)) return;
-        if (isValidCustomRange(customFromPicker.getValue(), customToPicker.getValue()))
+        if (CatalogFilterSupport.isValidCustomRange(customFromPicker.getValue(), customToPicker.getValue()))
             runSearch();
     }
 
@@ -367,61 +462,25 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
             from = customFromPicker.getValue();
             to   = customToPicker.getValue();
         } else {
-            DateWindow dw = dateWindow(filterDateRange, LocalDate.now());
+            CatalogFilterSupport.DateWindow dw = CatalogFilterSupport.dateWindow(filterDateRange, LocalDate.now());
             from = dw.from();
             to   = dw.to();
         }
         return new CatalogSearchFiltersDTO(
-                null,
+                filterEventName.isBlank() ? null : filterEventName,
                 filterArtist.isBlank() ? null : filterArtist,
-                categoryFilterValue(filterCategory),
-                null,
+                CatalogFilterSupport.categoryFilterValue(filterCategory),
+                filterKeywords.isBlank() ? null : filterKeywords,
                 filterPriceMin == null ? null : filterPriceMin.doubleValue(),
                 filterPriceMax == null ? null : filterPriceMax.doubleValue(),
                 from, to,
                 locationFilter(),
-                null, null, null, null);
+                filterMinEventRating, filterMaxEventRating,
+                filterMinCompanyRating, filterMaxCompanyRating);
     }
 
     private String locationFilter() {
-        return locationFilter(filterCity, filterCountry);
-    }
-
-    /** City (if selected) beats country so the DB predicate is as narrow as possible. */
-    static String locationFilter(String filterCity, String filterCountry) {
-        if (!CITY_ALL.equals(filterCity))       return filterCity;
-        if (!COUNTRY_ALL.equals(filterCountry)) return filterCountry;
-        return null;
-    }
-
-    /** UI category label → EventCategory enum name (null = no filter). */
-    static String categoryFilterValue(String label) {
-        if (label == null) return null;
-        return switch (label) {
-            case "Concerts"  -> "CONCERT";
-            case "Sports"    -> "SPORTS";
-            case "Theatre"   -> "THEATER";
-            case "Festivals" -> "FESTIVAL";
-            case "Comedy"    -> "COMEDY";
-            default          -> null;
-        };
-    }
-
-    /** Date-range preset → concrete [from, to] window relative to {@code today} (null bounds = open). */
-    static DateWindow dateWindow(String preset, LocalDate today) {
-        if (preset == null) return new DateWindow(null, null);
-        return switch (preset) {
-            case "Today" -> new DateWindow(today, today);
-            case "This weekend" -> {
-                LocalDate sat = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY));
-                yield new DateWindow(sat, sat.plusDays(1));
-            }
-            case "Next 7 days"   -> new DateWindow(today, today.plusDays(7));
-            case "Next 30 days"  -> new DateWindow(today, today.plusDays(30));
-            case "This month"    -> new DateWindow(today, today.with(TemporalAdjusters.lastDayOfMonth()));
-            case "Next 3 months" -> new DateWindow(today, today.plusMonths(3));
-            default              -> new DateWindow(null, null); // "Any time" and "Custom range"
-        };
+        return CatalogFilterSupport.locationFilter(filterCity, filterCountry);
     }
 
     private void renderGrid(List<EventRow> rows) {
@@ -472,6 +531,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
                 .col("Venue", "venue")
                 .col("Date", "date")
                 .col("From", "from", LkGrid.Align.RIGHT)
+                .col("Rating", "rating", LkGrid.Align.RIGHT)
                 .col("Status", "status")
                 .col("", "act", LkGrid.Align.RIGHT);
         for (EventRow ev : events)
@@ -483,12 +543,13 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     private void addRow(LkGrid grid, EventRow ev) {
         LinkedHashMap<String, Object> row = new LinkedHashMap<>();
         Span name = new Span();
-        name.getElement().setProperty("innerHTML", "<b>" + escape(ev.name) + "</b>");
+        name.getElement().setProperty("innerHTML", nameCellHtml(ev));
         row.put("name", name);
         row.put("cat", ev.category);
         row.put("venue", ev.venue);
         row.put("date", ev.date);
         row.put("from", "$" + (ev.priceCents / 100));
+        row.put("rating", ev.rating == null ? "—" : "★ " + ratingText(ev.rating));
         row.put("status", new LkStatusDot(ev.tone, ev.status));
         LkBtn reserve = new LkBtn("Reserve")
                 .variant(LkBtn.Variant.primary)
@@ -509,20 +570,6 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
 
     // ---- helpers ----
 
-    static List<String> cityOptionsFor(String country) {
-        List<String> cities = CITIES_BY_COUNTRY.get(country);
-        if (cities == null) return List.of(CITY_ALL);
-        List<String> opts = new ArrayList<>(cities.size() + 1);
-        opts.add(CITY_ALL);
-        opts.addAll(cities);
-        return opts;
-    }
-
-    /** A custom range is searchable unless it's the from&gt;to inversion; an open bound (null) is fine. */
-    static boolean isValidCustomRange(LocalDate from, LocalDate to) {
-        return from == null || to == null || !from.isAfter(to);
-    }
-
     private static Div labelledWrap(String labelText, Component field) {
         Div wrap = new Div();
         Span label = new Span(labelText);
@@ -542,7 +589,8 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         LkStatusDot.Tone tone = dto.soldOut() ? LkStatusDot.Tone.muted : LkStatusDot.Tone.ok;
         String status = dto.soldOut() ? "Sold out" : "On sale";
         return new EventRow(dto.name(), prettyCategory(dto.category()), dto.location(),
-                date, start, priceCents, tone, status, String.valueOf(dto.eventId()));
+                date, start, priceCents, tone, status, String.valueOf(dto.eventId()),
+                dto.rating(), dto.artistsNames());
     }
 
     private static Comparator<EventRow> comparatorFor(String sort) {
@@ -573,5 +621,20 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
 
     private static String escape(String s) {
         return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    /** Event name in bold, with the line-up (if any) as a muted second line. */
+    private static String nameCellHtml(EventRow ev) {
+        String html = "<b>" + escape(ev.name) + "</b>";
+        if (ev.artists != null && !ev.artists.isEmpty()) {
+            String lineup = String.join(" · ", ev.artists.stream().map(BrowseEventsView::escape).toList());
+            html += "<div style=\"color:var(--muted);font-size:12.5px;margin-top:2px;\">" + lineup + "</div>";
+        }
+        return html;
+    }
+
+    /** Rating shown without a trailing ".0" (e.g. 4.5 → "4.5", 4.0 → "4"). */
+    private static String ratingText(double rating) {
+        return rating == Math.floor(rating) ? String.valueOf((int) rating) : String.valueOf(rating);
     }
 }

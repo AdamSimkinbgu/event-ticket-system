@@ -29,6 +29,7 @@ import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.select.Select;
+import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.BeforeEnterEvent;
@@ -55,6 +56,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     private final LkTextRows artists = new LkTextRows("Artists", "+ Add artist").placeholder("e.g. The Beatles");
     private final DateTimePicker start = new DateTimePicker("Starts");
     private final DateTimePicker end = new DateTimePicker("Ends");
+    private final NumberField rating = new NumberField("Rating (0–5)");
     private final TextArea description = new TextArea("Description");
 
     /** Status badge lives in its own slot so the loader can fill it after the DTO arrives. */
@@ -126,6 +128,9 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             start.setValue(loadedShowDates.get(0).getStartTime());
             end.setValue(loadedShowDates.get(0).getEndTime());
         }
+        // Rating isn't part of EventUpdateDTO (set only at creation) — show it read-only here.
+        rating.setValue(ev.rating());
+        rating.setReadOnly(true);
         description.setValue(ev.description() != null ? ev.description() : "");
         renderStatus(ev.status());
     }
@@ -200,7 +205,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
 
         switch (presenter.create(AuthSession.token(), CurrentCompanies.currentCompanyId(),
                 name, blankToNull(description.getValue()), category.getValue(),
-                co, ci, start.getValue(), end.getValue(), artistList)) {
+                co, ci, start.getValue(), end.getValue(), artistList, rating.getValue())) {
             case EventManagementPresenter.CreateOutcome.Success ok -> {
                 Toasts.success("Event created as a draft — configure the venue map and publish when ready.");
                 UI.getCurrent().navigate("owner/events/" + ok.eventId());
@@ -274,6 +279,11 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
         start.setWidthFull();
         end.setWidthFull();
 
+        rating.setMin(0);
+        rating.setMax(5);
+        rating.setStep(0.5);
+        rating.setWidthFull();
+
         description.setMinHeight("120px");
         description.setWidthFull();
 
@@ -282,7 +292,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
                 .set("display", "grid")
                 .set("grid-template-columns", "repeat(auto-fit, minmax(min(100%, 220px), 1fr))")
                 .set("gap", "14px");
-        grid.add(title, category, country, city, start, end);
+        grid.add(title, category, country, city, start, end, rating);
 
         LkCol col = new LkCol().gap(14);
         col.add(grid, artists, description);

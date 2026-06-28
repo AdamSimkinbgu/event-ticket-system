@@ -82,4 +82,17 @@ public final class ScenarioCommand {
         String v = named.get(key);
         return v == null ? fallback : Boolean.parseBoolean(v.trim());
     }
+
+    /** Named arg parsed as a {@code Double}, or {@code null} if absent. Located error on bad numbers. */
+    public Double doubleNamed(String key) {
+        String v = named.get(key);
+        if (v == null) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(v.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("line " + line + " (" + op + "): " + key + " must be a number, got '" + v + "'");
+        }
+    }
 }

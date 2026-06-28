@@ -119,6 +119,9 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
         if (detail.category() != null) {
             badges.add(new LkBadge(prettify(detail.category().toString()), LkBadge.Tone.muted).small());
         }
+        if (detail.rating() != null) {
+            badges.add(new LkBadge("★ " + ratingText(detail.rating()), LkBadge.Tone.muted).small());
+        }
 
         Div title = new Div();
         title.addClassName("bz-evt-title");
@@ -359,6 +362,11 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
             return "EVENT";
         }
         return name.trim().substring(0, 1).toUpperCase(Locale.US);
+    }
+
+    /** Rating shown without a trailing ".0" (e.g. 4.5 → "4.5", 4.0 → "4"). */
+    private static String ratingText(double rating) {
+        return rating == Math.floor(rating) ? String.valueOf((int) rating) : String.valueOf(rating);
     }
 
     private static LkBadge statusBadge(EventStatus status) {
