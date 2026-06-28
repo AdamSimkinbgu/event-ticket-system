@@ -40,14 +40,18 @@ import com.ticketing.system.Core.Domain.users.User;
 
 import lombok.extern.slf4j.Slf4j;
 
-// Centralized messaging subsystem service.
-// Replaces per-User MessageInbox, per-Company Inbox, and the standalone Complaint flow.
-// Covers requirements II.3.3 (complaint), II.3.10 (contact company), II.4.4 (company support
-// inbox), II.6.3.1 (admin complaint queue), II.6.3.2 (admin announcements).
-//
-// All write paths fire the messaging→notification bridge AFTER releasing the conversation
-// lock: members are notified of admin/producer messages; company owners of new inquiries;
-// admins of new complaints.
+/**
+ * Centralized messaging subsystem service. Replaces the per-User MessageInbox,
+ * the per-Company Inbox, and the standalone Complaint flow. Covers II.3.3
+ * (complaint), II.3.10 (contact company), II.4.4 (company support inbox),
+ * II.6.3.1 (admin complaint queue) and II.6.3.2 (admin announcements).
+ *
+ * <p>All write paths fire the messaging→notification bridge <em>after</em>
+ * releasing the conversation lock: members are notified of admin/producer
+ * messages, company owners of new inquiries, and admins of new complaints. A
+ * notification failure never undoes a persisted message (see
+ * {@code safeNotify}).
+ */
 @Service
 @Slf4j
 public class MessagingService {
@@ -79,14 +83,24 @@ public class MessagingService {
         this.notificationService = notificationService;
     }
 
-    // Which side of a conversation the authenticated caller is acting as.
+    /** Which side of a conversation the authenticated caller is acting as. */
     private record CallerSide(int id, ParticipantType type) {}
 
     // ---------------------------------------------------------------------------
     // Write operations
     // ---------------------------------------------------------------------------
 
-    // II.3.10 — Member starts an INQUIRY conversation (two-way chat) with a Company.
+    /**
+     * II.3.10 — a member starts an INQUIRY conversation (two-way chat) with a
+     * company, then the company's owners are notified.
+     *
+     * @param token   the authenticated member's token
+     * @param request the target company id, subject and first message body
+     * @return the created conversation, from the member's viewpoint
+     * @throws UnauthorizedActionException if the token is invalid or expired
+     * @throws com.ticketing.system.Core.Domain.exceptions.CompanyNotFoundException
+     *         if the target company does not exist
+     */
     @Transactional
     public ConversationDTO startConversation(String token, StartConversationRequestDTO request) {
         int memberId = authenticate(token);
@@ -109,7 +123,18 @@ public class MessagingService {
 
 
 
-    // Append a reply to an existing conversation. Sender must be a participant.
+    /**
+     * Appends a reply to an existing conversation, then notifies the other party.
+     * Complaints are one-shot and are rejected here — the admin's single reply
+     * goes through {@link #respondToComplaint}.
+     *
+     * @param token   the sender's token
+     * @param request the target conversation id and message body
+     * @throws UnauthorizedActionException   if the token is invalid or expired
+     * @throws ConversationNotFoundException if the conversation does not exist
+     * @throws BusinessRuleViolationException if the conversation is a complaint
+     * @throws InvalidParticipantException   if the sender is not a participant
+     */
     @Transactional
     public void sendMessage(String token, SendMessageRequestDTO request) {
         Caller caller = authenticateCaller(token);
@@ -140,7 +165,16 @@ public class MessagingService {
 
 
 
-    // II.3.3 — Member submits a COMPLAINT (counterparty = ADMIN_GROUP).
+    /**
+     * II.3.3 — a member submits a COMPLAINT to the admin group. An optional
+     * related-entity reference is appended to the body; all admins are then
+     * notified.
+     *
+     * @param token   the authenticated member's token
+     * @param request the subject, body and optional related-entity reference
+     * @return the created complaint, from the member's viewpoint
+     * @throws UnauthorizedActionException if the token is invalid or expired
+     */
     @Transactional
     public ConversationDTO submitComplaint(String token, SubmitComplaintRequestDTO request) {
         int memberId = authenticate(token);
@@ -163,7 +197,17 @@ public class MessagingService {
 
 
 
-    // II.6.3.1 — admin sends the single response to a complaint, which resolves it (one-shot).
+    /**
+     * II.6.3.1 — an admin sends the single, terminal response to a complaint,
+     * which resolves it (one-shot). The lock serializes concurrent admins and the
+     * domain rejects a second admin reply; the filing member is then notified.
+     *
+     * @param token   the admin's token
+     * @param request the target complaint id and response body
+     * @throws UnauthorizedActionException    if the token is not a valid admin token
+     * @throws ConversationNotFoundException  if the conversation does not exist
+     * @throws BusinessRuleViolationException if the conversation is not a complaint
+     */
     @Transactional
     public void respondToComplaint(String token, RespondToComplaintRequestDTO request) {
         int adminId = requireSystemAdmin(token);
@@ -192,9 +236,19 @@ public class MessagingService {
         log.info("Admin {} resolved complaint {}", adminId, conversationId);
     }
 
-    // II.6.3.2 — admin proactive messaging. Resolves the recipient set (explicit members, and/or
-    // all members, and/or all producers' owner accounts), then opens one two-way DIRECT
-    // conversation per recipient so each lands in that member's Support Inbox as a chat.
+    /**
+     * II.6.3.2 — admin proactive messaging. Resolves the recipient set (explicit
+     * members, and/or all members, and/or all producers' owner accounts), then
+     * opens one two-way DIRECT conversation per recipient so each lands in that
+     * member's Support Inbox as a chat. Each recipient is notified.
+     *
+     * @param token   the admin's token
+     * @param request the recipient selection (all-members / all-producers /
+     *                explicit ids), subject and body
+     * @return the number of conversations created and the first conversation's id
+     * @throws UnauthorizedActionException   if the token is not a valid admin token
+     * @throws BusinessRuleViolationException if the selection matches no recipients
+     */
     @Transactional
     public OutreachResultDTO sendOutreach(String token, OutreachRequestDTO request) {
         int adminId = requireSystemAdmin(token);
@@ -241,7 +295,16 @@ public class MessagingService {
 
 
 
-    // UI action — mark a single message as read by the viewer.
+    /**
+     * UI action — marks a single message as read by the viewer.
+     *
+     * @param token          the viewer's token
+     * @param conversationId the conversation containing the message
+     * @param messageId      the message to mark read
+     * @throws UnauthorizedActionException   if the token is invalid or expired
+     * @throws ConversationNotFoundException if the conversation does not exist
+     * @throws InvalidParticipantException   if the caller is not a participant
+     */
     @Transactional
     public void markMessageAsRead(String token, String conversationId, String messageId) {
         Caller caller = authenticateCaller(token);
@@ -258,7 +321,16 @@ public class MessagingService {
 
 
 
-    // Terminal action — close a conversation (no further messages allowed).
+    /**
+     * Terminal action — closes a conversation (no further messages allowed). The
+     * caller must be a participant.
+     *
+     * @param token          the caller's token
+     * @param conversationId the conversation to close
+     * @throws UnauthorizedActionException   if the token is invalid or expired
+     * @throws ConversationNotFoundException if the conversation does not exist
+     * @throws InvalidParticipantException   if the caller is not a participant
+     */
     @Transactional
     public void closeConversation(String token, String conversationId) {
         Caller caller = authenticateCaller(token);
@@ -277,7 +349,14 @@ public class MessagingService {
     // Read operations
     // ---------------------------------------------------------------------------
 
-    // Member-facing Support Inbox: inquiries + complaints the member opened, plus admin outreach.
+    /**
+     * Member-facing Support Inbox: inquiries and complaints the member opened,
+     * plus admin outreach, newest activity first.
+     *
+     * @param token the authenticated member's token
+     * @return the member's conversations, from their viewpoint
+     * @throws UnauthorizedActionException if the token is invalid or expired
+     */
     @Transactional(readOnly = true)
     public List<ConversationDTO> viewMyConversations(String token) {
         int memberId = authenticate(token);
@@ -287,7 +366,16 @@ public class MessagingService {
                 .toList();
     }
 
-    // Open a single thread. Caller must be a participant.
+    /**
+     * Opens a single thread. The caller must be a participant.
+     *
+     * @param token          the caller's token
+     * @param conversationId the conversation to open
+     * @return the conversation from the caller's viewpoint
+     * @throws UnauthorizedActionException   if the token is invalid or expired
+     * @throws ConversationNotFoundException if the conversation does not exist
+     * @throws InvalidParticipantException   if the caller is not a participant
+     */
     @Transactional(readOnly = true)
     public ConversationDTO viewConversation(String token, String conversationId) {
         Caller caller = authenticateCaller(token);
@@ -296,7 +384,17 @@ public class MessagingService {
         return toDTO(conversation, side.id());
     }
 
-    // II.4.4 — company support inbox: all conversations where this company is counterparty.
+    /**
+     * II.4.4 — company support inbox: all conversations where this company is the
+     * counterparty, newest activity first. The caller must own or hold
+     * {@code RESPOND_TO_INQUIRIES} on the company.
+     *
+     * @param token     the caller's token
+     * @param companyId the company whose inbox to view
+     * @return the company's conversations, from the company's viewpoint
+     * @throws UnauthorizedActionException if the token is invalid or the caller
+     *                                     does not act for the company
+     */
     @Transactional(readOnly = true)
     public List<ConversationDTO> viewCompanyInbox(String token, int companyId) {
         int callerId = authenticate(token);
@@ -310,7 +408,15 @@ public class MessagingService {
                 .toList();
     }
 
-    // II.6.3.1 — admin queue of complaints with filters.
+    /**
+     * II.6.3.1 — admin queue of complaints, optionally filtered by status, member
+     * and date range, newest activity first.
+     *
+     * @param token   the admin's token
+     * @param filters the optional status/member/date filters (may be null)
+     * @return matching complaints, from the admin's viewpoint
+     * @throws UnauthorizedActionException if the token is not a valid admin token
+     */
     @Transactional(readOnly = true)
     public List<ConversationDTO> viewAllComplaints(String token, ComplaintFilterDTO filters) {
         int adminId = requireSystemAdmin(token);
@@ -326,8 +432,15 @@ public class MessagingService {
                 .toList();
     }
 
-    // II.6.3.2 — admin "sent history": every DIRECT conversation the admin initiated.
-    // The fan-out creates one conversation per recipient; callers group them into broadcasts.
+    /**
+     * II.6.3.2 — admin "sent history": every DIRECT conversation an admin
+     * initiated, newest activity first. The fan-out creates one conversation per
+     * recipient; callers group them into broadcasts.
+     *
+     * @param token the admin's token
+     * @return the admin-initiated outreach conversations
+     * @throws UnauthorizedActionException if the token is not a valid admin token
+     */
     @Transactional(readOnly = true)
     public List<ConversationDTO> viewSentOutreach(String token) {
         int adminId = requireSystemAdmin(token);
@@ -337,9 +450,16 @@ public class MessagingService {
                 .toList();
     }
 
-    // Admin Inbox — the calling admin's own DIRECT conversations (outreach they started), newest
-    // first, so they can chat and close each one. Scoped to this admin (findByParticipant is an
-    // exact id/type match), so it never includes another admin's outreach or complaints.
+    /**
+     * Admin Inbox — the calling admin's own DIRECT conversations (outreach they
+     * started), newest first, so they can chat and close each one. Scoped to this
+     * admin (an exact id/type match), so it never includes another admin's
+     * outreach or complaints.
+     *
+     * @param token the admin's token
+     * @return this admin's own DIRECT conversations
+     * @throws UnauthorizedActionException if the token is not a valid admin token
+     */
     @Transactional(readOnly = true)
     public List<ConversationDTO> viewAdminInbox(String token) {
         int adminId = requireSystemAdmin(token);
@@ -354,6 +474,11 @@ public class MessagingService {
     // Authentication / authorization helpers
     // ---------------------------------------------------------------------------
 
+    /**
+     * @param token the token to validate
+     * @return the authenticated user's id
+     * @throws UnauthorizedActionException if the token is invalid or expired
+     */
     private int authenticate(String token) {
         if (!sessionManager.validateToken(token)) {
             throw new UnauthorizedActionException("Invalid or expired token");
@@ -361,14 +486,31 @@ public class MessagingService {
         return sessionManager.extractUserId(token);
     }
 
-    // The authenticated caller: their id plus whether their token carries the ADMIN role claim.
-    // The claim — not adminRepository membership — is the authoritative admin signal (see isAdmin).
+    /**
+     * Resolves the authenticated caller: their id plus whether their token carries
+     * the ADMIN role claim. The claim — not {@code adminRepository} membership — is
+     * the authoritative admin signal (see {@link #isAdmin}).
+     *
+     * @param token the token to validate
+     * @return the caller's id and admin-token flag
+     * @throws UnauthorizedActionException if the token is invalid or expired
+     */
     private Caller authenticateCaller(String token) {
         return new Caller(authenticate(token), sessionManager.isAdminToken(token));
     }
 
     private record Caller(int id, boolean adminToken) {}
 
+    /**
+     * Requires the ADMIN role claim, not just {@code adminRepository} membership:
+     * member and admin id pools overlap, so a member token whose id collides with
+     * an admin's would otherwise pass this gate (mirrors
+     * {@code SystemAdminService.requireSystemAdmin}).
+     *
+     * @param token the token to validate
+     * @return the admin's user id
+     * @throws UnauthorizedActionException if the token is not a valid admin token
+     */
     private int requireSystemAdmin(String token) {
         int callerId = authenticate(token);
         // Require the ADMIN role claim, not just adminRepository membership: member and admin id
@@ -380,12 +522,24 @@ public class MessagingService {
         return callerId;
     }
 
+    /**
+     * @param id the user id
+     * @return {@code true} if an admin with that id exists
+     */
     private boolean isAdmin(int id) {
         return adminRepository.findById(id) != null;
     }
 
-    // Resolves which side of the conversation the caller represents — the single source of
-    // truth for authorization, sender-stamping, and read-tracking.
+    /**
+     * Resolves which side of the conversation the caller represents — the single
+     * source of truth for authorization, sender-stamping and read-tracking. Tries
+     * admin, then member, then company-agent in order.
+     *
+     * @param caller       the authenticated caller
+     * @param conversation the conversation being acted on
+     * @return the caller's side (id + participant type)
+     * @throws InvalidParticipantException if the caller is not a participant
+     */
     private CallerSide resolveCallerSide(Caller caller, Conversation conversation) {
         int callerId = caller.id();
         // 1. Admin acting within an admin-involved thread (complaint queue or admin-authored).
@@ -407,6 +561,12 @@ public class MessagingService {
                 "Caller " + callerId + " is not a participant in conversation " + conversation.getConversationId());
     }
 
+    /**
+     * @param c        the conversation
+     * @param callerId the candidate admin's id
+     * @return {@code true} if the conversation involves the admin group or this
+     *         specific admin as a party
+     */
     private boolean involvesAdmin(Conversation c, int callerId) {
         return c.getInitiatorType() == ParticipantType.ADMIN_GROUP
                 || c.getCounterpartyType() == ParticipantType.ADMIN_GROUP
@@ -414,11 +574,20 @@ public class MessagingService {
                 || (c.getCounterpartyType() == ParticipantType.ADMIN && c.getCounterpartyId() == callerId);
     }
 
+    /**
+     * @param c        the conversation
+     * @param callerId the candidate member's id
+     * @return {@code true} if the caller is the member party of the conversation
+     */
     private boolean matchesMember(Conversation c, int callerId) {
         return (c.getInitiatorType() == ParticipantType.MEMBER && c.getInitiatorId() == callerId)
                 || (c.getCounterpartyType() == ParticipantType.MEMBER && c.getCounterpartyId() == callerId);
     }
 
+    /**
+     * @param c the conversation
+     * @return the company party's id, or {@code null} if neither party is a company
+     */
     private Integer companyParticipantId(Conversation c) {
         if (c.getInitiatorType() == ParticipantType.COMPANY) {
             return c.getInitiatorId();
@@ -429,6 +598,12 @@ public class MessagingService {
         return null;
     }
 
+    /**
+     * @param callerId  the caller's user id
+     * @param companyId the company in question
+     * @return {@code true} if the caller is an owner of, or holds
+     *         {@code RESPOND_TO_INQUIRIES} on, the company
+     */
     private boolean callerActsForCompany(int callerId, int companyId) {
         try {
             User user = userRepository.getUserById(callerId);
@@ -443,6 +618,14 @@ public class MessagingService {
     // Notification bridge helpers
     // ---------------------------------------------------------------------------
 
+    /**
+     * Notifies whichever party did not send the message, dispatching by the other
+     * party's type (member, company owners, or all admins).
+     *
+     * @param conversation the conversation that was just appended to
+     * @param sender       the side that sent the message
+     * @param body         the message body (snippeted into the notification)
+     */
     private void notifyOtherParty(Conversation conversation, CallerSide sender, String body) {
         boolean senderIsInitiator = isInitiatorSide(conversation, sender);
         ParticipantType otherType = senderIsInitiator
@@ -465,6 +648,13 @@ public class MessagingService {
         }
     }
 
+    /**
+     * @param c    the conversation
+     * @param side the side in question
+     * @return {@code true} if {@code side} is the conversation's initiator (an
+     *         ADMIN acting for the ADMIN_GROUP counts as the initiator when the
+     *         group initiated)
+     */
     private boolean isInitiatorSide(Conversation c, CallerSide side) {
         if (c.getInitiatorType() == side.type() && c.getInitiatorId() == side.id()) {
             return true;
@@ -473,6 +663,14 @@ public class MessagingService {
         return side.type() == ParticipantType.ADMIN && c.getInitiatorType() == ParticipantType.ADMIN_GROUP;
     }
 
+    /**
+     * Notifies every owner of a company about new conversation activity.
+     *
+     * @param company      the company whose owners to notify
+     * @param conversation the conversation the activity belongs to
+     * @param senderLabel  a human-readable label for the sender
+     * @param body         the message body (snippeted into the notification)
+     */
     private void notifyCompanyOwners(ProductionCompany company, Conversation conversation,
             String senderLabel, String body) {
         for (Integer ownerId : company.getOwnerIds()) {
@@ -483,6 +681,13 @@ public class MessagingService {
         }
     }
 
+    /**
+     * Notifies every system admin about new conversation activity.
+     *
+     * @param conversation the conversation the activity belongs to
+     * @param senderLabel  a human-readable label for the sender
+     * @param body         the message body (snippeted into the notification)
+     */
     private void notifyAllAdmins(Conversation conversation, String senderLabel, String body) {
         for (Admin admin : adminRepository.findAll()) {
             safeNotify(admin.getId(), conversation.getConversationId(), senderLabel,
@@ -490,7 +695,16 @@ public class MessagingService {
         }
     }
 
-    // Never let a notification failure undo a persisted message — log and continue.
+    /**
+     * Sends one notification, swallowing failures so a notification error never
+     * undoes a persisted message (it is logged and execution continues).
+     *
+     * @param recipientUserId the recipient's user id
+     * @param conversationId  the conversation the notification refers to
+     * @param senderLabel     a human-readable label for the sender
+     * @param subject         the conversation subject
+     * @param body            the message body (snippeted into the notification)
+     */
     private void safeNotify(int recipientUserId, String conversationId, String senderLabel,
             String subject, String body) {
         try {
@@ -506,15 +720,29 @@ public class MessagingService {
     // DTO mapping
     // ---------------------------------------------------------------------------
 
-    // Maps a conversation to its DTO for the given viewer, resolving both parties' display names.
+    /**
+     * Maps a conversation to its DTO for the given viewer, resolving both parties'
+     * display names.
+     *
+     * @param c        the conversation
+     * @param viewerId the id of the party viewing it (drives read/unread framing)
+     * @return the conversation DTO
+     */
     private ConversationDTO toDTO(Conversation c, int viewerId) {
         return new ConversationMapper().toDTO(c, viewerId,
                 resolveDisplayName(c.getInitiatorId(), c.getInitiatorType()),
                 resolveDisplayName(c.getCounterpartyId(), c.getCounterpartyType()));
     }
 
-    // Human-readable label for a conversation party: member username, company name, or a fixed
-    // label for the admin side / system. Falls back to "<Kind> #id" if the entity can't be loaded.
+    /**
+     * Resolves a human-readable label for a conversation party: member username,
+     * company name, or a fixed label for the admin side / system. Falls back to
+     * "&lt;Kind&gt; #id" if the entity can't be loaded.
+     *
+     * @param id   the party's id
+     * @param type the party's type
+     * @return a display name for the party
+     */
     private String resolveDisplayName(int id, ParticipantType type) {
         return switch (type) {
             case MEMBER -> {
@@ -534,13 +762,24 @@ public class MessagingService {
     // Misc helpers
     // ---------------------------------------------------------------------------
 
+    /**
+     * @param conversationId the conversation id
+     * @return the conversation
+     * @throws ConversationNotFoundException if no conversation with that id exists
+     */
     private Conversation loadConversation(String conversationId) {
         return conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new ConversationNotFoundException(conversationId));
     }
 
-    // Best-effort company lookup — returns null instead of throwing so a missing company
-    // never aborts a notification fan-out (the repository throws when the id is unknown).
+    /**
+     * Best-effort company lookup — returns {@code null} instead of throwing so a
+     * missing company never aborts a notification fan-out (the repository throws
+     * when the id is unknown).
+     *
+     * @param companyId the company id
+     * @return the company, or {@code null} if it can't be loaded
+     */
     private ProductionCompany tryGetCompany(int companyId) {
         try {
             return companyRepository.getCompanyById(companyId);
@@ -549,6 +788,11 @@ public class MessagingService {
         }
     }
 
+    /**
+     * @param c       the complaint conversation to test
+     * @param filters the optional member/date filters (null matches everything)
+     * @return {@code true} if the complaint satisfies the supplied filters
+     */
     private boolean matchesComplaintFilter(Conversation c, ComplaintFilterDTO filters) {
         if (filters == null) {
             return true;
@@ -565,6 +809,11 @@ public class MessagingService {
         return true;
     }
 
+    /**
+     * @param raw the raw status string (may be null/blank/unknown)
+     * @return the parsed {@link ConversationStatus}, or {@code null} if absent or
+     *         unrecognized (meaning "no status filter")
+     */
     private ConversationStatus parseStatusOrNull(String raw) {
         if (raw == null || raw.isBlank()) {
             return null;
@@ -576,6 +825,10 @@ public class MessagingService {
         }
     }
 
+    /**
+     * @param type the sender's participant type
+     * @return a human-readable label for the sender used in notifications
+     */
     private String senderLabel(ParticipantType type) {
         return switch (type) {
             case MEMBER -> "a member";
@@ -585,6 +838,11 @@ public class MessagingService {
         };
     }
 
+    /**
+     * @param body the message body (may be null)
+     * @return the body truncated to {@code SNIPPET_MAX} characters (with an
+     *         ellipsis) for use in a notification preview
+     */
     private String snippet(String body) {
         if (body == null) {
             return "";
@@ -592,6 +850,11 @@ public class MessagingService {
         return body.length() <= SNIPPET_MAX ? body : body.substring(0, SNIPPET_MAX) + "…";
     }
 
+    /**
+     * @param list a possibly-null list
+     * @param <T>  the element type
+     * @return the list, or an empty list if it was {@code null}
+     */
     private static <T> List<T> safeList(List<T> list) {
         return list == null ? List.of() : list;
     }
