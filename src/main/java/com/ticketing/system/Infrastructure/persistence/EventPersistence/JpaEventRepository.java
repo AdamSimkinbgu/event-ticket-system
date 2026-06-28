@@ -93,6 +93,12 @@ public class JpaEventRepository implements IEventRepository {
     }
 
     @Override
+    @Transactional
+    public void delete(int eventId) {
+        data.deleteById(eventId);
+    }
+
+    @Override
     public List<Event> findByCompanyId(int companyId) {
         return data.findByCompanyId(companyId);
     }

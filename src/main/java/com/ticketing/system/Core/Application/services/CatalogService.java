@@ -34,9 +34,11 @@ import com.ticketing.system.Core.Domain.events.IEventRepository;
 // Separated from EventManagementService (which is owner-side / write-heavy) so the two audiences
 // don't share an API surface — see design_walkthrough_summary.md §6.
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
+@Transactional(readOnly = true)
 public class CatalogService {
 
     private final ISessionManager sessionManager;

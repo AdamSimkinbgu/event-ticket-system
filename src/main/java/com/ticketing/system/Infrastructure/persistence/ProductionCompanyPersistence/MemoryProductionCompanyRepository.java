@@ -94,6 +94,11 @@ public class MemoryProductionCompanyRepository implements IProductionCompanyRepo
     }
 
     @Override
+    public List<ProductionCompany> findAll() {
+        return new ArrayList<>(companiesById.values());
+    }
+
+    @Override
     public int nextId() {
         return idSequence.getAndIncrement();
     }

@@ -1,5 +1,6 @@
 package com.ticketing.system.Presentation.layouts;
 
+import com.ticketing.system.Presentation.components.NotificationBellComponent;
 import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkSideNav;
@@ -100,7 +101,7 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
                 new LkTopBar.NavItem("Browse",     BrowseEventsView.class),
                 new LkTopBar.NavItem("My Tickets", MyAccountView.class)
             ), null)
-            .bellDefault(false)
+            .bell(new NotificationBellComponent(null))
             .account(initials(name), name, buildOwnerMenu(name));
         addToNavbar(topBar);
     }

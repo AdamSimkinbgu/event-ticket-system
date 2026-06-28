@@ -11,6 +11,7 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.popover.PopoverPosition;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Self-contained bell icon + unread badge + notification dropdown.
@@ -19,7 +20,12 @@ import java.util.List;
  */
 public class NotificationBellComponent extends Span {
 
-    public NotificationBellComponent() {
+    private final Consumer<String> onRead;
+
+    public NotificationBellComponent(Consumer<String> onRead) {
+        this.onRead = onRead;
+        addAttachListener(e -> NotificationSession.setBell(this));
+        addDetachListener(e -> NotificationSession.setBell(null));
         build();
     }
 
@@ -50,7 +56,25 @@ public class NotificationBellComponent extends Span {
             bell.add(badge);
         }
 
-        add(new LkPopover(bell, LkNotifPanel.fromDTOs(notifs))
+        Runnable onMarkAll = () -> {
+            if (onRead != null) {
+                NotificationSession.getAll().stream()
+                        .filter(n -> !"READ".equals(n.status()))
+                        .map(NotificationDTO::notificationId)
+                        .filter(id -> id != null && !id.isEmpty())
+                        .forEach(onRead);
+            }
+            NotificationSession.markAllRead();
+            refresh();
+        };
+
+        java.util.function.Consumer<String> onMarkOne = notifId -> {
+            NotificationSession.markRead(notifId);
+            if (onRead != null) onRead.accept(notifId);
+            refresh();
+        };
+
+        add(new LkPopover(bell, LkNotifPanel.fromDTOs(notifs, onMarkAll, onMarkOne))
                 .position(PopoverPosition.BOTTOM_END));
     }
 }

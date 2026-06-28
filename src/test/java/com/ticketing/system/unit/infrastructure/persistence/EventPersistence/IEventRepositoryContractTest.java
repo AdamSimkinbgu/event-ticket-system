@@ -44,7 +44,7 @@ public abstract class IEventRepositoryContractTest {
 
     // Builds a minimal valid Event with specified category and one zone priced at
     // 50.
-    private Event buildEvent(int id, String name, Double rating, int companyId, EventStatus status,
+    protected Event buildEvent(int id, String name, Double rating, int companyId, EventStatus status,
             EventCategory category) {
         VenueMap venueMap = new VenueMap(id, LOCATION, List.of(new StandingZone(1, "Floor", 100, 50)));
         ShowDate showDate = new ShowDate(FUTURE_START, FUTURE_END);
