@@ -2,6 +2,7 @@ package com.ticketing.system.Presentation.views.admin;
 
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Presentation.components.admin.OrgTreeLegend;
 import com.ticketing.system.Presentation.components.admin.OrgTreeRenderer;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkCard;
@@ -125,31 +126,7 @@ public class OrganizationalTreeView extends LkPage {
 
     private Component buildLegendCard() {
         LkCard card = new LkCard("Legend").pad(16);
-        Div row = new Div();
-        row.getStyle().set("display", "flex").set("gap", "20px").set("flex-wrap", "wrap");
-        row.add(
-            legendItem("founder", "Founder",  "Immutable — created the company."),
-            legendItem("owner",   "Owner",    "Appointed by founder or another owner."),
-            legendItem("manager", "Manager",  "Appointed by an owner with granular permissions.")
-        );
-        card.add(row);
+        card.add(new OrgTreeLegend());
         return card;
-    }
-
-    private Component legendItem(String variant, String roleLabel, String desc) {
-        Div item = new Div();
-        item.getStyle().set("display", "flex").set("gap", "10px").set("align-items", "center");
-
-        Span dot = new Span("●");
-        dot.addClassName("oc-avatar");
-        dot.addClassName("oc-av-" + variant);
-        dot.getStyle().set("width", "26px").set("height", "26px").set("font-size", "12px");
-
-        Span text = new Span();
-        text.getElement().setProperty("innerHTML", "<b>" + roleLabel + "</b> · " + desc);
-        text.getStyle().set("font-size", "13px");
-
-        item.add(dot, text);
-        return item;
     }
 }

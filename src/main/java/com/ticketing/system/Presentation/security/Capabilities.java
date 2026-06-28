@@ -55,7 +55,8 @@ public final class Capabilities {
             Capability.APPOINT_CO_OWNER,
             Capability.EDIT_MANAGER_PERMISSIONS,
             Capability.REVOKE_MANAGER,
-            Capability.CANCEL_EVENT));
+            Capability.CANCEL_EVENT,
+            Capability.VIEW_COMPANY_ORG_TREE));
 
     /** Extra capabilities the founder holds on top of {@link #OWNER_BUNDLE}. */
     private static final Set<Capability> FOUNDER_EXTRA = unmodifiable(EnumSet.of(

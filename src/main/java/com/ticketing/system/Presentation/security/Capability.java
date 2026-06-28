@@ -49,6 +49,7 @@ public enum Capability {
     EDIT_MANAGER_PERMISSIONS,
     REVOKE_MANAGER,
     CANCEL_EVENT,
+    VIEW_COMPANY_ORG_TREE,
 
     // ---- Founder-only ----
     DISSOLVE_COMPANY,
