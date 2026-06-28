@@ -203,6 +203,8 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
         List<String> artistList = artists.getValues();
         if (artistList.isEmpty()) { Toasts.failure("Please list at least one artist."); return; }
 
+        if (rating.getValue() == null) { Toasts.failure("Please set a rating (0–5)."); return; }
+
         switch (presenter.create(AuthSession.token(), CurrentCompanies.currentCompanyId(),
                 name, blankToNull(description.getValue()), category.getValue(),
                 co, ci, start.getValue(), end.getValue(), artistList, rating.getValue())) {
@@ -282,6 +284,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
         rating.setMin(0);
         rating.setMax(5);
         rating.setStep(0.5);
+        rating.setRequiredIndicatorVisible(true);
         rating.setWidthFull();
 
         description.setMinHeight("120px");

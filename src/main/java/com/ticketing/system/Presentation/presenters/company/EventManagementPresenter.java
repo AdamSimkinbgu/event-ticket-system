@@ -81,7 +81,8 @@ public class EventManagementPresenter {
                                    return new CreateOutcome.InvalidInput("A start and an end time are required.");
         if (artists == null || artists.isEmpty())
                                    return new CreateOutcome.InvalidInput("At least one artist is required.");
-        if (rating != null && (rating < 0 || rating > 5))
+        if (rating == null)        return new CreateOutcome.InvalidInput("A rating (0–5) is required.");
+        if (rating < 0 || rating > 5)
                                    return new CreateOutcome.InvalidInput("Rating must be between 0 and 5.");
 
         try {
@@ -94,7 +95,7 @@ public class EventManagementPresenter {
                 description,
                 artists,
                 EventCategory.valueOf(categoryName),
-                rating,                                 // optional 0–5 rating set by the organizer
+                rating,                                 // required 0–5 rating set by the organizer
                 new Location(country, city),
                 List.of(new ShowDate(starts, ends)),
                 null);                                  // purchase policy — inherits company policy

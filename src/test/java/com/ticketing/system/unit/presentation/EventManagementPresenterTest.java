@@ -151,6 +151,17 @@ class EventManagementPresenterTest {
     }
 
     @Test
+    void create_nullRating_returnsInvalidInput() {
+        // Rating is required — a null rating maps to InvalidInput and touches no service.
+        EventManagementPresenter.CreateOutcome outcome = presenter.create(TOKEN, 1, "Gala", "desc",
+                EventCategory.COMEDY.name(), "Israel", "Tel Aviv", futureStart(), futureEnd(),
+                List.of("Headliner"), null);
+
+        assertInstanceOf(EventManagementPresenter.CreateOutcome.InvalidInput.class, outcome);
+        verifyNoInteractions(companyService, eventService);
+    }
+
+    @Test
     void create_pastShowDate_returnsInvalidInput() {
         when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(1)));
 
