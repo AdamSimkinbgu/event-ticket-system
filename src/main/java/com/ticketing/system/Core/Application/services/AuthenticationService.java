@@ -167,27 +167,24 @@ public class AuthenticationService {
     /**
      * Registers a new Member. UC-11.
      *
-     * <<<<<<< HEAD
      * <p>
-     * Session intentionally remains Guest per II.1.4 — caller must explicitly
-     * log in to upgrade to Member-Visitor.
+     * Per II.1.4 / D10a:
+     * <ul>
+     * <li>Requires an active Guest session (via
+     * {@link RegisterRequestDTO#guestSessionId()}).</li>
+     * <li>The session intentionally remains Guest after register —
+     * {@link #login(LoginRequestDTO)} is the explicit promotion step to
+     * Member-Visitor.</li>
+     * </ul>
      *
-     * @throws InvalidEmailFormatException email fails format check
-     * @throws WeakPasswordException       password fails strength rules
-     * @throws DuplicateUsernameException  username already taken
-     * @throws DuplicateEmailException     email already registered
-     *                                     =======
-     *                                     <p>
-     *                                     Per II.1.4 / D10a:
-     *                                     <ul>
-     *                                     <li>Requires an active Guest session (via
-     *                                     {@link RegisterRequestDTO#guestSessionId()}).</li>
-     *                                     <li>The session intentionally remains
-     *                                     Guest after register —
-     *                                     {@link #login(LoginRequestDTO)} is the
-     *                                     explicit promotion step.</li>
-     *                                     </ul>
-     *                                     >>>>>>> dev
+     * @param request registration details — username, email, raw password and
+     *                the active guest session id
+     * @throws InvalidEmailFormatException  email fails format check
+     * @throws WeakPasswordException        password fails strength rules
+     * @throws GuestSessionRequiredException the guest session is missing,
+     *                                      unknown, expired or not a guest
+     * @throws DuplicateUsernameException   username already taken
+     * @throws DuplicateEmailException      email already registered
      */
     @Transactional
     public void register(RegisterRequestDTO request) {
@@ -252,18 +249,17 @@ public class AuthenticationService {
      * Authenticates a Member and promotes their Guest session to a Member
      * session in place. UC-12.
      *
-     * <<<<<<< HEAD
      * <p>
      * "Unknown username" and "wrong password" raise the same exception to
-     * avoid username enumeration via the response.
-     * =======
-     * <p>
-     * "Unknown username" and "wrong password" raise the same exception
-     * to prevent username enumeration via the response.
-     * >>>>>>> dev
+     * prevent username enumeration via the response.
      *
+     * @param request login details — the active guest session id, username and
+     *                raw password
+     * @return the authenticated session token and member view
      * @throws GuestSessionRequiredException no / unknown / expired / non-guest
      *                                       sessionId
+     * @throws AccountLockedException        too many recent failed attempts
+     *                                       (brute-force lockout, SLR.2 #148)
      * @throws AuthenticationFailedException invalid credentials
      */
     @Transactional
@@ -443,23 +439,18 @@ public class AuthenticationService {
      * Terminates the authenticated session by deleting the underlying
      * Session row (via {@link ISessionManager#invalidate}). UC-14 / D8 (L1).
      *
-     * <<<<<<< HEAD
      * <p>
-     * Per II.3.1 the session state downgrades back to Guest-Visitor. Cart
-     * state is not touched here (II.3.0.1 / II.3.0.3 govern Active Orders
-     * separately). Idempotent: logout with a {@code null} / blank /
-     * already-revoked token is a no-op.
-     * =======
-     * <p>
-     * Per II.3.1 the user is downgraded back to Guest-Visitor. To act
-     * again they must call {@link #startGuestSession()} for a fresh
-     * sessionId — the old one is dead. (D9a: Member cart persists by userId
-     * and is restored on next login — that wiring lives in Phase 4/5.)
+     * Per II.3.1 the user is downgraded back to Guest-Visitor. To act again
+     * they must call {@link #startGuestSession()} for a fresh sessionId — the
+     * old one is dead. Cart state is not touched here (II.3.0.1 / II.3.0.3
+     * govern Active Orders separately; D9a: a Member cart persists by userId
+     * and is restored on next login).
      *
      * <p>
-     * Idempotent: logout with a {@code null} / blank / already-revoked
-     * token is a no-op.
-     * >>>>>>> dev
+     * Idempotent: logout with a {@code null} / blank / already-revoked token is
+     * a no-op.
+     *
+     * @param request the logout request carrying the session token to revoke
      */
     @Transactional
     public void logout(LogoutRequestDTO request) {

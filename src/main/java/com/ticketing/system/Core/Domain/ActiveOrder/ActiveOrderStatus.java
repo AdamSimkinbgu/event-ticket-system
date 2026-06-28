@@ -1,6 +1,11 @@
 package com.ticketing.system.Core.Domain.ActiveOrder;
 
+/**
+ * Lifecycle state of an {@code ActiveOrder} (the buyer's reservation/cart).
+ */
 public enum ActiveOrderStatus {
-    PRE_CHECKOUT,           // Active order not checked out yet
-    CHECKOUT_IN_PROGRESS    // Active order checkout is in progress
+    /** The active order has not been checked out yet. */
+    PRE_CHECKOUT,
+    /** Checkout for the active order is in progress (Phase 1 of the 3-phase checkout). */
+    CHECKOUT_IN_PROGRESS
 }
