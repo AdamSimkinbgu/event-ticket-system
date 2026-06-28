@@ -62,13 +62,22 @@ public class EventDetailsPresenter {
             log.debug("No accessible venue map for eventId {}: {}", eventId, e.getMessage());
         }
 
-        return new Outcome.Success(event, zones, gridRows, gridCols);
+        // Organizer's DERIVED rating (mean of the company's events' ratings) — best-effort so a
+        // failure here never blocks the page.
+        Double companyRating = null;
+        try {
+            companyRating = catalogService.companyRating(Integer.parseInt(event.companyId()));
+        } catch (RuntimeException e) {
+            log.debug("Could not resolve company rating for eventId {}: {}", eventId, e.getMessage());
+        }
+
+        return new Outcome.Success(event, zones, gridRows, gridCols, companyRating);
     }
 
     /** Sealed outcome the view switches on to render the page or an error banner. */
     public sealed interface Outcome {
         record Success(EventDetailDTO event, List<InventoryZoneDTO> zones,
-                       int gridRows, int gridCols) implements Outcome { }
+                       int gridRows, int gridCols, Double companyRating) implements Outcome { }
         record NotFound(String message) implements Outcome { }
         record Failure(String message)  implements Outcome { }
     }

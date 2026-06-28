@@ -48,6 +48,7 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
 
     private int eventId;
     private EventDetailDTO detail;
+    private Double companyRating;
     private List<InventoryZoneDTO> zones = List.of();
     private int gridRows = 3;
     private int gridCols = 3;
@@ -76,6 +77,7 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
     private void loadAndBuild() {
         bodyHolder.removeAll();
         this.detail = null;
+        this.companyRating = null;
         this.zones = List.of();
         this.selectedZoneId = null;
 
@@ -87,6 +89,7 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
         switch (presenter.load(sessionIdentity.credential(), eventId)) {
             case EventDetailsPresenter.Outcome.Success s -> {
                 this.detail = s.event();
+                this.companyRating = s.companyRating();
                 this.zones = s.zones();
                 this.gridRows = s.gridRows();
                 this.gridCols = s.gridCols();
@@ -128,6 +131,17 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
         title.setText(detail.name());
 
         meta.add(badges, title);
+
+        // Organizer (production company) name, with its DERIVED rating shown beside it when available.
+        if (detail.companyName() != null && !detail.companyName().isBlank()) {
+            String organizerLine = detail.companyName();
+            if (companyRating != null) {
+                organizerLine += "  ·  ★ " + ratingText(companyRating);
+            }
+            Span organizer = Lk.muted(organizerLine);
+            organizer.getStyle().set("font-size", "14px").set("font-weight", "600");
+            meta.add(organizer);
+        }
 
         String lineup = detail.artistsNames() == null ? "" : String.join(" · ", detail.artistsNames());
         if (!lineup.isBlank()) {

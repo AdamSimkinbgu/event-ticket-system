@@ -295,6 +295,12 @@ public class CatalogService {
                 .toList();
     }
 
+    //* A company's DERIVED rating — the mean of its events' ratings (CompanyRatings), or null when
+    //* it has no rated events. Backs the organizer line on the event-details page.
+    public Double companyRating(int companyId) {
+        return CompanyRatings.fromEvents(eventRepository.findByCompanyId(companyId));
+    }
+
     // *HELPER METHOD* — "city, country" label for an event's venue, or null if it has no location.
     private String venueLabel(Event event) {
         if (event.getVenueMap() == null || event.getVenueMap().getLocation() == null) {
