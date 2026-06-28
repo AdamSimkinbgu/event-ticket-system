@@ -8,6 +8,9 @@ package com.ticketing.system.Core.Domain.exceptions;
  */
 public class GuestSessionRequiredException extends DomainException {
 
+    /**
+     * @param reason why an active guest session is required / what was missing
+     */
     public GuestSessionRequiredException(String reason) {
         super(reason);
     }
