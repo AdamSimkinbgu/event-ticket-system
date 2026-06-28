@@ -21,6 +21,11 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
+/**
+ * Co-owner appointment page (route {@code /owner/owners/appoint}, UC-23). Lets an owner
+ * appoint another member as co-owner via
+ * {@link com.ticketing.system.Presentation.presenters.company.MyCompaniesPresenter}.
+ */
 @Route(value = "owner/owners/appoint", layout = WorkspaceLayout.class)
 @PageTitle("Appoint Co-Owner · TicketHub")
 @PermitAll

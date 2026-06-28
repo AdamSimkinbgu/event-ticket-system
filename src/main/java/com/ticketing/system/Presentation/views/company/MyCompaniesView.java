@@ -25,6 +25,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Member's companies page (route {@code /my-companies}). Lists the companies the member
+ * belongs to via {@link com.ticketing.system.Presentation.presenters.company.MyCompaniesPresenter}
+ * and lets them select the current company.
+ */
 @Route(value = "my-companies", layout = MainLayout.class)
 @PageTitle("My Companies · TicketHub")
 @PermitAll

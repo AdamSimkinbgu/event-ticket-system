@@ -17,6 +17,10 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
+/**
+ * System-admin workspace landing page (route {@code /admin}). Surfaces the platform
+ * / market state and admin entry points via {@code AdminDashboardPresenter}.
+ */
 @Route(value = "admin", layout = PlatformAdminLayout.class)
 @PageTitle("Admin Workspace · Event Ticket Platform")
 @PermitAll

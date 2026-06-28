@@ -39,6 +39,12 @@ import com.vaadin.flow.router.RouteParameters;
 
 import jakarta.annotation.security.PermitAll;
 
+/**
+ * Purchase-policy editor (route {@code /owner/policies/:companyId?/:eventId?}, UC-21).
+ * Reads the optional company/event route parameters in {@link #beforeEnter}, then loads
+ * and saves the company- or event-level policy via
+ * {@link com.ticketing.system.Presentation.presenters.company.PurchasePolicyEditorPresenter}.
+ */
 @Route(value = "owner/policies/:companyId?/:eventId?", layout = WorkspaceLayout.class)
 @PageTitle("Purchase Policies · TicketHub")
 @PermitAll

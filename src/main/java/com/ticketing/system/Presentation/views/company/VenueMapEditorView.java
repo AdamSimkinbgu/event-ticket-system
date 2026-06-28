@@ -36,6 +36,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Owner venue-map editor (route {@code /owner/venue/:eventId}, UC-20). Reads the
+ * {@code eventId} route parameter in {@link #beforeEnter}, then loads and saves the
+ * event's zone layout via {@link com.ticketing.system.Presentation.presenters.company.VenueMapPresenter}.
+ */
 @Route(value = "owner/venue/:eventId", layout = WorkspaceLayout.class)
 @PageTitle("Venue Map · TicketHub")
 @PermitAll

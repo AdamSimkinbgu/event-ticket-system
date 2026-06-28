@@ -18,6 +18,10 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
+/**
+ * Member profile page (route {@code /my-profile}). Displays the signed-in member's
+ * profile details.
+ */
 @Route(value = "my-profile", layout = MainLayout.class)
 @PageTitle("My Profile · TicketHub")
 @PermitAll
