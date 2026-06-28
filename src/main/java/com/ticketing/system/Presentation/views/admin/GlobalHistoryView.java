@@ -33,6 +33,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+/**
+ * Admin global purchase-history page (route {@code /admin/global-history}, UC-31).
+ * Lets an admin filter all receipts by buyer/company/event/date via
+ * {@code GlobalHistoryPresenter}.
+ */
 @Route(value = "admin/global-history", layout = PlatformAdminLayout.class)
 @PageTitle("Global Purchase History · Admin")
 @PermitAll

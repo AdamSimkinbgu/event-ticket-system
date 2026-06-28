@@ -30,6 +30,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Owner sales dashboard (route {@code /owner/sales}, UC-22). Shows the company's
+ * sales stats and history via {@link com.ticketing.system.Presentation.presenters.company.CompanySalesPresenter}.
+ */
 @Route(value = "owner/sales", layout = WorkspaceLayout.class)
 @PageTitle("Company Sales · TicketHub")
 @PermitAll

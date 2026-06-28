@@ -23,6 +23,11 @@ import jakarta.annotation.security.PermitAll;
 
 import java.util.List;
 
+/**
+ * Admin organizational-tree viewer (route {@code /admin/org-tree}, UC-25). Renders a
+ * selected company's appointment tree via {@code OrgTreePresenter} and
+ * {@link com.ticketing.system.Presentation.components.admin.OrgTreeRenderer}.
+ */
 @Route(value = "admin/org-tree", layout = PlatformAdminLayout.class)
 @PageTitle("Organizational Tree · Admin")
 @PermitAll
