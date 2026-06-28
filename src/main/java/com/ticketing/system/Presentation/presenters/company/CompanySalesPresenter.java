@@ -12,6 +12,12 @@ import com.ticketing.system.Core.Application.services.CompanyAnalyticsService;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 
+/**
+ * MVP presenter for the company sales dashboard (UC-22). Resolves the caller's
+ * first owned company and loads its dashboard stats and sales history from
+ * {@link CompanyAnalyticsService}. Returns a sealed {@link Outcome} the view
+ * renders. Holds no Vaadin imports.
+ */
 @Component
 public class CompanySalesPresenter {
 
@@ -25,6 +31,15 @@ public class CompanySalesPresenter {
         this.companyAnalyticsService = companyAnalyticsService;
     }
 
+    /**
+     * Loads the dashboard stats and sales history for the caller's first owned
+     * company.
+     *
+     * @param token the owner's token
+     * @return {@link Outcome.Success} with the company name, stats and sales; or
+     *         {@link Outcome.NotAuthenticated}, {@link Outcome.NoCompany}, or
+     *         {@link Outcome.Failure}
+     */
     public Outcome load(String token) {
         if (token == null) return new Outcome.NotAuthenticated();
         try {
@@ -41,6 +56,7 @@ public class CompanySalesPresenter {
         }
     }
 
+    /** Result of {@link #load(String)}. */
     public sealed interface Outcome {
         record Success(String companyName, CompanyDashboardDTO stats,
                        PurchaseHistoryDTO sales) implements Outcome {}
