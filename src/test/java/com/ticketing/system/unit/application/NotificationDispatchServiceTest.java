@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -20,7 +19,6 @@ import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Application.dto.NotificationDTO;
 import com.ticketing.system.Core.Application.interfaces.IPushNotificationService;
-import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.services.NotificationDispatchService;
 import com.ticketing.system.Core.Domain.notifications.INotificationRepository;
 import com.ticketing.system.Core.Domain.notifications.Notification;
@@ -31,26 +29,20 @@ class NotificationDispatchServiceTest {
 
     private INotificationRepository mockRepo;
     private IPushNotificationService mockPushService;
-    private ISessionManager mockSessionManager;
     private NotificationDispatchService service;
 
     @BeforeEach
     void setUp() {
         mockRepo = mock(INotificationRepository.class);
         mockPushService = mock(IPushNotificationService.class);
-        mockSessionManager = mock(ISessionManager.class);
-        service = new NotificationDispatchService(mockRepo, mockPushService, mockSessionManager);
+        service = new NotificationDispatchService(mockRepo, mockPushService);
     }
 
     @Test
-    void givenOnlineRecipient_whenDispatch_thenLivePushAndDelivered() {
-        int userId = 42;
-        when(mockSessionManager.isOnline(userId)).thenReturn(true);
-        when(mockPushService.send(eq(userId), any(Notification.class))).thenReturn(true);
-
+    void dispatch_savesPendingNotification() {
         Notification notification = new Notification(
                 "notif-1",
-                userId,
+                42,
                 NotificationType.PURCHASE_CONFIRMED,
                 NotificationStatus.PENDING,
                 "Your purchase has been confirmed",
@@ -58,51 +50,23 @@ class NotificationDispatchServiceTest {
 
         service.dispatch(notification);
 
-        // Verify it was saved twice: once as PENDING, once as SENT
-        verify(mockRepo, times(2)).save(notification);
-        verify(mockPushService, times(1)).send(eq(userId), any(Notification.class));
-        assertEquals(NotificationStatus.SENT, notification.getStatus());
-    }
-
-    @Test
-    void givenOnlineRecipientButPushFails_whenDispatch_thenStaysPending() {
-        int userId = 42;
-        when(mockSessionManager.isOnline(userId)).thenReturn(true);
-        when(mockPushService.send(eq(userId), any(Notification.class))).thenReturn(false);
-
-        Notification notification = new Notification(
-                "notif-1",
-                userId,
-                NotificationType.PURCHASE_CONFIRMED,
-                NotificationStatus.PENDING,
-                "Your purchase has been confirmed",
-                LocalDateTime.now());
-
-        service.dispatch(notification);
-
-        // Verify it was saved once (at the start of dispatch)
         verify(mockRepo, times(1)).save(notification);
         assertEquals(NotificationStatus.PENDING, notification.getStatus());
     }
 
-    // UC-36: offline recipient → PENDING storage
     @Test
-    void givenOfflineRecipient_whenDispatch_thenNotificationSavedAsPending() {
-        int userId = 42;
-        when(mockSessionManager.isOnline(userId)).thenReturn(false);
-
+    void dispatch_rejectsNonPendingNotification() {
         Notification notification = new Notification(
                 "notif-1",
-                userId,
+                42,
                 NotificationType.PURCHASE_CONFIRMED,
-                NotificationStatus.PENDING,
-                "Your purchase has been confirmed",
+                NotificationStatus.SENT,
+                "msg",
                 LocalDateTime.now());
 
-        service.dispatch(notification);
-
-        verify(mockRepo, times(1)).save(notification);
-        verify(mockPushService, never()).send(anyInt(), any());
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> service.dispatch(notification));
+        verify(mockRepo, never()).save(any());
     }
 
     /* UC-37: deliver pending notifications */
