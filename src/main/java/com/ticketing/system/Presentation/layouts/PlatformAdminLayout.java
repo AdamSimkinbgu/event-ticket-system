@@ -1,5 +1,6 @@
 package com.ticketing.system.Presentation.layouts;
 
+import com.ticketing.system.Presentation.components.NotificationBellComponent;
 import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkSideNav;
@@ -68,7 +69,7 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
             // No navigation target — the brand is inert; "Back to Site" (right) is the way out.
             .brand("Event Ticket Platform", " · Admin")
             .rightLink("Back to Site", "arrowLeft", LandingView.class)
-            .bellDefault(true)
+            .bell(new NotificationBellComponent(null))
             .account(initials(name), name, buildAdminMenu(name), "#fff", "#c2410c");
         addToNavbar(topBar);
     }
