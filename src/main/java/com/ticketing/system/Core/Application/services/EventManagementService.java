@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 // Owner / Manager-side write service for the Event aggregate and its lifecycle.
 // UC-19 (Manage Event Catalog), UC-20 (Configure Venue Map & Inventory), UC-21 (Configure Policies).
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
 import com.ticketing.system.Core.Domain.exceptions.BusinessRuleViolationException;
@@ -116,6 +117,7 @@ public class EventManagementService {
     // a second step.
 
     // UC-19 — Owner adds an Event in DRAFT state.
+    @Transactional
     public EventDetailDTO addEvent(String token, EventCreationDTO request) {
         int ownerId = validateTokenAndGetUserId(token);
 
@@ -170,6 +172,7 @@ public class EventManagementService {
     }
 
     // II.4.1.1 — Owner lists all events under their company.
+    @Transactional(readOnly = true)
     public List<EventDetailDTO> listEventsForCompany(String token, int companyId) {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
@@ -191,6 +194,7 @@ public class EventManagementService {
             .toList();
     }
 
+    @Transactional(readOnly = true)
     public EventDetailDTO getEvent(String token, int eventId) {
         int userId = validateTokenAndGetUserId(token);
         Event event = eventRepository.findById(eventId);
@@ -228,6 +232,7 @@ public class EventManagementService {
 
     // II.4.2.3 — Read back the current zone states from the domain so the
     // editor reflects real-time inventory (capacity consumed by sales, etc.).
+    @Transactional(readOnly = true)
     public VenueLayoutDTO getEventZones(String token, int eventId) {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
@@ -285,6 +290,7 @@ public class EventManagementService {
     // It also allows for a more iterative setup process where the owner/manager can
     // first create the event with basic details and then configure the venue map in
     // a second step.
+    @Transactional
     public void configureVenueMap(String token, int companyId, VenueMapConfigDTO config) {
         int eventId = Integer.parseInt(config.eventId());
 
@@ -362,6 +368,7 @@ public class EventManagementService {
 
     // UC-19 — partial update; immutability rules enforced inside
     // Event.editDetails().
+    @Transactional
     public void editEventDetails(String token, EventUpdateDTO update) {
         int userId = validateTokenAndGetUserId(token);
 
@@ -407,6 +414,7 @@ public class EventManagementService {
         }
     }
 
+    @Transactional
     public int addInventoryZone(String token, int companyId, int eventId, VenueMapConfigDTO.ZoneConfigDTO zoneConfig) {
 
         eventRepository.lockForUpdate(eventId);
@@ -455,6 +463,7 @@ public class EventManagementService {
         }
     }
 
+    @Transactional
     public void removeInventoryZone(String token, int companyId, int eventId, int zoneId) {
 
         eventRepository.lockForUpdate(eventId);
@@ -476,6 +485,7 @@ public class EventManagementService {
 
     // addPlacesToStandingZone is a helper function that allows the owner/manager to
     // add more places to a standing zone.
+    @Transactional
     public void addPlacesToStandingZone(String token, int companyId, int eventId, int zoneId, int placesToAdd) {
         eventRepository.lockForUpdate(eventId);
 
@@ -492,6 +502,7 @@ public class EventManagementService {
 
     // removePlacesFromStandingZone is a helper function that allows the
     // owner/manager to remove a specified number of places from a standing zone.
+    @Transactional
     public void removePlacesFromStandingZone(String token, int companyId, int eventId, int zoneId, int placesToRemove) {
         eventRepository.lockForUpdate(eventId);
 
@@ -508,6 +519,7 @@ public class EventManagementService {
 
     // addSeatsToSeatedZone is a helper function that allows the owner/manager to
     // add specific seats to a seated zone.
+    @Transactional
     public void addSeatsToSeatedZone(
             String token,
             int companyId,
@@ -530,6 +542,7 @@ public class EventManagementService {
 
     // removeSeatsFromSeatedZone is a helper function that allows the owner/manager
     // to remove specific seats from a seated zone.
+    @Transactional
     public void removeSeatsFromSeatedZone(
             String token,
             int companyId,
@@ -552,6 +565,7 @@ public class EventManagementService {
 
     // addSeatRowToSeatedZone is a helper function that allows the owner/manager to
     // add an entire row of seats to a seated zone.
+    @Transactional
     public void addSeatRowToSeatedZone(
             String token,
             int companyId,
@@ -593,6 +607,7 @@ public class EventManagementService {
     // based on the existing seat layout in the zone.
     // * This ensures that all seats in the specified row are removed consistently.
     // */
+    @Transactional
     public void removeSeatRowFromSeatedZone(
             String token,
             int companyId,
@@ -697,6 +712,7 @@ public class EventManagementService {
     }
 
     // Detail view for owner-side editing pages.
+    @Transactional(readOnly = true)
     public EventDetailDTO getEventDetail(String token, int eventId) {
         int userId = validateTokenAndGetUserId(token);
 
@@ -714,6 +730,7 @@ public class EventManagementService {
     // The actual transition (and its venue-map/show-date/invariant guards) lives in
     // Event.transitionToOnSale(); this method enforces auth, ownership, and
     // locking.
+    @Transactional
     public void publishEvent(String token, int companyId, int eventId) {
         int userId = validateTokenAndGetUserId(token);
 
@@ -784,6 +801,8 @@ public class EventManagementService {
 
     // UC-19 — soft cancel; fires EventCancelled domain event for UC-4 refund
     // pipeline.
+    // Intentionally NOT @Transactional: this calls the external payment gateway (refund) mid-flow,
+    // so its transaction boundary is restructured separately (externals outside the tx) in V3-TX-02.
     public void cancelEventAndRefund(String token, int eventId) {
         int ownerId = validateTokenAndGetUserId(token);
         // We lock the event for update to prevent concurrent modifications during the
@@ -949,6 +968,7 @@ public class EventManagementService {
     // to the event's purchase policy while we're updating it. This ensures that we
     // have a consistent view of the event's state and that we don't accidentally
     // overwrite changes made by another user at the same time.
+    @Transactional
     public void setEventPolicies(String token, EventPolicyConfigDTO config) {
         if (!sessionManager.validateToken(token)) {
             throw new RuntimeException("Invalid token");
@@ -1084,6 +1104,7 @@ public class EventManagementService {
         return sessionManager.extractUserId(token);
     }
 
+    @Transactional(readOnly = true)
     public PurchasePolicyDTO getEventPurchasePolicy(String token, int companyId, int eventId) {
         if (!sessionManager.validateToken(token))
             throw new RuntimeException("Invalid token");

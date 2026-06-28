@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.system.Core.Application.dto.ComplaintFilterDTO;
 import com.ticketing.system.Core.Application.dto.ConversationDTO;
@@ -86,6 +87,7 @@ public class MessagingService {
     // ---------------------------------------------------------------------------
 
     // II.3.10 — Member starts an INQUIRY conversation (two-way chat) with a Company.
+    @Transactional
     public ConversationDTO startConversation(String token, StartConversationRequestDTO request) {
         int memberId = authenticate(token);
         int companyId = request.counterpartyId();
@@ -108,6 +110,7 @@ public class MessagingService {
 
 
     // Append a reply to an existing conversation. Sender must be a participant.
+    @Transactional
     public void sendMessage(String token, SendMessageRequestDTO request) {
         Caller caller = authenticateCaller(token);
         String conversationId = request.conversationId();
@@ -138,6 +141,7 @@ public class MessagingService {
 
 
     // II.3.3 — Member submits a COMPLAINT (counterparty = ADMIN_GROUP).
+    @Transactional
     public ConversationDTO submitComplaint(String token, SubmitComplaintRequestDTO request) {
         int memberId = authenticate(token);
         String body = request.body();
@@ -160,6 +164,7 @@ public class MessagingService {
 
 
     // II.6.3.1 — admin sends the single response to a complaint, which resolves it (one-shot).
+    @Transactional
     public void respondToComplaint(String token, RespondToComplaintRequestDTO request) {
         int adminId = requireSystemAdmin(token);
         String conversationId = request.conversationId();
@@ -190,6 +195,7 @@ public class MessagingService {
     // II.6.3.2 — admin proactive messaging. Resolves the recipient set (explicit members, and/or
     // all members, and/or all producers' owner accounts), then opens one two-way DIRECT
     // conversation per recipient so each lands in that member's Support Inbox as a chat.
+    @Transactional
     public OutreachResultDTO sendOutreach(String token, OutreachRequestDTO request) {
         int adminId = requireSystemAdmin(token);
 
@@ -236,6 +242,7 @@ public class MessagingService {
 
 
     // UI action — mark a single message as read by the viewer.
+    @Transactional
     public void markMessageAsRead(String token, String conversationId, String messageId) {
         Caller caller = authenticateCaller(token);
         conversationRepository.lockForUpdate(conversationId);
@@ -252,6 +259,7 @@ public class MessagingService {
 
 
     // Terminal action — close a conversation (no further messages allowed).
+    @Transactional
     public void closeConversation(String token, String conversationId) {
         Caller caller = authenticateCaller(token);
         conversationRepository.lockForUpdate(conversationId);
@@ -270,6 +278,7 @@ public class MessagingService {
     // ---------------------------------------------------------------------------
 
     // Member-facing Support Inbox: inquiries + complaints the member opened, plus admin outreach.
+    @Transactional(readOnly = true)
     public List<ConversationDTO> viewMyConversations(String token) {
         int memberId = authenticate(token);
         return conversationRepository.findMemberInbox(memberId).stream()
@@ -279,6 +288,7 @@ public class MessagingService {
     }
 
     // Open a single thread. Caller must be a participant.
+    @Transactional(readOnly = true)
     public ConversationDTO viewConversation(String token, String conversationId) {
         Caller caller = authenticateCaller(token);
         Conversation conversation = loadConversation(conversationId);
@@ -287,6 +297,7 @@ public class MessagingService {
     }
 
     // II.4.4 — company support inbox: all conversations where this company is counterparty.
+    @Transactional(readOnly = true)
     public List<ConversationDTO> viewCompanyInbox(String token, int companyId) {
         int callerId = authenticate(token);
         if (!callerActsForCompany(callerId, companyId)) {
@@ -300,6 +311,7 @@ public class MessagingService {
     }
 
     // II.6.3.1 — admin queue of complaints with filters.
+    @Transactional(readOnly = true)
     public List<ConversationDTO> viewAllComplaints(String token, ComplaintFilterDTO filters) {
         int adminId = requireSystemAdmin(token);
         ConversationStatus status = parseStatusOrNull(filters == null ? null : filters.status());
@@ -316,6 +328,7 @@ public class MessagingService {
 
     // II.6.3.2 — admin "sent history": every DIRECT conversation the admin initiated.
     // The fan-out creates one conversation per recipient; callers group them into broadcasts.
+    @Transactional(readOnly = true)
     public List<ConversationDTO> viewSentOutreach(String token) {
         int adminId = requireSystemAdmin(token);
         return conversationRepository.findByTypeAndInitiatorType(ConversationType.DIRECT, ParticipantType.ADMIN).stream()
@@ -327,6 +340,7 @@ public class MessagingService {
     // Admin Inbox — the calling admin's own DIRECT conversations (outreach they started), newest
     // first, so they can chat and close each one. Scoped to this admin (findByParticipant is an
     // exact id/type match), so it never includes another admin's outreach or complaints.
+    @Transactional(readOnly = true)
     public List<ConversationDTO> viewAdminInbox(String token) {
         int adminId = requireSystemAdmin(token);
         return conversationRepository.findByParticipant(adminId, ParticipantType.ADMIN).stream()

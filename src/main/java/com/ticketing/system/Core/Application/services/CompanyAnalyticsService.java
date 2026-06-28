@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -34,6 +35,7 @@ import com.ticketing.system.Core.Domain.users.IUserRepository;
  */
 @Service
 @Slf4j
+@Transactional(readOnly = true)
 public class CompanyAnalyticsService {
 
     private static final int WINDOW_DAYS = 30;

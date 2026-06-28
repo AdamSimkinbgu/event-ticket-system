@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.dto.ReservationResultDTO;
@@ -70,21 +71,25 @@ public class ReservationService {
     // Public API - use these methods from new code/controllers/tests
     // ---------------------------------------------------------------------
 
+    @Transactional
     public ReservationResultDTO reserveForMember(String token, int eventId, int zoneId,
             InventorySelectionDTO selectionDto) {
         return reserve(authenticateMember(token), eventId, zoneId, toDomainSelection(selectionDto));
     }
 
+    @Transactional
     public ReservationResultDTO reserveForGuest(String sessionId, int eventId, int zoneId,
             InventorySelectionDTO selectionDto) {
         return reserve(authenticateGuest(sessionId), eventId, zoneId, toDomainSelection(selectionDto));
     }
 
+    @Transactional
     public ReservationResultDTO removeForMember(String token, int eventId, int zoneId,
             InventorySelectionDTO selectionDto) {
         return remove(authenticateMember(token), eventId, zoneId, toDomainSelection(selectionDto));
     }
 
+    @Transactional
     public ReservationResultDTO removeForGuest(String sessionId, int eventId, int zoneId,
             InventorySelectionDTO selectionDto) {
         return remove(authenticateGuest(sessionId), eventId, zoneId, toDomainSelection(selectionDto));
@@ -676,6 +681,7 @@ public class ReservationService {
     }
 
     // method to restore an active order for a user (member) - this is used by the frontend when a user logs in or returns to the site after navigating away, to restore their active order and show them their current reservations in the cart. For members, we look up the active order by their user ID. For guests, we look up the active order by their session ID. If an active order is found, we convert it to an ActiveOrderDTO and return it. If no active order is found, we return null. We also enrich the DTO with event names for better UX in the frontend, so that the frontend can show the event names directly in the cart without needing to make extra calls to get event details for each line item.
+    @Transactional(readOnly = true)
     public ActiveOrderDTO restoreActiveOrder(int userId) {
         ActiveOrder activeOrder = activeOrderRepository.getByUserId(userId);
         if (activeOrder == null) {
@@ -707,6 +713,7 @@ public class ReservationService {
                 enrichedLines);
     }
 
+    @Transactional(readOnly = true)
     public ActiveOrderDTO restoreActiveOrderForGuest(String sessionId) {
         return activeOrderRepository.getBySessionId(sessionId)
                 .map(order -> {
@@ -736,6 +743,7 @@ public class ReservationService {
     // leave it untouched so the existing expiry/sweeper path can reject the stale cart. The
     // reset runs under the per-order lock (the same lock the expiry sweeper acquires first),
     // so it cannot race the sweeper. The enriched DTO is built by reusing restoreActiveOrder.
+    @Transactional
     public ActiveOrderDTO renewReservationsForMemberCheckout(int userId) {
         String orderLockKey = "user:" + userId;
         activeOrderRepository.lockForUpdate(orderLockKey);
@@ -753,6 +761,7 @@ public class ReservationService {
         return restoreActiveOrder(userId);
     }
 
+    @Transactional
     public ActiveOrderDTO renewReservationsForGuestCheckout(String sessionId) {
         String orderLockKey = "sess:" + sessionId;
         activeOrderRepository.lockForUpdate(orderLockKey);
@@ -771,6 +780,7 @@ public class ReservationService {
     }
 
     // Helper method to abandon the active order for a user (member or guest) - this is used by the frontend when a user explicitly clicks "Abandon Cart" or when they log out, to clear their active order and release any reserved inventory back to the events. For members, we look up the active order by their user ID. For guests, we look up the active order by their session ID. If an active order is found, we release any reserved inventory back to the events and then delete the active order. If no active order is found, we simply return without doing anything. This ensures that we do not leave any reserved inventory hanging around for abandoned carts, which keeps our inventory accurate and allows other users to purchase those tickets if they are still available.
+    @Transactional
     public void abandonActiveOrder(BuyerContextDTO buyer) {
         if (buyer == null) {
             throw new IllegalArgumentException("Buyer context is required");
@@ -874,6 +884,7 @@ public class ReservationService {
     * Removes a line from the cart, automatically determining whether the user is a Member or Guest.
     * The UI just calls this method, no need to handle InventorySelectionDTO or user type.
     */
+    @Transactional
     public ReservationResultDTO removeLine(String userTokenOrSessionId, int eventId, int zoneId,
             InventorySelectionDTO selection) {
 
@@ -910,6 +921,7 @@ public class ReservationService {
     }
 
     // Helper method to view the current active order for a user (member or guest). For members, we look up the active order by their user ID. For guests, we look up the active order by their session ID. If an active order is found, we convert it to an ActiveOrderDTO and return it. If no active order is found, we return null. This allows the frontend to show the user their current reservations in the cart when they navigate to the cart page, etc.
+    @Transactional(readOnly = true)
     public ActiveOrderDTO viewMyActiveOrder(String userOrSessionId) {
         if (userOrSessionId == null || userOrSessionId.isBlank()) {
             return null;
