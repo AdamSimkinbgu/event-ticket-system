@@ -13,6 +13,7 @@ import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
@@ -115,11 +116,13 @@ public class AuthenticationService {
     }
 
     /** Delegates to {@link ISessionManager#extractUserId}. */
+    @Transactional(readOnly = true)
     public int extractUserId(String token) {
         return sessionManager.extractUserId(token);
     }
 
     /** Delegates to {@link ISessionManager#validateToken}. */
+    @Transactional(readOnly = true)
     public boolean validateToken(String token) {
         return sessionManager.validateToken(token);
     }
@@ -132,6 +135,7 @@ public class AuthenticationService {
      * Mints a new Guest session. Entry point for any visitor before
      * register/login.
      */
+    @Transactional
     public GuestSessionDTO startGuestSession() {
         Instant now = clock.instant();
         Instant expiry = now.plus(guestIdleMinutes, ChronoUnit.MINUTES);
@@ -147,6 +151,7 @@ public class AuthenticationService {
      * input is a no-op. Attached cart cleanup is the sweeper's
      * responsibility (Phase 5).
      */
+    @Transactional
     public void endGuestSession(String sessionId) {
         if (sessionId == null || sessionId.isBlank())
             return;
@@ -184,6 +189,7 @@ public class AuthenticationService {
      *                                     </ul>
      *                                     >>>>>>> dev
      */
+    @Transactional
     public void register(RegisterRequestDTO request) {
         // 1. Cheap format validation first — bots / garbage fail before any IO.
         validateEmail(request.email());
@@ -260,6 +266,7 @@ public class AuthenticationService {
      *                                       sessionId
      * @throws AuthenticationFailedException invalid credentials
      */
+    @Transactional
     public LoginDTO login(LoginRequestDTO request) {
         // 1. Guest session must exist.
         Session session = requireActiveGuestSession(request.guestSessionId());
@@ -314,6 +321,7 @@ public class AuthenticationService {
      * — disjoint-pool rule), applies the shared lock-after-N policy, audit-logs every failure, and
      * issues an ADMIN-role JWT so the backend admin gate can authorize it.
      */
+    @Transactional(readOnly = true)
     public AuthTokenDTO signInAsAdmin(String username, String rawPassword) {
         String lockKey = lockoutKey("a", username);
 
@@ -453,6 +461,7 @@ public class AuthenticationService {
      * token is a no-op.
      * >>>>>>> dev
      */
+    @Transactional
     public void logout(LogoutRequestDTO request) {
         Optional<Integer> userIdOpt = sessionManager.tryExtractUserId(request.token());
         sessionManager.invalidate(request.token());
