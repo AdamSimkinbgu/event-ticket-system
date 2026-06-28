@@ -151,14 +151,14 @@ public class PurchasePolicyEditorPresenter {
 
     public void updateRule(Group root, String nodeId, RuleType type, String value) {
         if (find(root, nodeId) instanceof Rule r) {
-            r.type  = type;
+            if (type != null) r.type = type;   // ignore null type — keeps r.type non-null for toTreeJson/nodeToDTO
             r.value = value == null ? "" : value.trim();
         }
     }
 
     public void updateGroupOp(Group root, String nodeId, Op op) {
         if (find(root, nodeId) instanceof Group g) {
-            g.op = op;
+            if (op != null) g.op = op;          // ignore null op — downstream assumes a non-null operator
         }
     }
 
@@ -247,6 +247,10 @@ public class PurchasePolicyEditorPresenter {
 
 
     public Validity validate(Group root) {
+        // An empty root means "no restrictions" — a valid NONE policy (see nodeToDTO).
+        if (root.children.isEmpty()) {
+            return Validity.OK;
+        }
         return validateNode(root);
     }
 
@@ -354,6 +358,11 @@ public class PurchasePolicyEditorPresenter {
             };
         }
         Group g = (Group) node;
+        // An empty group is "no restrictions" — serialize to NONE rather than an invalid
+        // 0-child AND/OR (the backend rejects composites with < 2 children).
+        if (g.children.isEmpty()) {
+            return new PurchasePolicyDTO("NONE", null, null, null, null);
+        }
         List<PurchasePolicyDTO> children = g.children.stream().map(this::nodeToDTO).toList();
         // The backend requires AND/OR composites to carry >= 2 children; a single-child group
         // is semantically just its child, so unwrap it instead of emitting an invalid AND/OR.
