@@ -57,6 +57,7 @@ import com.ticketing.system.Core.Domain.policies.purchase.MinTicketsPurchasePoli
 import com.ticketing.system.Core.Domain.policies.purchase.MaxTicketsPurchasePolicy;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
@@ -83,6 +84,7 @@ public class CompanyManagementService {
     }
 
     // UC-23 — Owner appoints another Member as co-Owner (PENDING).
+    @Transactional
     public void appointOwner(String token, OwnerAppointmentRequestDTO request) {
         if (request.companyId() <= 0 || request.targetUserId() <= 0) {
             log.warn("Invalid appointment request: companyId and targetUserId must be positive integers");
@@ -121,6 +123,7 @@ public class CompanyManagementService {
     }
 
     // UC-24 — Owner appoints a Manager with explicit granular permissions.
+    @Transactional
     public void appointManager(String token, ManagerAppointmentRequestDTO request) {
         if (request.companyId() <= 0 || request.targetUserId() <= 0) {
             log.warn("Invalid manager appointment request: companyId and targetUserId must be positive integers");
@@ -149,6 +152,7 @@ public class CompanyManagementService {
 
     // UC-23 / UC-24 — target accepts or rejects a pending owner/manager
     // appointment.
+    @Transactional
     public void respondToAppointment(String token, AppointmentResponseDTO response) {
         if (response.companyId() <= 0) {
             log.warn("Invalid appointment response: companyId must be a positive integer");
@@ -188,6 +192,7 @@ public class CompanyManagementService {
     }
 
     // UC-24 — edit a Manager's permission set (only by the original appointer).
+    @Transactional
     public void editManagerPermissions(String token, PermissionEditDTO edit) {
         int ownerId = authenticate(token);
 
@@ -221,6 +226,7 @@ public class CompanyManagementService {
                 edit.companyId());
     }
 
+    @Transactional
     public void RevokeAppointment(String token, AppointmentRevokeDTO revokeRequest) {
         int ownerId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(revokeRequest.companyId());
@@ -250,6 +256,7 @@ public class CompanyManagementService {
     }
 
     // Resolves a username-or-email string to a userId — used by the invite flow.
+    @Transactional(readOnly = true)
     public int resolveUserId(String identifier) {
         if (identifier == null || identifier.isBlank())
             throw new IllegalArgumentException("Identifier must not be blank");
@@ -270,6 +277,7 @@ public class CompanyManagementService {
     // ---------------------------------------------------------------------------
 
     // II.4.7.1 — active managers of a company (owner-only view).
+    @Transactional(readOnly = true)
     public List<AppointmentInfoDTO> listManagers(String token, int companyId) {
         int requesterId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
@@ -296,6 +304,7 @@ public class CompanyManagementService {
     }
 
     // II.4.7.1 — pending invitations (manager + owner offers) awaiting acceptance.
+    @Transactional(readOnly = true)
     public List<AppointmentInfoDTO> listPendingInvitations(String token, int companyId) {
         int requesterId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
@@ -324,6 +333,7 @@ public class CompanyManagementService {
     // Bridges token -> companyId for the owner workspace until a real
     // current-company
     // selector lands (V2-CADMIN-05).
+    @Transactional(readOnly = true)
     public List<ProductionCompanyDTO> findOwnedCompanies(String token) {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
@@ -357,6 +367,7 @@ public class CompanyManagementService {
     // (V2-WIRE-OWNER-DASH);
     // unlike findOwnedCompanies it keeps managers, since /owner is reachable by
     // them too.
+    @Transactional(readOnly = true)
     public List<MyCompanyDTO> findMyCompanies(String token) {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
@@ -392,6 +403,7 @@ public class CompanyManagementService {
     // resolved ACTIVE/REJECTED/REVOKED rows (history). Names are resolved per row,
     // mirroring
     // listPendingInvitations.
+    @Transactional(readOnly = true)
     public List<InvitationDTO> listMyInvitations(String token) {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
@@ -433,6 +445,7 @@ public class CompanyManagementService {
 
     // UC-18 — register a new Production Company; appoints Founder/Owner in same
     // transaction.
+    @Transactional
     public ProductionCompanyDTO registerCompany(String token, CompanyRegistrationDTO request) {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
@@ -483,6 +496,7 @@ public class CompanyManagementService {
         }
     }
 
+    @Transactional
     public void setCompanyPolicies(String token, CompanyPolicyConfigDTO config) {
         if (config == null) {
             throw new IllegalArgumentException("Company policy config cannot be null");
@@ -507,6 +521,7 @@ public class CompanyManagementService {
     // for events of this company (the rest are filtered out). This way we return
     // the full receipt details for each relevant purchase, but only
     // include the tickets that are relevant to this company's sales history.
+    @Transactional(readOnly = true)
     public List<PurchaseHistoryDTO> viewSalesHistory(String token, int companyId) {
         log.info("Attempting to view sales history for company {}", companyId);
 
@@ -560,6 +575,7 @@ public class CompanyManagementService {
     }
 
     // UC-25 — recursive organizational tree (Owners only per II.4.15).
+    @Transactional(readOnly = true)
     public OrganizationalTreeNodeDTO viewOrganizationalTree(String token, int companyId) {
         log.info("Attempting to view organizational tree for company {}", companyId);
 
@@ -634,6 +650,7 @@ public class CompanyManagementService {
         return userIdToNodeMap.get(founderId);
     }
 
+    @Transactional(readOnly = true)
     public List<UserCompanyDTO> listForUser(int userId) {
         User user = userRepository.getUserById(userId);
         if (user == null) {
@@ -656,6 +673,7 @@ public class CompanyManagementService {
         return memberships;
     }
 
+    @Transactional(readOnly = true)
     public boolean isOwnerOf(int userId, int companyId) {
         User user = userRepository.getUserById(userId);
         if (user == null) {
@@ -748,6 +766,7 @@ public class CompanyManagementService {
         }
     }
 
+    @Transactional(readOnly = true)
     public PurchasePolicyDTO getCompanyPurchasePolicy(String token, int companyId) {
         int userId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
