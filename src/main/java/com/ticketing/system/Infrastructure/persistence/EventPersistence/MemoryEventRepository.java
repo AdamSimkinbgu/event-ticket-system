@@ -65,6 +65,18 @@ public class MemoryEventRepository implements IEventRepository {
     }
 
     @Override
+    public void delete(int eventId) {
+        // Delete is a structural/lifecycle change: an existing event must be write-locked
+        // by the calling thread, mirroring save(), so it can't race with buyer read locks
+        // (lockForBuyerOperation) or other lifecycle writes.
+        if (events.containsKey(eventId)
+                && !locks.isWriteHeldByCurrentThread(eventId)) {
+            throw new IllegalStateException("Event " + eventId + " must be locked before deleting");
+        }
+        events.remove(eventId);
+    }
+
+    @Override
     public boolean save(Event event) {
         // New events (not yet in the map) may be saved without a lock — no other
         // thread can know the ID before the first save completes.
