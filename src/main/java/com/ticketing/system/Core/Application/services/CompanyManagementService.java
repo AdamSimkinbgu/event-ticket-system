@@ -507,7 +507,11 @@ public class CompanyManagementService {
         if (company == null) {
             throw new CompanyNotFoundException(config.companyId());
         }
-        company.checkowner(userId);
+        User user = userRepository.getUserById(userId);
+        if (user == null) {
+            throw new RuntimeException("User not found");
+        }
+        user.requirePermissionInCompany(config.companyId(), Permission.EDIT_POLICIES);
         PurchasePolicy policy = buildPurchasePolicyFromDTO(config.defaultPurchasePolicy());
         company.setPurchasePolicy(policy);
         companyRepository.save(company);
@@ -804,7 +808,10 @@ public class CompanyManagementService {
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null)
             throw new RuntimeException("Company not found");
-        company.checkowner(userId);
+        User user = userRepository.getUserById(userId);
+        if (user == null)
+            throw new RuntimeException("User not found");
+        user.requirePermissionInCompany(companyId, Permission.EDIT_POLICIES);
         return policyToDTO(company.getPurchasePolicy());
     }
 
