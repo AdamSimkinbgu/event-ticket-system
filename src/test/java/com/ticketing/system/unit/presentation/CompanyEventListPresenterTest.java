@@ -5,6 +5,7 @@ import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.events.EventStatus;
+import com.ticketing.system.Core.Domain.exceptions.BusinessRuleViolationException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Presentation.presenters.company.CompanyEventListPresenter;
@@ -163,6 +164,18 @@ class CompanyEventListPresenterTest {
                         presenter.deleteEvent(TOKEN, EVENT_ID));
 
         assertEquals("Only CANCELED events can be deleted", fail.reason());
+    }
+
+    @Test
+    void deleteEvent_withPurchaseHistory_returnsFailureWithMessage() {
+        doThrow(new BusinessRuleViolationException("Can't delete event with purchase history"))
+                .when(eventService).deleteEvent(TOKEN, EVENT_ID);
+
+        CompanyEventListPresenter.ActionOutcome.Failure fail =
+                assertInstanceOf(CompanyEventListPresenter.ActionOutcome.Failure.class,
+                        presenter.deleteEvent(TOKEN, EVENT_ID));
+
+        assertEquals("Can't delete event with purchase history", fail.reason());
     }
 
     // ── changeEventStatus ─────────────────────────────────────────────────────

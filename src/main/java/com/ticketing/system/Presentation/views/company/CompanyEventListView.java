@@ -177,7 +177,7 @@ public class CompanyEventListView extends LkPage {
                 case CompanyEventListPresenter.ActionOutcome.NotAuthenticated ignored2 ->
                     Toasts.warn("Session expired — please sign in again.");
                 case CompanyEventListPresenter.ActionOutcome.Failure fail ->
-                    Toasts.failure("Remove failed: " + fail.reason());
+                    Toasts.failure(fail.reason() == null ? "Remove failed." : fail.reason());
             }
         });
         dialog.open();
