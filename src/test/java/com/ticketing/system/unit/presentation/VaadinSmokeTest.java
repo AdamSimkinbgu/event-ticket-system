@@ -326,7 +326,7 @@ class VaadinSmokeTest {
         MyCompanyDTO company = new MyCompanyDTO(1, "Acme", "Founder");
         when(presenter.loadFor(any(), any())).thenReturn(
             new OwnerDashboardPresenter.Outcome.Success(
-                List.of(company), company, new CompanyDashboardDTO(0, 0, 0.0, 0)));
+                List.of(company), company, new CompanyDashboardDTO(0, 0, 0.0, 0, 4.5)));
         assertDoesNotThrow(() -> new OwnerDashboardView(presenter),
             "OwnerDashboardView failed to construct");
     }

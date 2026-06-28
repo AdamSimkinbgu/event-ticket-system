@@ -113,6 +113,7 @@ public class CompanyEventListView extends LkPage {
             .col("Event",   "name")
             .col("Date",    "date")
             .col("Venue",   "venue")
+            .col("Rating",  "rating", LkGrid.Align.RIGHT)
             .col("Status",  "status")
             .col("Actions", "act", LkGrid.Align.RIGHT);
         switch (presenter.load(AuthSession.token(), currentFilters())) {
@@ -334,7 +335,7 @@ public class CompanyEventListView extends LkPage {
     private void addEventRow(LkGrid grid, EventDetailDTO ev) {
         Map<String, Object> row = new LinkedHashMap<>();
         Span name = new Span();
-        name.getElement().setProperty("innerHTML", "<b>" + escape(ev.name()) + "</b>");
+        name.getElement().setProperty("innerHTML", nameCellHtml(ev));
         row.put("name", name);
 
         String date = ev.showDates() != null && !ev.showDates().isEmpty()
@@ -343,6 +344,8 @@ public class CompanyEventListView extends LkPage {
 
         String venue = ev.location() != null ? ev.location().toString() : "—";
         row.put("venue", venue);
+
+        row.put("rating", ev.rating() == null ? "—" : "★ " + ratingText(ev.rating()));
 
         LkStatusDot.Tone tone = ev.status() == EventStatus.ON_SALE ? LkStatusDot.Tone.ok
             : ev.status() == EventStatus.DRAFT ? LkStatusDot.Tone.muted
@@ -469,6 +472,21 @@ public class CompanyEventListView extends LkPage {
         LkIconBtn b = new LkIconBtn(new LkIcon(iconName, 15), tooltip);
         b.addClickListener(e -> r.run());
         return b;
+    }
+
+    /** Event name in bold, with the line-up (if any) as a muted second line — matches /browse. */
+    private static String nameCellHtml(EventDetailDTO ev) {
+        String html = "<b>" + escape(ev.name()) + "</b>";
+        if (ev.artistsNames() != null && !ev.artistsNames().isEmpty()) {
+            String lineup = String.join(" · ", ev.artistsNames().stream().map(CompanyEventListView::escape).toList());
+            html += "<div style=\"color:var(--muted);font-size:12.5px;margin-top:2px;\">" + lineup + "</div>";
+        }
+        return html;
+    }
+
+    /** Rating shown without a trailing ".0" (e.g. 4.5 → "4.5", 4.0 → "4"). */
+    private static String ratingText(double rating) {
+        return rating == Math.floor(rating) ? String.valueOf((int) rating) : String.valueOf(rating);
     }
 
     private static String escape(String s) {
