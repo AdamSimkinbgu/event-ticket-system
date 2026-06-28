@@ -40,6 +40,7 @@ import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Infrastructure.persistence.OrderReceiptPersistence.MemoryOrderReceiptRepository;
+import com.ticketing.system.testutil.TestTransactions;
 
 @ExtendWith(MockitoExtension.class)
 class RefundServiceTest {
@@ -68,7 +69,7 @@ class RefundServiceTest {
     @BeforeEach
     void setUp() {
         service = new RefundService(authenticationService, orderReceiptRepository, ticketRepository,
-                paymentGateway, eventRepository);
+                paymentGateway, eventRepository, TestTransactions.noOpManager());
     }
 
     private static OrderReceipt memberReceiptWithCharge(int userId) {
@@ -253,7 +254,7 @@ class RefundServiceTest {
         Mockito.when(ticketRepo.findByOrderReceiptId(ORDER_ID)).thenReturn(List.of());
         IEventRepository eventRepo = Mockito.mock(IEventRepository.class);
 
-        RefundService concurrentService = new RefundService(auth, realReceiptRepo, ticketRepo, countingGateway, eventRepo);
+        RefundService concurrentService = new RefundService(auth, realReceiptRepo, ticketRepo, countingGateway, eventRepo, TestTransactions.noOpManager());
 
         int threads = 2;
         CyclicBarrier barrier = new CyclicBarrier(threads);
