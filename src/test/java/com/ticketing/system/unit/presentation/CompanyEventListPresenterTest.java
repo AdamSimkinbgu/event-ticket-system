@@ -5,6 +5,7 @@ import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.events.EventStatus;
+import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Presentation.presenters.company.CompanyEventListPresenter;
 import org.junit.jupiter.api.BeforeEach;
@@ -154,7 +155,7 @@ class CompanyEventListPresenterTest {
 
     @Test
     void deleteEvent_notCanceled_returnsFailureWithMessage() {
-        doThrow(new IllegalStateException("Only CANCELED events can be deleted"))
+        doThrow(new InvalidStateTransitionException("Only CANCELED events can be deleted"))
                 .when(eventService).deleteEvent(TOKEN, EVENT_ID);
 
         CompanyEventListPresenter.ActionOutcome.Failure fail =

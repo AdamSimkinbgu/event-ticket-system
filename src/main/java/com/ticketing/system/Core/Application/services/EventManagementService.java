@@ -11,8 +11,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
+import com.ticketing.system.Core.Domain.exceptions.BusinessRuleViolationException;
 import com.ticketing.system.Core.Domain.exceptions.CompanyNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
@@ -744,7 +746,14 @@ public class EventManagementService {
             User user = userRepository.getUserById(userId);
             user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
             if (event.getStatus() != EventStatus.CANCELED) {
-                throw new IllegalStateException("Only CANCELED events can be deleted");
+                throw new InvalidStateTransitionException("Only CANCELED events can be deleted");
+            }
+            // Soft-cancel keeps events "for historical and reporting purposes": refuse to
+            // permanently delete one that still has purchase history, which would orphan its
+            // OrderReceipt/Ticket records (referenced by eventId, no cascade).
+            if (!orderReceiptRepository.findByEventId(eventId).isEmpty()) {
+                throw new BusinessRuleViolationException(
+                        "Cannot delete event " + eventId + " — it has purchase history and is retained for reporting.");
             }
             eventRepository.delete(eventId);
             log.info("Event {} deleted by user {}", eventId, userId);
@@ -765,7 +774,7 @@ public class EventManagementService {
             switch (targetStatus) {
                 case SCHEDULED -> event.transitionToScheduled();
                 case ON_SALE -> event.transitionToOnSale();
-                default -> throw new IllegalArgumentException("Cannot manually set status to " + targetStatus);
+                default -> throw new InvalidStateTransitionException("Cannot manually set status to " + targetStatus);
             }
             eventRepository.save(event);
             log.info("Event {} status changed to {} by user {}", eventId, targetStatus, userId);

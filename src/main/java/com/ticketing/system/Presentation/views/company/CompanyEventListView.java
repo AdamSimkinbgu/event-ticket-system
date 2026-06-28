@@ -122,12 +122,15 @@ public class CompanyEventListView extends LkPage {
             iconBtn("edit",    "Edit metadata", () -> UI.getCurrent().navigate("owner/events/" + ev.eventId())),
             iconBtn("map",     "Venue map",     () -> UI.getCurrent().navigate("owner/venue/" + ev.eventId())),
             iconBtn("policy",  "Policies",      () -> UI.getCurrent().navigate(PurchasePolicyEditorView.class)),
-            iconBtn("chart",   "Sales",         () -> UI.getCurrent().navigate(CompanySalesView.class)),
-            iconBtn("gear",    "Change status", () -> openStatusDialog(ev)),
-            iconBtn("warning", "Cancel event",  () -> openCancelDialog(ev))
+            iconBtn("chart",   "Sales",         () -> UI.getCurrent().navigate(CompanySalesView.class))
         );
         if (ev.status() == EventStatus.CANCELED) {
+            // A canceled event has no further transitions and can't be canceled again —
+            // the only action is to permanently remove it.
             actions.add(iconBtn("trash", "Remove event", () -> openDeleteDialog(ev)));
+        } else {
+            actions.add(iconBtn("gear",    "Change status", () -> openStatusDialog(ev)));
+            actions.add(iconBtn("warning", "Cancel event",  () -> openCancelDialog(ev)));
         }
         row.put("act", actions);
         grid.row(row);
@@ -135,7 +138,7 @@ public class CompanyEventListView extends LkPage {
 
     private void openCancelDialog(EventDetailDTO ev) {
         ConfirmDialog dialog = new ConfirmDialog();
-        dialog.setHeader("Cancel \"" + escape(ev.name()) + "\"?");
+        dialog.setHeader("Cancel \"" + ev.name() + "\"?");
         dialog.setText("This will refund all ticket holders and permanently cancel the event. This cannot be undone.");
         dialog.setCancelable(true);
         dialog.setCancelText("Keep event");
@@ -159,7 +162,7 @@ public class CompanyEventListView extends LkPage {
 
     private void openDeleteDialog(EventDetailDTO ev) {
         ConfirmDialog dialog = new ConfirmDialog();
-        dialog.setHeader("Remove \"" + escape(ev.name()) + "\"?");
+        dialog.setHeader("Remove \"" + ev.name() + "\"?");
         dialog.setText("The event record will be permanently deleted. This cannot be undone.");
         dialog.setCancelable(true);
         dialog.setCancelText("Keep");
@@ -197,14 +200,17 @@ public class CompanyEventListView extends LkPage {
         select.setPlaceholder("Select new status…");
 
         ConfirmDialog dialog = new ConfirmDialog();
-        dialog.setHeader("Change status — " + escape(ev.name()));
+        dialog.setHeader("Change status — " + ev.name());
         dialog.add(select);
         dialog.setCancelable(true);
         dialog.setCancelText("Cancel");
         dialog.setConfirmText("Apply");
         dialog.addConfirmListener(ignored -> {
             EventStatus target = select.getValue();
-            if (target == null) return;
+            if (target == null) {
+                Toasts.warn("Please select a status.");
+                return;
+            }
             switch (presenter.changeEventStatus(AuthSession.token(), Integer.parseInt(ev.eventId()), target)) {
                 case CompanyEventListPresenter.ActionOutcome.Success ignored2 -> {
                     Toasts.success("Event status changed to " + target.name() + ".");
