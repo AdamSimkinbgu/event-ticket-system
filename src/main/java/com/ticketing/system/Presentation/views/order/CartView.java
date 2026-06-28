@@ -20,6 +20,10 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
+/**
+ * Buyer cart page (route {@code /cart}). Renders the active order via
+ * {@link CartPresenter}, lets the buyer remove lines, and links on to checkout.
+ */
 @Route(value = "cart", layout = MainLayout.class)
 @PageTitle("Cart · TicketHub")
 @AnonymousAllowed

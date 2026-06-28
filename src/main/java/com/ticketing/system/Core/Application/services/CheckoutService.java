@@ -60,6 +60,30 @@ import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.users.User;
 
+/**
+ * Orchestrates the checkout flow for both members and guests: validates input,
+ * enforces idempotency, prices the cart, charges payment, issues tickets,
+ * confirms the inventory sale, persists the receipt, and rolls back cleanly on
+ * failure. UC-10 / UC-33 / UC-34.
+ *
+ * <p><b>Idempotency:</b> if the same buyer resubmits the same checkout request
+ * (same idempotency key), only the first is processed and the cached result is
+ * returned for the rest — preventing duplicate charges/orders on a double-click
+ * or a network retry. The cache is keyed by buyer identity + idempotency key
+ * (in-memory for V1; would be a distributed cache with a TTL in production).
+ *
+ * <p><b>3-phase structure</b> (minimizes lock hold time during slow I/O):
+ * <ol>
+ *   <li>Phase 1 (short order lock): validate, snapshot items, mark
+ *       CHECKOUT_IN_PROGRESS, release the lock.</li>
+ *   <li>Phase 2 (no domain locks): price items, charge payment, issue tickets.</li>
+ *   <li>Phase 3 (short order + event locks): re-verify the reservation still
+ *       belongs to this order, persist tickets/receipt, then commit the
+ *       RESERVED→SOLD inventory sale as the point of no return.</li>
+ * </ol>
+ * The market-open gate (UC-32 / I.2.1) runs after the idempotency short-circuit
+ * so a completed purchase is still replayable once the market has closed.
+ */
 @Service
 @Slf4j
 public class CheckoutService {
@@ -81,21 +105,13 @@ public class CheckoutService {
     // the Phase-3 DB unit (tickets + receipt + RESERVED→SOLD confirm), between the external calls.
     private final TransactionTemplate transactionTemplate;
 
-    // In-memory cache for completed checkouts to handle idempotency. Keyed by a
-    // combination of buyer identity and idempotency key, since the same idempotency
-    // key could be used
-    // by different users (e.g. if they copy-paste it from a confirmation page). In
-    // a real implementation this would likely be a distributed cache like Redis
-    // with an expiration time.
+    /**
+     * In-memory cache of completed checkouts for idempotency. Keyed by idempotency
+     * key, with the buyer identity stored in the entry so the same key reused by a
+     * different buyer is detected as a conflict. In production this would be a
+     * distributed cache (e.g. Redis) with a TTL.
+     */
     private final ConcurrentMap<String, IdempotencyCacheEntry> completedCheckoutsByIdempotencyKey = new ConcurrentHashMap<>();
-
-    // idempotency means that if the same buyer (member or guest) submits the same
-    // checkout request (identified by idempotency key) multiple times, only the
-    // first one will be processed and the result will be returned for subsequent
-    // ones.
-    // This is crucial for preventing duplicate charges and orders if, for example,
-    // the user accidentally clicks the "Buy" button twice or if there are network
-    // issues causing retries.
 
     public CheckoutService(
             IActiveOrderRepository activeOrderRepository,
@@ -130,34 +146,40 @@ public class CheckoutService {
     private record Phase3Persisted(int orderReceiptId, List<ReceiptLine> receiptLines) {
     }
 
-    // UC-32 / I.2.1 — no money moves while the trading market is closed. This is a
-    // platform-wide gate, orthogonal to the per-event ON_SALE check enforced later
-    // in Phase 3 (validateEventsStillOnSale). Called as a guard clause before the
-    // checkout try-block so it propagates cleanly instead of being wrapped as a
-    // generic checkout failure.
+    /**
+     * UC-32 / I.2.1 — guards that no money moves while the trading market is
+     * closed. A platform-wide gate, orthogonal to the per-event ON_SALE check in
+     * Phase 3 ({@link #validateEventsStillOnSale}). Invoked as a guard clause so it
+     * propagates cleanly instead of being wrapped as a generic checkout failure.
+     *
+     * @throws MarketNotOpenException if the market is not currently open
+     */
     private void requireMarketOpen() {
         if (!systemAdminService.isMarketOpen()) {
             throw new MarketNotOpenException();
         }
     }
 
-    // The checkoutMember and checkoutGuest methods follow a similar flow but have
-    // some differences in how they identify the buyer (user ID for members, guest
-    // session ID + email for guests) and how they retrieve the active order (by
-    // user ID vs. by guest session ID). They both implement the same core steps of
-    // validating input, checking the cache for idempotency, locking the order and
-    // events, pricing items, processing payment, issuing tickets, confirming
-    // inventory sale, saving receipts, and handling errors. The separation into two
-    // methods allows us to handle member-specific and guest-specific logic cleanly
-    // while still sharing common helper methods for the core checkout steps.
-    //
-    // 3-Phase checkout structure (reduces lock hold time during slow I/O):
-    // Phase 1 (short order lock): validate, snapshot items, mark
-    // CHECKOUT_IN_PROGRESS, release lock.
-    // Phase 2 (no domain locks): price items, charge payment, issue tickets.
-    // Phase 3 (short order + event locks): verify reservations still belong to this
-    // order,
-    // confirm inventory sale, persist, mark bought.
+    /**
+     * UC-10 / UC-33 / UC-34 — checks out the authenticated member's active order
+     * (identified by user id) through the 3-phase flow described on the class. A
+     * completed purchase is returned from the idempotency cache before the
+     * market-open gate, so it replays even if the market has since closed.
+     *
+     * <p>On failure after Phase 1, reserved inventory is returned to stock and any
+     * charge is refunded (unless the sale already committed); the exception is
+     * rethrown wrapped as a checkout failure. A closed market is rethrown raw.
+     *
+     * @param token          the authenticated member's token
+     * @param idempotencyKey the client-supplied key that dedupes retries
+     * @param currency       the payment currency
+     * @param card           the payment card details
+     * @return the checkout result (total, receipt id, payment txn, issued tickets)
+     * @throws MarketNotOpenException        if the market is closed (rethrown raw)
+     * @throws IdempotencyConflictException  if the key was used by a different buyer
+     * @throws RuntimeException              wrapping any mid-checkout failure (after
+     *                                      rollback/refund)
+     */
     public CheckoutResultDTO checkoutMember(String token, String idempotencyKey, String currency,
             CardDetailsDTO card) {
         int userId = -1;
@@ -321,17 +343,27 @@ public class CheckoutService {
         }
     }
 
-    // The checkoutMember and checkoutGuest methods follow a similar flow but have
-    // some differences in how they identify the buyer (user ID for members, guest
-    // session ID + email for guests) and how they retrieve the active order (by
-    // user ID vs. by guest session ID). They both implement the same core steps of
-    // validating input, checking the cache for idempotency, locking the order and
-    // events, pricing items, processing payment, issuing tickets, confirming
-    // inventory sale, saving receipts, and handling errors. The separation into two
-    // methods allows us to handle member-specific and guest-specific logic cleanly
-    // while still sharing common helper methods for the core checkout steps.
-    //
-    // See checkoutMember for the 3-phase description.
+    /**
+     * UC-10 / UC-33 / UC-34 — the guest counterpart of {@link #checkoutMember}.
+     * Identifies the buyer by guest session id + email and retrieves the active
+     * order by session id, but otherwise follows the same 3-phase flow, idempotency
+     * handling, and rollback/refund semantics. Presence and idempotency checks run
+     * before the market gate; the session-liveness check runs just after it, so a
+     * completed purchase replays without a live session.
+     *
+     * @param guestSessionId the guest session id
+     * @param guestEmail     the guest's contact email (also receives the receipt)
+     * @param idempotencyKey the client-supplied key that dedupes retries
+     * @param currency       the payment currency
+     * @param card           the payment card details
+     * @param buyerAge       the guest's age, for purchase-policy evaluation
+     * @return the checkout result (total, receipt id, payment txn, issued tickets)
+     * @throws MarketNotOpenException        if the market is closed (rethrown raw)
+     * @throws IdempotencyConflictException  if the key was used by a different buyer
+     * @throws SessionExpiredException       if the guest session is no longer live
+     * @throws RuntimeException              wrapping any mid-checkout failure (after
+     *                                      rollback/refund)
+     */
     public CheckoutResultDTO checkoutGuest(String guestSessionId, String guestEmail, String idempotencyKey,
             String currency, CardDetailsDTO card, int buyerAge) {
         ActiveOrder order = null;
@@ -458,20 +490,22 @@ public class CheckoutService {
         }
     }
 
-    // Helper methods for checkout flow steps (authentication, validation, pricing,
-    // payment, ticket issuance, inventory confirmation, receipt saving,
-    // notifications, caching) and error handling are defined below to keep the main
-    // checkout methods clean and focused on the overall flow. These helper methods
-    // encapsulate specific pieces of logic and can be reused across both member and
-    // guest checkout flows where applicable.
+    // ---------------------------------------------------------------------------
+    // Helper methods for the checkout flow (auth, validation, pricing, payment,
+    // issuance, inventory confirmation, receipt saving, notifications, caching,
+    // error handling) — shared by member and guest checkout where applicable.
+    // ---------------------------------------------------------------------------
 
-    // We validate member checkout identity by checking that the authentication
-    // token is present and valid (i.e. corresponds to an active session in our
-    // session manager) and that the user ID can be extracted from the token. This
-    // ensures that we can associate the checkout with a specific member for
-    // tracking and that we have a valid user ID to process the order. If any of
-    // these validations fail, we throw an exception to prevent the checkout from
-    // proceeding.
+    /**
+     * Validates member checkout identity: the token must be present, valid (an
+     * active session), and resolve to a positive user id.
+     *
+     * @param token the authentication token
+     * @return the authenticated member's user id
+     * @throws InvalidTokenException         if the token is missing/blank
+     * @throws AuthenticationFailedException if the token is invalid
+     * @throws UserNotFoundException         if the token resolves to a non-positive id
+     */
     private int authenticateAndGetUserId(String token) {
         if (token == null || token.isBlank()) {
             throw new InvalidTokenException("Missing authentication token");
@@ -489,13 +523,14 @@ public class CheckoutService {
         return userId;
     }
 
-    // We validate guest checkout identity by checking that the guest session ID is
-    // present and valid (i.e. corresponds to an active guest session in our session
-    // manager) and that the guest email is present. This ensures that we can
-    // associate the checkout with a specific guest session for tracking and that we
-    // have an email to send the receipt to. If any of these validations fail, we
-    // throw an exception to prevent the checkout from proceeding.
-    // Presence checks only — needed to form the idempotency cache key, so they run before the market gate.
+    /**
+     * Presence checks for guest identity (session id + email) — these run before
+     * the market gate because they are needed to form the idempotency cache key.
+     *
+     * @param guestSessionId the guest session id
+     * @param guestEmail     the guest's email
+     * @throws InvalidTokenException if either value is missing/blank
+     */
     private void validateGuestIdentityPresent(String guestSessionId, String guestEmail) {
         if (guestSessionId == null || guestSessionId.isBlank()) {
             throw new InvalidTokenException("guestSessionId is required");
@@ -506,22 +541,30 @@ public class CheckoutService {
         }
     }
 
-    // Liveness check — the guest session must still be valid. Runs after the idempotency short-circuit so
-    // a completed purchase can be replayed without a live session.
+    /**
+     * Liveness check — the guest session must still be valid. Runs after the
+     * idempotency short-circuit so a completed purchase can replay without a live
+     * session.
+     *
+     * @param guestSessionId the guest session id
+     * @throws SessionExpiredException if the session is no longer valid
+     */
     private void validateGuestSessionLive(String guestSessionId) {
         if (!sessionManager.validateCredential(guestSessionId)) {
             throw new SessionExpiredException();
         }
     }
 
-    // We validate payment input by checking that the idempotency key, currency, and
-    // payment method token are all present and valid. The idempotency key is
-    // required to ensure that we can handle duplicate checkout attempts correctly.
-    // The currency is required to ensure that we know which currency the payment
-    // should be processed in. The payment method token is required to have a valid
-    // reference to the payment method that the user wants to use for the
-    // transaction. If any of these validations fail, we throw an exception to
-    // prevent the checkout from proceeding with invalid payment information.
+    /**
+     * Validates that the idempotency key, currency and card details are all
+     * present.
+     *
+     * @param idempotencyKey the dedupe key
+     * @param currency       the payment currency
+     * @param card           the card details
+     * @param userId         the buyer's user id, or {@code null} for a guest (context only)
+     * @throws IllegalArgumentException if any required payment input is missing
+     */
     private void validatePaymentInput(String idempotencyKey, String currency, CardDetailsDTO card,
             Integer userId) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
@@ -537,12 +580,15 @@ public class CheckoutService {
         }
     }
 
-    // We validate the active order for checkout by checking that it exists and that
-    // it is in a state that allows checkout (e.g. not empty, not already bought,
-    // etc.). This ensures that we have a valid order to process and that we don't
-    // allow checkouts on orders that are not ready for it. If any of these
-    // validations fail, we throw an exception to prevent the checkout from
-    // proceeding with an invalid order.
+    /**
+     * Validates that the active order exists and is in a checkout-able state (not
+     * empty, not already bought, etc.).
+     *
+     * @param order  the active order (may be null)
+     * @param userId the buyer's user id, or {@code null} for a guest (context only)
+     * @throws EntityNotFoundException         if the order is null
+     * @throws InvalidStateTransitionException if the order cannot be checked out
+     */
     private void validateOrderForCheckout(ActiveOrder order, Integer userId) {
         if (order == null) {
             throw new EntityNotFoundException("Active order not found");
@@ -553,12 +599,13 @@ public class CheckoutService {
         }
     }
 
-    // We extract the unique event IDs from the list of cart line items and sort
-    // them to ensure a consistent locking order. This is important for preventing
-    // deadlocks when we lock events for update during the checkout process. By
-    // always locking events in a consistent order (e.g. by event ID), we can reduce
-    // the likelihood of two concurrent checkouts trying to lock the same set of
-    // events in different orders and blocking each other indefinitely.
+    /**
+     * Extracts the distinct event ids from the cart, sorted, to give a consistent
+     * lock-acquisition order that prevents deadlocks between concurrent checkouts.
+     *
+     * @param items the cart line items
+     * @return the distinct event ids, ascending
+     */
     private List<Integer> extractSortedEventIds(List<CartLineItem> items) {
         return items.stream()
                 .map(CartLineItem::geteventId)
@@ -567,22 +614,39 @@ public class CheckoutService {
                 .toList();
     }
 
-    //
+    /**
+     * Acquires the buyer-operation (read) lock on each event, in the given order.
+     *
+     * @param eventIds the event ids to lock (pre-sorted for deadlock avoidance)
+     */
     private void lockEvents(List<Integer> eventIds) {
         for (Integer eventId : eventIds) {
             eventRepository.lockForBuyerOperation(eventId);
         }
     }
 
-    // ? Note: checkout Phase 3 still blocks structural event editing, but it no
-    // longer blocks unrelated buyer operations unnecessarily.
-    //
+    /**
+     * Releases the buyer-operation locks acquired by {@link #lockEvents}, in
+     * reverse order. Phase 3 still blocks structural event editing but no longer
+     * blocks unrelated buyer operations.
+     *
+     * @param eventIds the event ids to unlock
+     */
     private void unlockEvents(List<Integer> eventIds) {
         for (int i = eventIds.size() - 1; i >= 0; i--) {
             eventRepository.unlockBuyerOperation(eventIds.get(i));
         }
     }
 
+    /**
+     * Phase 3 re-check that every event in the cart is still purchasable. SOLD_OUT
+     * is allowed (holders of existing reservations must be able to complete their
+     * purchase, including the last tickets); other non-ON_SALE states are rejected.
+     *
+     * @param boughtItems the cart items being purchased
+     * @throws EventNotFoundException  if an event no longer exists
+     * @throws EventNotOnSaleException if an event is neither ON_SALE nor SOLD_OUT
+     */
     private void validateEventsStillOnSale(List<CartLineItem> boughtItems) {
         List<Integer> eventIds = extractSortedEventIds(boughtItems);
 
@@ -603,12 +667,15 @@ public class CheckoutService {
         }
     }
 
-    // We price all items at once before processing payment to ensure that the total
-    // price is consistent with what the user saw at checkout and to avoid issues
-    // where prices might change between individual item pricing calls. This also
-    // allows us to apply any relevant discounts or promotions that depend on the
-    // overall purchase (e.g. "buy 2 get 1 free" or "10% off if you buy more than 3
-    // tickets").
+    /**
+     * Prices every cart line once, at a single pricing time, so the total is
+     * consistent and any quantity-dependent pricing is computed against the whole
+     * purchase.
+     *
+     * @param boughtItems the cart items being purchased
+     * @return the items paired with their computed per-ticket final price
+     * @throws EventNotFoundException if an item references a missing event
+     */
     private List<PricedCartLine> priceItemsOnce(List<CartLineItem> boughtItems) {
         LocalDateTime pricingTime = LocalDateTime.now();
 
@@ -636,25 +703,28 @@ public class CheckoutService {
         return pricedItems;
     }
 
-    // We sum the final prices of all priced cart lines to get the total price for
-    // the checkout. This total price is what we will charge the customer and what
-    // we will use for the payment validation. By summing the final prices from our
-    // pricing logic, we ensure that any discounts or promotions that were applied
-    // are reflected in the total amount charged to the customer.
+    /**
+     * @param pricedItems the priced cart lines
+     * @return the sum of their final prices — the amount to charge
+     */
     private double sumPrices(List<PricedCartLine> pricedItems) {
         return pricedItems.stream()
                 .mapToDouble(PricedCartLine::finalPrice)
                 .sum();
     }
 
-    // We charge the payment using the payment gateway by creating a
-    // PaymentRequestDTO with all the necessary information (buyer identity, total
-    // price, currency, payment method token, idempotency key) and calling the
-    // charge method on the payment gateway. This encapsulates the interaction with
-    // the payment gateway and allows us to handle any exceptions or errors that
-    // might occur during the payment process in a consistent way. The result from
-    // the payment gateway will be validated to ensure that the charge was
-    // successful and that the amount and currency match what we expected.
+    /**
+     * Charges the payment gateway for the given total.
+     *
+     * @param buyerUserId    the member's id, or {@code null} for a guest
+     * @param buyerEmail     the guest's email, or {@code null} for a member
+     * @param totalPrice     the amount to charge
+     * @param idempotencyKey the dedupe key passed through to the gateway
+     * @param currency       the payment currency
+     * @param card           the card details
+     * @return the gateway's payment result
+     * @throws PaymentGatewayException if the gateway declines or fails
+     */
     private PaymentResultDTO chargePayment(Integer buyerUserId, String buyerEmail, double totalPrice,
             String idempotencyKey, String currency, CardDetailsDTO card) {
         PaymentRequestDTO requestToPay = new PaymentRequestDTO(
@@ -668,14 +738,16 @@ public class CheckoutService {
         return paymentGateway.charge(requestToPay);
     }
 
-    // We validate the payment result from the payment gateway by checking that it
-    // is not null, that it contains a valid payment transaction ID, that the
-    // gateway name is present, that the charge time is present, and that the
-    // charged amount and currency match what we expected. This ensures that we only
-    // proceed with successful payments that match our expected values and that we
-    // can handle any discrepancies or errors in the payment result appropriately.
-    // If any of these validations fail, we throw an exception to prevent the
-    // checkout from proceeding with an invalid payment result.
+    /**
+     * Validates the gateway's payment result against expectations (non-null, valid
+     * transaction id, gateway name and charge time present, currency and amount
+     * matching).
+     *
+     * @param paymentResult   the gateway result
+     * @param expectedAmount  the amount that should have been charged
+     * @param expectedCurrency the currency that should have been charged
+     * @throws PaymentGatewayException if any field is missing or mismatched
+     */
     private void validatePaymentResult(PaymentResultDTO paymentResult, double expectedAmount, String expectedCurrency) {
         if (paymentResult == null) {
             throw new PaymentGatewayException("payment gateway returned null result");
@@ -702,15 +774,16 @@ public class CheckoutService {
         }
     }
 
-    // We issue tickets using the ticket issuer by creating an IssuanceRequestDTO
-    // with all the necessary information (buyer identity, list of items being
-    // purchased) and calling the issue method on the ticket issuer. This
-    // encapsulates the interaction with the ticket issuer and allows us to handle
-    // any exceptions or errors that might occur during the ticket issuance process
-    // in a consistent way. The result from the ticket issuer will be validated to
-    // ensure that the tickets were issued successfully and that we have all the
-    // necessary information (e.g. ticket IDs, barcodes) to proceed with saving
-    // receipts and confirming inventory sale.
+    /**
+     * Issues tickets via the external ticket issuer for the purchased items.
+     *
+     * @param buyerUserId the member's id, or {@code null} for a guest
+     * @param buyerEmail  the guest's email, or {@code null} for a member
+     * @param boughtItems the cart items being purchased
+     * @return the issuer's result (transaction id + barcodes)
+     * @throws EventNotFoundException        if an item references a missing event
+     * @throws TicketIssuanceFailedException if issuance fails
+     */
     private IssuanceResultDTO issueTickets(Integer buyerUserId, String buyerEmail, List<CartLineItem> boughtItems) {
         List<IssuanceRequestDTO.TicketIssuanceItemDTO> issuanceItems = boughtItems.stream()
                 .map(item -> {
@@ -735,16 +808,16 @@ public class CheckoutService {
         return ticketIssuer.issue(issuanceRequest);
     }
 
-    // We validate the issuance result from the ticket issuer by checking that it is
-    // not null, that it contains a valid issuance transaction ID, that the issuer
-    // name is present, that the issuance time is present, and that the list of
-    // issued barcodes matches the number of items we attempted to purchase. We also
-    // validate each issued barcode to ensure that it contains a valid ticket ID and
-    // a non-blank barcode value. This ensures that we only proceed with successful
-    // ticket issuances that match our expected values and that we can handle any
-    // discrepancies or errors in the issuance result appropriately. If any of these
-    // validations fail, we throw an exception to prevent the checkout from
-    // proceeding with an invalid ticket issuance result.
+    /**
+     * Validates the issuer's result: non-null, valid transaction id, issuer name
+     * and time present, one barcode per purchased item, and each barcode carrying a
+     * positive ticket id and non-blank value.
+     *
+     * @param issuanceResult the issuer result
+     * @param boughtItems    the items that were submitted for issuance
+     * @param userId         the member's id, or {@code null} for a guest (context only)
+     * @throws TicketIssuanceFailedException if any field is missing or counts mismatch
+     */
     private void validateIssuanceResult(
             IssuanceResultDTO issuanceResult,
             List<CartLineItem> boughtItems,
@@ -784,6 +857,13 @@ public class CheckoutService {
         }
     }
 
+    /**
+     * Phase 3 re-check that the order still exists and is CHECKOUT_IN_PROGRESS.
+     *
+     * @param order the order re-fetched in Phase 3
+     * @throws EntityNotFoundException         if the order disappeared
+     * @throws InvalidStateTransitionException if it is no longer in checkout
+     */
     private void validateOrderStillInCheckout(ActiveOrder order) {
         if (order == null) {
             throw new EntityNotFoundException("Active order disappeared during checkout");
@@ -794,6 +874,14 @@ public class CheckoutService {
         }
     }
 
+    /**
+     * Phase 3 guard that the cart hasn't changed since the Phase 1 snapshot,
+     * comparing order-independent line signatures.
+     *
+     * @param order         the order re-fetched in Phase 3
+     * @param snapshotItems the items snapshotted in Phase 1
+     * @throws ConcurrentReservationException if the cart changed during checkout
+     */
     private void validateCheckoutSnapshotStillMatches(ActiveOrder order, List<CartLineItem> snapshotItems) {
         List<String> currentSignature = cartLineSignature(order.getItems());
         List<String> snapshotSignature = cartLineSignature(snapshotItems);
@@ -803,6 +891,10 @@ public class CheckoutService {
         }
     }
 
+    /**
+     * @param items the cart line items
+     * @return the sorted per-line signatures, for order-independent comparison
+     */
     private List<String> cartLineSignature(List<CartLineItem> items) {
         return items.stream()
                 .map(this::cartLineSignature)
@@ -810,6 +902,10 @@ public class CheckoutService {
                 .toList();
     }
 
+    /**
+     * @param item a cart line item
+     * @return a stable signature of (event, zone, seat, reservation price)
+     */
     private String cartLineSignature(CartLineItem item) {
         return item.geteventId()
                 + "|"
@@ -820,14 +916,18 @@ public class CheckoutService {
                 + item.getPriceAtReservation();
     }
 
-    // We validate that we can confirm the inventory sale for the items being
-    // purchased by checking that the events and zones exist,
-    // that the seat numbers (if applicable) are valid and reserved by the expected
-    // orderKey, and that there is enough reserved
-    // inventory under that orderKey for standing zones. This is the Phase 3
-    // ownership check: after releasing locks during Phase 2
-    // (payment/issuance), we re-verify that our reservations were not stolen by
-    // expiry/cleanup before we confirm them as SOLD.
+    /**
+     * Phase 3 ownership re-check (read-only): verifies the events/zones exist, that
+     * seated reservations are still RESERVED and held by this order key, and that
+     * standing zones still hold enough reserved inventory — i.e. the reservations
+     * weren't stolen by expiry/cleanup while locks were released in Phase 2.
+     *
+     * @param boughtItems the cart items being purchased
+     * @param orderKey    this checkout's order key (ownership token)
+     * @throws EventNotFoundException         if an event no longer exists
+     * @throws InsufficientInventoryException if reserved inventory is insufficient or seat data is inconsistent
+     * @throws ConcurrentReservationException if a seat is no longer RESERVED or is held by another order
+     */
     private void validateCanConfirmInventorySale(List<CartLineItem> boughtItems, String orderKey) {
         Map<Integer, Map<Integer, List<CartLineItem>>> grouped = groupItemsByEventAndZone(boughtItems);
 
@@ -884,10 +984,17 @@ public class CheckoutService {
         }
     }
 
-    // We confirm the inventory sale for the items being purchased by calling
-    // confirmInventorySale on the event for each zone,
-    // passing the orderKey so each zone can verify that it still holds these
-    // reservations before marking them SOLD.
+    /**
+     * Commits the RESERVED→SOLD transition for each zone (passing the order key so
+     * each zone re-verifies ownership). Confirming across multiple events/zones is
+     * not atomic, so each confirmed unit is tracked and a mid-loop failure
+     * compensates the already-confirmed units back to AVAILABLE (C3) — never
+     * leaving a partial SOLD end-state.
+     *
+     * @param boughtItems the cart items being purchased
+     * @param orderKey    this checkout's order key (ownership token)
+     * @throws RuntimeException if a confirmation fails (after compensating prior units)
+     */
     private void confirmInventorySale(List<CartLineItem> boughtItems, String orderKey) {
         Map<Integer, Map<Integer, List<CartLineItem>>> grouped = groupItemsByEventAndZone(boughtItems);
 
@@ -920,9 +1027,14 @@ public class CheckoutService {
         }
     }
 
-    // Best-effort reversal (SOLD -> AVAILABLE) of units already confirmed when a multi-event confirm
-    // fails partway, so no inventory is stranded SOLD. Runs under the event locks already held in Phase 3.
-    // Failures are logged, not propagated — we are already on the failure path.
+    /**
+     * Best-effort reversal (SOLD → AVAILABLE) of units already confirmed when a
+     * multi-event confirm fails partway, so no inventory is stranded SOLD. Runs
+     * under the Phase 3 event locks; failures are logged, not propagated (already
+     * on the failure path).
+     *
+     * @param confirmed the units confirmed before the failure, to reverse
+     */
     private void compensateConfirmedSales(List<ConfirmedUnit> confirmed) {
         for (int i = confirmed.size() - 1; i >= 0; i--) {
             ConfirmedUnit unit = confirmed.get(i);
@@ -936,8 +1048,13 @@ public class CheckoutService {
         }
     }
 
-    // Consume the cart after a committed sale: buy() empties it, delete removes it. Best-effort — a
-    // cleanup failure here must not turn a committed purchase into a checkout failure (C2).
+    /**
+     * Consumes the cart after a committed sale ({@code buy()} empties it, then it
+     * is deleted). Best-effort — a cleanup failure here must not turn a committed
+     * purchase into a checkout failure (C2).
+     *
+     * @param order the order to consume
+     */
     private void finalizeConsumedOrder(ActiveOrder order) {
         try {
             order.buy();
@@ -948,12 +1065,13 @@ public class CheckoutService {
         }
     }
 
-    // We group the cart line items by event ID and then by zone ID to facilitate
-    // the inventory validation and confirmation steps. This allows us to easily
-    // access all items for a specific event and zone when we need to check the
-    // inventory status or confirm the sale. The resulting data structure is a
-    // nested map where the first key is the event ID, the second key is the zone
-    // ID, and the value is a list of cart line items for that event and zone.
+    /**
+     * Groups cart line items by event id, then by zone id, for the inventory
+     * validation/confirmation steps.
+     *
+     * @param items the cart line items
+     * @return a nested map: eventId → (zoneId → items)
+     */
     private Map<Integer, Map<Integer, List<CartLineItem>>> groupItemsByEventAndZone(List<CartLineItem> items) {
         return items.stream()
                 .collect(Collectors.groupingBy(
@@ -961,13 +1079,10 @@ public class CheckoutService {
                         Collectors.groupingBy(CartLineItem::getzoneId)));
     }
 
-    // We extract the seat numbers from a list of cart line items for a specific
-    // zone. If the zone is a standing zone, there should be no seat numbers and we
-    // will return an empty list. If the zone is a seated zone, we will return the
-    // list of seat numbers that are associated with the cart line items. This
-    // helper method simplifies the logic in the inventory validation and
-    // confirmation steps by providing a clear way to get the seat numbers for a
-    // group of items in the same zone.
+    /**
+     * @param zoneItems the cart items for a single zone
+     * @return the non-null seat numbers (empty for a standing zone)
+     */
     private List<String> extractSeatNumbers(List<CartLineItem> zoneItems) {
         return zoneItems.stream()
                 .map(CartLineItem::getSeatNumber)
@@ -975,13 +1090,17 @@ public class CheckoutService {
                 .toList();
     }
 
-    // We save the issued tickets to the database and build the receipt lines for
-    // the order receipt. For each priced cart line, we create a corresponding
-    // Ticket entity with the information from the cart line and the issuance result
-    // (e.g. ticket ID, barcode). We then save each ticket to the database and
-    // create a ReceiptLine for it that will be included in the order receipt. This
-    // method encapsulates the logic for persisting the issued tickets and preparing
-    // the data needed for the receipt in one place.
+    /**
+     * Persists one issued {@code Ticket} per priced cart line (marked ISSUED with
+     * its barcode) and builds the matching receipt lines. Barcodes are matched to
+     * lines by index.
+     *
+     * @param holderUserId   the member holder's id, or {@code null} for a guest
+     * @param orderReceiptId the receipt id the tickets belong to
+     * @param pricedItems    the priced cart lines
+     * @param issuanceResult the issuer result supplying ticket ids/barcodes
+     * @return the receipt lines for the order receipt
+     */
     private List<ReceiptLine> saveTicketsAndBuildReceiptLines(
             Integer holderUserId,
             int orderReceiptId,
@@ -1027,14 +1146,17 @@ public class CheckoutService {
         return receiptLines;
     }
 
-    // We save the order receipt for a member by creating an OrderReceipt entity
-    // with the member-specific information (user ID) and the details of the
-    // purchase (total price, receipt lines, transactions) and then saving it to the
-    // database. This method encapsulates the logic for creating and persisting the
-    // order receipt for a member in one place. We also build the list of
-    // transactions for the receipt by combining the payment transaction and the
-    // ticket issuance transaction into a single list that will be included in the
-    // receipt.
+    /**
+     * Creates and persists the member's order receipt (with the payment + issuance
+     * transactions).
+     *
+     * @param userId         the member's id
+     * @param receiptId      the receipt id
+     * @param totalPrice     the order total
+     * @param receiptLines   the per-ticket receipt lines
+     * @param paymentResult  the gateway payment result
+     * @param issuanceResult the issuer result
+     */
     private void saveMemberReceipt(
             int userId,
             int receiptId,
@@ -1052,14 +1174,18 @@ public class CheckoutService {
         orderReceiptRepository.save(receipt);
     }
 
-    // We save the order receipt for a guest by creating an OrderReceipt entity with
-    // the guest-specific information (guest email and session ID) and the details
-    // of the purchase (total price, receipt lines, transactions) and then saving it
-    // to the database. This method encapsulates the logic for creating and
-    // persisting the order receipt for a guest in one place. We also build the list
-    // of transactions for the receipt by combining the payment transaction and the
-    // ticket issuance transaction into a single list that will be included in the
-    // receipt.
+    /**
+     * Creates and persists the guest's order receipt (with the payment + issuance
+     * transactions).
+     *
+     * @param guestEmail     the guest's email
+     * @param guestSessionId the guest's session id
+     * @param receiptId      the receipt id
+     * @param totalPrice     the order total
+     * @param receiptLines   the per-ticket receipt lines
+     * @param paymentResult  the gateway payment result
+     * @param issuanceResult the issuer result
+     */
     private void saveGuestReceipt(
             String guestEmail,
             String guestSessionId,
@@ -1079,13 +1205,14 @@ public class CheckoutService {
         orderReceiptRepository.save(receipt);
     }
 
-    // We build the list of transactions for the receipt by creating a
-    // TransactionRecord for the payment charge and a TransactionRecord for the
-    // ticket issuance. This allows us to have a clear record of the key
-    // transactions that occurred during the checkout process, which can be useful
-    // for customer service, refunds, or any future audits of the purchase history.
-    // By encapsulating this logic in a helper method, we can easily maintain and
-    // modify how we record transactions without affecting the main checkout flow.
+    /**
+     * Builds the receipt's transaction records — one for the payment charge and one
+     * for the ticket issuance.
+     *
+     * @param paymentResult  the gateway payment result
+     * @param issuanceResult the issuer result
+     * @return the payment + issuance transaction records
+     */
     private List<TransactionRecord> buildPurchaseTransactions(
             PaymentResultDTO paymentResult,
             IssuanceResultDTO issuanceResult) {
@@ -1106,13 +1233,16 @@ public class CheckoutService {
         return transactions;
     }
 
-    // We build the checkout result DTO that will be returned to the caller of the
-    // checkout method. This DTO contains the total price, the order receipt ID, the
-    // payment transaction ID, and the list of issued ticket IDs. This allows the
-    // caller to have all the relevant information about the completed checkout in a
-    // single object. By encapsulating this logic in a helper method, we can easily
-    // modify what information we include in the checkout result without affecting
-    // the main checkout flow.
+    /**
+     * Builds the result DTO returned to the caller (total, receipt id, payment
+     * transaction id, issued tickets).
+     *
+     * @param totalPrice     the order total
+     * @param orderReceiptId the receipt id
+     * @param paymentResult  the gateway payment result
+     * @param issuanceResult the issuer result
+     * @return the checkout result DTO
+     */
     private CheckoutResultDTO buildCheckoutResult(
             double totalPrice,
             int orderReceiptId,
@@ -1129,13 +1259,14 @@ public class CheckoutService {
                         .toList());
     }
 
-    // We notify the user of the completed purchase by sending a notification with
-    // the total price and the list of ticket IDs that were purchased. This allows
-    // us to provide immediate feedback to the user that their purchase was
-    // successful and to give them information about the tickets they bought. By
-    // encapsulating this logic in a helper method, we can easily modify how we send
-    // notifications or what information we include in the notification without
-    // affecting the main checkout flow.
+    /**
+     * Notifies a member that their purchase completed, with the total and the
+     * purchased ticket ids.
+     *
+     * @param userId       the member to notify
+     * @param totalPrice   the order total
+     * @param receiptLines the receipt lines (source of the ticket ids)
+     */
     private void notifyPurchaseCompleted(int userId, double totalPrice, List<ReceiptLine> receiptLines) {
         notificationService.notifyPurchaseCompleted(
                 userId,
@@ -1145,16 +1276,20 @@ public class CheckoutService {
                         .toList());
     }
 
-    // We handle checkout failures by logging the error with relevant information
-    // (user ID, total price, whether payment was done, whether inventory sale was
-    // confirmed) and then attempting to roll back any changes that were made during
-    // the checkout process. If the inventory sale was not confirmed, we try to
-    // return the reserved tickets back to stock. If the payment was done, we try to
-    // refund the payment. We also send a notification to the user that the purchase
-    // failed. This method centralizes all the error handling and rollback logic for
-    // member checkouts in one place, making it easier to maintain and ensuring that
-    // we consistently handle failures across different failure points in the
-    // checkout process.
+    /**
+     * Centralizes member checkout-failure handling: logs context, rolls back
+     * reserved inventory and the order status atomically (skipped once the sale
+     * committed), refunds the charge if the sale did <em>not</em> commit, and
+     * notifies the member of the failure.
+     *
+     * @param order                  the order (possibly stale; re-fetched under lock)
+     * @param userId                 the member's id
+     * @param orderLockKey           the order lock key, or {@code null} if locking never happened
+     * @param paymentResult          the charge result, or {@code null} if not charged
+     * @param totalPrice             the amount charged (for the refund)
+     * @param inventorySaleConfirmed whether the RESERVED→SOLD commit succeeded
+     * @param originalFailure        the failure being handled (logged, not rethrown here)
+     */
     private void handleCheckoutFailure(
             ActiveOrder order,
             int userId,
@@ -1199,17 +1334,20 @@ public class CheckoutService {
         }
     }
 
-    // We handle guest checkout failures by logging the error with relevant
-    // information (guest session ID, total price, whether payment was done, whether
-    // inventory sale was confirmed) and then attempting to roll back any changes
-    // that were made during the checkout process. If the inventory sale was not
-    // confirmed, we try to return the reserved tickets back to stock. If the
-    // payment was done, we try to refund the payment. Since we don't have a user ID
-    // for guests, we cannot send a notification about the failure, but we log
-    // enough information to allow for manual follow-up if needed. This method
-    // centralizes all the error handling and rollback logic for guest checkouts in
-    // one place, making it easier to maintain and ensuring that we consistently
-    // handle failures across different failure points in the checkout process.
+    /**
+     * Guest counterpart of {@link #handleCheckoutFailure}: logs context, rolls back
+     * reserved inventory and order status atomically, and refunds the charge if the
+     * sale did not commit. No failure notification is sent (guests have no user id),
+     * but the failure is logged for manual follow-up.
+     *
+     * @param order                  the order (possibly stale; re-fetched under lock)
+     * @param guestSessionId         the guest's session id
+     * @param orderLockKey           the order lock key, or {@code null} if locking never happened
+     * @param paymentResult          the charge result, or {@code null} if not charged
+     * @param totalPrice             the amount charged (for the refund)
+     * @param inventorySaleConfirmed whether the RESERVED→SOLD commit succeeded
+     * @param originalFailure        the failure being handled (logged, not rethrown here)
+     */
     private void handleGuestCheckoutFailure(
             ActiveOrder order,
             String guestSessionId,
@@ -1242,12 +1380,21 @@ public class CheckoutService {
         }
     }
 
-    // Atomic checkout-failure rollback: under a single order-write-lock + event-read-lock scope, reset the
-    // CHECKOUT_IN_PROGRESS status, return the reserved inventory to stock, and clear the cart. Folding these
-    // into one lock scope closes the window where a concurrent op (checkout retry, add-to-cart, expiry sweep)
-    // could interleave between the status reset and the cart clear, and lets eventRepository.save run under the
-    // event lock it requires. Reentrant-safe: in a Phase-3 failure the main flow already holds these locks, so
-    // re-acquiring just bumps the hold count and the matching unlocks restore it.
+    /**
+     * Atomic checkout-failure rollback: under a single order-write-lock +
+     * event-read-lock scope, resets CHECKOUT_IN_PROGRESS, returns reserved
+     * inventory to stock, and clears the cart. Folding these into one lock scope
+     * closes the window where a concurrent op could interleave, and lets
+     * {@code eventRepository.save} run under the event lock it requires. Skipped
+     * once the sale committed (inventory is SOLD) or before Phase 1 acquired the
+     * order. Reentrant-safe: in a Phase 3 failure the main flow already holds these
+     * locks, so re-acquiring just bumps the hold count.
+     *
+     * @param orderLockKey            the order lock key, or {@code null} if none
+     * @param fallbackOrder           the main-flow order reference, used only if the
+     *                               re-fetch under lock returns null
+     * @param inventorySaleConfirmed whether the sale already committed (skip if so)
+     */
     private void rollbackReservedInventoryAtomically(
             String orderLockKey,
             ActiveOrder fallbackOrder,
@@ -1292,6 +1439,14 @@ public class CheckoutService {
         }
     }
 
+    /**
+     * Resolves the active order from a lock key (decoding the {@code user:} /
+     * {@code sess:} prefix back to a member or guest lookup).
+     *
+     * @param orderLockKey the order lock key
+     * @return the active order, or {@code null} if a guest order is absent
+     * @throws IllegalArgumentException if the key prefix is unrecognized
+     */
     private ActiveOrder getOrderByLockKey(String orderLockKey) {
         if (orderLockKey.startsWith("user:")) {
             int userId = Integer.parseInt(orderLockKey.substring("user:".length()));
@@ -1306,17 +1461,13 @@ public class CheckoutService {
         throw new IllegalArgumentException("Unknown order lock key format: " + orderLockKey);
     }
 
-    // We return the reserved tickets back to stock by iterating through the items
-    // in the order, grouping them by event and zone, and then calling the
-    // releaseInventory method on the event for each group of items. For standing
-    // zones, we release the inventory by specifying the quantity of tickets being
-    // released. For seated zones, we release the inventory by specifying the list
-    // of seat numbers being released. After releasing the inventory for all items,
-    // we clear the order and save it to persist the changes. This method assumes
-    // that we are only trying to return tickets that were reserved but not yet
-    // confirmed as sold, and it does not handle any cases where tickets might have
-    // already been sold or where there might be other complications in the
-    // inventory state.
+    /**
+     * Returns the order's still-reserved inventory to stock, releasing each
+     * (event, zone) independently so one un-releasable zone never aborts the rest,
+     * then clears the cart. Assumes the inventory is RESERVED (not yet SOLD).
+     *
+     * @param order the order whose reservations to release
+     */
     private void returnTicketsToStock(ActiveOrder order) {
         List<CartLineItem> returnToStock = order.getItems();
         String orderKey = order.getOrderKey();
@@ -1366,11 +1517,12 @@ public class CheckoutService {
         safelyClearCart(order);
     }
 
-    // We clear and persist the cart after a rollback without letting a failure here
-    // mask the
-    // original checkout failure. The release loop above is resilient and always
-    // reaches this point,
-    // so the clear is no longer skipped by an earlier release throwing.
+    /**
+     * Clears and persists the cart after a rollback, swallowing any failure so it
+     * never masks the original checkout failure.
+     *
+     * @param order the order whose cart to clear
+     */
     private void safelyClearCart(ActiveOrder order) {
         try {
             order.clear();
@@ -1381,14 +1533,13 @@ public class CheckoutService {
         }
     }
 
-    // We attempt to refund the payment during a checkout rollback. This is done as
-    // a safety measure in case the checkout process fails after the payment was
-    // charged, allowing us to return the funds to the customer. We wrap this in a
-    // try-catch block to ensure that if any exceptions occur during the refund
-    // (e.g. issues with the payment gateway), we log the error but do not let it
-    // propagate further since we are already in an error handling flow and we want
-    // to avoid masking the original failure with additional exceptions from the
-    // refund process.
+    /**
+     * Refunds a charge during checkout rollback, swallowing any gateway failure so
+     * it never masks the original checkout failure (it is logged for follow-up).
+     *
+     * @param paymentResult the charge to refund
+     * @param totalPrice    the amount to refund
+     */
     private void safelyRefundPayment(PaymentResultDTO paymentResult, double totalPrice) {
         try {
             paymentGateway.refund(paymentResult.paymentTransactionId(), totalPrice);
@@ -1401,14 +1552,14 @@ public class CheckoutService {
         }
     }
 
-    // We check the idempotency cache for a completed checkout result using the
-    // idempotency key and the buyer key. If there is an existing cache entry for
-    // the idempotency key, we check if the buyer key matches. If it does not match,
-    // we throw an IdempotencyConflictException to indicate that there is a conflict
-    // with the idempotency key being used by a different buyer. If it matches, we
-    // return the cached checkout result. If there is no existing cache entry for
-    // the idempotency key, we return null to indicate that there is no cached
-    // result and that we should proceed with processing the checkout as normal.
+    /**
+     * Looks up a completed checkout in the idempotency cache.
+     *
+     * @param idempotencyKey the dedupe key
+     * @param buyerKey       the buyer identity expected to own the key
+     * @return the cached result if present and owned by this buyer, otherwise {@code null}
+     * @throws IdempotencyConflictException if the key is held by a different buyer
+     */
     private CheckoutResultDTO getCachedCheckoutResult(String idempotencyKey, String buyerKey) {
         IdempotencyCacheEntry existing = completedCheckoutsByIdempotencyKey.get(idempotencyKey);
 
@@ -1423,56 +1574,65 @@ public class CheckoutService {
         return existing.result();
     }
 
-    // We cache the checkout result in the idempotency cache by associating the
-    // idempotency key with a new cache entry that contains the buyer key and the
-    // checkout result. This allows us to return the same checkout result for
-    // subsequent requests that use the same idempotency key and buyer key, while
-    // also ensuring that if there is a conflict with the idempotency key being used
-    // by a different buyer, we can detect it and throw an appropriate exception. By
-    // using putIfAbsent, we ensure that we do not overwrite an existing cache entry
-    // if one already exists for the same idempotency key, which helps maintain the
-    // integrity of our idempotency handling.
+    /**
+     * Caches a completed checkout result under the idempotency key (via
+     * {@code putIfAbsent}, so a concurrent first write is never overwritten).
+     *
+     * @param idempotencyKey the dedupe key
+     * @param buyerKey       the owning buyer identity
+     * @param result         the result to cache
+     */
     private void cacheCheckoutResult(String idempotencyKey, String buyerKey, CheckoutResultDTO result) {
         completedCheckoutsByIdempotencyKey.putIfAbsent(
                 idempotencyKey,
                 new IdempotencyCacheEntry(buyerKey, result));
     }
 
-    // We generate a unique key for a member buyer based on their user ID. This key
-    // is used to identify the buyer in the idempotency cache and other internal
-    // mechanisms.
+    /**
+     * @param userId the member's id
+     * @return the buyer identity key for the idempotency cache
+     */
     private String memberBuyerKey(int userId) {
         return "member:" + userId;
     }
 
-    // We generate a unique key for a guest buyer based on their session ID and
-    // email. This key is used to identify the buyer in the idempotency cache and
-    // other internal mechanisms. By combining the session ID and email, we can
-    // create a more unique identifier for the guest buyer, which helps prevent
-    // conflicts in the idempotency cache when multiple guests might be using the
-    // same session or when a guest might have multiple sessions.
+    /**
+     * @param guestSessionId the guest's session id
+     * @param guestEmail     the guest's email
+     * @return the buyer identity key for the idempotency cache (session + email)
+     */
     private String guestBuyerKey(String guestSessionId, String guestEmail) {
         return "guest:" + guestSessionId + ":" + guestEmail.trim().toLowerCase();
     }
 
-    // We generate a unique lock key for a member buyer based on their user ID. This
-    // key is used to acquire a lock for the member's order during the checkout
-    // process to prevent concurrent modifications and ensure that only one checkout
-    // can be processed for the member at a time.
+    /**
+     * @param userId the member's id
+     * @return the order lock key for the member ({@code user:} prefix)
+     */
     private String memberOrderLockKey(int userId) {
         return "user:" + userId;
     }
 
-    // We generate a unique lock key for a guest buyer based on their session ID.
-    // This key is used to acquire a lock for the guest's order during the checkout
-    // process to prevent concurrent modifications and ensure that only one checkout
-    // can be processed for the guest at a time. By using the session ID, we can
-    // allow guests to have multiple sessions (e.g. on different devices) while
-    // still ensuring that each session is locked separately during checkout.
+    /**
+     * @param guestSessionId the guest's session id
+     * @return the order lock key for the guest ({@code sess:} prefix)
+     */
     private String guestOrderLockKey(String guestSessionId) {
         return "sess:" + guestSessionId;
     }
 
+    /**
+     * Evaluates each event's effective purchase policy (company policy combined
+     * with the event policy) against a {@link PurchaseContext} built from the
+     * per-event quantity and the buyer.
+     *
+     * @param boughtItems the cart items being purchased
+     * @param userId      the member's id, or {@code null} for a guest (treated as buyer id -1)
+     * @param buyerAge    the buyer's age (for age policies), may be {@code null}
+     * @throws EventNotFoundException if an item references a missing event
+     * @throws com.ticketing.system.Core.Domain.exceptions.PolicyViolationException
+     *         if a purchase policy rejects the order
+     */
     private void validatePurchasePolicies(List<CartLineItem> boughtItems, Integer userId, Integer buyerAge) {
         Map<Integer, Long> quantityByEvent = boughtItems.stream()
                 .collect(Collectors.groupingBy(CartLineItem::geteventId, Collectors.counting()));
@@ -1506,6 +1666,11 @@ public class CheckoutService {
         }
     }
 
+    /**
+     * @param userId the member's id
+     * @return the member's age (for age-policy evaluation)
+     * @throws UserNotFoundException if the user does not exist
+     */
     private Integer getBuyerAgeByUserId(int userId) {
         User user = userRepository.getUserById(userId);
 
@@ -1516,28 +1681,34 @@ public class CheckoutService {
         return user.getAge();
     }
 
-    // helper record classes for internal use within the service - not part of the
-    // public API
+    // ---------------------------------------------------------------------------
+    // Internal helper records (not part of the public API)
+    // ---------------------------------------------------------------------------
 
-    // This is a simple struct to hold a cart line item along with its calculated
-    // final price for the checkout. This allows us to calculate prices once and
-    // keep the logic clean, especially when we need to build receipt lines later.
+    /**
+     * A cart line item paired with its computed final price, so pricing is done
+     * once and reused when building receipt lines.
+     */
     private record PricedCartLine(
             CartLineItem item,
             double finalPrice) {
     }
 
-    // A single (event, zone, selection) that was confirmed SOLD during confirmInventorySale — kept so a
-    // partial-confirm failure can be compensated back to AVAILABLE (C3).
+    /**
+     * A single (event, zone, selection) confirmed SOLD during
+     * {@link #confirmInventorySale}, kept so a partial-confirm failure can be
+     * compensated back to AVAILABLE (C3).
+     */
     private record ConfirmedUnit(
             Event event,
             int zoneId,
             InventorySelection selection) {
     }
 
-    // This is the value stored in the idempotency cache. It includes the buyerKey
-    // to detect conflicts (same idempotency key used by different buyers) and the
-    // actual checkout result to return for repeated requests.
+    /**
+     * The value stored in the idempotency cache: the owning buyer key (to detect
+     * conflicting reuse by a different buyer) and the checkout result to replay.
+     */
     private record IdempotencyCacheEntry(
             String buyerKey,
             CheckoutResultDTO result) {

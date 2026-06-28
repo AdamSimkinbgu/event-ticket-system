@@ -25,6 +25,11 @@ import jakarta.annotation.security.PermitAll;
 
 import java.util.List;
 
+/**
+ * Complaint submission page (route {@code /support/new}, II.3.3). Lets a member file a
+ * complaint to the admin group via
+ * {@link com.ticketing.system.Presentation.presenters.messaging.SubmitComplaintPresenter}.
+ */
 @Route(value = "support/new", layout = MainLayout.class)
 @PageTitle("Submit Complaint · TicketHub")
 @PermitAll

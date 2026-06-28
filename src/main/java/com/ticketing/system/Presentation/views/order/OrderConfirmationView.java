@@ -27,6 +27,11 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Post-checkout confirmation page (route {@code /order-confirmed}). Reads the
+ * {@code CheckoutResultDTO} stashed on the Vaadin session by the checkout flow and
+ * shows the receipt summary; redirects away if no result is present.
+ */
 @Route(value = "order-confirmed", layout = MainLayout.class)
 @PageTitle("Order Confirmed · TicketHub")
 @AnonymousAllowed

@@ -32,6 +32,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Owner event-list page (route {@code /owner/events}). Lists the company's events and
+ * drives lifecycle actions via
+ * {@link com.ticketing.system.Presentation.presenters.company.CompanyEventListPresenter}.
+ */
 @Route(value = "owner/events", layout = WorkspaceLayout.class)
 @PageTitle("My Events · TicketHub")
 @PermitAll

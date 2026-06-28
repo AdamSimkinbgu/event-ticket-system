@@ -24,6 +24,10 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
+/**
+ * Member sign-in page (route {@code /login}). Collects credentials and delegates to
+ * {@link com.ticketing.system.Presentation.presenters.auth.LoginPresenter} (UC-12).
+ */
 @Route(value = "login", layout = MainLayout.class)
 @PageTitle("Sign In · TicketHub")
 @AnonymousAllowed

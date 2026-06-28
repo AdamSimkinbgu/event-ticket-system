@@ -35,6 +35,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Member account page (route {@code /my-account}, UC-16). Shows the member's purchase
+ * history via {@code MyAccountPresenter} and supports refunds via
+ * {@code RefundPresenter}.
+ */
 @Route(value = "my-account", layout = MainLayout.class)
 @PageTitle("My Account · TicketHub")
 @PermitAll

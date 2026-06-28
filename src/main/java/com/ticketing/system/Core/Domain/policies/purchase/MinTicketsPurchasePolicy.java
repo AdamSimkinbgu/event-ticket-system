@@ -2,15 +2,27 @@ package com.ticketing.system.Core.Domain.policies.purchase;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+/**
+ * {@link PurchasePolicy} leaf that requires a minimum number of tickets. The
+ * minimum is only enforced at {@link PurchaseStage#CHECKOUT} — during
+ * {@link PurchaseStage#RESERVE} the cart is still being built up.
+ */
 public class MinTicketsPurchasePolicy implements PurchasePolicy, InvariantChecked {
 
     private final int minimumTickets;
 
+    /**
+     * @param minimumTickets the minimum required quantity (must be non-negative)
+     * @throws IllegalStateException if {@code minimumTickets} is negative
+     */
     public MinTicketsPurchasePolicy(int minimumTickets) {
         this.minimumTickets = minimumTickets;
         checkInvariants();
     }
 
+    /**
+     * @throws IllegalStateException if {@code minimumTickets} is negative
+     */
     @Override
     public void checkInvariants() {
         if (minimumTickets < 0) {
@@ -18,6 +30,12 @@ public class MinTicketsPurchasePolicy implements PurchasePolicy, InvariantChecke
         }
     }
 
+    /**
+     * @param context the purchase being evaluated
+     * @return {@code true} at reserve (always), or at checkout when the quantity
+     *         meets the minimum
+     * @throws IllegalArgumentException if {@code context} is {@code null}
+     */
     @Override
     public boolean isSatisfiedBy(PurchaseContext context) {
         if (context == null) {
@@ -32,10 +50,15 @@ public class MinTicketsPurchasePolicy implements PurchasePolicy, InvariantChecke
         return context.getQuantity() >= minimumTickets;
     }
 
+    /**
+     * @return a message stating the minimum required quantity
+     */
     @Override
     public String getFailureMessage() {
         return "You must buy at least " + minimumTickets + " tickets";
-        
+
     }
+
+    /** @return the configured minimum ticket quantity */
     public int getMinimumTickets() { return minimumTickets; }
 }

@@ -26,6 +26,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Manager invitation page (route {@code /owner/managers/invite}, UC-24). Collects the
+ * invitee and permissions and delegates to
+ * {@link com.ticketing.system.Presentation.presenters.company.ManagerInvitationPresenter}.
+ */
 @Route(value = "owner/managers/invite", layout = WorkspaceLayout.class)
 @PageTitle("Invite Manager · TicketHub")
 @PermitAll

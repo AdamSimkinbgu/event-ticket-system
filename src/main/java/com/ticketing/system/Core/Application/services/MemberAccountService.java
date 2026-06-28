@@ -16,14 +16,18 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 
-// Read-side service for member-facing personal account queries.
-// Owns UC-16 (View Personal Purchase History).
-// Reserved for additional member-side reads (UC-15 if it returns from Cancelled, profile views, etc.).
-// Separated from AuthenticationService (which is auth-flow only) so personal-data reads don't
-// stretch the auth boundary — see design_walkthrough_summary.md §6.
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Read-side service for member-facing personal account queries. Owns UC-16
+ * (View Personal Purchase History).
+ *
+ * <p>Reserved for additional member-side reads (UC-15 if it returns from
+ * Cancelled, profile views, etc.). Separated from {@link AuthenticationService}
+ * (which is auth-flow only) so personal-data reads don't stretch the auth
+ * boundary — see {@code design_walkthrough_summary.md} §6.
+ */
 @Service
 @Slf4j
 @Transactional(readOnly = true)
@@ -46,10 +50,19 @@ public class MemberAccountService {
         this.eventRepository = eventRepository;
     }
 
-    // UC-16: comprehensive personal purchase history + real-time status of upcoming
-    // tickets.
-    // Authorization is a domain concern: only returns history for the authenticated
-    // user.
+    /**
+     * UC-16 — returns the authenticated member's comprehensive personal purchase
+     * history with the real-time status of upcoming tickets.
+     *
+     * <p>Authorization is a domain concern: only history for the user identified
+     * by the token is returned. This method is lenient — any auth or lookup
+     * failure is logged and an empty history is returned rather than thrown, so
+     * the account page always renders. Use {@link #viewMyReceipt(String, int)}
+     * when the caller needs to distinguish the failure modes.
+     *
+     * @param authToken the authenticated member's token
+     * @return the member's purchase history, or an empty history on any failure
+     */
     public PurchaseHistoryDTO viewMyHistory(AuthTokenDTO authToken) {
         try {
             log.debug("Received request to view purchase history.");
@@ -83,12 +96,22 @@ public class MemberAccountService {
         return new PurchaseHistoryDTO(new ArrayList<>()); // Return empty history on failure.
     }
 
-    // UC-16 (single receipt): one member-owned order, enriched for the receipt page
-    // (#276).
-    // Unlike viewMyHistory (which degrades to an empty list), this THROWS so the
-    // presenter can
-    // tell apart auth failure, a missing receipt, and a receipt that isn't the
-    // caller's (403).
+    /**
+     * UC-16 (single receipt, #276) — returns one member-owned order enriched for
+     * the receipt page.
+     *
+     * <p>Unlike {@link #viewMyHistory(AuthTokenDTO)} (which degrades to an empty
+     * list), this throws so the presenter can tell apart auth failure, a missing
+     * receipt, and a receipt that isn't the caller's (403). Authorization is a
+     * domain concern: a member may only view their own receipt.
+     *
+     * @param token     the authenticated member's token
+     * @param receiptId the id of the receipt to view
+     * @return the receipt as an enriched purchase record
+     * @throws InvalidTokenException       if the token is invalid
+     * @throws EntityNotFoundException     if no receipt with that id exists
+     * @throws UnauthorizedActionException if the receipt belongs to another user
+     */
     public PurchaseRecordDTO viewMyReceipt(String token, int receiptId) {
         log.info("Received request to view receipt {} for the authenticated member", receiptId);
         if (!authenticationService.validateToken(token)) {
