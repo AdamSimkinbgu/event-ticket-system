@@ -46,6 +46,9 @@ public interface IEventRepository extends IRepository<Event, Integer> {
     List<Event> searchONSALE(CatalogSearchFiltersDTO filters);
     
 
+    // Permanently removes a CANCELED event from the store.
+    void delete(int eventId);
+
     int nextId();
 
     int nextVenueMapId();

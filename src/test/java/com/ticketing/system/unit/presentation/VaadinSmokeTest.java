@@ -82,6 +82,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -250,7 +251,7 @@ class VaadinSmokeTest {
         // (which is exercised by the buyer-side construction path). AdminDashboardView
         // now takes a presenter, so it has its own test below.
         OrgTreePresenter orgTreePresenter = mock(OrgTreePresenter.class);
-        when(orgTreePresenter.load(any(), any())).thenReturn(new OrgTreePresenter.Outcome.NotAuthenticated());
+        when(orgTreePresenter.load(any(), any(), anyBoolean())).thenReturn(new OrgTreePresenter.Outcome.NotAuthenticated());
         assertDoesNotThrow(() -> new OrganizationalTreeView(orgTreePresenter),
             "OrganizationalTreeView failed to construct");
     }

@@ -73,27 +73,27 @@ abstract class INotificationRepositoryContractTest {
     void save_updatesALoadedNotificationInPlace() {
         repo.save(note("n1", 5, NotificationStatus.PENDING));
         Notification loaded = repo.findById("n1");
-        loaded.markDelivered();
+        loaded.markSent();
         repo.save(loaded);
 
-        assertEquals(NotificationStatus.DELIVERED, repo.findById("n1").getStatus());
+        assertEquals(NotificationStatus.SENT, repo.findById("n1").getStatus());
     }
 
     @Test
     void findByRecipientAndStatus_filtersByRecipientAndStatus() {
         repo.save(note("n1", 5, NotificationStatus.PENDING));
-        repo.save(note("n2", 5, NotificationStatus.DELIVERED));
+        repo.save(note("n2", 5, NotificationStatus.SENT));
         repo.save(note("n3", 7, NotificationStatus.PENDING));
 
         assertEquals(Set.of("n1"), ids(repo.findByRecipientAndStatus(5, NotificationStatus.PENDING)));
-        assertEquals(Set.of("n2"), ids(repo.findByRecipientAndStatus(5, NotificationStatus.DELIVERED)));
+        assertEquals(Set.of("n2"), ids(repo.findByRecipientAndStatus(5, NotificationStatus.SENT)));
         assertTrue(repo.findByRecipientAndStatus(99, NotificationStatus.PENDING).isEmpty());
     }
 
     @Test
     void findByRecipient_returnsAllForThatRecipient() {
         repo.save(note("n1", 5, NotificationStatus.PENDING));
-        repo.save(note("n2", 5, NotificationStatus.DELIVERED));
+        repo.save(note("n2", 5, NotificationStatus.SENT));
         repo.save(note("n3", 7, NotificationStatus.PENDING));
 
         assertEquals(Set.of("n1", "n2"), ids(repo.findByRecipient(5)));

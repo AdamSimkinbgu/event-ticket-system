@@ -23,6 +23,9 @@ public interface IProductionCompanyRepository extends IRepository<ProductionComp
     // Owner's own list of companies they founded (informational).
     List<ProductionCompany> findByFounder(int founderUserId);
 
+    // Admin view — every company in the system regardless of status.
+    List<ProductionCompany> findAll();
+
     // UC-18 — persist newly-registered company.
     void save(ProductionCompany company);
 

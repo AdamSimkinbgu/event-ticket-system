@@ -11,8 +11,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
+import com.ticketing.system.Core.Domain.exceptions.BusinessRuleViolationException;
 import com.ticketing.system.Core.Domain.exceptions.CompanyNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
@@ -730,6 +732,51 @@ public class EventManagementService {
             eventRepository.save(event);
 
             log.info("Event {} published (ON_SALE) by user {}", eventId, userId);
+        } finally {
+            eventRepository.unlock(eventId);
+        }
+    }
+
+    // Permanently removes a CANCELED event. Only callable by a user with CONFIGURE_VENUE.
+    public void deleteEvent(String token, int eventId) {
+        int userId = validateTokenAndGetUserId(token);
+        eventRepository.lockForUpdate(eventId);
+        try {
+            Event event = eventRepository.findById(eventId);
+            User user = userRepository.getUserById(userId);
+            user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+            if (event.getStatus() != EventStatus.CANCELED) {
+                throw new InvalidStateTransitionException("Only CANCELED events can be deleted");
+            }
+            // Soft-cancel keeps events "for historical and reporting purposes": refuse to
+            // permanently delete one that still has purchase history, which would orphan its
+            // OrderReceipt/Ticket records (referenced by eventId, no cascade).
+            if (!orderReceiptRepository.findByEventId(eventId).isEmpty()) {
+                throw new BusinessRuleViolationException("Can't delete event with purchase history");
+            }
+            eventRepository.delete(eventId);
+            log.info("Event {} deleted by user {}", eventId, userId);
+        } finally {
+            eventRepository.unlock(eventId);
+        }
+    }
+
+    // Owner/Manager changes an event's status to a target state (non-cancel transitions only).
+    // Cancel with refund pipeline uses cancelEventAndRefund.
+    public void changeEventStatus(String token, int eventId, EventStatus targetStatus) {
+        int userId = validateTokenAndGetUserId(token);
+        eventRepository.lockForUpdate(eventId);
+        try {
+            Event event = eventRepository.findById(eventId);
+            User user = userRepository.getUserById(userId);
+            user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+            switch (targetStatus) {
+                case SCHEDULED -> event.transitionToScheduled();
+                case ON_SALE -> event.transitionToOnSale();
+                default -> throw new InvalidStateTransitionException("Cannot manually set status to " + targetStatus);
+            }
+            eventRepository.save(event);
+            log.info("Event {} status changed to {} by user {}", eventId, targetStatus, userId);
         } finally {
             eventRepository.unlock(eventId);
         }

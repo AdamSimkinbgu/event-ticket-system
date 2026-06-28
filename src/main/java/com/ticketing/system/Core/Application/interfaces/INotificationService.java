@@ -37,4 +37,10 @@ public interface INotificationService {
      */
     void notifyNewMessage(int recipientUserId, String conversationId, String senderLabel,
             String subject, String snippet);
+
+    /** Mark a single notification as READ (SENT → READ). No-op if already READ. */
+    void markRead(int userId, String notificationId);
+
+    /** Revert all SENT notifications for a user back to PENDING — called on disconnect. */
+    void revertSentToPending(int userId);
 }

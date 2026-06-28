@@ -19,7 +19,7 @@ import java.util.function.Consumer;
  */
 public class LkNotifPanel extends Div {
 
-    public record Item(String notificationId, String iconName, String title, String body, String time, boolean unread) { }
+    public record Item(String notificationId, String iconName, String title, String body, String time, boolean unread, Runnable onClick) { }
 
     private final NativeButton markAll;
 
@@ -57,6 +57,9 @@ public class LkNotifPanel extends Div {
             Span tm = new Span(it.time); tm.addClassName("lk-notif-time");
             body.add(t, d, tm);
 
+            if (it.onClick != null) {
+                row.addClickListener(e -> it.onClick().run());
+            }
             row.add(icoSlot, body);
             if (it.unread) {
                 Span dot = new Span();
@@ -83,21 +86,21 @@ public class LkNotifPanel extends Div {
 
     public static LkNotifPanel buyer() {
         return new LkNotifPanel("Notifications", List.of(
-            new Item("", "ticket", "Your Coldplay seats are confirmed", "Receipt #TKT-20847 · $504.00 paid", "2m", true),
-            new Item("", "clock",  "Cart expiring soon",                "Hapoel TLV · 2 tickets release in 2 min", "5m", true),
-            new Item("", "star",   "Price drop on a watched event",     "Mashina · 35-Year Tour — now from $150", "1h", true),
-            new Item("", "card",   "Refund processed",                  "Othello at Habima · $120.00 returned", "Yesterday", false),
-            new Item("", "bell",   "New from Live Nation Israel",       "Eden Hason · Live — on sale now", "2d", false)
+            new Item("", "ticket", "Your Coldplay seats are confirmed", "Receipt #TKT-20847 · $504.00 paid", "2m", true, null),
+            new Item("", "clock",  "Cart expiring soon",                "Hapoel TLV · 2 tickets release in 2 min", "5m", true, null),
+            new Item("", "star",   "Price drop on a watched event",     "Mashina · 35-Year Tour — now from $150", "1h", true, null),
+            new Item("", "card",   "Refund processed",                  "Othello at Habima · $120.00 returned", "Yesterday", false, null),
+            new Item("", "bell",   "New from Live Nation Israel",       "Eden Hason · Live — on sale now", "2d", false, null)
         ), "View all notifications");
     }
 
     public static LkNotifPanel admin() {
         return new LkNotifPanel("Admin alerts", List.of(
-            new Item("", "comment",  "5 open complaints",          "Oldest is 2 days old — review the queue",        "2d", true),
-            new Item("", "chart",    "Daily sales report ready",   "Yesterday: $48,250 across 12 companies",         "6h", true),
-            new Item("", "building", "New company registration",   "BlueWave Productions awaiting review",           "8h", true),
-            new Item("", "policy",   "Policy flagged for review",  "Coldplay · MOTS age-gate needs a check",         "1d", true),
-            new Item("", "warning",  "Refund spike detected",      "Othello at Habima — 14 refunds in 1h",           "1d", true)
+            new Item("", "comment",  "5 open complaints",          "Oldest is 2 days old — review the queue",        "2d", true,  null),
+            new Item("", "chart",    "Daily sales report ready",   "Yesterday: $48,250 across 12 companies",         "6h", true,  null),
+            new Item("", "building", "New company registration",   "BlueWave Productions awaiting review",           "8h", true,  null),
+            new Item("", "policy",   "Policy flagged for review",  "Coldplay · MOTS age-gate needs a check",         "1d", true,  null),
+            new Item("", "warning",  "Refund spike detected",      "Othello at Habima — 14 refunds in 1h",           "1d", true,  null)
         ), "View admin activity feed");
     }
 
@@ -143,7 +146,7 @@ public class LkNotifPanel extends Div {
                                          Consumer<String> onRowClick) {
         if (notifications == null || notifications.isEmpty()) {
             return new LkNotifPanel("Notifications", List.of(
-                new Item("", "bell", "You're all caught up", "No new notifications", "", false)
+                new Item("", "bell", "You're all caught up", "No new notifications", "", false, null)
             ), "View all notifications");
         }
         List<Item> items = notifications.stream()
@@ -153,7 +156,8 @@ public class LkNotifPanel extends Div {
                 TYPE_TITLE.getOrDefault(n.type(), "Notification"),
                 n.message() == null ? "" : n.message(),
                 relativeTime(n.createdAt()),
-                !"READ".equals(n.status())
+                !"READ".equals(n.status()),
+                null
             ))
             .toList();
         LkNotifPanel panel = new LkNotifPanel("Notifications", items, "View all notifications", onRowClick);

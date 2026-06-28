@@ -85,6 +85,11 @@ public class JpaProductionCompanyRepository implements IProductionCompanyReposit
     }
 
     @Override
+    public List<ProductionCompany> findAll() {
+        return data.findAll();
+    }
+
+    @Override
     public int nextId() {
         ensureSeeded();
         return idSequence.incrementAndGet();
