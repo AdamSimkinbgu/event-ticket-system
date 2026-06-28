@@ -53,6 +53,14 @@ class OrgTreePresenterTest {
         assertInstanceOf(OrgTreePresenter.Outcome.NotAuthenticated.class, presenter.load(TOKEN, null, false));
     }
 
+    @Test
+    void admin_invalidOrExpiredToken_returnsNotAuthenticated() {
+        when(service.adminListAllCompanies(ADMIN_TOKEN)).thenThrow(new InvalidTokenException("expired"));
+
+        assertInstanceOf(OrgTreePresenter.Outcome.NotAuthenticated.class,
+                presenter.load(ADMIN_TOKEN, null, true));
+    }
+
     // ── no company ────────────────────────────────────────────────────────────
 
     @Test

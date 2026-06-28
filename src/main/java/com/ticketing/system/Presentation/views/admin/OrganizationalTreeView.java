@@ -50,7 +50,9 @@ public class OrganizationalTreeView extends LkPage {
                     "Your session has expired — please sign in again."));
             case OrgTreePresenter.Outcome.NoCompany ignored ->
                 body.add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 16),
-                    "No companies exist in the system yet."));
+                    AuthSession.isAdmin()
+                        ? "No companies exist in the system yet."
+                        : "You have no owned companies."));
             case OrgTreePresenter.Outcome.Failure fail ->
                 body.add(new LkBanner(LkBanner.Tone.error, new LkIcon("warning", 16),
                     "Could not load the tree: " + fail.reason()));

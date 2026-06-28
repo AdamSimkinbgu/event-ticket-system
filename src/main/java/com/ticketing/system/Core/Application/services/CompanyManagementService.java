@@ -1,6 +1,7 @@
 package com.ticketing.system.Core.Application.services;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -590,10 +591,14 @@ public class CompanyManagementService {
 
     // Admin-only: list every company in the system regardless of ownership.
     public List<ProductionCompanyDTO> adminListAllCompanies(String token) {
-        if (token == null || !sessionManager.isAdminToken(token)) {
-            throw new RuntimeException("Admin token required");
+        authenticate(token);
+        if (!sessionManager.isAdminToken(token)) {
+            throw new InvalidTokenException("Admin privileges required");
         }
+        // Sort by companyId so the default selection (the presenter falls back to the first
+        // entry) is deterministic — repository iteration order is not guaranteed.
         return companyRepository.findAll().stream()
+                .sorted(Comparator.comparingInt(ProductionCompany::getCompanyId))
                 .map(c -> new ProductionCompanyDTO(
                         c.getCompanyId(), c.getName(), c.getDescription(),
                         c.getStatus().name(), c.getFounderId()))
@@ -602,10 +607,15 @@ public class CompanyManagementService {
 
     // Admin-only: build org tree for any company, bypassing the ownership check.
     public OrganizationalTreeNodeDTO adminViewOrgTree(String token, int companyId) {
-        if (token == null || !sessionManager.isAdminToken(token)) {
-            throw new RuntimeException("Admin token required");
+        authenticate(token);
+        if (!sessionManager.isAdminToken(token)) {
+            throw new InvalidTokenException("Admin privileges required");
         }
         ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null) {
+            log.warn("Company {} not found", companyId);
+            throw new CompanyNotFoundException(companyId);
+        }
         log.info("Admin viewing organizational tree for company {}", companyId);
         return buildOrganizationalTree(companyId, company.getFounderId());
     }
