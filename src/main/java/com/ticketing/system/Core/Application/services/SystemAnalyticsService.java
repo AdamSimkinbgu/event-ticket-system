@@ -7,6 +7,7 @@ import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.system.Core.Application.dto.AdminOverviewDTO;
 import com.ticketing.system.Core.Application.dto.GlobalHistoryFiltersDTO;
@@ -35,6 +36,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Service
 @Slf4j
+@Transactional(readOnly = true)
 public class SystemAnalyticsService {
 
     private static final int THROUGHPUT_WINDOW_MINUTES = 60;

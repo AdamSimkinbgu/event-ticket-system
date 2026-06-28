@@ -23,9 +23,11 @@ import lombok.extern.slf4j.Slf4j;
 // Separated from AuthenticationService (which is auth-flow only) so personal-data reads don't
 // stretch the auth boundary — see design_walkthrough_summary.md §6.
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
+@Transactional(readOnly = true)
 public class MemberAccountService {
 
     private final AuthenticationService authenticationService; // For user identity verification, if needed for future methods.
