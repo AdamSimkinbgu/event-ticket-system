@@ -989,8 +989,11 @@ public class EventManagementService {
             }
 
             User user = userRepository.getUserById(userId);
+            if (user == null) {
+                throw new RuntimeException("User not found");
+            }
             user.requirePermissionInCompany(config.companyId(), Permission.EDIT_POLICIES);
-            
+
             Event event = eventRepository.findById(config.eventId());
             if (event == null) {
                 throw new RuntimeException("Event not found");
@@ -1113,7 +1116,10 @@ public class EventManagementService {
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null)
             throw new RuntimeException("Company not found");
-        company.checkowner(userId);
+        User user = userRepository.getUserById(userId);
+        if (user == null)
+            throw new RuntimeException("User not found");
+        user.requirePermissionInCompany(companyId, Permission.EDIT_POLICIES);
         Event event = eventRepository.findById(eventId);
         if (event == null)
             throw new RuntimeException("Event not found");
