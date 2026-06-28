@@ -25,15 +25,18 @@ public class OrgTreePresenter {
     }
 
     /**
-     * Loads the organizational tree for the selected company. When {@code companyId}
-     * is null (first load) or not in the owner's list, the first owned company is used.
+     * Loads the organizational tree for the selected company.
+     * Admins see all companies; owners see only their own. When {@code companyId}
+     * is null (first load) or not in the list, the first company is used.
      */
-    public Outcome load(String token, Integer companyId) {
+    public Outcome load(String token, Integer companyId, boolean isAdmin) {
         if (token == null) {
             return new Outcome.NotAuthenticated();
         }
         try {
-            List<ProductionCompanyDTO> companies = companyManagementService.findOwnedCompanies(token);
+            List<ProductionCompanyDTO> companies = isAdmin
+                    ? companyManagementService.adminListAllCompanies(token)
+                    : companyManagementService.findOwnedCompanies(token);
             if (companies.isEmpty()) {
                 return new Outcome.NoCompany();
             }
@@ -41,8 +44,9 @@ public class OrgTreePresenter {
                     .filter(c -> companyId != null && c.companyId() == companyId)
                     .findFirst()
                     .orElse(companies.get(0));
-            OrganizationalTreeNodeDTO tree =
-                    companyManagementService.viewOrganizationalTree(token, selected.companyId());
+            OrganizationalTreeNodeDTO tree = isAdmin
+                    ? companyManagementService.adminViewOrgTree(token, selected.companyId())
+                    : companyManagementService.viewOrganizationalTree(token, selected.companyId());
             return new Outcome.Success(companies, selected, tree);
         } catch (InvalidTokenException e) {
             return new Outcome.NotAuthenticated();

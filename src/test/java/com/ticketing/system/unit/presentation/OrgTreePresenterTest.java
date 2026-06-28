@@ -19,10 +19,12 @@ import static org.mockito.Mockito.*;
 /**
  * Unit tests for {@link OrgTreePresenter} (UC-25 / V2-VIEW-03).
  * Service is mocked; asserts the sealed-outcome mapping the view switches on.
+ * Tests cover both the owner path (isAdmin=false) and the admin path (isAdmin=true).
  */
 class OrgTreePresenterTest {
 
-    private static final String TOKEN = "owner-token";
+    private static final String TOKEN       = "owner-token";
+    private static final String ADMIN_TOKEN = "admin-token";
 
     private CompanyManagementService service;
     private OrgTreePresenter presenter;
@@ -37,17 +39,26 @@ class OrgTreePresenterTest {
 
     @Test
     void nullToken_returnsNotAuthenticated_withoutCallingService() {
-        OrgTreePresenter.Outcome outcome = presenter.load(null, null);
+        OrgTreePresenter.Outcome outcome = presenter.load(null, null, false);
 
         assertInstanceOf(OrgTreePresenter.Outcome.NotAuthenticated.class, outcome);
         verify(service, never()).findOwnedCompanies(anyString());
+        verify(service, never()).adminListAllCompanies(anyString());
     }
 
     @Test
     void invalidToken_returnsNotAuthenticated() {
         when(service.findOwnedCompanies(TOKEN)).thenThrow(new InvalidTokenException("bad token"));
 
-        assertInstanceOf(OrgTreePresenter.Outcome.NotAuthenticated.class, presenter.load(TOKEN, null));
+        assertInstanceOf(OrgTreePresenter.Outcome.NotAuthenticated.class, presenter.load(TOKEN, null, false));
+    }
+
+    @Test
+    void admin_invalidOrExpiredToken_returnsNotAuthenticated() {
+        when(service.adminListAllCompanies(ADMIN_TOKEN)).thenThrow(new InvalidTokenException("expired"));
+
+        assertInstanceOf(OrgTreePresenter.Outcome.NotAuthenticated.class,
+                presenter.load(ADMIN_TOKEN, null, true));
     }
 
     // ── no company ────────────────────────────────────────────────────────────
@@ -56,13 +67,13 @@ class OrgTreePresenterTest {
     void noOwnedCompanies_returnsNoCompany_withoutCallingTree() {
         when(service.findOwnedCompanies(TOKEN)).thenReturn(List.of());
 
-        OrgTreePresenter.Outcome outcome = presenter.load(TOKEN, null);
+        OrgTreePresenter.Outcome outcome = presenter.load(TOKEN, null, false);
 
         assertInstanceOf(OrgTreePresenter.Outcome.NoCompany.class, outcome);
         verify(service, never()).viewOrganizationalTree(anyString(), anyInt());
     }
 
-    // ── success ───────────────────────────────────────────────────────────────
+    // ── owner success ──────────────────────────────────────────────────────────
 
     @Test
     void oneCompany_nullCompanyId_selectsFirst_andReturnsTree() {
@@ -71,7 +82,7 @@ class OrgTreePresenterTest {
         when(service.findOwnedCompanies(TOKEN)).thenReturn(List.of(company));
         when(service.viewOrganizationalTree(TOKEN, 7)).thenReturn(tree);
 
-        OrgTreePresenter.Outcome outcome = presenter.load(TOKEN, null);
+        OrgTreePresenter.Outcome outcome = presenter.load(TOKEN, null, false);
 
         OrgTreePresenter.Outcome.Success ok =
                 assertInstanceOf(OrgTreePresenter.Outcome.Success.class, outcome);
@@ -89,7 +100,7 @@ class OrgTreePresenterTest {
         when(service.viewOrganizationalTree(TOKEN, 8)).thenReturn(tree);
 
         OrgTreePresenter.Outcome.Success ok =
-                assertInstanceOf(OrgTreePresenter.Outcome.Success.class, presenter.load(TOKEN, 8));
+                assertInstanceOf(OrgTreePresenter.Outcome.Success.class, presenter.load(TOKEN, 8, false));
 
         assertEquals(bravo, ok.selected());
         assertEquals(tree, ok.tree());
@@ -104,7 +115,7 @@ class OrgTreePresenterTest {
         when(service.viewOrganizationalTree(TOKEN, 7)).thenReturn(tree);
 
         OrgTreePresenter.Outcome.Success ok =
-                assertInstanceOf(OrgTreePresenter.Outcome.Success.class, presenter.load(TOKEN, 99));
+                assertInstanceOf(OrgTreePresenter.Outcome.Success.class, presenter.load(TOKEN, 99, false));
 
         assertEquals(acme, ok.selected());
     }
@@ -117,9 +128,53 @@ class OrgTreePresenterTest {
         when(service.viewOrganizationalTree(anyString(), anyInt())).thenReturn(founderNode(1, "Alice"));
 
         OrgTreePresenter.Outcome.Success ok =
-                assertInstanceOf(OrgTreePresenter.Outcome.Success.class, presenter.load(TOKEN, null));
+                assertInstanceOf(OrgTreePresenter.Outcome.Success.class, presenter.load(TOKEN, null, false));
 
         assertEquals(2, ok.companies().size());
+    }
+
+    // ── admin success ──────────────────────────────────────────────────────────
+
+    @Test
+    void admin_seesAllCompanies_notJustOwned() {
+        ProductionCompanyDTO acme  = company(7, "Acme");
+        ProductionCompanyDTO bravo = company(8, "Bravo");
+        when(service.adminListAllCompanies(ADMIN_TOKEN)).thenReturn(List.of(acme, bravo));
+        when(service.adminViewOrgTree(ADMIN_TOKEN, 7)).thenReturn(founderNode(1, "Alice"));
+
+        OrgTreePresenter.Outcome.Success ok =
+                assertInstanceOf(OrgTreePresenter.Outcome.Success.class,
+                        presenter.load(ADMIN_TOKEN, null, true));
+
+        assertEquals(2, ok.companies().size());
+        assertEquals(acme, ok.selected());
+        verify(service, never()).findOwnedCompanies(anyString());
+        verify(service, never()).viewOrganizationalTree(anyString(), anyInt());
+    }
+
+    @Test
+    void admin_selectsSpecificCompany_byId() {
+        ProductionCompanyDTO acme  = company(7, "Acme");
+        ProductionCompanyDTO bravo = company(8, "Bravo");
+        OrganizationalTreeNodeDTO tree = founderNode(2, "Bob");
+        when(service.adminListAllCompanies(ADMIN_TOKEN)).thenReturn(List.of(acme, bravo));
+        when(service.adminViewOrgTree(ADMIN_TOKEN, 8)).thenReturn(tree);
+
+        OrgTreePresenter.Outcome.Success ok =
+                assertInstanceOf(OrgTreePresenter.Outcome.Success.class,
+                        presenter.load(ADMIN_TOKEN, 8, true));
+
+        assertEquals(bravo, ok.selected());
+        assertEquals(tree, ok.tree());
+    }
+
+    @Test
+    void admin_noCompaniesInSystem_returnsNoCompany() {
+        when(service.adminListAllCompanies(ADMIN_TOKEN)).thenReturn(List.of());
+
+        assertInstanceOf(OrgTreePresenter.Outcome.NoCompany.class,
+                presenter.load(ADMIN_TOKEN, null, true));
+        verify(service, never()).adminViewOrgTree(anyString(), anyInt());
     }
 
     // ── failure ───────────────────────────────────────────────────────────────
@@ -129,7 +184,7 @@ class OrgTreePresenterTest {
         when(service.findOwnedCompanies(TOKEN)).thenThrow(new RuntimeException("db down"));
 
         OrgTreePresenter.Outcome.Failure fail =
-                assertInstanceOf(OrgTreePresenter.Outcome.Failure.class, presenter.load(TOKEN, null));
+                assertInstanceOf(OrgTreePresenter.Outcome.Failure.class, presenter.load(TOKEN, null, false));
 
         assertEquals("db down", fail.reason());
     }
@@ -140,8 +195,18 @@ class OrgTreePresenterTest {
         when(service.viewOrganizationalTree(TOKEN, 7)).thenThrow(new RuntimeException("tree error"));
 
         OrgTreePresenter.Outcome.Failure fail =
-                assertInstanceOf(OrgTreePresenter.Outcome.Failure.class, presenter.load(TOKEN, null));
+                assertInstanceOf(OrgTreePresenter.Outcome.Failure.class, presenter.load(TOKEN, null, false));
         assertEquals("tree error", fail.reason());
+    }
+
+    @Test
+    void admin_serviceThrowsRuntime_returnsFailureWithMessage() {
+        when(service.adminListAllCompanies(ADMIN_TOKEN)).thenThrow(new RuntimeException("admin token required"));
+
+        OrgTreePresenter.Outcome.Failure fail =
+                assertInstanceOf(OrgTreePresenter.Outcome.Failure.class,
+                        presenter.load(ADMIN_TOKEN, null, true));
+        assertEquals("admin token required", fail.reason());
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
