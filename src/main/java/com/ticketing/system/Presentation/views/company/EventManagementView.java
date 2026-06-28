@@ -14,6 +14,7 @@ import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
+import com.ticketing.system.Presentation.components.kit.LkTextRows;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.presenters.company.EventManagementPresenter;
 import com.ticketing.system.Presentation.security.Capabilities;
@@ -51,7 +52,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     private final Select<String> category = new Select<>();
     private final TextField country = new TextField("Country");
     private final TextField city = new TextField("City");
-    private final TextField artists = new TextField("Artists");
+    private final LkTextRows artists = new LkTextRows("Artists", "+ Add artist").placeholder("e.g. The Beatles");
     private final DateTimePicker start = new DateTimePicker("Starts");
     private final DateTimePicker end = new DateTimePicker("Ends");
     private final TextArea description = new TextArea("Description");
@@ -90,11 +91,11 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             title("Create Event");
             subtitle("Create the event as a draft, then configure its venue and publish it.");
             saveBtn.label("Create Event");
-            artists.setReadOnly(false);
+            artists.readOnly(false);
             // Linked editors, status and the danger zone all act on a persisted event.
             sideCol.setVisible(false);
         } else {
-            artists.setReadOnly(true);
+            artists.readOnly(true);
             loadEvent(eventId);
         }
     }
@@ -115,7 +116,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     private void applyEvent(EventDetailDTO ev) {
         title.setValue(ev.name() != null ? ev.name() : "");
         category.setValue(ev.category() != null ? ev.category().name() : null);
-        artists.setValue(ev.artistsNames() == null ? "" : String.join(", ", ev.artistsNames()));
+        artists.setValues(ev.artistsNames());
         if (ev.location() != null) {
             country.setValue(ev.location().country() != null ? ev.location().country() : "");
             city.setValue(ev.location().city() != null ? ev.location().city() : "");
@@ -194,7 +195,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             return;
         }
 
-        List<String> artistList = parseArtists(artists.getValue());
+        List<String> artistList = artists.getValues();
         if (artistList.isEmpty()) { Toasts.failure("Please list at least one artist."); return; }
 
         switch (presenter.create(AuthSession.token(), CurrentCompanies.currentCompanyId(),
@@ -213,17 +214,6 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             case EventManagementPresenter.CreateOutcome.Failure fail ->
                 Toasts.failure("Could not create event: " + fail.reason());
         }
-    }
-
-    /** Split a comma-separated artists field into a trimmed, blank-free list. */
-    private static List<String> parseArtists(String csv) {
-        if (csv == null || csv.isBlank()) {
-            return List.of();
-        }
-        return Arrays.stream(csv.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isBlank())
-                .toList();
     }
 
     /** Location is country+city in the domain; both are required, so only send it when both are present. */
@@ -280,7 +270,6 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
         city.setWidthFull();
 
         artists.setWidthFull();
-        artists.setHelperText("Comma-separated");
 
         start.setWidthFull();
         end.setWidthFull();
@@ -293,10 +282,10 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
                 .set("display", "grid")
                 .set("grid-template-columns", "repeat(auto-fit, minmax(min(100%, 220px), 1fr))")
                 .set("gap", "14px");
-        grid.add(title, category, country, city, artists, start, end);
+        grid.add(title, category, country, city, start, end);
 
         LkCol col = new LkCol().gap(14);
-        col.add(grid, description);
+        col.add(grid, artists, description);
         card.add(col);
         return card;
     }
