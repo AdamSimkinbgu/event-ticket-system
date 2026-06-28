@@ -57,12 +57,20 @@ public class NotificationBellComponent extends Span {
         }
 
         Runnable onMarkAll = () -> {
+            if (onRead != null) {
+                NotificationSession.getAll().stream()
+                        .filter(n -> !"READ".equals(n.status()))
+                        .map(NotificationDTO::notificationId)
+                        .filter(id -> id != null && !id.isEmpty())
+                        .forEach(onRead);
+            }
             NotificationSession.markAllRead();
             refresh();
         };
 
         java.util.function.Consumer<String> onMarkOne = notifId -> {
             NotificationSession.markRead(notifId);
+            if (onRead != null) onRead.accept(notifId);
             refresh();
         };
 
