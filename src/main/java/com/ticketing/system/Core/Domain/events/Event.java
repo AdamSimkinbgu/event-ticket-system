@@ -3,6 +3,7 @@ package com.ticketing.system.Core.Domain.events;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
@@ -452,14 +453,14 @@ public class Event implements InvariantChecked {
 
 
 
-    // ON_SALE -> COMPLETED after the last show date.
+    // ON_SALE / SOLD_OUT -> COMPLETED after the last show date.
     public void transitionToCompleted() {
         if (status == EventStatus.COMPLETED) {
             return;
         }
 
-        if (status != EventStatus.ON_SALE) {
-            throw new IllegalStateException("Only on-sale events can be marked as completed");
+        if (status != EventStatus.ON_SALE && status != EventStatus.SOLD_OUT) {
+            throw new IllegalStateException("Only on-sale or sold-out events can be marked as completed");
         }
 
         this.status = EventStatus.COMPLETED;
@@ -577,6 +578,19 @@ public class Event implements InvariantChecked {
 
     public List<ShowDate> getShowDates() {
         return List.copyOf(showDates);
+    }
+
+    // True once the event's last show has ended as of `now` — drives auto-completion
+    // (ON_SALE / SOLD_OUT -> COMPLETED). A multi-leg event finishes only after its latest leg.
+    public boolean hasFinishedAsOf(LocalDateTime now) {
+        if (showDates == null || showDates.isEmpty()) {
+            return false;
+        }
+        LocalDateTime lastEnd = showDates.stream()
+                .map(ShowDate::getEndTime)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+        return lastEnd != null && now.isAfter(lastEnd);
     }
 
     public VenueMap getVenueMap() {

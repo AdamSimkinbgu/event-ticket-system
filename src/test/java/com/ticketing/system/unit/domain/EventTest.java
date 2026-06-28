@@ -1,7 +1,9 @@
 package com.ticketing.system.unit.domain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
@@ -479,7 +481,111 @@ class EventTest extends BaseDomainTest {
         assertEquals(0, standingZone.getSoldAmount());
     }
 
+    // -- hasFinishedAsOf (auto-completion predicate) ---------------------
+
+    // Drives the completion sweeper: true once `now` is strictly past the last show's end.
+    @Test
+    void GivenSingleShow_WhenHasFinishedAsOf_ThenStrictlyAfterEndTime() {
+        LocalDateTime end = LocalDateTime.now().plusDays(10);
+        Event e = eventWithShowDates(List.of(new ShowDate(end.minusHours(2), end)));
+
+        assertFalse(e.hasFinishedAsOf(end.minusSeconds(1)), "before the show ends");
+        assertFalse(e.hasFinishedAsOf(end), "exactly at the end is not yet past (strict isAfter)");
+        assertTrue(e.hasFinishedAsOf(end.plusSeconds(1)), "after the show ends");
+    }
+
+    // A multi-leg event is finished only after its LATEST leg ends — uses max(endTime),
+    // not the first/last element of the list. The earlier-ending leg is placed last to
+    // expose any "use the last element" bug.
+    @Test
+    void GivenMultiShow_WhenHasFinishedAsOf_ThenUsesLatestEnd() {
+        LocalDateTime lastEnd = LocalDateTime.now().plusDays(20);
+        LocalDateTime earlierEnd = LocalDateTime.now().plusDays(10);
+        Event e = eventWithShowDates(List.of(
+                new ShowDate(lastEnd.minusHours(2), lastEnd),
+                new ShowDate(earlierEnd.minusHours(2), earlierEnd)));
+
+        // Past the earlier leg but before the latest leg → not finished.
+        assertFalse(e.hasFinishedAsOf(earlierEnd.plusDays(1)));
+        // Past the latest leg → finished.
+        assertTrue(e.hasFinishedAsOf(lastEnd.plusSeconds(1)));
+    }
+
+    // -- ON_SALE / SOLD_OUT -> COMPLETED transition ----------------------
+
+    @Test
+    void GivenOnSaleEvent_WhenTransitionToCompleted_ThenCompleted() {
+        Event event = createEventWithZones(List.of(track(new StandingZone(1, "General", 5, 50.0))));
+        event.transitionToOnSale();
+
+        event.transitionToCompleted();
+
+        assertEquals(EventStatus.COMPLETED, event.getStatus());
+    }
+
+    @Test
+    void GivenSoldOutEvent_WhenTransitionToCompleted_ThenCompleted() {
+        StandingZone zone = track(new StandingZone(1, "General", 2, 50.0));
+        Event event = createEventWithZones(List.of(zone));
+        event.transitionToOnSale();
+        event.reserveInventory(1, InventorySelection.standing(2)); // exhaust inventory -> SOLD_OUT
+        assertEquals(EventStatus.SOLD_OUT, event.getStatus());
+
+        event.transitionToCompleted();
+
+        assertEquals(EventStatus.COMPLETED, event.getStatus());
+    }
+
+    @Test
+    void GivenCompletedEvent_WhenTransitionToCompletedAgain_ThenIdempotent() {
+        Event event = createEventWithZones(List.of(track(new StandingZone(1, "General", 5, 50.0))));
+        event.transitionToOnSale();
+        event.transitionToCompleted();
+
+        event.transitionToCompleted(); // no throw
+
+        assertEquals(EventStatus.COMPLETED, event.getStatus());
+    }
+
+    @Test
+    void GivenScheduledEvent_WhenTransitionToCompleted_ThenThrows() {
+        Event event = createEventWithZones(List.of(track(new StandingZone(1, "General", 5, 50.0))));
+
+        assertThrows(IllegalStateException.class, event::transitionToCompleted);
+    }
+
+    @Test
+    void GivenDraftEvent_WhenTransitionToCompleted_ThenThrows() {
+        Event event = createDraftEvent();
+
+        assertThrows(IllegalStateException.class, event::transitionToCompleted);
+    }
+
+    @Test
+    void GivenCanceledEvent_WhenTransitionToCompleted_ThenThrows() {
+        Event event = createEventWithZones(List.of(track(new StandingZone(1, "General", 5, 50.0))));
+        event.transitionToOnSale();
+        event.transitionToCanceled("done");
+
+        assertThrows(IllegalStateException.class, event::transitionToCompleted);
+    }
+
     // test helper functions:
+
+    private Event eventWithShowDates(List<ShowDate> showDates) {
+        return track(new Event(
+                EVENT_ID,
+                "Concert",
+                4.5,
+                ARTISTS,
+                EventCategory.CONCERT,
+                COMPANY_ID,
+                EventStatus.ON_SALE,
+                new VenueMap(1, LOCATION, List.of(track(new StandingZone(ZONE_ID, "VIP", 10, 100)))),
+                showDates,
+                acceptingPurchasePolicy(),
+                noDiscountPolicy()));
+    }
 
     private PurchasePolicy acceptingPurchasePolicy() {
         return new NoPurchasePolicy();
