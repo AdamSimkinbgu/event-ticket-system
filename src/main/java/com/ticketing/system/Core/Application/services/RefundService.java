@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
@@ -49,18 +51,24 @@ public class RefundService {
     private final ITicketRepository ticketRepository;
     private final IPaymentGateway paymentGateway;
     private final IEventRepository eventRepository;
+    // Programmatic transaction for the refund critical section: it must hold a real row lock on the
+    // receipt (SELECT … FOR UPDATE) across the eligibility check + gateway refund + receipt flip so a
+    // double-click can't refund twice (#410). The gateway-first call runs inside it by design.
+    private final TransactionTemplate transactionTemplate;
 
     public RefundService(
             AuthenticationService authenticationService,
             IOrderReceiptRepository orderReceiptRepository,
             ITicketRepository ticketRepository,
             IPaymentGateway paymentGateway,
-            IEventRepository eventRepository) {
+            IEventRepository eventRepository,
+            PlatformTransactionManager transactionManager) {
         this.authenticationService = authenticationService;
         this.orderReceiptRepository = orderReceiptRepository;
         this.ticketRepository = ticketRepository;
         this.paymentGateway = paymentGateway;
         this.eventRepository = eventRepository;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     /**
@@ -81,44 +89,48 @@ public class RefundService {
         }
         int userId = authenticationService.extractUserId(token);
 
-        RefundResultDTO refundResult;
-        // Serialize the eligibility check + gateway refund + receipt flip per receipt under the receipt
-        // lock. Without it, two concurrent requests (double-click / retry) could both pass wasRefunded()
-        // and both call paymentGateway.refund() — refunding the buyer twice. Fetching inside the lock
-        // means the loser sees isRefunded=true (happens-before via the same lock) and bails.
-        orderReceiptRepository.lockForUpdate(orderId);
-        try {
-            OrderReceipt receipt = orderReceiptRepository.findByOrderReceiptId(orderId)
-                    .orElseThrow(() -> new EntityNotFoundException("OrderReceipt", orderId));
+        // Serialize the eligibility check + gateway refund + receipt flip in ONE transaction holding a
+        // row lock on the receipt. orderReceiptRepository.lockForUpdate takes a real SELECT … FOR UPDATE
+        // under jpa (and a real lock under the in-memory repo), held until this transaction commits.
+        // Without it, two concurrent requests (double-click / retry) could both pass wasRefunded() and
+        // both call paymentGateway.refund() — refunding the buyer twice (#410). The loser blocks on the
+        // lock, then sees isRefunded=true and bails before any second gateway call. The slow WSEP refund
+        // runs inside this section by design (gateway-first: never mark refunded while the gateway
+        // disagrees); refunds are low-frequency, so holding the row lock across it is acceptable.
+        RefundResultDTO refundResult = transactionTemplate.execute(status -> {
+            orderReceiptRepository.lockForUpdate(orderId);
+            try {
+                OrderReceipt receipt = orderReceiptRepository.findByOrderReceiptId(orderId)
+                        .orElseThrow(() -> new EntityNotFoundException("OrderReceipt", orderId));
 
-            Integer holderUserId = receipt.getHolderUserId();
-            if (holderUserId == null || holderUserId != userId) {
-                throw new UnauthorizedActionException("refund order " + orderId, userId);
+                Integer holderUserId = receipt.getHolderUserId();
+                if (holderUserId == null || holderUserId != userId) {
+                    throw new UnauthorizedActionException("refund order " + orderId, userId);
+                }
+
+                if (receipt.wasRefunded()) {
+                    throw new BusinessRuleViolationException("Order " + orderId + " has already been refunded");
+                }
+
+                double refundAmount = receipt.getTotalAmount();
+                int paymentTransactionId = receipt.getPaymentTransactionId()
+                        .orElseThrow(() -> new RefundFailedException(orderId, "receipt does not contain a payment transaction"));
+
+                RefundResultDTO result = paymentGateway.refund(paymentTransactionId, refundAmount);
+                validateRefundResult(orderId, refundAmount, result);
+
+                receipt.markRefunded(TransactionRecord.refund(
+                        result.refundTransactionId(),
+                        paymentGateway.getId(),
+                        result.totalRefunded(),
+                        receipt.getPaymentCurrency(),
+                        result.refundedAt()));
+                orderReceiptRepository.save(receipt);
+                return result;
+            } finally {
+                orderReceiptRepository.unlock(orderId);
             }
-
-            if (receipt.wasRefunded()) {
-                throw new BusinessRuleViolationException("Order " + orderId + " has already been refunded");
-            }
-
-            double refundAmount = receipt.getTotalAmount();
-            // Charge the gateway BEFORE touching domain state — we never want a receipt marked refunded
-            // while the gateway disagrees.
-            int paymentTransactionId = receipt.getPaymentTransactionId()
-                    .orElseThrow(() -> new RefundFailedException(orderId, "receipt does not contain a payment transaction"));
-
-            refundResult = paymentGateway.refund(paymentTransactionId, refundAmount);
-            validateRefundResult(orderId, refundAmount, refundResult);
-
-            receipt.markRefunded(TransactionRecord.refund(
-                    refundResult.refundTransactionId(),
-                    paymentGateway.getId(),
-                    refundResult.totalRefunded(),
-                    receipt.getPaymentCurrency(),
-                    refundResult.refundedAt()));
-            orderReceiptRepository.save(receipt);
-        } finally {
-            orderReceiptRepository.unlock(orderId);
-        }
+        });
 
         // The money refund + receipt flip have committed under the lock; the remaining ticket flips and
         // inventory return run outside it (best-effort, idempotent-by-state). A second concurrent request
