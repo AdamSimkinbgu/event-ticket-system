@@ -10,6 +10,8 @@ import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
@@ -73,6 +75,11 @@ public class CheckoutService {
     private final IUserRepository userRepository;
     private final IProductionCompanyRepository companyRepository;
     private final SystemAdminService systemAdminService;
+    // Programmatic transactions for the checkout's Phase-3 DB work. Checkout cannot be a single
+    // @Transactional method because the WSEP charge + issue (Phase 2, 20s HTTP timeouts) must run
+    // OUTSIDE any transaction so a slow gateway never pins a DB connection. This template wraps only
+    // the Phase-3 DB unit (tickets + receipt + RESERVED→SOLD confirm), between the external calls.
+    private final TransactionTemplate transactionTemplate;
 
     // In-memory cache for completed checkouts to handle idempotency. Keyed by a
     // combination of buyer identity and idempotency key, since the same idempotency
@@ -101,7 +108,8 @@ public class CheckoutService {
             ISessionManager sessionManager,
             IUserRepository userRepository,
             IProductionCompanyRepository companyRepository,
-            SystemAdminService systemAdminService) {
+            SystemAdminService systemAdminService,
+            PlatformTransactionManager transactionManager) {
         this.activeOrderRepository = activeOrderRepository;
         this.eventRepository = eventRepository;
         this.ticketRepository = ticketRepository;
@@ -113,6 +121,13 @@ public class CheckoutService {
         this.userRepository = userRepository;
         this.companyRepository = companyRepository;
         this.systemAdminService = systemAdminService;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+    }
+
+    // Result of the atomic Phase-3 persistence unit, surfaced to the orchestrator once the
+    // transaction has committed: the receipt id feeds the result DTO, the lines feed the
+    // post-unlock purchase notification.
+    private record Phase3Persisted(int orderReceiptId, List<ReceiptLine> receiptLines) {
     }
 
     // UC-32 / I.2.1 — no money moves while the trading market is closed. This is a
@@ -232,26 +247,33 @@ public class CheckoutService {
             lockedEventIds = eventIds;
             lockEvents(lockedEventIds);
 
-            validateEventsStillOnSale(snapshotItems);
-            // Fail-fast ownership check (read-only): the reservation must still be ours and
-            // RESERVED.
-            validateCanConfirmInventorySale(snapshotItems, orderKey);
+            // ─── Atomic Phase-3 DB unit (one transaction) ───
+            // Re-validate, persist tickets + receipt, then the irreversible RESERVED→SOLD confirm —
+            // all committed together or not at all. The WSEP charge/issue already ran in Phase 2,
+            // OUTSIDE this (and any) transaction, so no DB connection is held across an HTTP call.
+            // If anything here fails — including a @Version conflict at commit when two buyers race
+            // the same seat — the whole unit rolls back, inventorySaleConfirmed stays false, and the
+            // catch below returns the inventory to stock and refunds the charge via the existing path.
+            final int capturedUserId = userId;
+            final double capturedTotalPrice = totalPrice;
+            final PaymentResultDTO capturedPaymentResult = paymentResult;
+            Phase3Persisted persisted = transactionTemplate.execute(status -> {
+                validateEventsStillOnSale(snapshotItems);
+                // Fail-fast ownership check (read-only): the reservation must still be ours and RESERVED.
+                validateCanConfirmInventorySale(snapshotItems, orderKey);
 
-            // Persist tickets + receipt BEFORE the irreversible RESERVED→SOLD confirmation.
-            // If any of
-            // this fails, the inventory is still RESERVED, so the normal
-            // (!inventorySaleConfirmed)
-            // rollback cleanly returns it to stock and refunds — nothing is stranded as
-            // SOLD.
-            int orderReceiptId = orderReceiptRepository.nextId();
-            List<ReceiptLine> receiptLines = saveTicketsAndBuildReceiptLines(userId, orderReceiptId, pricedItems,
-                    issuanceResult);
-            saveMemberReceipt(userId, orderReceiptId, totalPrice, receiptLines, paymentResult, issuanceResult);
+                int receiptId = orderReceiptRepository.nextId();
+                List<ReceiptLine> lines = saveTicketsAndBuildReceiptLines(capturedUserId, receiptId, pricedItems,
+                        issuanceResult);
+                saveMemberReceipt(capturedUserId, receiptId, capturedTotalPrice, lines, capturedPaymentResult, issuanceResult);
 
-            // Point of no return: commit the sale last, once everything fallible has
-            // succeeded.
-            confirmInventorySale(snapshotItems, orderKey);
+                // Point of no return: commit the sale last, once everything fallible has succeeded.
+                confirmInventorySale(snapshotItems, orderKey);
+                return new Phase3Persisted(receiptId, lines);
+            });
             inventorySaleConfirmed = true;
+            int orderReceiptId = persisted.orderReceiptId();
+            List<ReceiptLine> receiptLines = persisted.receiptLines();
 
             // Point of no return passed: the sale is committed and the receipt is the durable record.
             // Consuming the cart (buy() + delete) is best-effort — a cleanup hiccup must never turn a
@@ -384,27 +406,27 @@ public class CheckoutService {
             lockedEventIds = eventIds;
             lockEvents(lockedEventIds);
 
-            validateEventsStillOnSale(snapshotItems);
-            // Fail-fast ownership check (read-only): the reservation must still be ours and
-            // RESERVED.
-            validateCanConfirmInventorySale(snapshotItems, orderKey);
+            // ─── Atomic Phase-3 DB unit (one transaction) ─── see checkoutMember for the rationale:
+            // the WSEP charge/issue already ran in Phase 2, outside any transaction; this unit commits
+            // tickets + receipt + the RESERVED→SOLD confirm together, or rolls back and the catch refunds.
+            final double capturedTotalPrice = totalPrice;
+            final PaymentResultDTO capturedPaymentResult = paymentResult;
+            Phase3Persisted persisted = transactionTemplate.execute(status -> {
+                validateEventsStillOnSale(snapshotItems);
+                // Fail-fast ownership check (read-only): the reservation must still be ours and RESERVED.
+                validateCanConfirmInventorySale(snapshotItems, orderKey);
 
-            // Persist tickets + receipt BEFORE the irreversible RESERVED→SOLD confirmation.
-            // If any of
-            // this fails, the inventory is still RESERVED, so the normal
-            // (!inventorySaleConfirmed)
-            // rollback cleanly returns it to stock and refunds — nothing is stranded as
-            // SOLD.
-            int orderReceiptId = orderReceiptRepository.nextId();
-            List<ReceiptLine> receiptLines = saveTicketsAndBuildReceiptLines(null, orderReceiptId, pricedItems,
-                    issuanceResult);
-            saveGuestReceipt(guestEmail, guestSessionId, orderReceiptId, totalPrice, receiptLines, paymentResult,
-                    issuanceResult);
+                int receiptId = orderReceiptRepository.nextId();
+                List<ReceiptLine> lines = saveTicketsAndBuildReceiptLines(null, receiptId, pricedItems, issuanceResult);
+                saveGuestReceipt(guestEmail, guestSessionId, receiptId, capturedTotalPrice, lines, capturedPaymentResult,
+                        issuanceResult);
 
-            // Point of no return: commit the sale last, once everything fallible has
-            // succeeded.
-            confirmInventorySale(snapshotItems, orderKey);
+                // Point of no return: commit the sale last, once everything fallible has succeeded.
+                confirmInventorySale(snapshotItems, orderKey);
+                return new Phase3Persisted(receiptId, lines);
+            });
             inventorySaleConfirmed = true;
+            int orderReceiptId = persisted.orderReceiptId();
 
             // Point of no return passed: the sale is committed and the receipt is the durable record.
             // Consuming the cart (buy() + delete) is best-effort — a cleanup hiccup must never turn a

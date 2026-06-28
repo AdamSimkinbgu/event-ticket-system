@@ -31,6 +31,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 import com.ticketing.system.Core.Application.dto.BarcodeDTO;
+import com.ticketing.system.testutil.TestTransactions;
 import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
@@ -156,7 +157,8 @@ class CheckoutServiceTest {
                 mockiSessionManager,
                 mockUserRepository,
                 mock(IProductionCompanyRepository.class),
-                mockSystemAdminService
+                mockSystemAdminService,
+                TestTransactions.noOpManager()
         );
 
         mockOrder = mock(ActiveOrder.class);

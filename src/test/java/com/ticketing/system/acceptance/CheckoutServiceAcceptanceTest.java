@@ -15,6 +15,7 @@ import com.ticketing.system.Core.Domain.orders.*;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.Infrastructure.persistence.ActiveOrderPersistence.MemoryActiveOrderRepository;
+import com.ticketing.system.testutil.TestTransactions;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -118,7 +119,8 @@ public class CheckoutServiceAcceptanceTest {
                 sessionManager,
                 userRepository,
                 companyRepository,
-                systemAdminService
+                systemAdminService,
+                TestTransactions.noOpManager()
         );
 
         event1 = mock(Event.class);
@@ -925,7 +927,8 @@ public class CheckoutServiceAcceptanceTest {
                 sessionManager,
                 userRepository,
                 companyRepository,
-                systemAdminService
+                systemAdminService,
+                TestTransactions.noOpManager()
         );
     }
 
