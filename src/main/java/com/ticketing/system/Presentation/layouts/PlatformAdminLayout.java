@@ -69,7 +69,7 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
             // No navigation target — the brand is inert; "Back to Site" (right) is the way out.
             .brand("Event Ticket Platform", " · Admin")
             .rightLink("Back to Site", "arrowLeft", LandingView.class)
-            .bell(new NotificationBellComponent())
+            .bell(new NotificationBellComponent(null))
             .account(initials(name), name, buildAdminMenu(name), "#fff", "#c2410c");
         addToNavbar(topBar);
     }

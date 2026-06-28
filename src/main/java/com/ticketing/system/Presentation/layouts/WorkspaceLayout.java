@@ -101,7 +101,7 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
                 new LkTopBar.NavItem("Browse",     BrowseEventsView.class),
                 new LkTopBar.NavItem("My Tickets", MyAccountView.class)
             ), null)
-            .bell(new NotificationBellComponent())
+            .bell(new NotificationBellComponent(null))
             .account(initials(name), name, buildOwnerMenu(name));
         addToNavbar(topBar);
     }
