@@ -21,8 +21,9 @@ import jakarta.persistence.criteria.Subquery;
  * Translates {@link CatalogSearchFiltersDTO} into a Criteria {@link Specification} for the catalogue
  * search (UC-7), mirroring {@code MemoryEventRepository.matchesSearch}. Simple predicates (name,
  * category, rating, location) sit on the Event root; the "at least one matching element" filters
- * (artist, keyword-in-artist, show-date range, zone-price range) are correlated {@code EXISTS}
- * subqueries so the outer query never multiplies rows (no {@code distinct} needed).
+ * (artist, keyword-in-artist, show-date range) are correlated {@code EXISTS} subqueries, and the
+ * price range compares against a correlated {@code min(zone price)} subquery (the event's cheapest
+ * ticket) so the outer query never multiplies rows (no {@code distinct} needed).
  */
 final class EventSearchSpecification {
 
@@ -53,8 +54,13 @@ final class EventSearchSpecification {
             if (filters.fromDate() != null || filters.toDate() != null) {
                 predicates.add(cb.exists(showDateInRange(query, cb, root, filters)));
             }
-            if (filters.minPrice() != null || filters.maxPrice() != null) {
-                predicates.add(cb.exists(zonePriceInRange(query, cb, root, filters)));
+            // The event's CHEAPEST ticket price (min zone price) must fall within the range; a
+            // correlated min() subquery returns null for an event with no zones, so it never matches.
+            if (filters.minPrice() != null) {
+                predicates.add(cb.greaterThanOrEqualTo(cheapestZonePrice(query, cb, root), filters.minPrice()));
+            }
+            if (filters.maxPrice() != null) {
+                predicates.add(cb.lessThanOrEqualTo(cheapestZonePrice(query, cb, root), filters.maxPrice()));
             }
             if (filters.minEventRating() != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("rating"), filters.minEventRating()));
@@ -110,20 +116,12 @@ final class EventSearchSpecification {
         return sub;
     }
 
-    private static Subquery<Integer> zonePriceInRange(CriteriaQuery<?> query, CriteriaBuilder cb, Root<Event> root,
-            CatalogSearchFiltersDTO filters) {
-        Subquery<Integer> sub = query.subquery(Integer.class);
+    /** Correlated scalar subquery: the cheapest (min) zone price for the outer event; null if it has no zones. */
+    private static Subquery<Double> cheapestZonePrice(CriteriaQuery<?> query, CriteriaBuilder cb, Root<Event> root) {
+        Subquery<Double> sub = query.subquery(Double.class);
         Root<Event> subRoot = sub.from(Event.class);
         Join<Object, Object> zone = subRoot.join("venueMap").join("inventoryZones");
-        List<Predicate> predicates = new ArrayList<>();
-        predicates.add(cb.equal(subRoot, root));
-        if (filters.minPrice() != null) {
-            predicates.add(cb.greaterThanOrEqualTo(zone.get("price"), filters.minPrice()));
-        }
-        if (filters.maxPrice() != null) {
-            predicates.add(cb.lessThanOrEqualTo(zone.get("price"), filters.maxPrice()));
-        }
-        sub.select(cb.literal(1)).where(predicates.toArray(new Predicate[0]));
+        sub.select(cb.min(zone.<Double>get("price"))).where(cb.equal(subRoot, root));
         return sub;
     }
 }

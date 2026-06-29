@@ -43,7 +43,7 @@ class EventDetailsPresenterTest {
     private static EventDetailDTO detail() {
         return new EventDetailDTO("1", "Coldplay", 4.8, "Music of the Spheres",
                 EventCategory.MUSIC, new Location("Israel", "Tel Aviv"), "10", "Live Nation",
-                EventStatus.ON_SALE, List.of(), List.of("Coldplay"));
+                EventStatus.ON_SALE, List.of(), List.of("Coldplay"), 75.0);
     }
 
     private static VenueMapDTO venueMap() {

@@ -298,12 +298,12 @@ class CompanyEventListPresenterTest {
     private static EventDetailDTO eventAt(int id, String country, String city) {
         return new EventDetailDTO(String.valueOf(id), "E" + id, null, null, null,
                 new Location(country, city), String.valueOf(COMPANY_ID), "Company " + COMPANY_ID,
-                EventStatus.SCHEDULED, new ArrayList<>(), new ArrayList<>());
+                EventStatus.SCHEDULED, new ArrayList<>(), new ArrayList<>(), 0.0);
     }
 
     private static EventDetailDTO event(int id, String name) {
         return new EventDetailDTO(String.valueOf(id), name, null, null, null, null,
                 String.valueOf(COMPANY_ID), "Company " + COMPANY_ID, EventStatus.SCHEDULED,
-                new ArrayList<>(), new ArrayList<>());
+                new ArrayList<>(), new ArrayList<>(), 0.0);
     }
 }

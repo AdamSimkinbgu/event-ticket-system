@@ -229,7 +229,8 @@ public class EventManagementService {
             company.getName(),
             event.getStatus(),
             event.getShowDates(),
-            event.getArtistsNames()
+            event.getArtistsNames(),
+            EventMapper.minZonePrice(event)
             );
     }
 

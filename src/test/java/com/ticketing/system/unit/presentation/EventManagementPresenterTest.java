@@ -185,6 +185,6 @@ class EventManagementPresenterTest {
     private static EventDetailDTO detailWithId(String id) {
         return new EventDetailDTO(id, "Gala Night", null, "A great show", EventCategory.COMEDY,
                 new Location("Israel", "Tel Aviv"), "1", "Company 1", EventStatus.DRAFT,
-                List.of(), List.of("Headliner"));
+                List.of(), List.of("Headliner"), 0.0);
     }
 }

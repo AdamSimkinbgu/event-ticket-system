@@ -113,6 +113,7 @@ public class CompanyEventListView extends LkPage {
             .col("Event",   "name")
             .col("Date",    "date")
             .col("Venue",   "venue")
+            .col("From",    "from", LkGrid.Align.RIGHT)
             .col("Rating",  "rating", LkGrid.Align.RIGHT)
             .col("Status",  "status")
             .col("Actions", "act", LkGrid.Align.RIGHT);
@@ -347,6 +348,10 @@ public class CompanyEventListView extends LkPage {
 
         String venue = ev.location() != null ? ev.location().toString() : "—";
         row.put("venue", venue);
+
+        // Cheapest ticket price (the same value the catalog's price-range filter matches on); "—"
+        // for events with no venue/zones yet (e.g. drafts).
+        row.put("from", ev.minPrice() > 0 ? "$" + (long) ev.minPrice() : "—");
 
         row.put("rating", ev.rating() == null ? "—" : "★ " + ratingText(ev.rating()));
 

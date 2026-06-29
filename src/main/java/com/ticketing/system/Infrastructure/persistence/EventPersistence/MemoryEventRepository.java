@@ -209,19 +209,17 @@ public class MemoryEventRepository implements IEventRepository {
                 return false;
         }
 
-        // minPrice / maxPrice — at least one zone must be priced within the range.
+        // minPrice / maxPrice — the event's CHEAPEST ticket price (its lowest zone price) must fall
+        // within the range. An event with no venue/zones has no price and never matches a price filter.
         if (filters.minPrice() != null || filters.maxPrice() != null) {
-            if (event.getVenueMap() == null || event.getVenueMap().getInventoryZones() == null)
+            if (event.getVenueMap() == null || event.getVenueMap().getInventoryZones() == null
+                    || event.getVenueMap().getInventoryZones().isEmpty())
                 return false;
-            boolean hasMatchingZone = event.getVenueMap().getInventoryZones().stream().anyMatch(z -> {
-                double price = z.getprice();
-                if (filters.minPrice() != null && price < filters.minPrice())
-                    return false;
-                if (filters.maxPrice() != null && price > filters.maxPrice())
-                    return false;
-                return true;
-            });
-            if (!hasMatchingZone)
+            double cheapest = event.getVenueMap().getInventoryZones().stream()
+                    .mapToDouble(z -> z.getprice()).min().getAsDouble();
+            if (filters.minPrice() != null && cheapest < filters.minPrice())
+                return false;
+            if (filters.maxPrice() != null && cheapest > filters.maxPrice())
                 return false;
         }
 

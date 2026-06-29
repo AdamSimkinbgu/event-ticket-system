@@ -11,11 +11,16 @@ import com.ticketing.system.Core.Domain.events.Location;
 public class EventMapper {
 
 
-    // HELPER METHOD to convert Event --> EventSummaryDTO; used in both search methods above.
-    public EventSummaryDTO convertEventToEventSummaryDTO(Event event, IProductionCompanyRepository productionCompanyRepository) {
-        double minPrice = (event.getVenueMap() != null && !event.getVenueMap().getInventoryZones().isEmpty())
+    /** Cheapest ticket price across the event's zones, or 0 when it has no venue map / no zones. */
+    public static double minZonePrice(Event event) {
+        return (event.getVenueMap() != null && !event.getVenueMap().getInventoryZones().isEmpty())
                 ? event.getVenueMap().getInventoryZones().stream().mapToDouble(z -> z.getprice()).min().getAsDouble()
                 : 0;
+    }
+
+    // HELPER METHOD to convert Event --> EventSummaryDTO; used in both search methods above.
+    public EventSummaryDTO convertEventToEventSummaryDTO(Event event, IProductionCompanyRepository productionCompanyRepository) {
+        double minPrice = minZonePrice(event);
         double maxPrice = (event.getVenueMap() != null && !event.getVenueMap().getInventoryZones().isEmpty())
                 ? event.getVenueMap().getInventoryZones().stream().mapToDouble(z -> z.getprice()).max().getAsDouble()
                 : 0;
@@ -51,7 +56,8 @@ public class EventMapper {
                 companyName,
                 event.getStatus(),
                 event.getShowDates(),
-                event.getArtistsNames());
+                event.getArtistsNames(),
+                minZonePrice(event));
     }
 
 
