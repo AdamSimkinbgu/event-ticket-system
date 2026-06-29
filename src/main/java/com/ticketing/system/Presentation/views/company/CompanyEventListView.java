@@ -178,12 +178,15 @@ public class CompanyEventListView extends LkPage {
         eventRatingMin = ratingField("Min", v -> { filterMinEventRating = v; reload(); });
         eventRatingMax = ratingField("Max", v -> { filterMaxEventRating = v; reload(); });
 
-        countrySelect = new LkSelect(CatalogFilterSupport.COUNTRY_ALL, CatalogFilterSupport.COUNTRIES).label("Country");
+        countrySelect = new LkSelect(CatalogFilterSupport.COUNTRY_ALL,
+                CatalogFilterSupport.countryOptions(presenter.countries(AuthSession.token()))).label("Country");
         countrySelect.onChange(v -> {
             if (Objects.equals(filterCountry, v)) return;
             filterCountry = v;
             filterCity = CatalogFilterSupport.CITY_ALL;
-            citySelect.setOptions(CatalogFilterSupport.cityOptionsFor(v));
+            citySelect.setOptions(CatalogFilterSupport.COUNTRY_ALL.equals(v)
+                    ? List.of(CatalogFilterSupport.CITY_ALL)
+                    : CatalogFilterSupport.cityOptions(presenter.cities(AuthSession.token(), v)));
             citySelect.enabled(!CatalogFilterSupport.COUNTRY_ALL.equals(v));
             reload();
         });

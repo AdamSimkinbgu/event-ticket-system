@@ -6,6 +6,7 @@ import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.events.EventStatus;
+import com.ticketing.system.Core.Domain.events.Location;
 import com.ticketing.system.Core.Domain.exceptions.BusinessRuleViolationException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
@@ -244,10 +245,60 @@ class CompanyEventListPresenterTest {
         assertEquals("invalid transition", fail.reason());
     }
 
+    // ── countries / cities (owner-scope filter options) ───────────────────────
+
+    @Test
+    void countries_nullToken_isEmpty() {
+        assertTrue(presenter.countries(null).isEmpty());
+        verifyNoInteractions(eventService, companyService);
+    }
+
+    @Test
+    void countries_noOwnedCompany_isEmpty() {
+        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of());
+
+        assertTrue(presenter.countries(TOKEN).isEmpty());
+        verifyNoInteractions(eventService);
+    }
+
+    @Test
+    void countries_distinctSortedFromOwnedCompanyEvents() {
+        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
+        when(eventService.listEventsForCompany(eq(TOKEN), eq(COMPANY_ID), any())).thenReturn(List.of(
+                eventAt(1, "Israel", "Tel Aviv"),
+                eventAt(2, "USA", "New York"),
+                eventAt(3, "Israel", "Haifa")));
+
+        assertEquals(List.of("Israel", "USA"), presenter.countries(TOKEN));
+    }
+
+    @Test
+    void cities_filtersToCountryDistinctSorted() {
+        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
+        when(eventService.listEventsForCompany(eq(TOKEN), eq(COMPANY_ID), any())).thenReturn(List.of(
+                eventAt(1, "Israel", "Tel Aviv"),
+                eventAt(2, "Israel", "Haifa"),
+                eventAt(4, "Israel", "Tel Aviv"),   // duplicate city
+                eventAt(3, "USA", "New York")));
+
+        assertEquals(List.of("Haifa", "Tel Aviv"), presenter.cities(TOKEN, "Israel"));
+    }
+
+    @Test
+    void cities_nullCountry_isEmpty() {
+        assertTrue(presenter.cities(TOKEN, null).isEmpty());
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private static ProductionCompanyDTO company(int id) {
         return new ProductionCompanyDTO(id, "Company " + id, "desc", "ACTIVE", 1);
+    }
+
+    private static EventDetailDTO eventAt(int id, String country, String city) {
+        return new EventDetailDTO(String.valueOf(id), "E" + id, null, null, null,
+                new Location(country, city), String.valueOf(COMPANY_ID), "Company " + COMPANY_ID,
+                EventStatus.SCHEDULED, new ArrayList<>(), new ArrayList<>());
     }
 
     private static EventDetailDTO event(int id, String name) {

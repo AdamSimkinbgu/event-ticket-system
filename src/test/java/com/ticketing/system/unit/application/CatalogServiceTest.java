@@ -765,6 +765,79 @@ class CatalogServiceTest {
         assertEquals(3, catalogService.search(VALID_TOKEN, "show", 3).size());
     }
 
+    // -------------------------------------------------------------------------
+    // Browse filter options: onSaleCountries / onSaleCitiesInCountry
+    // -------------------------------------------------------------------------
+
+    @Test
+    void onSaleCountries_distinctSortedAndVisibleOnly() {
+        // Build mocks into locals BEFORE stubbing the repos — helper calls invoke when(...) themselves,
+        // which Mockito rejects if nested inside an ongoing thenReturn(...) stub.
+        Event e1 = locatedEvent(1, 10, "Israel", "Tel Aviv");
+        Event e2 = locatedEvent(2, 10, "Israel", "Haifa");
+        Event e3 = locatedEvent(3, 20, "USA", "New York");
+        ProductionCompany a = createMockCompany("A", 4.0);
+        ProductionCompany b = createMockCompany("B", 4.0);
+        when(mockEventRepository.searchONSALE(any())).thenReturn(List.of(e1, e2, e3));
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(a);
+        when(mockCompanyRepository.getCompanyById(20)).thenReturn(b);
+
+        assertEquals(List.of("Israel", "USA"), catalogService.onSaleCountries());
+    }
+
+    @Test
+    void onSaleCountries_excludesInactiveCompanyEvents() {
+        Event e1 = locatedEvent(1, 10, "Israel", "Tel Aviv");
+        Event e2 = locatedEvent(2, 20, "USA", "New York");
+        ProductionCompany active = createMockCompany("A", 4.0);
+        ProductionCompany inactive = mock(ProductionCompany.class);
+        when(inactive.getStatus()).thenReturn(CompanyStatus.INACTIVE);
+        when(mockEventRepository.searchONSALE(any())).thenReturn(List.of(e1, e2));
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(active);
+        when(mockCompanyRepository.getCompanyById(20)).thenReturn(inactive);
+
+        assertEquals(List.of("Israel"), catalogService.onSaleCountries());
+    }
+
+    @Test
+    void onSaleCountries_skipsEventsWithoutLocation() {
+        Event noLoc = mock(Event.class);
+        when(noLoc.getCompanyId()).thenReturn(10);
+        when(noLoc.getVenueMap()).thenReturn(null);
+        ProductionCompany a = createMockCompany("A", 4.0);
+        when(mockEventRepository.searchONSALE(any())).thenReturn(List.of(noLoc));
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(a);
+
+        assertTrue(catalogService.onSaleCountries().isEmpty());
+    }
+
+    @Test
+    void onSaleCitiesInCountry_filtersToCountryDistinctSorted() {
+        Event e1 = locatedEvent(1, 10, "Israel", "Tel Aviv");
+        Event e2 = locatedEvent(2, 10, "Israel", "Haifa");
+        Event e4 = locatedEvent(4, 10, "Israel", "Tel Aviv");   // duplicate city
+        Event e3 = locatedEvent(3, 20, "USA", "New York");
+        ProductionCompany a = createMockCompany("A", 4.0);
+        ProductionCompany b = createMockCompany("B", 4.0);
+        when(mockEventRepository.searchONSALE(any())).thenReturn(List.of(e1, e2, e4, e3));
+        when(mockCompanyRepository.getCompanyById(10)).thenReturn(a);
+        when(mockCompanyRepository.getCompanyById(20)).thenReturn(b);
+
+        assertEquals(List.of("Haifa", "Tel Aviv"), catalogService.onSaleCitiesInCountry("Israel"));
+    }
+
+    @Test
+    void onSaleCitiesInCountry_nullCountry_isEmpty() {
+        assertTrue(catalogService.onSaleCitiesInCountry(null).isEmpty());
+    }
+
+    private Event locatedEvent(int id, int companyId, String country, String city) {
+        Event e = mock(Event.class);
+        when(e.getCompanyId()).thenReturn(companyId);
+        when(e.getVenueMap()).thenReturn(new VenueMap(id, new Location(country, city), List.of()));
+        return e;
+    }
+
     private CatalogSearchFiltersDTO emptyFilters() {
         return new CatalogSearchFiltersDTO(
                 null, null, null, null, null, null, null, null, null, null, null, null, null);

@@ -64,10 +64,10 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     private static final String DATE_ANY    = CatalogFilterSupport.DATE_ANY;
 
     private static final List<String> CATEGORIES = CatalogFilterSupport.CATEGORIES;
-    private static final List<String> COUNTRIES  = CatalogFilterSupport.COUNTRIES;
 
     private static final List<String> SORTS = List.of(
-            "Date · soonest", "Date · latest", "Price · low to high", "Price · high to low", "Popularity");
+            "Date · soonest", "Price · low to high", "Price · high to low",
+            "Rating · high to low", "Rating · low to high");
 
     // ---- filter state ----
 
@@ -261,13 +261,16 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         customRangeRow.add(customFromPicker, customToPicker);
         customRangeRow.setVisible(false);
 
-        // Country → City (dependent selects)
-        countrySelect = new LkSelect(COUNTRY_ALL, COUNTRIES).label("Country");
+        // Country → City (dependent selects), both populated from events that actually exist.
+        countrySelect = new LkSelect(COUNTRY_ALL,
+                CatalogFilterSupport.countryOptions(presenter.countries())).label("Country");
         countrySelect.onChange(v -> {
             if (Objects.equals(filterCountry, v)) return;
             filterCountry = v;
             filterCity = CITY_ALL;
-            citySelect.setOptions(CatalogFilterSupport.cityOptionsFor(v));
+            citySelect.setOptions(COUNTRY_ALL.equals(v)
+                    ? List.of(CITY_ALL)
+                    : CatalogFilterSupport.cityOptions(presenter.cities(v)));
             citySelect.enabled(!COUNTRY_ALL.equals(v));
             runSearch();
         });
@@ -289,9 +292,9 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         });
 
         LkCol col = new LkCol().gap(16);
-        col.add(categorySelect, eventNameWrap, keywordsWrap, artistWrap, dateRangeField, customRangeRow,
+        col.add(sortSelect, categorySelect, eventNameWrap, keywordsWrap, artistWrap, dateRangeField, customRangeRow,
                 buildPriceRange(), buildEventRatingRange(), buildCompanyRatingRange(),
-                countrySelect, citySelect, sortSelect);
+                countrySelect, citySelect);
         card.add(col);
         return card;
     }
@@ -596,14 +599,14 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
     private static Comparator<EventRow> comparatorFor(String sort) {
         Comparator<EventRow> bySoonest = Comparator.comparing(EventRow::startsAt,
                 Comparator.nullsLast(Comparator.naturalOrder()));
-        Comparator<EventRow> byLatest = Comparator.comparing(EventRow::startsAt,
-                Comparator.nullsLast(Comparator.reverseOrder()));
         return switch (sort) {
-            case "Date · latest"       -> byLatest;
-            case "Price · low to high" -> Comparator.comparingInt(EventRow::priceCents);
-            case "Price · high to low" -> Comparator.comparingInt(EventRow::priceCents).reversed();
-            case "Popularity"          -> Comparator.comparing(EventRow::id);
-            default                    -> bySoonest;
+            case "Price · low to high"  -> Comparator.comparingInt(EventRow::priceCents);
+            case "Price · high to low"  -> Comparator.comparingInt(EventRow::priceCents).reversed();
+            case "Rating · high to low" -> Comparator.comparing(EventRow::rating,
+                    Comparator.nullsLast(Comparator.reverseOrder()));
+            case "Rating · low to high" -> Comparator.comparing(EventRow::rating,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            default                     -> bySoonest;
         };
     }
 

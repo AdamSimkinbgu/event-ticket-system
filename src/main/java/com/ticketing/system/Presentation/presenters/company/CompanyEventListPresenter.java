@@ -44,6 +44,47 @@ public class CompanyEventListPresenter {
         }
     }
 
+    // ---- filter options (owner scope): distinct country/city of THIS company's own events ----
+
+    /** This company's events (all statuses), unfiltered; empty when there's no token / no owned company. */
+    private List<EventDetailDTO> ownedCompanyEvents(String token) {
+        if (token == null) return List.of();
+        List<ProductionCompanyDTO> owned = companyManagementService.findOwnedCompanies(token);
+        if (owned.isEmpty()) return List.of();
+        int companyId = owned.get(0).companyId();
+        return eventService.listEventsForCompany(token, companyId, CatalogSearchFiltersDTO.empty());
+    }
+
+    /** Distinct countries this company has events in, sorted; empty list on any failure. */
+    public List<String> countries(String token) {
+        try {
+            return ownedCompanyEvents(token).stream()
+                    .map(ev -> ev.location() == null ? null : ev.location().country())
+                    .filter(c -> c != null && !c.isBlank())
+                    .distinct()
+                    .sorted(String.CASE_INSENSITIVE_ORDER)
+                    .toList();
+        } catch (RuntimeException e) {
+            return List.of();
+        }
+    }
+
+    /** Distinct cities this company has events in for {@code country}, sorted; empty list on any failure. */
+    public List<String> cities(String token, String country) {
+        if (country == null) return List.of();
+        try {
+            return ownedCompanyEvents(token).stream()
+                    .filter(ev -> ev.location() != null && country.equalsIgnoreCase(ev.location().country()))
+                    .map(ev -> ev.location().city())
+                    .filter(c -> c != null && !c.isBlank())
+                    .distinct()
+                    .sorted(String.CASE_INSENSITIVE_ORDER)
+                    .toList();
+        } catch (RuntimeException e) {
+            return List.of();
+        }
+    }
+
     public ActionOutcome cancelEvent(String token, int eventId) {
         if (token == null) return new ActionOutcome.NotAuthenticated();
         try {

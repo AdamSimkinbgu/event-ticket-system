@@ -91,6 +91,33 @@ public class CatalogService {
                 .toList();
     }
 
+    //* Browse filters: distinct countries that currently have publicly-visible ON_SALE events, sorted.
+    //* Visibility-gated exactly like searchGlobal so the dropdown never lists a country whose only ON_SALE
+    //* events belong to an inactive company (which Browse would then show zero results for). No credential —
+    //* the browse page is anonymous, like featured() above.
+    public List<String> onSaleCountries() {
+        return eventRepository.searchONSALE(CatalogSearchFiltersDTO.empty()).stream()
+                .filter(e -> isCompanyPubliclyVisible(activeCompanyOrNull(e.getCompanyId())))
+                .map(this::eventCountry)
+                .filter(c -> c != null && !c.isBlank())
+                .distinct()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+    }
+
+    //* Browse filters: distinct cities of publicly-visible ON_SALE events in the chosen country, sorted.
+    public List<String> onSaleCitiesInCountry(String country) {
+        if (country == null) return List.of();
+        return eventRepository.searchONSALE(CatalogSearchFiltersDTO.empty()).stream()
+                .filter(e -> isCompanyPubliclyVisible(activeCompanyOrNull(e.getCompanyId())))
+                .filter(e -> country.equalsIgnoreCase(eventCountry(e)))
+                .map(this::eventCity)
+                .filter(c -> c != null && !c.isBlank())
+                .distinct()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+    }
+
 
 
 
@@ -316,6 +343,17 @@ public class CatalogService {
             return null;
         }
         return event.getVenueMap().getLocation().toString();
+    }
+
+    // *HELPER METHOD* — an event's country / city, or null when it has no bound venue/location.
+    private String eventCountry(Event event) {
+        return (event.getVenueMap() != null && event.getVenueMap().getLocation() != null)
+                ? event.getVenueMap().getLocation().country() : null;
+    }
+
+    private String eventCity(Event event) {
+        return (event.getVenueMap() != null && event.getVenueMap().getLocation() != null)
+                ? event.getVenueMap().getLocation().city() : null;
     }
 
     
