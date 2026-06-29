@@ -119,6 +119,11 @@ public class JpaEventRepository implements IEventRepository {
     }
 
     @Override
+    public List<Event> findAll() {
+        return data.findAll();
+    }
+
+    @Override
     public List<Event> searchAll(CatalogSearchFiltersDTO filters) {
         return data.findAll(EventSearchSpecification.from(filters));
     }
