@@ -3,13 +3,11 @@ package com.ticketing.system.Presentation.views.admin;
 import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Presentation.components.Money;
-import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkFilterChip;
 import com.ticketing.system.Presentation.components.kit.LkGrid;
-import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStat;
@@ -38,25 +36,47 @@ public class CompanySalesView extends LkPage {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("d MMM yyyy");
 
-    public CompanySalesView(CompanySalesPresenter presenter) {
-        title("Company Sales History");
-        actions(new LkBtn("Export CSV").variant(LkBtn.Variant.secondary)
-            .icon(new LkIcon("chart", 15))
-            .onClick(e -> Toasts.success("Export CSV — no streaming endpoint yet.")));
+    private final CompanySalesPresenter presenter;
+    // Single body slot, rebuilt on every (re)load so the Refresh button can surface a
+    // freshly-completed sale without a full page reload. Styled like the kit's .lk-page
+    // body (flex column, 20px gap) because it replaces what used to be direct page children.
+    private final Div content = new Div();
 
+    public CompanySalesView(CompanySalesPresenter presenter) {
+        this.presenter = presenter;
+
+        title("Company Sales History");
+        actions(new LkBtn("Refresh").variant(LkBtn.Variant.secondary)
+            .onClick(e -> reload()));
+
+        content.getStyle().set("display", "flex").set("flex-direction", "column").set("gap", "20px");
+        add(content);
+
+        reload();
+    }
+
+    /** (Re)builds the report into the content slot — on open and on every Refresh click. */
+    private void reload() {
+        content.removeAll();
         switch (presenter.load(AuthSession.token())) {
             case CompanySalesPresenter.Outcome.Success ok -> {
                 subtitle(ok.companyName() + "  ·  immutable order receipts.");
-                add(buildFilters());
-                add(buildStats(ok.stats(), ok.sales()));
-                add(buildGridCard(ok.sales()));
+                content.add(buildFilters());
+                content.add(buildStats(ok.stats(), ok.sales()));
+                content.add(buildGridCard(ok.sales()));
             }
-            case CompanySalesPresenter.Outcome.NotAuthenticated ignored ->
-                add(Lk.muted("Your session has expired — please sign in again."));
-            case CompanySalesPresenter.Outcome.NoCompany ignored ->
-                add(Lk.muted("You don't own a company yet."));
-            case CompanySalesPresenter.Outcome.Failure fail ->
-                add(Lk.muted("Could not load sales: " + fail.reason()));
+            case CompanySalesPresenter.Outcome.NotAuthenticated ignored -> {
+                subtitle("");
+                content.add(Lk.muted("Your session has expired — please sign in again."));
+            }
+            case CompanySalesPresenter.Outcome.NoCompany ignored -> {
+                subtitle("");
+                content.add(Lk.muted("You don't own a company yet."));
+            }
+            case CompanySalesPresenter.Outcome.Failure fail -> {
+                subtitle("");
+                content.add(Lk.muted("Could not load sales: " + fail.reason()));
+            }
         }
     }
 
@@ -65,9 +85,7 @@ public class CompanySalesView extends LkPage {
         row.add(
             new LkFilterChip("Date range",
                 List.of("Last 7 days", "Last 30 days", "This quarter", "This year", "All time"),
-                true, List.of("Last 30 days")),
-            new LkFilterChip("Event",
-                List.of("All events"), false, List.of())
+                true, List.of("Last 30 days"))
         );
         return row;
     }
