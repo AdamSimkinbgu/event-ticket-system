@@ -120,6 +120,11 @@ public class MemoryEventRepository implements IEventRepository {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public List<Event> findAll() {
+        return events.values().stream().collect(Collectors.toList());
+    }
+
 
 
 

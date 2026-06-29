@@ -40,4 +40,7 @@ public interface IActiveOrderRepository extends IRepository<ActiveOrder, String>
 
     /** Sweep query for UC-2 / Phase 5: returns carts with any expired items. */
     List<ActiveOrder> findExpired();
+
+    // #372 — full enumeration for the boot-time integrity scan (<=1 active order per buyer/event).
+    List<ActiveOrder> findAll();
 }
