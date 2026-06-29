@@ -321,7 +321,7 @@ public class AuthenticationService {
      * — disjoint-pool rule), applies the shared lock-after-N policy, audit-logs every failure, and
      * issues an ADMIN-role JWT so the backend admin gate can authorize it.
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthTokenDTO signInAsAdmin(String username, String rawPassword) {
         String lockKey = lockoutKey("a", username);
 

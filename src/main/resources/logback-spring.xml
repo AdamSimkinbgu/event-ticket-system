@@ -56,6 +56,19 @@
         <logger name="com.ticketing.system.Infrastructure.logging" level="DEBUG"/>
     </springProfile>
 
+    <!-- JPA run profiles (supabase / plain `jpa` deploy) — but NOT dev, which has its own block
+         above (dev activates jpa via profiles.group, so the `& !dev` avoids double-logging). Without
+         this, a supabase/jpa run matches no <springProfile> and gets NO appenders at all (silent). -->
+    <springProfile name="jpa &amp; !dev">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+        <logger name="com.ticketing.system" level="INFO"/>
+        <logger name="com.ticketing.system.Core.Domain" level="WARN"/>
+        <logger name="com.ticketing.system.Infrastructure.logging" level="INFO"/>
+    </springProfile>
+
     <!-- Test profile: DEBUG for our code, console only. -->
     <springProfile name="test">
         <root level="WARN">

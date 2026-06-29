@@ -18,6 +18,9 @@ spring:
   profiles:
     group:
       dev: jpa
+      # Running against Supabase: `supabase` activates the JPA stack + the SSL/pooler datasource
+      # (see application-supabase.yml). Run with SPRING_PROFILES_ACTIVE=supabase + the DB_* env vars.
+      supabase: jpa
 
 # JWT signing secret (consumed by Infrastructure/security/JwtSessionManager — UC-12).
 # In production the secret MUST be supplied via environment variable, never committed.

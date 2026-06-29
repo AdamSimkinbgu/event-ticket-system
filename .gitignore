@@ -65,3 +65,8 @@ logs/
 
 # settings
 .settings/
+
+# Local Supabase run script — holds the DB password, never commit
+run-supabase.sh
+.env
+.env.*
