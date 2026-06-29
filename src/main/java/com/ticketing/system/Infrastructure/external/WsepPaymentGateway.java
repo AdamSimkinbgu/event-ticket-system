@@ -12,6 +12,7 @@ import com.ticketing.system.Core.Application.dto.PaymentResultDTO;
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
+import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayUnreachableException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
 
 import lombok.extern.slf4j.Slf4j;
@@ -84,10 +85,14 @@ public class WsepPaymentGateway implements IPaymentGateway {
         try {
             body = http.post(form);
         } catch (WsepCommunicationException e) {
-            throw new PaymentGatewayException("payment gateway unreachable: " + e.getMessage());
+            // No answer from WSEP (timeout / connection error). This is NOT a decline — the charge
+            // never reached a verdict — so it gets the unreachable subtype, which the Presentation
+            // layer surfaces as a generic error (no gateway wording leaked).
+            throw new PaymentGatewayUnreachableException("payment gateway unreachable: " + e.getMessage(), e);
         }
 
         if (FAILURE.equals(body)) {
+            // The ONLY real decline: WSEP explicitly replied "-1".
             log.debug("wsep pay declined ({} ms)", msSince(start));
             throw new PaymentGatewayException("payment declined by gateway");
         }
@@ -134,15 +139,18 @@ public class WsepPaymentGateway implements IPaymentGateway {
                 List.of());
     }
 
+    // Only "-1" is a real decline (handled by the caller). Any other non-positive or unparseable
+    // body is a malformed/unexpected response, not a verdict — treat it as unreachable/generic so
+    // it never masquerades as "Payment declined".
     private int parsePositiveInt(String body, String action) {
         try {
             int value = Integer.parseInt(body == null ? "" : body.trim());
             if (value <= 0) {
-                throw new PaymentGatewayException("wsep " + action + " returned non-positive value: " + value);
+                throw new PaymentGatewayUnreachableException("wsep " + action + " returned non-positive value: " + value);
             }
             return value;
         } catch (NumberFormatException e) {
-            throw new PaymentGatewayException("wsep " + action + " returned an unparseable response");
+            throw new PaymentGatewayUnreachableException("wsep " + action + " returned an unparseable response");
         }
     }
 

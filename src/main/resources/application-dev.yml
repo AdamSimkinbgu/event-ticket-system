@@ -28,3 +28,9 @@ seed:
   scenario: classpath:scenarios/demo.scenario
   mode: idempotent
   fail-fast: false
+
+# WSEP external-systems client. Prod/eval keep the 20s default (application.yml is
+# untouched); dev shortens the per-request timeout so the "gateway unreachable" demo
+# (e.g. CVV 986, which never answers) surfaces the generic error in ~8s instead of ~20s.
+wsep:
+  request-timeout-seconds: 8

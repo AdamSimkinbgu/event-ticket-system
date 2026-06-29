@@ -10,6 +10,7 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.session.OrderSession;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.vaadin.flow.component.Component;
@@ -21,7 +22,6 @@ import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
-import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
 import java.util.LinkedHashMap;
@@ -36,13 +36,10 @@ public class OrderConfirmationView extends LkPage implements BeforeEnterObserver
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
-        VaadinSession s = VaadinSession.getCurrent();
-        if (s == null) {
-            result = null;
-        } else {
-            result = (CheckoutResultDTO) s.getAttribute("checkout.result");
-            s.setAttribute("checkout.result", null);
-        }
+        // Read-once: grab the result handed over by CheckoutView, then clear it so a
+        // refresh / re-navigation reroutes to Browse instead of re-showing the receipt.
+        result = OrderSession.result();
+        OrderSession.clear();
         if (result == null) {
             event.rerouteTo(BrowseEventsView.class);
             return;
