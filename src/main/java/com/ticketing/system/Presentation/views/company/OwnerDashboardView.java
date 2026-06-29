@@ -122,13 +122,23 @@ public class OwnerDashboardView extends LkPage {
             inquiries.delta("needs reply", LkStat.Tone.warn);
         }
 
+        // Company rating is derived from the average of this company's events' ratings.
+        LkStat rating = new LkStat("Rating",
+            stats.rating() == null ? "—" : "★ " + ratingText(stats.rating()));
+
         row.add(
+            rating,
             new LkStat("Live events",        String.valueOf(stats.activeEvents())),
             new LkStat("Tickets sold · 30d",  String.format("%,d", stats.ticketsSold30d())),
             new LkStat("Revenue · 30d",       "$" + String.format("%,.0f", stats.revenue30d())),
             inquiries
         );
         return row;
+    }
+
+    /** Rating shown without a trailing ".0" (e.g. 4.5 → "4.5", 4.0 → "4"). */
+    private static String ratingText(double rating) {
+        return rating == Math.floor(rating) ? String.valueOf((int) rating) : String.valueOf(rating);
     }
 
     /**

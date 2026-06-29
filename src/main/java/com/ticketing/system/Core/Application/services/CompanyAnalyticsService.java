@@ -93,9 +93,12 @@ public class CompanyAnalyticsService {
                 .filter(c -> c.getType() == ConversationType.INQUIRY && !c.isClosed())
                 .count();
 
-        log.debug("Dashboard for company {}: {} active events, {} tickets/30d, {} revenue/30d, {} open inquiries",
-                companyId, activeEvents, ticketsSold, revenue, openInquiries);
-        return new CompanyDashboardDTO(activeEvents, ticketsSold, revenue, openInquiries);
+        // Company rating is derived: the mean of this company's events' ratings (null if none rated).
+        Double rating = CompanyRatings.fromEvents(eventRepository.findByCompanyId(companyId));
+
+        log.debug("Dashboard for company {}: {} active events, {} tickets/30d, {} revenue/30d, {} open inquiries, rating {}",
+                companyId, activeEvents, ticketsSold, revenue, openInquiries, rating);
+        return new CompanyDashboardDTO(activeEvents, ticketsSold, revenue, openInquiries, rating);
     }
 
     public PurchaseHistoryDTO salesHistory(int companyId) {

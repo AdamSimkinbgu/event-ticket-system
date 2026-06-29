@@ -30,7 +30,8 @@ public class EventMapper {
                 event.getShowDates().stream().map(sd -> new ShowDateDTO(sd.getStartTime(), sd.getEndTime())).toList(),
                 minPrice,
                 maxPrice,
-                event.getStatus() == EventStatus.SOLD_OUT);
+                event.getStatus() == EventStatus.SOLD_OUT,
+                event.getArtistsNames());
     }
 
 

@@ -44,6 +44,8 @@ public interface IEventRepository extends IRepository<Event, Integer> {
     List<Event> searchAll(CatalogSearchFiltersDTO filters);
     // UC-7 — search across all events that are ON_SALE (filters from DTO).
     List<Event> searchONSALE(CatalogSearchFiltersDTO filters);
+    // Owner event list — a single company's events (all statuses), narrowed by the DTO filters.
+    List<Event> searchByCompanyAll(int companyId, CatalogSearchFiltersDTO filters);
     
 
     // Permanently removes a CANCELED event from the store.

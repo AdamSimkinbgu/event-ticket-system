@@ -1,24 +1,49 @@
 package com.ticketing.system.unit.domain;
 
-import org.junit.jupiter.api.Disabled;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.time.LocalDateTime;
+
 import org.junit.jupiter.api.Test;
 
+import com.ticketing.system.Core.Domain.notifications.Notification;
+import com.ticketing.system.Core.Domain.notifications.NotificationStatus;
+import com.ticketing.system.Core.Domain.notifications.NotificationType;
 import com.ticketing.system.support.BaseDomainTest;
 
 // Unit tests for the Notification aggregate (UC-35/36/37).
-// Extends BaseDomainTest so future (currently @Disabled) tests get automatic
-// invariant verification via track(aggregate).
+// Extends BaseDomainTest so each tracked aggregate gets automatic
+// invariant verification via track(aggregate) after the test runs.
 class NotificationTest extends BaseDomainTest {
 
-    @Test
-    @Disabled("V1: markSent transitions PENDING -> SENT (UC-37)")
-    void givenPendingNotification_whenMarkSent_thenStatusSent() {}
+    /** A freshly-built PENDING notification, tracked for post-test invariant checks. */
+    private Notification pending() {
+        return track(new Notification(
+                "n1", 7, NotificationType.PURCHASE_CONFIRMED,
+                NotificationStatus.PENDING, "Your purchase is confirmed",
+                LocalDateTime.now()));
+    }
 
     @Test
-    @Disabled("V1: markRead transitions SENT -> READ")
-    void givenSentNotification_whenMarkRead_thenStatusRead() {}
+    void givenPendingNotification_whenMarkSent_thenStatusSent() {
+        Notification n = pending();
+        n.markSent();
+        assertTrue(n.isSent());
+    }
 
     @Test
-    @Disabled("V1: markRead from PENDING is invalid")
-    void givenPendingNotification_whenMarkRead_thenThrows() {}
+    void givenSentNotification_whenMarkRead_thenStatusRead() {
+        Notification n = pending();
+        n.markSent();
+        n.markRead();
+        assertTrue(n.isRead());
+    }
+
+    @Test
+    void givenPendingNotification_whenMarkRead_thenThrows() {
+        Notification n = pending();
+        // markRead requires SENT; from PENDING it must throw before mutating state.
+        assertThrows(IllegalStateException.class, n::markRead);
+    }
 }

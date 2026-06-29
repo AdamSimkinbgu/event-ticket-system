@@ -37,7 +37,7 @@ class OwnerDashboardPresenterTest {
     }
 
     private static CompanyDashboardDTO stats() {
-        return new CompanyDashboardDTO(1, 2, 3.0, 4);
+        return new CompanyDashboardDTO(1, 2, 3.0, 4, 4.5);
     }
 
     @Test

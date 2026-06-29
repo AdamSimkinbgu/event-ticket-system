@@ -63,7 +63,7 @@ class EventManagementPresenterTest {
     private EventManagementPresenter.CreateOutcome createWith(Integer preferredCompanyId,
                                                              LocalDateTime starts, LocalDateTime ends) {
         return presenter.create(TOKEN, preferredCompanyId, "Gala Night", "A great show",
-                EventCategory.COMEDY.name(), "Israel", "Tel Aviv", starts, ends, List.of("Headliner"));
+                EventCategory.COMEDY.name(), "Israel", "Tel Aviv", starts, ends, List.of("Headliner"), 4.5);
     }
 
     @Test
@@ -113,7 +113,7 @@ class EventManagementPresenterTest {
     void create_nullToken_returnsNotAuthenticated() {
         EventManagementPresenter.CreateOutcome outcome = presenter.create(null, 1, "Gala", "d",
                 EventCategory.COMEDY.name(), "Israel", "Tel Aviv", futureStart(), futureEnd(),
-                List.of("Headliner"));
+                List.of("Headliner"), 4.5);
 
         assertInstanceOf(EventManagementPresenter.CreateOutcome.NotAuthenticated.class, outcome);
         verifyNoInteractions(companyService, eventService);
@@ -133,7 +133,29 @@ class EventManagementPresenterTest {
         // Required inputs are validated before any service call, so a null category maps to
         // InvalidInput (not a leaked NPE → Failure) and touches neither service.
         EventManagementPresenter.CreateOutcome outcome = presenter.create(TOKEN, 1, "Gala", "desc",
-                null, "Israel", "Tel Aviv", futureStart(), futureEnd(), List.of("Headliner"));
+                null, "Israel", "Tel Aviv", futureStart(), futureEnd(), List.of("Headliner"), 4.5);
+
+        assertInstanceOf(EventManagementPresenter.CreateOutcome.InvalidInput.class, outcome);
+        verifyNoInteractions(companyService, eventService);
+    }
+
+    @Test
+    void create_ratingOutOfRange_returnsInvalidInput() {
+        // Rating is validated up front (0–5), so a bad value maps to InvalidInput and touches no service.
+        EventManagementPresenter.CreateOutcome outcome = presenter.create(TOKEN, 1, "Gala", "desc",
+                EventCategory.COMEDY.name(), "Israel", "Tel Aviv", futureStart(), futureEnd(),
+                List.of("Headliner"), 6.0);
+
+        assertInstanceOf(EventManagementPresenter.CreateOutcome.InvalidInput.class, outcome);
+        verifyNoInteractions(companyService, eventService);
+    }
+
+    @Test
+    void create_nullRating_returnsInvalidInput() {
+        // Rating is required — a null rating maps to InvalidInput and touches no service.
+        EventManagementPresenter.CreateOutcome outcome = presenter.create(TOKEN, 1, "Gala", "desc",
+                EventCategory.COMEDY.name(), "Israel", "Tel Aviv", futureStart(), futureEnd(),
+                List.of("Headliner"), null);
 
         assertInstanceOf(EventManagementPresenter.CreateOutcome.InvalidInput.class, outcome);
         verifyNoInteractions(companyService, eventService);

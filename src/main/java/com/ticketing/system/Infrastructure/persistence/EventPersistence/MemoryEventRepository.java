@@ -143,6 +143,15 @@ public class MemoryEventRepository implements IEventRepository {
                 .collect(Collectors.toList());
     }
 
+    // Owner event list: a single company's events (all statuses) narrowed by the same filters.
+    @Override
+    public List<Event> searchByCompanyAll(int companyId, CatalogSearchFiltersDTO filters) {
+        return events.values().stream()
+                .filter(e -> e.getCompanyId() == companyId)
+                .filter(e -> matchesSearch(e, filters))
+                .collect(Collectors.toList());
+    }
+
     /*
      * A helper method to apply the various search filters to an event and return a boolean indicating
      * whether the event matches the filters; used in the search() implementation above.

@@ -1,5 +1,6 @@
 package com.ticketing.system.unit.presentation;
 
+import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -43,7 +45,7 @@ class CompanyEventListPresenterTest {
     @Test
     void load_nullToken_returnsNotAuthenticated() {
         assertInstanceOf(CompanyEventListPresenter.Outcome.NotAuthenticated.class,
-                presenter.load(null));
+                presenter.load(null, CatalogSearchFiltersDTO.empty()));
         verifyNoInteractions(eventService, companyService);
     }
 
@@ -52,7 +54,7 @@ class CompanyEventListPresenterTest {
         when(companyService.findOwnedCompanies(TOKEN)).thenThrow(new InvalidTokenException("bad"));
 
         assertInstanceOf(CompanyEventListPresenter.Outcome.NotAuthenticated.class,
-                presenter.load(TOKEN));
+                presenter.load(TOKEN, CatalogSearchFiltersDTO.empty()));
     }
 
     @Test
@@ -60,7 +62,7 @@ class CompanyEventListPresenterTest {
         when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of());
 
         assertInstanceOf(CompanyEventListPresenter.Outcome.NoCompany.class,
-                presenter.load(TOKEN));
+                presenter.load(TOKEN, CatalogSearchFiltersDTO.empty()));
         verifyNoInteractions(eventService);
     }
 
@@ -68,23 +70,37 @@ class CompanyEventListPresenterTest {
     void load_success_returnsEventsForFirstOwnedCompany() {
         when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
         List<EventDetailDTO> events = List.of(event(EVENT_ID, "Gala Night"));
-        when(eventService.listEventsForCompany(TOKEN, COMPANY_ID)).thenReturn(events);
+        when(eventService.listEventsForCompany(eq(TOKEN), eq(COMPANY_ID), any())).thenReturn(events);
 
         CompanyEventListPresenter.Outcome.Success ok =
-                assertInstanceOf(CompanyEventListPresenter.Outcome.Success.class, presenter.load(TOKEN));
+                assertInstanceOf(CompanyEventListPresenter.Outcome.Success.class,
+                        presenter.load(TOKEN, CatalogSearchFiltersDTO.empty()));
 
         assertEquals(1, ok.events().size());
         assertEquals("Gala Night", ok.events().get(0).name());
     }
 
     @Test
+    void load_passesFiltersThroughToService() {
+        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
+        CatalogSearchFiltersDTO filters = new CatalogSearchFiltersDTO(
+                "Othello", null, null, null, null, null, null, null, null, null, null, null, null);
+        when(eventService.listEventsForCompany(eq(TOKEN), eq(COMPANY_ID), eq(filters))).thenReturn(List.of());
+
+        presenter.load(TOKEN, filters);
+
+        verify(eventService).listEventsForCompany(eq(TOKEN), eq(COMPANY_ID), eq(filters));
+    }
+
+    @Test
     void load_serviceThrowsRuntime_returnsFailure() {
         when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
-        when(eventService.listEventsForCompany(anyString(), anyInt()))
+        when(eventService.listEventsForCompany(anyString(), anyInt(), any()))
                 .thenThrow(new RuntimeException("db error"));
 
         CompanyEventListPresenter.Outcome.Failure fail =
-                assertInstanceOf(CompanyEventListPresenter.Outcome.Failure.class, presenter.load(TOKEN));
+                assertInstanceOf(CompanyEventListPresenter.Outcome.Failure.class,
+                        presenter.load(TOKEN, CatalogSearchFiltersDTO.empty()));
 
         assertEquals("db error", fail.reason());
     }

@@ -57,6 +57,7 @@ class EventDetailsPresenterTest {
         EventDetailDTO detail = detail();
         when(catalogService.getEventDetail(CRED, EVENT_ID)).thenReturn(detail);
         when(catalogService.getEventVenueMap(CRED, EVENT_ID)).thenReturn(venueMap());
+        when(catalogService.companyRating(10)).thenReturn(4.7); // detail()'s companyId is "10"
 
         EventDetailsPresenter.Outcome outcome = presenter.load(CRED, EVENT_ID);
 
@@ -66,6 +67,7 @@ class EventDetailsPresenterTest {
         assertEquals(1, ok.zones().size());
         assertEquals(4, ok.gridRows());
         assertEquals(4, ok.gridCols());
+        assertEquals(4.7, ok.companyRating(), 0.0001);
     }
 
     @Test

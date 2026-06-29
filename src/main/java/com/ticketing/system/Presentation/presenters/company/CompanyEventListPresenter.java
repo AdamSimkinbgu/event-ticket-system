@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
@@ -25,13 +26,16 @@ public class CompanyEventListPresenter {
         this.companyManagementService = companyManagementService;
     }
 
-    public Outcome load(String token) {
+    public Outcome load(String token, CatalogSearchFiltersDTO filters) {
         if (token == null) return new Outcome.NotAuthenticated();
         try {
             List<ProductionCompanyDTO> owned = companyManagementService.findOwnedCompanies(token);
             if (owned.isEmpty()) return new Outcome.NoCompany();
             int companyId = owned.get(0).companyId();
-            List<EventDetailDTO> events = eventService.listEventsForCompany(token, companyId);
+            // Null filters means "unfiltered" — substitute an empty filter set so the service's
+            // filters.withoutCompanyRating() call can't NPE into a generic Failure.
+            CatalogSearchFiltersDTO effectiveFilters = filters == null ? CatalogSearchFiltersDTO.empty() : filters;
+            List<EventDetailDTO> events = eventService.listEventsForCompany(token, companyId, effectiveFilters);
             return new Outcome.Success(events);
         } catch (InvalidTokenException e) {
             return new Outcome.NotAuthenticated();

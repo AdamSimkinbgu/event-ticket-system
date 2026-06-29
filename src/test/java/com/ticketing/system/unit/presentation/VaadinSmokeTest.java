@@ -8,6 +8,7 @@ import com.ticketing.system.Presentation.components.kit.LkConfirm;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkSearchPanel;
 import com.ticketing.system.Presentation.components.kit.LkSideNav;
+import com.ticketing.system.Presentation.components.kit.LkTextRows;
 import com.ticketing.system.Presentation.components.venue.VkQuantitySelector;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatLegend;
@@ -325,7 +326,7 @@ class VaadinSmokeTest {
         MyCompanyDTO company = new MyCompanyDTO(1, "Acme", "Founder");
         when(presenter.loadFor(any(), any())).thenReturn(
             new OwnerDashboardPresenter.Outcome.Success(
-                List.of(company), company, new CompanyDashboardDTO(0, 0, 0.0, 0)));
+                List.of(company), company, new CompanyDashboardDTO(0, 0, 0.0, 0, 4.5)));
         assertDoesNotThrow(() -> new OwnerDashboardView(presenter),
             "OwnerDashboardView failed to construct");
     }
@@ -483,6 +484,12 @@ class VaadinSmokeTest {
         assertDoesNotThrow(() -> new LkBtn("Sign in"),    "LkBtn failed");
         assertDoesNotThrow(() -> new LkCard("Card"),      "LkCard failed");
         assertDoesNotThrow(() -> new LkBadge("OK"),       "LkBadge failed");
+        // Repeatable add-row text input (event-creation Artists field).
+        assertDoesNotThrow(() -> {
+            LkTextRows rows = new LkTextRows("Artists", "+ Add artist").placeholder("e.g. The Beatles");
+            rows.setValues(List.of("The Beatles", "Pink Floyd"));
+            rows.readOnly(true);
+        }, "LkTextRows failed");
         // Live top-bar search panel (#281) — debounced input + search-fn callback, no DI needed.
         assertDoesNotThrow(() -> new LkSearchPanel(List.of("Coldplay"), q -> List.of()),
             "live LkSearchPanel failed");

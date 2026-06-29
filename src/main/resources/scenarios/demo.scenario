@@ -32,9 +32,9 @@ confirm bob live
 open-company carol habima "Habima Theatre" "Israel's national theatre"
 
 # --- events (published, on sale) ---
-add-event alice live   coldplay seated:3x8@220 seated:4x10@140 standing:250@90 name="Coldplay" category=CONCERT days=20 publish=true
-add-event alice live   beyonce  standing:200@320 standing:500@180             name="Beyonce"  category=CONCERT days=35 publish=true
-add-event carol habima othello  seated:4x10@200 seated:3x10@130               name="Othello"  category=THEATER days=14 publish=true
+add-event alice live   coldplay seated:3x8@220 seated:4x10@140 standing:250@90 name="Coldplay" category=CONCERT days=20 rating=4.8 publish=true
+add-event alice live   beyonce  standing:200@320 standing:500@180             name="Beyonce"  category=CONCERT days=35 rating=4.9 publish=true
+add-event carol habima othello  seated:4x10@200 seated:3x10@130               name="Othello"  category=THEATER days=14 rating=4.6 publish=true
 
 # --- purchases: member standing, member seated, and a guest ---
 reserve carol coldplay standing qty=2
@@ -48,20 +48,20 @@ checkout g1 email=g1@guest.demo.test age=27
 reserve erin coldplay standing qty=2
 
 # --- sold-out: a one-zone event bought out entirely, then asserted SOLD_OUT ---
-add-event alice live indie standing:6@80 name="Indie Night" category=CONCERT days=25 publish=true
+add-event alice live indie standing:6@80 name="Indie Night" category=CONCERT days=25 rating=4.3 publish=true
 reserve dave indie standing qty=6
 checkout dave
 assert-status indie SOLD_OUT by=alice
 
 # --- cancellation + refund: a buyer, then cancel, then asserted CANCELED ---
-add-event carol habima gala standing:50@150 name="Postponed Gala" category=OTHER days=30 publish=true
+add-event carol habima gala standing:50@150 name="Postponed Gala" category=OTHER days=30 rating=4.0 publish=true
 reserve carol gala standing qty=2
 checkout carol
 cancel-event carol gala
 assert-status gala CANCELED by=carol
 
 # --- negative check: reserving on an unpublished (SCHEDULED) event must fail ---
-add-event alice live draft standing:100@100 name="Not On Sale Yet" days=40
+add-event alice live draft standing:100@100 name="Not On Sale Yet" days=40 rating=4.2
 expect-error reserve carol draft standing qty=1
 
 # --- messaging (centralized Conversation aggregate) ---

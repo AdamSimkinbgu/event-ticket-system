@@ -67,7 +67,8 @@ public class EventManagementPresenter {
      */
     public CreateOutcome create(String token, Integer preferredCompanyId, String name,
                                 String description, String categoryName, String country, String city,
-                                LocalDateTime starts, LocalDateTime ends, List<String> artists) {
+                                LocalDateTime starts, LocalDateTime ends, List<String> artists,
+                                Double rating) {
         if (token == null) return new CreateOutcome.NotAuthenticated();
 
         // Validate required inputs up front so bad/missing data surfaces as InvalidInput rather than
@@ -80,6 +81,11 @@ public class EventManagementPresenter {
                                    return new CreateOutcome.InvalidInput("A start and an end time are required.");
         if (artists == null || artists.isEmpty())
                                    return new CreateOutcome.InvalidInput("At least one artist is required.");
+        if (rating == null)        return new CreateOutcome.InvalidInput("A rating (0–5) is required.");
+        // Double.isFinite guards against NaN/Infinity, for which `< 0`/`> 5` are both false and would
+        // otherwise let an invalid rating slip past the range check into the domain.
+        if (!Double.isFinite(rating) || rating < 0 || rating > 5)
+                                   return new CreateOutcome.InvalidInput("Rating must be between 0 and 5.");
 
         try {
             Integer companyId = resolveCompanyId(token, preferredCompanyId);
@@ -91,7 +97,7 @@ public class EventManagementPresenter {
                 description,
                 artists,
                 EventCategory.valueOf(categoryName),
-                null,                                   // rating — set later
+                rating,                                 // required 0–5 rating set by the organizer
                 new Location(country, city),
                 List.of(new ShowDate(starts, ends)),
                 null);                                  // purchase policy — inherits company policy

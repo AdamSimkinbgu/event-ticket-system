@@ -1,5 +1,6 @@
 package com.ticketing.system.Presentation.layouts;
 
+import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Presentation.components.NotificationBellComponent;
 import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
@@ -17,6 +18,7 @@ import com.ticketing.system.Presentation.views.auth.LoginView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.ticketing.system.Presentation.views.company.CompanyEventListView;
 import com.ticketing.system.Presentation.views.company.CompanyInquiryInboxView;
+import com.ticketing.system.Presentation.views.company.CompanyOrgTreeView;
 import com.ticketing.system.Presentation.views.company.ManagerListView;
 import com.ticketing.system.Presentation.views.company.MyCompaniesView;
 import com.ticketing.system.Presentation.views.company.OwnerAppointmentView;
@@ -60,6 +62,7 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
         new DrawerEntry(new LkSideNav.Item("chart",     "Company Sales",     CompanySalesView.class),         Capability.VIEW_COMPANY_SALES),
         new DrawerEntry(new LkSideNav.Item("users",     "Managers",          ManagerListView.class),          Capability.APPOINT_MANAGER),
         new DrawerEntry(new LkSideNav.Item("crown",     "Appoint Co-Owner",  OwnerAppointmentView.class),     Capability.APPOINT_CO_OWNER),
+        new DrawerEntry(new LkSideNav.Item("org",       "Organizational Tree", CompanyOrgTreeView.class),     Capability.VIEW_COMPANY_ORG_TREE),
         new DrawerEntry(new LkSideNav.Item("policy",    "Purchase Policies", PurchasePolicyEditorView.class), Capability.EDIT_PURCHASE_POLICIES)
     );
 
@@ -71,6 +74,7 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
         CompanySalesView.class,         "Company Sales",
         ManagerListView.class,          "Managers",
         OwnerAppointmentView.class,     "Appoint Co-Owner",
+        CompanyOrgTreeView.class,       "Organizational Tree",
         PurchasePolicyEditorView.class, "Purchase Policies"
     );
 
@@ -78,9 +82,11 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
     private LkSideNav ownerNav;
     private final Div drawerWrap = new Div();
     private final SignOutFlow signOutFlow;
+    private final INotificationService notificationService;
 
-    public WorkspaceLayout(SignOutFlow signOutFlow) {
+    public WorkspaceLayout(SignOutFlow signOutFlow, INotificationService notificationService) {
         this.signOutFlow = signOutFlow;
+        this.notificationService = notificationService;
         rebuildTopBar();
         addToDrawer(drawerWrap);
         rebuildDrawer(null);
@@ -101,7 +107,10 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
                 new LkTopBar.NavItem("Browse",     BrowseEventsView.class),
                 new LkTopBar.NavItem("My Tickets", MyAccountView.class)
             ), null)
-            .bell(new NotificationBellComponent(null))
+            .bell(new NotificationBellComponent(notifId -> {
+                Integer userId = AuthSession.userId();
+                if (userId != null) notificationService.markRead(userId, notifId);
+            }))
             .account(initials(name), name, buildOwnerMenu(name));
         addToNavbar(topBar);
     }

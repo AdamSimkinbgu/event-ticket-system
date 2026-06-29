@@ -75,7 +75,7 @@ confirm u3 p1
 
 # 10. u2 adds event e1 to p1: a standing zone of 30 tickets @ 50,
 #     and a seated zone of 100 tickets (10x10) @ 100
-add-event u2 p1 e1 standing:30@50 seated:10x10@100 name="e1"
+add-event u2 p1 e1 standing:30@50 seated:10x10@100 name="e1" rating=4.5
 
 # 11. u2 adds a 20% company-wide coupon, code "sale123"
 #     -> SKIPPED: coupons are out of scope in this system (no discount feature).

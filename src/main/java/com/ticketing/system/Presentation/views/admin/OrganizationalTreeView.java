@@ -2,13 +2,12 @@ package com.ticketing.system.Presentation.views.admin;
 
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Presentation.components.admin.OrgTreeLegend;
 import com.ticketing.system.Presentation.components.admin.OrgTreeRenderer;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkCard;
-import com.ticketing.system.Presentation.components.kit.LkFilterChip;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
-import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.PlatformAdminLayout;
 import com.ticketing.system.Presentation.presenters.admin.OrgTreePresenter;
 import com.ticketing.system.Presentation.security.Capability;
@@ -36,7 +35,7 @@ public class OrganizationalTreeView extends LkPage {
     public OrganizationalTreeView(OrgTreePresenter presenter) {
         this.presenter = presenter;
         title("Organizational Tree");
-        subtitle("Founder → owners → managers hierarchy for the selected company, with audit lines.");
+        subtitle("Pick a company on the left to see its founder → owners → managers hierarchy.");
         add(body);
         render();
     }
@@ -56,35 +55,67 @@ public class OrganizationalTreeView extends LkPage {
             case OrgTreePresenter.Outcome.Failure fail ->
                 body.add(new LkBanner(LkBanner.Tone.error, new LkIcon("warning", 16),
                     "Could not load the tree: " + fail.reason()));
-            case OrgTreePresenter.Outcome.Success ok -> {
-                body.add(buildFilters(ok.companies(), ok.selected()));
-                body.add(buildTreeCard(ok.selected().name(), ok.tree()));
-                body.add(buildLegendCard());
-            }
+            case OrgTreePresenter.Outcome.Success ok ->
+                body.add(buildMasterDetail(ok.companies(), ok.selected(), ok.tree()));
         }
     }
 
-    private Component buildFilters(List<ProductionCompanyDTO> companies, ProductionCompanyDTO selected) {
-        LkRow row = new LkRow().gap(8);
+    /** Two-column master/detail: all companies on the left, the selected company's tree on the right. */
+    private Component buildMasterDetail(List<ProductionCompanyDTO> companies,
+                                        ProductionCompanyDTO selected,
+                                        OrganizationalTreeNodeDTO tree) {
+        Div split = new Div();
+        split.getStyle().set("display", "flex").set("gap", "16px")
+            .set("align-items", "flex-start").set("flex-wrap", "wrap");
 
-        List<String> names = companies.stream().map(ProductionCompanyDTO::name).toList();
-        LkFilterChip companyChip = new LkFilterChip("Company", names, true, List.of(selected.name()));
-        companyChip.onApply(() -> {
-            String picked = companyChip.getSelected().stream().findFirst().orElse(selected.name());
-            selectedCompanyId = companies.stream()
-                    .filter(c -> c.name().equals(picked))
-                    .map(ProductionCompanyDTO::companyId)
-                    .findFirst()
-                    .orElse(selected.companyId());
+        Div left = new Div();
+        left.getStyle().set("flex", "0 0 280px").set("min-width", "240px");
+        left.add(buildCompanyList(companies, selected));
+
+        Div right = new Div();
+        right.getStyle().set("flex", "1 1 480px").set("min-width", "320px")
+            .set("display", "flex").set("flex-direction", "column").set("gap", "16px");
+        right.add(buildTreeCard(selected.name(), tree), buildLegendCard());
+
+        split.add(left, right);
+        return split;
+    }
+
+    private Component buildCompanyList(List<ProductionCompanyDTO> companies, ProductionCompanyDTO selected) {
+        LkCard card = new LkCard("Companies (" + companies.size() + ")").pad(12);
+
+        Div list = new Div();
+        list.getStyle().set("display", "flex").set("flex-direction", "column").set("gap", "8px")
+            .set("max-height", "70vh").set("overflow", "auto");
+        for (ProductionCompanyDTO c : companies) {
+            list.add(companyItem(c, c.companyId() == selected.companyId()));
+        }
+        card.add(list);
+        return card;
+    }
+
+    private Component companyItem(ProductionCompanyDTO c, boolean active) {
+        Div item = new Div();
+        item.getStyle()
+            .set("display", "flex").set("flex-direction", "column").set("gap", "2px")
+            .set("padding", "10px 12px").set("border-radius", "8px").set("cursor", "pointer")
+            .set("border", "1px solid " + (active ? "#0f172a" : "#e2e8f0"))
+            .set("background", active ? "#0f172a" : "#fff");
+
+        Span name = new Span(c.name());
+        name.getStyle().set("font-weight", "700").set("font-size", "13.5px")
+            .set("color", active ? "#fff" : "#1e293b");
+
+        Span meta = new Span(c.status());
+        meta.getStyle().set("font-size", "12px")
+            .set("color", active ? "#cbd5e1" : "#94a3b8");
+
+        item.add(name, meta);
+        item.addClickListener(e -> {
+            selectedCompanyId = c.companyId();
             render();
         });
-
-        row.add(
-            companyChip,
-            new LkFilterChip("Roles", List.of("Founder", "Owners", "Managers"), true,
-                List.of("Founder", "Owners", "Managers"))
-        );
-        return row;
+        return item;
     }
 
     private Component buildTreeCard(String companyName, OrganizationalTreeNodeDTO root) {
@@ -95,31 +126,7 @@ public class OrganizationalTreeView extends LkPage {
 
     private Component buildLegendCard() {
         LkCard card = new LkCard("Legend").pad(16);
-        Div row = new Div();
-        row.getStyle().set("display", "flex").set("gap", "20px").set("flex-wrap", "wrap");
-        row.add(
-            legendItem("founder", "Founder",  "Immutable — created the company."),
-            legendItem("owner",   "Owner",    "Appointed by founder or another owner."),
-            legendItem("manager", "Manager",  "Appointed by an owner with granular permissions.")
-        );
-        card.add(row);
+        card.add(new OrgTreeLegend());
         return card;
-    }
-
-    private Component legendItem(String variant, String roleLabel, String desc) {
-        Div item = new Div();
-        item.getStyle().set("display", "flex").set("gap", "10px").set("align-items", "center");
-
-        Span dot = new Span("●");
-        dot.addClassName("oc-avatar");
-        dot.addClassName("oc-av-" + variant);
-        dot.getStyle().set("width", "26px").set("height", "26px").set("font-size", "12px");
-
-        Span text = new Span();
-        text.getElement().setProperty("innerHTML", "<b>" + roleLabel + "</b> · " + desc);
-        text.getStyle().set("font-size", "13px");
-
-        item.add(dot, text);
-        return item;
     }
 }

@@ -52,6 +52,7 @@ public final class NotificationSession {
 
     /** Mark one notification READ in the session snapshot. */
     public static void markRead(String notificationId) {
+        if (notificationId == null || notificationId.isBlank()) return;
         List<NotificationDTO> updated = getAll().stream()
                 .map(n -> notificationId.equals(n.notificationId())
                         ? new NotificationDTO(n.notificationId(), n.type(), "READ", n.message(), n.createdAt())
