@@ -47,8 +47,6 @@ public class CompanyEventListView extends LkPage {
         title("My Events");
         subtitle("All events under the selected company.");
         actions(
-            new LkBtn("Bulk Export").variant(LkBtn.Variant.secondary)
-                .onClick(e -> Toasts.success("Event list exported to CSV (mock).")),
             new LkBtn("New Event").variant(LkBtn.Variant.primary)
                 .icon(new LkIcon("plus", 15))
                 .onClick(e -> UI.getCurrent().navigate("owner/events/new"))
@@ -152,9 +150,9 @@ public class CompanyEventListView extends LkPage {
                     reload();
                 }
                 case CompanyEventListPresenter.ActionOutcome.NotAuthenticated ignored2 ->
-                    Toasts.warn("Session expired — please sign in again.");
+                    Toasts.warn("Your session has expired — please sign in again.");
                 case CompanyEventListPresenter.ActionOutcome.Failure fail ->
-                    Toasts.failure("Cancel failed: " + fail.reason());
+                    Toasts.failure("Could not cancel the event — please try again.");
             }
         });
         dialog.open();
@@ -175,9 +173,9 @@ public class CompanyEventListView extends LkPage {
                     reload();
                 }
                 case CompanyEventListPresenter.ActionOutcome.NotAuthenticated ignored2 ->
-                    Toasts.warn("Session expired — please sign in again.");
+                    Toasts.warn("Your session has expired — please sign in again.");
                 case CompanyEventListPresenter.ActionOutcome.Failure fail ->
-                    Toasts.failure(fail.reason() == null ? "Remove failed." : fail.reason());
+                    Toasts.failure("Could not remove the event — please try again.");
             }
         });
         dialog.open();
@@ -186,7 +184,7 @@ public class CompanyEventListView extends LkPage {
     private void openStatusDialog(EventDetailDTO ev) {
         List<EventStatus> allowed = allowedTransitions(ev.status());
         if (allowed.isEmpty()) {
-            Toasts.warn("No status transitions available for a " + ev.status().name() + " event.");
+            Toasts.warn("No further status changes are available for this event.");
             return;
         }
 
@@ -213,13 +211,13 @@ public class CompanyEventListView extends LkPage {
             }
             switch (presenter.changeEventStatus(AuthSession.token(), Integer.parseInt(ev.eventId()), target)) {
                 case CompanyEventListPresenter.ActionOutcome.Success ignored2 -> {
-                    Toasts.success("Event status changed to " + target.name() + ".");
+                    Toasts.success("Event status updated.");
                     reload();
                 }
                 case CompanyEventListPresenter.ActionOutcome.NotAuthenticated ignored2 ->
-                    Toasts.warn("Session expired — please sign in again.");
+                    Toasts.warn("Your session has expired — please sign in again.");
                 case CompanyEventListPresenter.ActionOutcome.Failure fail ->
-                    Toasts.failure("Status change failed: " + fail.reason());
+                    Toasts.failure("Could not change the event status — please try again.");
             }
         });
         dialog.open();

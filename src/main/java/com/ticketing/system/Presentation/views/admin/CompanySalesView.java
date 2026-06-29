@@ -3,13 +3,10 @@ package com.ticketing.system.Presentation.views.admin;
 import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Presentation.components.Money;
-import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
-import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkFilterChip;
 import com.ticketing.system.Presentation.components.kit.LkGrid;
-import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStat;
@@ -40,9 +37,6 @@ public class CompanySalesView extends LkPage {
 
     public CompanySalesView(CompanySalesPresenter presenter) {
         title("Company Sales History");
-        actions(new LkBtn("Export CSV").variant(LkBtn.Variant.secondary)
-            .icon(new LkIcon("chart", 15))
-            .onClick(e -> Toasts.success("Export CSV — no streaming endpoint yet.")));
 
         switch (presenter.load(AuthSession.token())) {
             case CompanySalesPresenter.Outcome.Success ok -> {

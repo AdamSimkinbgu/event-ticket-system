@@ -107,7 +107,7 @@ public class CompanyInquiryRespondView extends LkPage implements BeforeEnterObse
             case CompanyInquiryInboxPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case CompanyInquiryInboxPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not send your reply: " + fail.reason());
+                Toasts.failure("Could not send your reply — please try again.");
         }
     }
 
@@ -120,7 +120,7 @@ public class CompanyInquiryRespondView extends LkPage implements BeforeEnterObse
             case CompanyInquiryInboxPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case CompanyInquiryInboxPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not close the inquiry: " + fail.reason());
+                Toasts.failure("Could not close the inquiry — please try again.");
         }
     }
 
