@@ -21,6 +21,15 @@ spring:
     hikari:
       # Supabase caps connections (more so when several instances share the DB) — keep each pool small.
       maximum-pool-size: ${DB_POOL_SIZE:5}
+      # --- DB-reconnect / recovery resilience (SLR.6, #362), config-only: no health-poller, no retry lib ---
+      # The reconnect is HikariCP's own job: it validates a pooled connection before lending it (the default
+      # 30s connection-timeout / 5s validation-timeout bound a clean failure during an outage), so once
+      # Postgres is back the next borrow gets a fresh connection and the app resumes with NO restart.
+      # These three knobs make that recovery smooth and safe:
+      max-lifetime: 600000             # retire each connection after 10 min, before the Supabase pooler can
+                                       # silently drop an idle one — so a request is never lent a dead connection
+      keepalive-time: 300000           # ping idle connections every 5 min to keep them warm / detect dead ones
+      initialization-fail-timeout: 0   # let the pool start even if the DB is momentarily unreachable at boot
   jpa:
     hibernate:
       # First boot builds the whole schema from the @Entity mappings; later boots only add what's new.
