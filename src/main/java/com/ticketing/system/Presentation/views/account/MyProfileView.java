@@ -1,14 +1,11 @@
 package com.ticketing.system.Presentation.views.account;
 
-import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
-import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkField;
 import com.ticketing.system.Presentation.components.kit.LkPage;
-import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.account.MyProfilePresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
@@ -69,16 +66,7 @@ public class MyProfileView extends LkPage {
         fields.add(new LkField().label("Username").value(username));
         fields.add(new LkField().label("Email").value(email));
 
-        LkRow actions = new LkRow().gap(8);
-        actions.getStyle().set("margin-top", "16px");
-        actions.add(
-            new LkBtn("Edit Profile").variant(LkBtn.Variant.secondary)
-                .onClick(e -> Toasts.warn("Profile editing is exempt in Tier C (II.3.4).")),
-            new LkBtn("Change Password").variant(LkBtn.Variant.tertiary)
-                .onClick(e -> Toasts.warn("Password change wires with V2-AUTH-02."))
-        );
-
-        card.add(idRow, Lk.divider(), fields, actions);
+        card.add(idRow, Lk.divider(), fields);
         return card;
     }
 

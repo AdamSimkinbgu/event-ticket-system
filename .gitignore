@@ -47,6 +47,9 @@ src/main/frontend/generated/
 
 scripts/*
 docs/*
+# V3-DOC-02 (#374) deliverables are tracked; the rest of docs/ stays ignored.
+!docs/use-cases-v3.md
+!docs/version-3-requirements.html
 
 # Runtime log output (logs/event-ticket-system.log + rolled .gz archives)
 logs/
@@ -65,3 +68,8 @@ logs/
 
 # settings
 .settings/
+
+# Local Supabase run script — holds the DB password, never commit
+run-supabase.sh
+.env
+.env.*

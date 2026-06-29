@@ -22,11 +22,13 @@ spring:
 
 # Scenario init (ScenarioRunner) — boots the system from an editable command file.
 #   scenario:  the file to run (classpath:scenarios/*.scenario, or file:/abs/path/to/your.scenario)
-#   mode:      off | wipe (clear repos + re-seed dev personas, then run) | anything else runs it
+#   mode:      off (nothing) | reseed (idempotent) | wipe (clear data) | reset (wipe + reseed)
+#              | ask (interactive menu: pick mode + scenario at boot)
 #   fail-fast: true = stop at the first unexpected error (partial report still logged); false = run all
+# dev's H2 is create-drop (empty every boot), so reseed is the right default here — no wipe needed.
 seed:
   scenario: classpath:scenarios/demo.scenario
-  mode: idempotent
+  mode: reseed
   fail-fast: false
 
 # WSEP external-systems client. Prod/eval keep the 20s default (application.yml is

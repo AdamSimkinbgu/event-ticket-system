@@ -160,6 +160,25 @@ public abstract class IEventRepositoryContractTest {
         assertTrue(result.isEmpty());
     }
 
+    // === findAll (#372 boot-time integrity scan) ===
+
+    @Test
+    void givenEventsAcrossCompaniesAndStatuses_whenFindAll_thenReturnsEveryEvent() {
+        eventRepo.save(buildEvent(1, "Event A", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(2, "Event B", 3.8, 20, EventStatus.DRAFT, EventCategory.CONCERT));
+
+        List<Event> all = eventRepo.findAll();
+
+        assertEquals(2, all.size());
+        assertTrue(all.stream().anyMatch(e -> e.getId() == 1));
+        assertTrue(all.stream().anyMatch(e -> e.getId() == 2));
+    }
+
+    @Test
+    void givenNoEvents_whenFindAll_thenReturnsEmptyList() {
+        assertTrue(eventRepo.findAll().isEmpty());
+    }
+
     // === searchAll — eventName ===
 
     @Test
