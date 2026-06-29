@@ -131,7 +131,7 @@ public class CompanyInquiryInboxView extends LkPage {
         LkRow row = new LkRow().gap(8);
         List<String> applied = ALL.equals(statusFilter) ? List.of() : List.of(statusFilter);
         LkFilterChip status = new LkFilterChip("Status",
-            List.of("Open", "Responded", "Closed"), true, applied);
+            List.of("Open", "Closed"), true, applied);
         status.onApply(() -> {
             Set<String> selected = status.getSelected();
             statusFilter = selected.isEmpty() ? ALL : selected.iterator().next();
@@ -143,8 +143,11 @@ public class CompanyInquiryInboxView extends LkPage {
 
     private List<ConversationDTO> applyStatusFilter(List<ConversationDTO> all) {
         if (ALL.equals(statusFilter)) return all;
+        // "Closed" = terminal (CLOSED/RESOLVED); "Open" = active (OPEN/RESPONDED — i.e. an inquiry
+        // the company has replied to is still "Open", not hidden).
+        boolean wantClosed = "Closed".equals(statusFilter);
         return all.stream()
-            .filter(c -> statusFilter.equals(humanizeStatus(c.status())))
+            .filter(c -> isTerminal(c.status()) == wantClosed)
             .toList();
     }
 

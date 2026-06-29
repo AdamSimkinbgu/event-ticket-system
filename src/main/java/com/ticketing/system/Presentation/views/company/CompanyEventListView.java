@@ -384,7 +384,9 @@ public class CompanyEventListView extends LkPage {
             actions.add(iconBtn("map", "Venue map", () -> UI.getCurrent().navigate("owner/venue/" + ev.eventId())));
         }
         if (Capabilities.has(Capability.EDIT_PURCHASE_POLICIES)) {
-            actions.add(iconBtn("policy", "Policies", () -> UI.getCurrent().navigate(PurchasePolicyEditorView.class)));
+            // Deep-link to THIS event's purchase policy (route owner/policies/:companyId?/:eventId?).
+            actions.add(iconBtn("policy", "Policies",
+                    () -> UI.getCurrent().navigate("owner/policies/" + ev.companyId() + "/" + ev.eventId())));
         }
         if (Capabilities.has(Capability.VIEW_COMPANY_SALES)) {
             actions.add(iconBtn("chart", "Sales", () -> UI.getCurrent().navigate(CompanySalesView.class)));

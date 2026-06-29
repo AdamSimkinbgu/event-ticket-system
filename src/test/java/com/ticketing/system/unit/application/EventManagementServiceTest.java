@@ -74,13 +74,15 @@ class EventManagementServiceTest {
         private INotificationService notificationService;
 
         private final String OWNER_TOKEN = "owner-token";
-        private final String MANAGER_TOKEN = "manager-token";
+        private final String MANAGER_TOKEN = "manager-token";                 // CONFIGURE_VENUE manager
+        private final String MANAGE_INVENTORY_TOKEN = "inventory-manager-token"; // MANAGE_INVENTORY manager
         private final String INVALID_TOKEN = "invalid-token";
 
         private final int COMPANY_ID = 100;
         private final int EVENT_ID = 10;
         private final int OWNER_ID = 1;
         private final int MANAGER_ID = 2;
+        private final int INVENTORY_MANAGER_ID = 3;
         private final int ZONE_ID = 5;
         private final int ORDER_RECEIPT_ID = 20;
         private final String COMPANY_1_NAME = "Company1";
@@ -93,6 +95,7 @@ class EventManagementServiceTest {
         private Event event;
         private User ownerUser;
         private User managerUser;
+        private User inventoryManagerUser;
 
         @BeforeEach
         public void setUp() {
@@ -137,6 +140,11 @@ class EventManagementServiceTest {
                 managerUser = new User(MANAGER_ID, "Manager Name", "manager@example.com", "hashedpassword", 40);
                 managerUser.receiveManagerAppointment(COMPANY_ID, OWNER_ID, List.of(Permission.CONFIGURE_VENUE));
                 managerUser.acceptInvitation(COMPANY_ID);
+                inventoryManagerUser = new User(INVENTORY_MANAGER_ID, "Inventory Manager",
+                                "inventory@example.com", "hashedpassword", 40);
+                inventoryManagerUser.receiveManagerAppointment(COMPANY_ID, OWNER_ID,
+                                List.of(Permission.MANAGE_INVENTORY));
+                inventoryManagerUser.acceptInvitation(COMPANY_ID);
         }
 
         private OrderReceipt setupStateBasedHappyPath() {
@@ -522,16 +530,85 @@ class EventManagementServiceTest {
         }
 
         @Test
-        void GivenManagerWithPermission_WhenEditEventDetails_ThenSucceeds() {
+        void GivenInventoryManager_WhenEditEventDetails_ThenSucceeds() {
+                // Editing event metadata requires MANAGE_INVENTORY (not CONFIGURE_VENUE).
+                when(sessionManager.validateToken(MANAGE_INVENTORY_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(MANAGE_INVENTORY_TOKEN)).thenReturn(INVENTORY_MANAGER_ID);
+                when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+                when(userRepository.getUserById(INVENTORY_MANAGER_ID)).thenReturn(inventoryManagerUser);
+
+                eventService.editEventDetails(MANAGE_INVENTORY_TOKEN,
+                                new EventUpdateDTO(String.valueOf(EVENT_ID), "Manager Edited", null, null, null, null));
+
+                assertEquals("Manager Edited", event.getName());
+        }
+
+        // -------------------------------------------------------------------------
+        // Manager permission boundaries — MANAGE_INVENTORY (events) vs CONFIGURE_VENUE (venue)
+        // -------------------------------------------------------------------------
+
+        @Test
+        void GivenConfigureVenueManager_WhenEditEventDetails_ThenThrows() {
+                // A venue-only manager must NOT be able to edit event metadata.
                 when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
                 when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
                 when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
 
-                eventService.editEventDetails(MANAGER_TOKEN,
-                                new EventUpdateDTO(String.valueOf(EVENT_ID), "Manager Edited", null, null, null, null));
+                assertThrows(RuntimeException.class, () -> eventService.editEventDetails(MANAGER_TOKEN,
+                                new EventUpdateDTO(String.valueOf(EVENT_ID), "Nope", null, null, null, null)));
+                assertEquals("Concert", event.getName());
+        }
 
-                assertEquals("Manager Edited", event.getName());
+        @Test
+        void GivenInventoryManager_WhenChangeEventStatus_ThenSucceeds() {
+                when(sessionManager.validateToken(MANAGE_INVENTORY_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(MANAGE_INVENTORY_TOKEN)).thenReturn(INVENTORY_MANAGER_ID);
+                when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+                when(userRepository.getUserById(INVENTORY_MANAGER_ID)).thenReturn(inventoryManagerUser);
+
+                eventService.changeEventStatus(MANAGE_INVENTORY_TOKEN, EVENT_ID, EventStatus.ON_SALE);
+
+                assertEquals(EventStatus.ON_SALE, event.getStatus());
+        }
+
+        @Test
+        void GivenConfigureVenueManager_WhenChangeEventStatus_ThenThrows() {
+                when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
+                when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+                when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
+
+                assertThrows(RuntimeException.class,
+                                () -> eventService.changeEventStatus(MANAGER_TOKEN, EVENT_ID, EventStatus.ON_SALE));
+                assertEquals(EventStatus.SCHEDULED, event.getStatus());
+        }
+
+        @Test
+        void GivenInventoryManager_WhenCancelEventAndRefund_ThenEventIsCanceled() {
+                when(sessionManager.validateToken(MANAGE_INVENTORY_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(MANAGE_INVENTORY_TOKEN)).thenReturn(INVENTORY_MANAGER_ID);
+                when(userRepository.getUserById(INVENTORY_MANAGER_ID)).thenReturn(inventoryManagerUser);
+                when(mockEventRepo.findById(EVENT_ID)).thenReturn(event);
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+                when(orderReceiptRepository.findByEventId(EVENT_ID)).thenReturn(List.of());
+                when(mockTicketRepo.findByEventId(EVENT_ID)).thenReturn(List.of());
+
+                eventService.cancelEventAndRefund(MANAGE_INVENTORY_TOKEN, EVENT_ID);
+
+                assertEquals(EventStatus.CANCELED, event.getStatus());
+        }
+
+        @Test
+        void GivenInventoryManager_WhenConfigureVenueMap_ThenThrows() {
+                // MANAGE_INVENTORY does NOT grant venue editing (that's CONFIGURE_VENUE).
+                when(sessionManager.validateToken(MANAGE_INVENTORY_TOKEN)).thenReturn(true);
+                when(sessionManager.extractUserId(MANAGE_INVENTORY_TOKEN)).thenReturn(INVENTORY_MANAGER_ID);
+                when(userRepository.getUserById(INVENTORY_MANAGER_ID)).thenReturn(inventoryManagerUser);
+
+                VenueMapConfigDTO config = new VenueMapConfigDTO(String.valueOf(EVENT_ID), "Venue", 1, 1, List.of());
+                assertThrows(RuntimeException.class,
+                                () -> eventService.configureVenueMap(MANAGE_INVENTORY_TOKEN, COMPANY_ID, config));
         }
 
         @Test

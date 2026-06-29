@@ -9,6 +9,7 @@ import com.ticketing.system.Presentation.views.company.OwnerDashboardView;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.server.ServiceInitEvent;
 import com.vaadin.flow.server.VaadinServiceInitListener;
+import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 import org.springframework.stereotype.Component;
 
@@ -74,10 +75,16 @@ public class AuthBootstrap implements VaadinServiceInitListener {
         Capability.TRANSFER_FOUNDERSHIP
     );
 
+    /** Session attribute holding a permission-denied message to flash after the redirect lands. */
+    private static final String PENDING_DENIAL_KEY = "authBootstrap.pendingDenialToast";
+
     @Override
     public void serviceInit(ServiceInitEvent event) {
-        event.getSource().addUIInitListener(uiInit ->
-            uiInit.getUI().addBeforeEnterListener(this::guard));
+        event.getSource().addUIInitListener(uiInit -> {
+            uiInit.getUI().addBeforeEnterListener(this::guard);
+            // Flash the deferred permission-denied toast once the forwarded navigation has landed.
+            uiInit.getUI().addAfterNavigationListener(e -> flushPendingDenialToast());
+        });
     }
 
     private void guard(BeforeEnterEvent event) {
@@ -100,10 +107,32 @@ public class AuthBootstrap implements VaadinServiceInitListener {
             // for — e.g. a manager clicking "Policies" without EDIT_PURCHASE_POLICIES — gets a clear
             // toast instead of a silent redirect. The admin-shell and "no company yet" forwards keep
             // their existing (silent) behavior; those aren't a missing-permission situation.
+            //
+            // The toast is DEFERRED (stored, then shown by the after-navigation listener): opening a
+            // Notification here and immediately forwardTo()-ing reroutes in the same navigation cycle,
+            // so the toast wouldn't reliably render on the destination. Flashing it after the redirect
+            // lands makes it dependable.
             if (WORKSPACE_CAPS.contains(cap.value()) && Capabilities.has(Capability.OWNER_WORKSPACE)) {
-                Toasts.warn("Action not in your permissions - Contact Owner");
+                VaadinSession session = VaadinSession.getCurrent();
+                if (session != null) {
+                    session.setAttribute(PENDING_DENIAL_KEY,
+                        "You don't have that action in your permissions - contact an owner");
+                }
             }
             event.forwardTo(fallbackFor(cap.value()));
+        }
+    }
+
+    /** Shows (once) any permission-denied message queued by {@link #guard} on the previous redirect. */
+    private void flushPendingDenialToast() {
+        VaadinSession session = VaadinSession.getCurrent();
+        if (session == null) {
+            return;
+        }
+        Object pending = session.getAttribute(PENDING_DENIAL_KEY);
+        if (pending instanceof String message) {
+            session.setAttribute(PENDING_DENIAL_KEY, null);
+            Toasts.warn(message);
         }
     }
 

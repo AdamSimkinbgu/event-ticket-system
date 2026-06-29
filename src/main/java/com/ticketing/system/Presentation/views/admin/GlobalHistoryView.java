@@ -24,6 +24,7 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
@@ -99,15 +100,9 @@ public class GlobalHistoryView extends LkPage {
         Set<String> sel = dateChip.getSelected();
         if (sel.isEmpty() || sel.contains(DATE_ALL)) return true;
         if (r.purchasedAt() == null) return false;
-        LocalDateTime now = LocalDateTime.now();
-        String pick = sel.iterator().next();
-        LocalDateTime from = switch (pick) {
-            case "Last 7 days" -> now.minusDays(7);
-            case "Last 30 days" -> now.minusDays(30);
-            case "This quarter" -> now.minusMonths(3);
-            case "This year" -> now.minusYears(1);
-            default -> null;
-        };
+        // Calendar-correct windows ("This quarter"/"This year" start on the quarter/year boundary),
+        // shared with the Company Sales page filter.
+        LocalDateTime from = SalesDateRange.startOf(sel.iterator().next(), LocalDate.now());
         return from == null || !r.purchasedAt().isBefore(from);
     }
 

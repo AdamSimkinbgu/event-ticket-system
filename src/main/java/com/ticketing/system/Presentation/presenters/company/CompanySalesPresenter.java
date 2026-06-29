@@ -5,7 +5,6 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
 import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.services.CompanyAnalyticsService;
@@ -36,9 +35,10 @@ public class CompanySalesPresenter {
                     .filter(c -> companyId != null && c.companyId() == companyId)
                     .findFirst()
                     .orElse(companies.get(0));
-            CompanyDashboardDTO stats = companyAnalyticsService.dashboard(selected.companyId());
+            // The view derives all headline figures from the order records (refund-aware, honoring
+            // the date filter), so the fixed 30-day dashboard() snapshot is no longer fetched here.
             PurchaseHistoryDTO sales = companyAnalyticsService.salesHistory(selected.companyId());
-            return new Outcome.Success(selected.name(), stats, sales);
+            return new Outcome.Success(selected.name(), sales);
         } catch (InvalidTokenException e) {
             return new Outcome.NotAuthenticated();
         } catch (RuntimeException e) {
@@ -47,8 +47,7 @@ public class CompanySalesPresenter {
     }
 
     public sealed interface Outcome {
-        record Success(String companyName, CompanyDashboardDTO stats,
-                       PurchaseHistoryDTO sales) implements Outcome {}
+        record Success(String companyName, PurchaseHistoryDTO sales) implements Outcome {}
         record NotAuthenticated() implements Outcome {}
         record NoCompany() implements Outcome {}
         record Failure(String reason) implements Outcome {}
