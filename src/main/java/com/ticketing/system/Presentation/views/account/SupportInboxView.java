@@ -199,7 +199,7 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
             case SupportInboxPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case SupportInboxPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not send your reply: " + fail.reason());
+                Toasts.failure("Could not send your reply — please try again.");
         }
     }
 

@@ -93,7 +93,7 @@ public class OwnerAppointmentView extends LkPage {
             case MyCompaniesPresenter.AppointOutcome.UserNotFound u ->
                 Toasts.failure("User \"" + u.username() + "\" was not found.");
             case MyCompaniesPresenter.AppointOutcome.Failure fail ->
-                Toasts.failure(fail.reason());
+                Toasts.failure("Could not complete the appointment — please try again.");
         }
     }
 }

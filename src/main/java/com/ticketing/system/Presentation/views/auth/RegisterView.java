@@ -172,15 +172,17 @@ public class RegisterView extends LkAuthCard {
             case RegisterPresenter.Outcome.EmailTaken ignored ->
                 Toasts.failure("That email is already registered.");
             case RegisterPresenter.Outcome.WeakPassword weak ->
-                Toasts.failure("Weak password — " + weak.reason() + ".");
+                Toasts.failure("That password is too weak — please choose a stronger one.");
             case RegisterPresenter.Outcome.InvalidEmail ignored ->
                 Toasts.failure("That email address looks invalid.");
-            case RegisterPresenter.Outcome.GuestSessionMissing miss ->
-                Toasts.failure("Session expired — please refresh the page. (" + miss.reason() + ")");
+            case RegisterPresenter.Outcome.GuestSessionMissing miss -> {
+                Toasts.warn("Your session timed out — reloading…");
+                UI.getCurrent().getPage().reload();
+            }
             case RegisterPresenter.Outcome.InvalidInput bad ->
-                Toasts.failure("Invalid input: " + bad.reason());
+                Toasts.failure("Please check your details and try again.");
             case RegisterPresenter.Outcome.Failure fail ->
-                Toasts.failure("Registration failed: " + fail.reason());
+                Toasts.failure("Registration failed — please try again.");
         }
     }
 }

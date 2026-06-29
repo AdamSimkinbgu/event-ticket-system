@@ -141,7 +141,7 @@ public class AdminSendMessagesView extends LkPage {
             case AdminSendMessagesPresenter.SearchOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case AdminSendMessagesPresenter.SearchOutcome.Failure fail ->
-                Toasts.failure("Could not search members: " + fail.reason());
+                Toasts.failure("Could not search members — please try again.");
         }
     }
 
@@ -198,7 +198,7 @@ public class AdminSendMessagesView extends LkPage {
             case AdminSendMessagesPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case AdminSendMessagesPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not send the message: " + fail.reason());
+                Toasts.failure("Could not send the message — please try again.");
         }
     }
 

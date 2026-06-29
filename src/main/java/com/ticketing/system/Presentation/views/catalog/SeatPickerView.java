@@ -228,7 +228,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
                 UI.getCurrent().navigate(CartView.class);
             }
             case SeatPickerPresenter.ReserveOutcome.Failure f ->
-                Toasts.failure(f.message());
+                Toasts.failure("Couldn't reserve those tickets — please try again.");
         }
     }
 
@@ -283,7 +283,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
                 UI.getCurrent().navigate(CartView.class);
             }
             case SeatPickerPresenter.ReserveOutcome.Failure f ->
-                Toasts.failure(f.message());
+                Toasts.failure("Couldn't reserve those tickets — please try again.");
         }
     }
 

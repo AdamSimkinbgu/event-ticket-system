@@ -64,7 +64,6 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
     private final TextField    cardNumber  = new TextField("Card number");
     private final TextField    expiry      = new TextField("Expiry");
     private final TextField    cvc         = new TextField("CVC");
-    private final TextField    coupon      = new TextField();
     private final EmailField   guestEmail  = new EmailField("Your email");
     private final IntegerField guestAge    = new IntegerField("Your age");
 
@@ -283,18 +282,6 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
         Div foot = new Div();
         foot.addClassName("bz-order-foot");
 
-        coupon.setPlaceholder("Coupon code");
-        coupon.getStyle().set("flex", "1 1 auto");
-        LkBtn apply = new LkBtn("Apply")
-                .variant(LkBtn.Variant.tertiary)
-                .onClick(e -> {
-                    if (coupon.isEmpty()) Toasts.warn("Enter a coupon code first.");
-                    else Toasts.success("Coupon applied (no discount in placeholder).");
-                });
-        LkRow couponRow = new LkRow().gap(8);
-        couponRow.add(coupon, apply);
-        foot.add(couponRow);
-
         subtotalSpan = new Span(formatCents(subtotalCents));
         totalSpan    = new Span(formatCents(totalCents));
 
@@ -480,9 +467,9 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
                     return;
                 }
                 case CheckoutPresenter.PayOutcome.PolicyRejected p ->
-                    Toasts.failure("Cannot purchase: " + p.reason());
+                    Toasts.failure("This purchase isn't allowed under the event's purchase policy.");
                 case CheckoutPresenter.PayOutcome.PaymentDeclined d ->
-                    Toasts.failure("Payment declined: " + d.reason());
+                    Toasts.failure("Your payment was declined — please check your card details and try again.");
                 case CheckoutPresenter.PayOutcome.SoldOut s ->
                     Toasts.failure("Those seats just sold out. Please choose again.");
                 case CheckoutPresenter.PayOutcome.OrderExpired e ->

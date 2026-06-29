@@ -185,7 +185,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
                     signOutFlow.execute();
                     UI.getCurrent().navigate(LoginView.class);
                 }));
-        return new LkAccountMenu(initials(name), name, "Signed in member · V2-AUTH-02 stub", menu, null, null);
+        return new LkAccountMenu(initials(name), name, "Signed in member", menu, null, null);
     }
 
     private static String findActiveLabel(AfterNavigationEvent event) {

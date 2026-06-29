@@ -110,7 +110,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             case EventManagementPresenter.LoadOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case EventManagementPresenter.LoadOutcome.Failure fail ->
-                Toasts.failure("Could not load event: " + fail.reason());
+                Toasts.failure("Could not load the event — please try again.");
         }
     }
 
@@ -171,7 +171,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             case EventManagementPresenter.SaveOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case EventManagementPresenter.SaveOutcome.Failure fail ->
-                Toasts.failure("Could not save event: " + fail.reason());
+                Toasts.failure("Could not save the event — please try again.");
         }
     }
 
@@ -219,7 +219,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             case EventManagementPresenter.CreateOutcome.InvalidInput bad ->
                 Toasts.failure(bad.reason());
             case EventManagementPresenter.CreateOutcome.Failure fail ->
-                Toasts.failure("Could not create event: " + fail.reason());
+                Toasts.failure("Could not create the event — please try again.");
         }
     }
 
@@ -372,7 +372,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             case EventManagementPresenter.CancelOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case EventManagementPresenter.CancelOutcome.Failure fail ->
-                Toasts.failure("Could not cancel event: " + fail.reason());
+                Toasts.failure("Could not cancel the event — please try again.");
         }
     }
 }

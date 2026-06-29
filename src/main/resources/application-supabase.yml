@@ -1,0 +1,27 @@
+# Supabase (remote Postgres) run profile — V3 Lane J (#377).
+#
+# Activate with SPRING_PROFILES_ACTIVE=supabase — that auto-activates `jpa` too (see the
+# profiles.group in application.yml), so the Jpa* repositories are wired. Supply the connection
+# entirely via env vars; NEVER commit them:
+#
+#   DB_HOST=aws-1-eu-central-1.pooler.supabase.com   (your project's Session-pooler host)
+#   DB_PORT=5432                                      (Session pooler — NOT the 6543 txn pooler)
+#   DB_NAME=postgres
+#   DB_USER=postgres.<project-ref>
+#   DB_PASSWORD=<your database password>
+#
+# Uses the Supabase Session pooler (IPv4, supports the prepared statements Hibernate needs) over TLS.
+# Many app instances (local + deployed) can point here at once — they share all data, and @Version /
+# the refund FOR UPDATE coordinate across instances because they're enforced in Postgres.
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:postgres}?sslmode=require
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    hikari:
+      # Supabase caps connections (more so when several instances share the DB) — keep each pool small.
+      maximum-pool-size: ${DB_POOL_SIZE:5}
+  jpa:
+    hibernate:
+      # First boot builds the whole schema from the @Entity mappings; later boots only add what's new.
+      ddl-auto: update

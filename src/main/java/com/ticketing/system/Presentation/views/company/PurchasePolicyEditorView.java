@@ -189,7 +189,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
             case LoadOutcome.Success s -> this.root = s.root();
             case LoadOutcome.NotAuthenticated na -> {
                 this.root = presenter.emptyPolicy();
-                Toasts.warn("Please sign in again to edit policies.");
+                Toasts.warn("Your session has expired — please sign in again.");
             }
             case LoadOutcome.Failure f -> {
                 this.root = presenter.emptyPolicy();
@@ -502,9 +502,9 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
         if (isEventLevel && eventId <= 0) { Toasts.failure("Choose an event, or switch to Company-level."); return; }
         switch (presenter.save(memberToken, companyId, eventId, isEventLevel, root)) {
             case SaveOutcome.Success s           -> Toasts.success("Policy saved.");
-            case SaveOutcome.NotAuthenticated na  -> Toasts.failure("Please sign in again to save.");
+            case SaveOutcome.NotAuthenticated na  -> Toasts.failure("Your session has expired — please sign in again.");
             case SaveOutcome.Invalid inv         -> Toasts.warn(inv.reason());
-            case SaveOutcome.Failure f           -> Toasts.failure("Failed to save: " + f.reason());
+            case SaveOutcome.Failure f           -> Toasts.failure("Couldn't save the policy — please try again.");
         }
     }
 
