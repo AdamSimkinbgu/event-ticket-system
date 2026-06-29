@@ -176,6 +176,11 @@ public class OwnerDashboardView extends LkPage {
                 "Invite another member as co-owner. Cycle-prevention enforced.",
                 OwnerAppointmentView.class));
 
+        if (Capabilities.has(Capability.VIEW_COMPANY_ORG_TREE))
+            tiles.add(tile("org", "Organizational Tree",
+                "View your company's founder → owners → managers appointment hierarchy.",
+                CompanyOrgTreeView.class));
+
         if (Capabilities.has(Capability.EDIT_PURCHASE_POLICIES))
             tiles.add(tile("policy", "Purchase Policies",
                 "Visual AND/OR builder for company- or event-level rules.",

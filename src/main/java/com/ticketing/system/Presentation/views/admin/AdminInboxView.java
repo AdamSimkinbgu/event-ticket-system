@@ -146,7 +146,10 @@ public class AdminInboxView extends LkPage {
 
     private void handleReply(String text) {
         switch (presenter.reply(AuthSession.token(), selectedId, text)) {
-            case AdminInboxPresenter.ActionOutcome.Success ignored -> reload();
+            case AdminInboxPresenter.ActionOutcome.Success ignored -> {
+                Toasts.success("Reply sent.");
+                reload();
+            }
             case AdminInboxPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case AdminInboxPresenter.ActionOutcome.Failure fail ->

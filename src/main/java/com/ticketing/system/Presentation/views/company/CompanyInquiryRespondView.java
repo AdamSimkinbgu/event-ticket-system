@@ -102,8 +102,10 @@ public class CompanyInquiryRespondView extends LkPage implements BeforeEnterObse
 
     private void handleReply(String text) {
         switch (presenter.reply(AuthSession.token(), conversationId, text)) {
-            case CompanyInquiryInboxPresenter.ActionOutcome.Success ignored ->
+            case CompanyInquiryInboxPresenter.ActionOutcome.Success ignored -> {
+                Toasts.success("Reply sent.");
                 reload(); // refresh thread + status
+            }
             case CompanyInquiryInboxPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case CompanyInquiryInboxPresenter.ActionOutcome.Failure fail ->

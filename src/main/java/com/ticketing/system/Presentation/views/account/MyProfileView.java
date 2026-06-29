@@ -10,6 +10,7 @@ import com.ticketing.system.Presentation.components.kit.LkField;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.presenters.account.MyProfilePresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
@@ -23,22 +24,33 @@ import jakarta.annotation.security.PermitAll;
 @PermitAll
 public class MyProfileView extends LkPage {
 
-    public MyProfileView() {
+    private final MyProfilePresenter presenter;
+
+    public MyProfileView(MyProfilePresenter presenter) {
+        this.presenter = presenter;
         title("My Profile");
         subtitle("Your account details.");
-        add(buildSplit());
-    }
-
-    private Component buildSplit() {
-        Div split = new Div();
-        split.addClassName("prof-split");
-        split.add(buildProfileCard(), buildSideCol());
-        return split;
+        add(buildProfileCard());
     }
 
     private Component buildProfileCard() {
         String name = AuthSession.displayName();
         if (name == null || name.isBlank()) name = "Alex Morgan";
+
+        // Real username + email come from the User aggregate via the presenter;
+        // fall back to the display name / a derived handle when signed out or on error.
+        String username = name;
+        String email = name + "@gmail.com";
+        switch (presenter.load()) {
+            case MyProfilePresenter.Outcome.Success ok -> {
+                username = ok.member().username();
+                if (ok.member().email() != null && !ok.member().email().isBlank()) {
+                    email = ok.member().email();
+                }
+            }
+            case MyProfilePresenter.Outcome.NotAuthenticated ignored -> { /* keep placeholder */ }
+            case MyProfilePresenter.Outcome.Failure ignored -> { /* keep placeholder */ }
+        }
 
         LkCard card = new LkCard("Profile").pad(20);
 
@@ -54,9 +66,8 @@ public class MyProfileView extends LkPage {
         idRow.add(avatar, info);
 
         LkCol fields = new LkCol().gap(14);
-        fields.add(new LkField().label("Username").value("alex.morgan"));
-        fields.add(new LkField().label("Email").value("alex.morgan@email.com"));
-        fields.add(new LkField().label("Member Since").value("15 Dec 2024"));
+        fields.add(new LkField().label("Username").value(username));
+        fields.add(new LkField().label("Email").value(email));
 
         LkRow actions = new LkRow().gap(8);
         actions.getStyle().set("margin-top", "16px");
@@ -69,31 +80,6 @@ public class MyProfileView extends LkPage {
 
         card.add(idRow, Lk.divider(), fields, actions);
         return card;
-    }
-
-    private Component buildSideCol() {
-        LkCol col = new LkCol().gap(14);
-
-        LkCard prefs = new LkCard("Preferences").pad(16);
-        LkCol p = new LkCol().gap(8);
-        Span pDesc = Lk.muted("Notifications, language, and privacy settings.");
-        pDesc.getStyle().set("font-size", "13.5px");
-        p.add(pDesc);
-        p.add(new LkBtn("Manage Preferences").variant(LkBtn.Variant.secondary).full()
-            .onClick(e -> Toasts.warn("Preferences screen — wired by V2-MEM-04.")));
-        prefs.add(p);
-
-        LkCard sessions = new LkCard("Sessions").pad(16);
-        LkCol s = new LkCol().gap(8);
-        Span sDesc = new Span("Signed in on 2 devices.");
-        sDesc.getStyle().set("font-size", "13.5px");
-        s.add(sDesc);
-        s.add(new LkBtn("Sign Out Everywhere").variant(LkBtn.Variant.tertiary).full()
-            .onClick(e -> Toasts.warn("Multi-device session control — V2-AUTH-02.")));
-        sessions.add(s);
-
-        col.add(prefs, sessions);
-        return col;
     }
 
     private static String initials(String name) {

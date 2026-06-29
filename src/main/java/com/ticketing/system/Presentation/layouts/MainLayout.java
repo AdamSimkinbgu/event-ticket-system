@@ -1,9 +1,8 @@
 package com.ticketing.system.Presentation.layouts;
 
-import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
-import com.ticketing.system.Core.Application.interfaces.INotificationService;
-import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Presentation.components.NotificationBellComponent;
+import com.ticketing.system.Presentation.presenters.notifications.NotificationBellPresenter;
+import com.ticketing.system.Presentation.presenters.order.CartBadgePresenter;
 import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkTopBar;
@@ -33,7 +32,6 @@ import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.router.AfterNavigationEvent;
 import com.vaadin.flow.router.AfterNavigationObserver;
 import com.vaadin.flow.server.VaadinSession;
-import com.ticketing.system.Presentation.session.SessionIdentity;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,18 +60,16 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
             CheckoutView.class, "My Tickets",
             OrderConfirmationView.class, "My Tickets");
 
-    private final ReservationService reservationService;
+    private final CartBadgePresenter cartBadgePresenter;
     private LkTopBar topBar;
     private final SignOutFlow signOutFlow;
-    private final SessionIdentity identity;
-    private final INotificationService notificationService;
+    private final NotificationBellPresenter bellPresenter;
 
-    public MainLayout(ReservationService reservationService, SignOutFlow signOutFlow,
-            SessionIdentity identity, INotificationService notificationService) {
-        this.reservationService = reservationService;
+    public MainLayout(CartBadgePresenter cartBadgePresenter, SignOutFlow signOutFlow,
+            NotificationBellPresenter bellPresenter) {
+        this.cartBadgePresenter = cartBadgePresenter;
         this.signOutFlow = signOutFlow;
-        this.identity = identity;
-        this.notificationService = notificationService;
+        this.bellPresenter = bellPresenter;
         rebuildTopBar(null);
     }
 
@@ -105,20 +101,17 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
                     cartSize = cachedSize;
                     cartDeadlineMs = cachedDeadlineMs;
                 } else {
-                    try {
-                        String credential = identity.credential();
-                        ActiveOrderDTO order = (credential != null)
-                                ? reservationService.viewMyActiveOrder(credential)
-                                : null;
-                        if (order != null && !order.lines().isEmpty()) {
-                            cartSize = order.lines().size();
-                            long remSec = order.remainingSecondsBeforeExpiry();
-                            if (remSec > 0) {
-                                cartDeadlineMs = now + remSec * 1000L;
+                    // The presenter owns the service call + error handling; the shell only
+                    // reads the typed Outcome and keeps caching the result in the Vaadin session.
+                    switch (cartBadgePresenter.loadBadge()) {
+                        case CartBadgePresenter.Outcome.Cart c -> {
+                            cartSize = c.count();
+                            if (c.remainingSeconds() > 0) {
+                                cartDeadlineMs = now + c.remainingSeconds() * 1000L;
                             }
                         }
-                    } catch (Exception e) {
-                        // Log but don't fail topbar render
+                        case CartBadgePresenter.Outcome.Empty ignored -> { /* no cart — leave 0 */ }
+                        case CartBadgePresenter.Outcome.Failure ignored -> { /* don't fail topbar render */ }
                     }
                     session.setAttribute("cart.size", cartSize);
                     session.setAttribute("cart.deadline", cartDeadlineMs);
@@ -141,10 +134,7 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
                 .brand("TicketHub", LandingView.class)
                 .nav(nav, activeLabel)
                 .cart(CartView.class, cartSize, cartDeadlineMs)
-                .bell(new NotificationBellComponent(notifId -> {
-                    Integer userId = AuthSession.userId();
-                    if (userId != null) notificationService.markRead(userId, notifId);
-                }));
+                .bell(new NotificationBellComponent(bellPresenter::markRead));
 
         if (signedIn) {
             bar.account(initials(name), name, buildMemberMenu(name));
