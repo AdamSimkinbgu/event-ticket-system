@@ -26,6 +26,8 @@ import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 public class AdminComplaintQueuePresenter {
 
     private static final String ALL = "All";
+    private static final String GROUP_OPEN = "Open";
+    private static final String GROUP_RESOLVED = "Resolved";
     private static final String RESOLVED = "RESOLVED";
 
     private final MessagingService messagingService;
@@ -35,22 +37,40 @@ public class AdminComplaintQueuePresenter {
         this.messagingService = messagingService;
     }
 
-    /** Loads the complaint queue, optionally filtered to a single status ("All"/blank → no filter). */
-    public Outcome load(String token, String statusFilter) {
+    /**
+     * Loads the complaint queue grouped by the UI status filter: "All" → everything, "Open" →
+     * OPEN+RESPONDED (not yet resolved), "Resolved" → RESOLVED+CLOSED (terminal). A single
+     * server-side status can't express those groups, so the whole queue is fetched and grouped
+     * in-memory ("All"/blank → no grouping).
+     */
+    public Outcome load(String token, String group) {
         if (token == null) {
             return new Outcome.NotAuthenticated();
         }
         try {
-            String status = (statusFilter == null || statusFilter.isBlank() || ALL.equals(statusFilter))
-                ? null : statusFilter;
-            List<ConversationDTO> complaints = messagingService.viewAllComplaints(
-                token, new ComplaintFilterDTO(status, null, null, null));
-            return new Outcome.Success(complaints);
+            List<ConversationDTO> all = messagingService.viewAllComplaints(
+                token, new ComplaintFilterDTO(null, null, null, null));
+            List<ConversationDTO> filtered = all.stream()
+                .filter(c -> inGroup(c.status(), group))
+                .toList();
+            return new Outcome.Success(filtered);
         } catch (InvalidTokenException e) {
             return new Outcome.NotAuthenticated();
         } catch (RuntimeException e) {
             return new Outcome.Failure(e.getMessage());
         }
+    }
+
+    /** UI status group → which raw ConversationStatus values it includes. "All"/blank → everything. */
+    private static boolean inGroup(String status, String group) {
+        if (group == null || group.isBlank() || ALL.equals(group)) {
+            return true;
+        }
+        return switch (group) {
+            case GROUP_OPEN     -> "OPEN".equals(status) || "RESPONDED".equals(status);
+            case GROUP_RESOLVED -> "RESOLVED".equals(status) || "CLOSED".equals(status);
+            default             -> true;
+        };
     }
 
     /** Loads a single complaint thread for the dedicated respond page. */
