@@ -82,7 +82,9 @@ public class EventManagementPresenter {
         if (artists == null || artists.isEmpty())
                                    return new CreateOutcome.InvalidInput("At least one artist is required.");
         if (rating == null)        return new CreateOutcome.InvalidInput("A rating (0–5) is required.");
-        if (rating < 0 || rating > 5)
+        // Double.isFinite guards against NaN/Infinity, for which `< 0`/`> 5` are both false and would
+        // otherwise let an invalid rating slip past the range check into the domain.
+        if (!Double.isFinite(rating) || rating < 0 || rating > 5)
                                    return new CreateOutcome.InvalidInput("Rating must be between 0 and 5.");
 
         try {

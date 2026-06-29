@@ -90,7 +90,14 @@ public final class ScenarioCommand {
             return null;
         }
         try {
-            return Double.parseDouble(v.trim());
+            double parsed = Double.parseDouble(v.trim());
+            // Double.parseDouble accepts "NaN"/"Infinity"; reject them so seeded data can't bypass
+            // range checks that rely on < / > (both false for NaN) and corrupt ratings downstream.
+            if (!Double.isFinite(parsed)) {
+                throw new IllegalArgumentException(
+                        "line " + line + " (" + op + "): " + key + " must be a finite number, got '" + v + "'");
+            }
+            return parsed;
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("line " + line + " (" + op + "): " + key + " must be a number, got '" + v + "'");
         }

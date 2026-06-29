@@ -327,9 +327,9 @@ public class ProductionCompany implements InvariantChecked {
         if (name == null || name.isBlank()) {
             throw new IllegalStateException("ProductionCompany invariant violated: name must be non-blank");
         }
-        if (rating != null && (rating < 0 || rating > 5)) {
+        if (rating != null && (!Double.isFinite(rating) || rating < 0 || rating > 5)) {
             throw new IllegalStateException(
-                    "ProductionCompany invariant violated: rating must be between 0 and 5 (was " + rating + ")");
+                    "ProductionCompany invariant violated: rating must be a finite value between 0 and 5 (was " + rating + ")");
         }
         if (companyStatus == null) {
             throw new IllegalStateException("ProductionCompany invariant violated: status must not be null");
