@@ -95,13 +95,13 @@ public class CompanyRegistrationView extends LkPage {
             case CompanyRegistrationPresenter.Outcome.Success success ->
                 Toasts.success("'" + success.company().name() + "' registered — welcome to the organizer workspace.");
             case CompanyRegistrationPresenter.Outcome.NotAuthenticated ignored ->
-                Toasts.failure("Sign in again to register a company.");
+                Toasts.failure("Your session has expired — please sign in again.");
             case CompanyRegistrationPresenter.Outcome.InvalidInput invalid ->
-                Toasts.failure(invalid.reason());
+                Toasts.failure("Please check the company details and try again.");
             case CompanyRegistrationPresenter.Outcome.NameTaken taken ->
-                Toasts.failure(taken.reason());
+                Toasts.failure("That company name is already taken — please choose another.");
             case CompanyRegistrationPresenter.Outcome.Failure fail ->
-                Toasts.failure("Registration failed: " + fail.reason());
+                Toasts.failure("Registration failed — please try again.");
         }
 
         if (outcome instanceof CompanyRegistrationPresenter.Outcome.Success) {

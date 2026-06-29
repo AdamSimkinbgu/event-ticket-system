@@ -68,9 +68,9 @@ public class AdminLoginView extends LkAuthCard {
             case AdminLoginPresenter.Outcome.InvalidCredentials ignored ->
                 Toasts.failure("Invalid admin username or password.");
             case AdminLoginPresenter.Outcome.Locked locked ->
-                Toasts.failure(locked.reason());
+                Toasts.failure("Your account is temporarily locked after too many failed attempts. Please try again later.");
             case AdminLoginPresenter.Outcome.Failure fail ->
-                Toasts.failure("Sign-in failed: " + fail.reason());
+                Toasts.failure("Sign-in failed — please try again.");
         }
     }
 }

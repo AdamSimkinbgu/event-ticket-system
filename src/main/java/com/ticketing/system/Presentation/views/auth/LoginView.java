@@ -110,10 +110,12 @@ public class LoginView extends LkAuthCard {
             case LoginPresenter.Outcome.Success ok -> onSuccess(ok.loginDTO());
             case LoginPresenter.Outcome.InvalidCredentials ignored ->
                 Toasts.failure("Invalid username or password.");
-            case LoginPresenter.Outcome.GuestSessionMissing miss ->
-                Toasts.failure("Session expired — please refresh the page. (" + miss.reason() + ")");
+            case LoginPresenter.Outcome.GuestSessionMissing miss -> {
+                Toasts.warn("Your session timed out — reloading…");
+                UI.getCurrent().getPage().reload();
+            }
             case LoginPresenter.Outcome.Failure fail ->
-                Toasts.failure("Sign-in failed: " + fail.reason());
+                Toasts.failure("Sign-in failed — please try again.");
         }
     }
 

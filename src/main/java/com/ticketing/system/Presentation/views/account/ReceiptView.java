@@ -135,9 +135,7 @@ public class ReceiptView extends LkPage implements BeforeEnterObserver {
         actions.add(
                 new LkBtn("Print").variant(LkBtn.Variant.secondary)
                         .icon(new LkIcon("copy", 15))
-                        .onClick(e -> UI.getCurrent().getPage().executeJs("window.print()")),
-                new LkBtn("Email Receipt").variant(LkBtn.Variant.tertiary)
-                        .onClick(e -> Toasts.success("Receipt resent to your account email (mock).")));
+                        .onClick(e -> UI.getCurrent().getPage().executeJs("window.print()")));
         return actions;
     }
 

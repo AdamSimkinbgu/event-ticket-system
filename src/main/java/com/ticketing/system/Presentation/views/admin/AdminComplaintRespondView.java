@@ -116,7 +116,7 @@ public class AdminComplaintRespondView extends LkPage implements BeforeEnterObse
             case AdminComplaintQueuePresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case AdminComplaintQueuePresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not send your response: " + fail.reason());
+                Toasts.failure("Could not send your response — please try again.");
         }
     }
 
