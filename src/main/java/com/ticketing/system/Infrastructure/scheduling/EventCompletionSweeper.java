@@ -51,12 +51,16 @@ public class EventCompletionSweeper {
      * Returns the number of events transitioned. Public so unit tests can drive the
      * sweep independently of the {@code @Scheduled} cadence.
      *
-     * <p>Each event is locked, re-read, re-validated, mutated and unlocked one at a time
-     * — never holding more than one event lock — so there is no lock-ordering concern with
-     * the multi-event {@code SessionAndOrderSweeper}.
+     * <p>Concurrency safety does NOT rely on {@code lockForUpdate} — that is a no-op on the JPA
+     * repository (it locks only under the in-memory repo). Each candidate is re-read and
+     * re-validated, and the real guard is the {@code Event} {@code @Version} optimistic lock: a
+     * racing sale bumps the version, so a stale completion fails on {@code save} and is retried on
+     * the next tick. The transition is idempotent and monotonic ({@code -> COMPLETED}) and mutates
+     * status only (no inventory side effects), and the {@code @Scheduled} pool is single-threaded —
+     * so there is no lock-ordering concern with the multi-event {@code SessionAndOrderSweeper}.
      */
     public int completeFinishedEvents(LocalDateTime now) {
-        // Unlocked scan: collect candidates, then re-validate each under its write lock below.
+        // Scan first, then re-read + re-validate each candidate before transitioning it below.
         List<Event> candidates = new ArrayList<>();
         candidates.addAll(eventRepository.findByStatus(EventStatus.ON_SALE));
         candidates.addAll(eventRepository.findByStatus(EventStatus.SOLD_OUT));
@@ -67,13 +71,13 @@ public class EventCompletionSweeper {
                 continue;
             }
             int eventId = candidate.getId();
-            eventRepository.lockForUpdate(eventId);
+            eventRepository.lockForUpdate(eventId); // no-op under JPA; a real lock only on the in-memory repo
             try {
                 Event fresh = eventRepository.findById(eventId);
-                // Re-validate under the write lock: status/dates may have changed since the
-                // unlocked scan (owner cancel, inventory release reverting SOLD_OUT, a prior
-                // tick). transitionToCompleted is idempotent, but checking first avoids the
-                // guard throwing on a now-stale candidate.
+                // Re-read + re-validate before transitioning: status/dates may have changed since the
+                // scan (owner cancel, inventory release reverting SOLD_OUT, a prior tick). The actual
+                // concurrency guard is Event's @Version on save; transitionToCompleted is idempotent,
+                // but checking first avoids the guard throwing on a now-stale candidate.
                 if ((fresh.getStatus() == EventStatus.ON_SALE || fresh.getStatus() == EventStatus.SOLD_OUT)
                         && fresh.hasFinishedAsOf(now)) {
                     fresh.transitionToCompleted();
@@ -81,7 +85,7 @@ public class EventCompletionSweeper {
                     completed++;
                 }
             } catch (EventNotFoundException e) {
-                // Event was deleted between the scan and acquiring the lock — nothing to do.
+                // Event was deleted between the scan and the re-read — nothing to do.
                 log.warn("event-completion: event {} vanished before completion; skipping", eventId);
             } catch (RuntimeException e) {
                 // One bad event must not abort the rest of the tick.
