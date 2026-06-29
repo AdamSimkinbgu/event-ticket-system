@@ -49,7 +49,8 @@ class EventCompletionSweeperTest {
 
     private static final LocalDateTime SHOW_END = LocalDateTime.now().plusDays(10);
     private static final LocalDateTime AFTER_SHOW = SHOW_END.plusDays(1);
-    private static final LocalDateTime BEFORE_SHOW = LocalDateTime.now();
+    // Derived from SHOW_END (not a fresh now()) so the ordering BEFORE_SHOW < SHOW_END is explicit and clock-stable.
+    private static final LocalDateTime BEFORE_SHOW = SHOW_END.minusDays(1);
 
     private IEventRepository eventRepo;
     private EventCompletionSweeper sweeper;

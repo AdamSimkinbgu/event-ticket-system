@@ -92,7 +92,8 @@ class ProductionCompanyTest extends BaseDomainTest {
 
         @Test
         public void GivenNullRating_WhenConstruct_ThenSucceeds() {
-                // The main-code path (registerCompany) constructs with a null rating — must stay valid.
+                // A null rating models an unrated company (rating is derived, see CompanyRatings); the
+                // constructor invariant must permit it even though registerCompany seeds new companies with 0.0.
                 assertDoesNotThrow(() -> track(new ProductionCompany(
                                 COMPANY_ID, OWNER_ID, COMPANY_1_NAME, CompanyStatus.ACTIVE, COMPANY_1_DESCRIPTION, null)));
         }

@@ -32,7 +32,10 @@ public class CompanyEventListPresenter {
             List<ProductionCompanyDTO> owned = companyManagementService.findOwnedCompanies(token);
             if (owned.isEmpty()) return new Outcome.NoCompany();
             int companyId = owned.get(0).companyId();
-            List<EventDetailDTO> events = eventService.listEventsForCompany(token, companyId, filters);
+            // Null filters means "unfiltered" — substitute an empty filter set so the service's
+            // filters.withoutCompanyRating() call can't NPE into a generic Failure.
+            CatalogSearchFiltersDTO effectiveFilters = filters == null ? CatalogSearchFiltersDTO.empty() : filters;
+            List<EventDetailDTO> events = eventService.listEventsForCompany(token, companyId, effectiveFilters);
             return new Outcome.Success(events);
         } catch (InvalidTokenException e) {
             return new Outcome.NotAuthenticated();

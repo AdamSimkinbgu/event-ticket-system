@@ -151,9 +151,18 @@ public class CatalogService {
                 continue;
             }
             if (filterByCompanyRating) {
-                Double companyRating = companyRatingCache.computeIfAbsent(
-                        event.getCompanyId(),
-                        id -> CompanyRatings.fromEvents(eventRepository.findByCompanyId(id)));
+                // NOTE: don't use computeIfAbsent — a derived company rating is null when none of
+                // the company's events are rated, and computeIfAbsent does NOT store a null result,
+                // so it would re-query findByCompanyId for every event of an unrated company. Cache
+                // the null explicitly via containsKey/put so each company is looked up at most once.
+                Integer companyId = event.getCompanyId();
+                Double companyRating;
+                if (companyRatingCache.containsKey(companyId)) {
+                    companyRating = companyRatingCache.get(companyId);
+                } else {
+                    companyRating = CompanyRatings.fromEvents(eventRepository.findByCompanyId(companyId));
+                    companyRatingCache.put(companyId, companyRating);
+                }
                 if (!matchesCompanyRating(companyRating, effectiveFilters)) {
                     continue;
                 }
