@@ -321,13 +321,10 @@ public class AuthenticationService {
      * — disjoint-pool rule), applies the shared lock-after-N policy, audit-logs every failure, and
      * issues an ADMIN-role JWT so the backend admin gate can authorize it.
      */
-<<<<<<< UI_General_Fixes
     // Read-WRITE: generateAdminToken persists a brand-new Session row. A read-only transaction
     // would leave Hibernate in MANUAL flush mode, so the assigned-id INSERT would never flush
     // under the jpa profile and every admin token would fail validation as "session not found"
     // (member login is unaffected — it promotes an already-persisted guest session).
-=======
->>>>>>> dev
     @Transactional
     public AuthTokenDTO signInAsAdmin(String username, String rawPassword) {
         String lockKey = lockoutKey("a", username);
