@@ -99,7 +99,12 @@ public final class Capabilities {
         Set<Capability> caps = EnumSet.copyOf(GUEST_BASE);
 
         if (AuthSession.isAdmin()) {
+            // Admins are a SEPARATE pool from members — the admin's id lives in the `admins` table,
+            // not `users`. Return here so we never resolve company memberships for an admin: falling
+            // through to listForUser(userId) -> getUserById(userId) throws UserNotFoundException
+            // whenever no member happens to share that id (always, on a clean DB).
             caps.addAll(ADMIN_BUNDLE);
+            return caps;
         }
 
         if (!AuthSession.isSignedIn()) {
