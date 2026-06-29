@@ -738,13 +738,33 @@ class EventManagementServiceTest {
         }
 
         @Test
-        void GivenManagerWithoutManageInventoryPermission_WhenListEventsForCompany_ThenThrowsException() {
+        void GivenManagerMember_WhenListEventsForCompany_ThenReturnsEvents() {
+                // The events list is a read-only hub: any active member may see it (managerUser holds
+                // CONFIGURE_VENUE, not MANAGE_INVENTORY), so a venue/sales manager can reach the
+                // per-event venue editor. Per-event mutations stay gated by their own permission.
                 when(sessionManager.validateToken(MANAGER_TOKEN)).thenReturn(true);
                 when(sessionManager.extractUserId(MANAGER_TOKEN)).thenReturn(MANAGER_ID);
                 when(userRepository.getUserById(MANAGER_ID)).thenReturn(managerUser);
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
+                when(mockEventRepo.searchByCompanyAll(eq(COMPANY_ID), any())).thenReturn(List.of(event));
+
+                List<EventDetailDTO> result = eventService.listEventsForCompany(MANAGER_TOKEN, COMPANY_ID);
+
+                assertNotNull(result);
+                assertEquals(1, result.size());
+                assertEquals(String.valueOf(EVENT_ID), result.get(0).eventId());
+        }
+
+        @Test
+        void GivenNonMember_WhenListEventsForCompany_ThenThrowsException() {
+                User stranger = new User(999, "Stranger", "stranger@example.com", "hashedpassword", 30);
+                when(sessionManager.validateToken("stranger-token")).thenReturn(true);
+                when(sessionManager.extractUserId("stranger-token")).thenReturn(999);
+                when(userRepository.getUserById(999)).thenReturn(stranger);
+                when(mockCompanyRepo.getCompanyById(COMPANY_ID)).thenReturn(company);
 
                 assertThrows(RuntimeException.class,
-                                () -> eventService.listEventsForCompany(MANAGER_TOKEN, COMPANY_ID));
+                                () -> eventService.listEventsForCompany("stranger-token", COMPANY_ID));
         }
 
         @Test

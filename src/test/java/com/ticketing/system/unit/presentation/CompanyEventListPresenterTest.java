@@ -2,7 +2,7 @@ package com.ticketing.system.unit.presentation;
 
 import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
-import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.events.EventStatus;
@@ -46,62 +46,91 @@ class CompanyEventListPresenterTest {
     @Test
     void load_nullToken_returnsNotAuthenticated() {
         assertInstanceOf(CompanyEventListPresenter.Outcome.NotAuthenticated.class,
-                presenter.load(null, CatalogSearchFiltersDTO.empty()));
+                presenter.load(null, null, CatalogSearchFiltersDTO.empty()));
         verifyNoInteractions(eventService, companyService);
     }
 
     @Test
     void load_invalidToken_returnsNotAuthenticated() {
-        when(companyService.findOwnedCompanies(TOKEN)).thenThrow(new InvalidTokenException("bad"));
+        when(companyService.findMyCompanies(TOKEN)).thenThrow(new InvalidTokenException("bad"));
 
         assertInstanceOf(CompanyEventListPresenter.Outcome.NotAuthenticated.class,
-                presenter.load(TOKEN, CatalogSearchFiltersDTO.empty()));
+                presenter.load(TOKEN, null, CatalogSearchFiltersDTO.empty()));
     }
 
     @Test
-    void load_noOwnedCompanies_returnsNoCompany() {
-        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of());
+    void load_noCompanies_returnsNoCompany() {
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of());
 
         assertInstanceOf(CompanyEventListPresenter.Outcome.NoCompany.class,
-                presenter.load(TOKEN, CatalogSearchFiltersDTO.empty()));
+                presenter.load(TOKEN, null, CatalogSearchFiltersDTO.empty()));
         verifyNoInteractions(eventService);
     }
 
     @Test
-    void load_success_returnsEventsForFirstOwnedCompany() {
-        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
+    void load_success_returnsEventsForFirstCompany() {
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
         List<EventDetailDTO> events = List.of(event(EVENT_ID, "Gala Night"));
         when(eventService.listEventsForCompany(eq(TOKEN), eq(COMPANY_ID), any())).thenReturn(events);
 
         CompanyEventListPresenter.Outcome.Success ok =
                 assertInstanceOf(CompanyEventListPresenter.Outcome.Success.class,
-                        presenter.load(TOKEN, CatalogSearchFiltersDTO.empty()));
+                        presenter.load(TOKEN, null, CatalogSearchFiltersDTO.empty()));
 
         assertEquals(1, ok.events().size());
         assertEquals("Gala Night", ok.events().get(0).name());
     }
 
     @Test
+    void load_managerMembership_returnsThatCompanysEvents() {
+        // The exact bug (#429): a manager holds a Manager appointment, not an Owner one, so the old
+        // owner-only lookup returned NoCompany. findMyCompanies keeps managers; the presenter must
+        // resolve the company and serve its events.
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID, "Manager")));
+        when(eventService.listEventsForCompany(eq(TOKEN), eq(COMPANY_ID), any()))
+                .thenReturn(List.of(event(EVENT_ID, "Manager-Visible Show")));
+
+        CompanyEventListPresenter.Outcome.Success ok =
+                assertInstanceOf(CompanyEventListPresenter.Outcome.Success.class,
+                        presenter.load(TOKEN, null, CatalogSearchFiltersDTO.empty()));
+
+        assertEquals(1, ok.events().size());
+        assertEquals("Manager-Visible Show", ok.events().get(0).name());
+    }
+
+    @Test
+    void load_honorsSelectedCompanyAmongMemberships() {
+        // Multiple memberships: the workspace's selected company id must win over "first".
+        when(companyService.findMyCompanies(TOKEN))
+                .thenReturn(List.of(company(99, "Co-owner"), company(COMPANY_ID, "Manager")));
+        when(eventService.listEventsForCompany(eq(TOKEN), eq(COMPANY_ID), any())).thenReturn(List.of());
+
+        presenter.load(TOKEN, COMPANY_ID, CatalogSearchFiltersDTO.empty());
+
+        verify(eventService).listEventsForCompany(eq(TOKEN), eq(COMPANY_ID), any());
+    }
+
+    @Test
     void load_passesFiltersThroughToService() {
-        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
         CatalogSearchFiltersDTO filters = new CatalogSearchFiltersDTO(
                 "Othello", null, null, null, null, null, null, null, null, null, null, null, null);
         when(eventService.listEventsForCompany(eq(TOKEN), eq(COMPANY_ID), eq(filters))).thenReturn(List.of());
 
-        presenter.load(TOKEN, filters);
+        presenter.load(TOKEN, null, filters);
 
         verify(eventService).listEventsForCompany(eq(TOKEN), eq(COMPANY_ID), eq(filters));
     }
 
     @Test
     void load_serviceThrowsRuntime_returnsFailure() {
-        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
         when(eventService.listEventsForCompany(anyString(), anyInt(), any()))
                 .thenThrow(new RuntimeException("db error"));
 
         CompanyEventListPresenter.Outcome.Failure fail =
                 assertInstanceOf(CompanyEventListPresenter.Outcome.Failure.class,
-                        presenter.load(TOKEN, CatalogSearchFiltersDTO.empty()));
+                        presenter.load(TOKEN, null, CatalogSearchFiltersDTO.empty()));
 
         assertEquals("db error", fail.reason());
     }
@@ -249,50 +278,54 @@ class CompanyEventListPresenterTest {
 
     @Test
     void countries_nullToken_isEmpty() {
-        assertTrue(presenter.countries(null).isEmpty());
+        assertTrue(presenter.countries(null, null).isEmpty());
         verifyNoInteractions(eventService, companyService);
     }
 
     @Test
-    void countries_noOwnedCompany_isEmpty() {
-        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of());
+    void countries_noCompany_isEmpty() {
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of());
 
-        assertTrue(presenter.countries(TOKEN).isEmpty());
+        assertTrue(presenter.countries(TOKEN, null).isEmpty());
         verifyNoInteractions(eventService);
     }
 
     @Test
-    void countries_distinctSortedFromOwnedCompanyEvents() {
-        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
+    void countries_distinctSortedFromCompanyEvents() {
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
         when(eventService.listEventsForCompany(eq(TOKEN), eq(COMPANY_ID), any())).thenReturn(List.of(
                 eventAt(1, "Israel", "Tel Aviv"),
                 eventAt(2, "USA", "New York"),
                 eventAt(3, "Israel", "Haifa")));
 
-        assertEquals(List.of("Israel", "USA"), presenter.countries(TOKEN));
+        assertEquals(List.of("Israel", "USA"), presenter.countries(TOKEN, null));
     }
 
     @Test
     void cities_filtersToCountryDistinctSorted() {
-        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of(company(COMPANY_ID)));
         when(eventService.listEventsForCompany(eq(TOKEN), eq(COMPANY_ID), any())).thenReturn(List.of(
                 eventAt(1, "Israel", "Tel Aviv"),
                 eventAt(2, "Israel", "Haifa"),
                 eventAt(4, "Israel", "Tel Aviv"),   // duplicate city
                 eventAt(3, "USA", "New York")));
 
-        assertEquals(List.of("Haifa", "Tel Aviv"), presenter.cities(TOKEN, "Israel"));
+        assertEquals(List.of("Haifa", "Tel Aviv"), presenter.cities(TOKEN, null, "Israel"));
     }
 
     @Test
     void cities_nullCountry_isEmpty() {
-        assertTrue(presenter.cities(TOKEN, null).isEmpty());
+        assertTrue(presenter.cities(TOKEN, null, null).isEmpty());
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    private static ProductionCompanyDTO company(int id) {
-        return new ProductionCompanyDTO(id, "Company " + id, "desc", "ACTIVE", 1);
+    private static MyCompanyDTO company(int id) {
+        return company(id, "Co-owner");
+    }
+
+    private static MyCompanyDTO company(int id, String role) {
+        return new MyCompanyDTO(id, "Company " + id, role);
     }
 
     private static EventDetailDTO eventAt(int id, String country, String city) {

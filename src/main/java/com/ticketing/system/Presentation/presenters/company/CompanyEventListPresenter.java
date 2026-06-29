@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 
 import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
-import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.events.EventStatus;
@@ -26,16 +26,15 @@ public class CompanyEventListPresenter {
         this.companyManagementService = companyManagementService;
     }
 
-    public Outcome load(String token, CatalogSearchFiltersDTO filters) {
+    public Outcome load(String token, Integer companyId, CatalogSearchFiltersDTO filters) {
         if (token == null) return new Outcome.NotAuthenticated();
         try {
-            List<ProductionCompanyDTO> owned = companyManagementService.findOwnedCompanies(token);
-            if (owned.isEmpty()) return new Outcome.NoCompany();
-            int companyId = owned.get(0).companyId();
+            Integer resolved = resolveCompanyId(token, companyId);
+            if (resolved == null) return new Outcome.NoCompany();
             // Null filters means "unfiltered" — substitute an empty filter set so the service's
             // filters.withoutCompanyRating() call can't NPE into a generic Failure.
             CatalogSearchFiltersDTO effectiveFilters = filters == null ? CatalogSearchFiltersDTO.empty() : filters;
-            List<EventDetailDTO> events = eventService.listEventsForCompany(token, companyId, effectiveFilters);
+            List<EventDetailDTO> events = eventService.listEventsForCompany(token, resolved, effectiveFilters);
             return new Outcome.Success(events);
         } catch (InvalidTokenException e) {
             return new Outcome.NotAuthenticated();
@@ -44,21 +43,38 @@ public class CompanyEventListPresenter {
         }
     }
 
-    // ---- filter options (owner scope): distinct country/city of THIS company's own events ----
+    /**
+     * Resolve which of the caller's companies to scope to. Uses {@code findMyCompanies}
+     * (manager-inclusive, unlike {@code findOwnedCompanies}) so a manager granted
+     * {@code MANAGE_INVENTORY} sees their company's events; honors the workspace's selected company
+     * ({@code preferredCompanyId}) when it is one of theirs, else falls back to the first — the same
+     * select-or-first idiom as {@code CompanyInquiryInboxPresenter}. {@code null} when the caller
+     * belongs to no company.
+     */
+    private Integer resolveCompanyId(String token, Integer preferredCompanyId) {
+        List<MyCompanyDTO> companies = companyManagementService.findMyCompanies(token);
+        if (companies.isEmpty()) return null;
+        return companies.stream()
+                .filter(c -> preferredCompanyId != null && c.companyId() == preferredCompanyId)
+                .findFirst()
+                .orElse(companies.get(0))
+                .companyId();
+    }
 
-    /** This company's events (all statuses), unfiltered; empty when there's no token / no owned company. */
-    private List<EventDetailDTO> ownedCompanyEvents(String token) {
+    // ---- filter options (company scope): distinct country/city of THIS company's own events ----
+
+    /** This company's events (all statuses), unfiltered; empty when there's no token / no company. */
+    private List<EventDetailDTO> companyEvents(String token, Integer companyId) {
         if (token == null) return List.of();
-        List<ProductionCompanyDTO> owned = companyManagementService.findOwnedCompanies(token);
-        if (owned.isEmpty()) return List.of();
-        int companyId = owned.get(0).companyId();
-        return eventService.listEventsForCompany(token, companyId, CatalogSearchFiltersDTO.empty());
+        Integer resolved = resolveCompanyId(token, companyId);
+        if (resolved == null) return List.of();
+        return eventService.listEventsForCompany(token, resolved, CatalogSearchFiltersDTO.empty());
     }
 
     /** Distinct countries this company has events in, sorted; empty list on any failure. */
-    public List<String> countries(String token) {
+    public List<String> countries(String token, Integer companyId) {
         try {
-            return ownedCompanyEvents(token).stream()
+            return companyEvents(token, companyId).stream()
                     .map(ev -> ev.location() == null ? null : ev.location().country())
                     .filter(c -> c != null && !c.isBlank())
                     .distinct()
@@ -70,10 +86,10 @@ public class CompanyEventListPresenter {
     }
 
     /** Distinct cities this company has events in for {@code country}, sorted; empty list on any failure. */
-    public List<String> cities(String token, String country) {
+    public List<String> cities(String token, Integer companyId, String country) {
         if (country == null) return List.of();
         try {
-            return ownedCompanyEvents(token).stream()
+            return companyEvents(token, companyId).stream()
                     .filter(ev -> ev.location() != null && country.equalsIgnoreCase(ev.location().country()))
                     .map(ev -> ev.location().city())
                     .filter(c -> c != null && !c.isBlank())

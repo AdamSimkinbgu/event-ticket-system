@@ -193,7 +193,11 @@ public class EventManagementService {
             throw new CompanyNotFoundException("Company not found for ID: " + companyId);
         }
 
-        user.requirePermissionInCompany(companyId, Permission.MANAGE_INVENTORY);
+        // The events list is a read-only management hub. Any active member of the company may see
+        // it (so e.g. a venue/sales manager can reach the per-event venue editor); the per-event
+        // mutations (configure venue, edit details, policies, cancel) stay gated by their own
+        // permission at their own service entry points.
+        user.requireMemberInCompany(companyId);
 
         EventMapper mapper = new EventMapper();
         return eventRepository.searchByCompanyAll(companyId, filters.withoutCompanyRating()).stream()

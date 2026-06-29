@@ -16,6 +16,7 @@ import com.ticketing.system.Presentation.presenters.company.CompanySalesPresente
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.session.CurrentCompanies;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
@@ -58,7 +59,7 @@ public class CompanySalesView extends LkPage {
     /** (Re)builds the report into the content slot — on open and on every Refresh click. */
     private void reload() {
         content.removeAll();
-        switch (presenter.load(AuthSession.token())) {
+        switch (presenter.load(AuthSession.token(), CurrentCompanies.currentCompanyId())) {
             case CompanySalesPresenter.Outcome.Success ok -> {
                 subtitle(ok.companyName() + "  ·  immutable order receipts.");
                 content.add(buildFilters());

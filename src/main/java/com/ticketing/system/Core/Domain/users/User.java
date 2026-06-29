@@ -251,6 +251,23 @@ public class User implements InvariantChecked {
         }
     }
 
+    // True when the user holds any ACTIVE appointment (owner or manager) in the company.
+    public boolean isMemberInCompany(int companyId) {
+        return getActiveCompanyAppointment(companyId) != null;
+    }
+
+    /**
+     * Will throw if the user is not an active member (owner or manager) of the company.
+     * Used to gate read-only company-management views that any member may see — e.g. the
+     * events hub a venue/sales manager opens to reach the per-event venue editor — while the
+     * per-action mutations stay gated by their specific {@link Permission}.
+     */
+    public void requireMemberInCompany(int companyId) {
+        if (!isMemberInCompany(companyId)) {
+            throw new RuntimeException("User is not a member of this company");
+        }
+    }
+
 
 
     /**

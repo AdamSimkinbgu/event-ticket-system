@@ -1,5 +1,6 @@
 package com.ticketing.system.Presentation.security;
 
+import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.auth.LoginView;
 import com.ticketing.system.Presentation.views.company.CompanyRegistrationView;
@@ -95,6 +96,13 @@ public class AuthBootstrap implements VaadinServiceInitListener {
 
         // 2. Capability gate.
         if (cap != null && !Capabilities.has(cap.value())) {
+            // A signed-in company member who reached a workspace action they lack the permission
+            // for — e.g. a manager clicking "Policies" without EDIT_PURCHASE_POLICIES — gets a clear
+            // toast instead of a silent redirect. The admin-shell and "no company yet" forwards keep
+            // their existing (silent) behavior; those aren't a missing-permission situation.
+            if (WORKSPACE_CAPS.contains(cap.value()) && Capabilities.has(Capability.OWNER_WORKSPACE)) {
+                Toasts.warn("Action not in your permissions - Contact Owner");
+            }
             event.forwardTo(fallbackFor(cap.value()));
         }
     }

@@ -163,7 +163,13 @@ public final class Capabilities {
                 case VIEW_SALES -> caps.add(Capability.VIEW_COMPANY_SALES);
                 case EDIT_POLICIES -> caps.add(Capability.EDIT_PURCHASE_POLICIES);
                 case RESPOND_TO_INQUIRIES -> caps.add(Capability.RESPOND_INQUIRIES);
-                case CONFIGURE_VENUE -> caps.add(Capability.MANAGE_VENUE_MAPS);
+                case CONFIGURE_VENUE -> {
+                    caps.add(Capability.MANAGE_VENUE_MAPS);
+                    // Reach the "My Events" hub (read-only) to open an event's venue editor —
+                    // the only path to it. EDIT_COMPANY_EVENTS is NOT granted, so event-detail
+                    // editing/creation/cancellation stay hidden for a venue-only manager.
+                    caps.add(Capability.VIEW_COMPANY_EVENTS);
+                }
                 case MANAGE_INVENTORY -> {
                     caps.add(Capability.VIEW_COMPANY_EVENTS);
                     caps.add(Capability.EDIT_COMPANY_EVENTS);

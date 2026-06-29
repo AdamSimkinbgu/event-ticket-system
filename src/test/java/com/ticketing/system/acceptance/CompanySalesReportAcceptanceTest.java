@@ -76,7 +76,7 @@ class CompanySalesReportAcceptanceTest {
     }
 
     private CompanySalesPresenter.Outcome.Success loadSuccess(AuthTokenDTO owner) {
-        CompanySalesPresenter.Outcome outcome = presenter.load(owner.token());
+        CompanySalesPresenter.Outcome outcome = presenter.load(owner.token(), null);
         return assertInstanceOf(CompanySalesPresenter.Outcome.Success.class, outcome);
     }
 
