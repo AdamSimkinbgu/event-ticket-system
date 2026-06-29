@@ -4,7 +4,6 @@ import java.util.EnumSet;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
 import org.hibernate.annotations.Fetch;
@@ -297,15 +296,12 @@ public int getAge() {
 }
 
     /**
-     * Verifies a candidate raw password against the stored hash. UC-12.
-     *
-     * <p>
-     * The hash never leaves this entity — the hasher does the comparison
-     * in place. The {@link IPasswordHasher} collaborator is passed in rather
-     * than held as a field so the entity stays a pure domain object.
+     * The stored password hash. UC-12. The Application layer owns the password hasher and does the
+     * raw-vs-hash comparison (mirrors {@code Admin.getPasswordHash()}), keeping this entity free of
+     * any Application/Infrastructure dependency.
      */
-    public boolean verifyPassword(String rawPassword, IPasswordHasher hasher) {
-        return hasher.matches(rawPassword, this.password);
+    public String getPasswordHash() {
+        return password;
     }
 
     public List<CompanyAppointment> getAllCompanyAppointments() {
