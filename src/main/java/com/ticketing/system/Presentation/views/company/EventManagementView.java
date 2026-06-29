@@ -283,7 +283,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
 
         rating.setMin(0);
         rating.setMax(5);
-        rating.setStep(0.5);
+        // No step constraint: accept any decimal (e.g. 4.1); only out-of-range [0,5] is flagged invalid.
         rating.setRequiredIndicatorVisible(true);
         rating.setWidthFull();
 

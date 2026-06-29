@@ -38,6 +38,7 @@ import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +54,9 @@ public class CompanyEventListView extends LkPage {
     private static final String STATUS_ALL = "All statuses";
     private static final List<String> STATUS_OPTIONS = List.of(
             STATUS_ALL, "Draft", "Scheduled", "On sale", "Sold out", "Cancelled", "Completed");
+
+    /** Human-readable start date + time, e.g. "Jul 19, 2026 · 5:41 PM" (no ISO "T"/seconds gibberish). */
+    private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("MMM d, yyyy · h:mm a");
 
     private final CompanyEventListPresenter presenter;
     private final LkCard eventsCard = new LkCard().pad(0);
@@ -343,7 +347,7 @@ public class CompanyEventListView extends LkPage {
         row.put("name", name);
 
         String date = ev.showDates() != null && !ev.showDates().isEmpty()
-            ? ev.showDates().get(0).getStartTime().toString() : "—";
+            ? ev.showDates().get(0).getStartTime().format(DATE_TIME_FMT) : "—";
         row.put("date", date);
 
         String venue = ev.location() != null ? ev.location().toString() : "—";
