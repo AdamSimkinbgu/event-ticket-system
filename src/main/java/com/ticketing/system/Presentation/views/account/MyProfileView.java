@@ -32,12 +32,12 @@ public class MyProfileView extends LkPage {
 
     private Component buildProfileCard() {
         String name = AuthSession.displayName();
-        if (name == null || name.isBlank()) name = "Alex Morgan";
+        if (name == null || name.isBlank()) name = "Guest";
 
-        // Real username + email come from the User aggregate via the presenter;
-        // fall back to the display name / a derived handle when signed out or on error.
-        String username = name;
-        String email = name + "@gmail.com";
+        // Username + email come from the User aggregate via the presenter. When signed out or on a load
+        // error we show a neutral placeholder rather than fabricating a plausible-looking address.
+        String username = "—";
+        String email = "—";
         switch (presenter.load()) {
             case MyProfilePresenter.Outcome.Success ok -> {
                 username = ok.member().username();
