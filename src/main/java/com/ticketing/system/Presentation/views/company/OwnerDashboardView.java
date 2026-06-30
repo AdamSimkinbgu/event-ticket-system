@@ -117,11 +117,6 @@ public class OwnerDashboardView extends LkPage {
         Div row = new Div();
         row.addClassName("ow-stats");
 
-        LkStat inquiries = new LkStat("Open inquiries", String.valueOf(stats.openInquiries()));
-        if (stats.openInquiries() > 0) {
-            inquiries.delta("needs reply", LkStat.Tone.warn);
-        }
-
         // Company rating is derived from the average of this company's events' ratings.
         LkStat rating = new LkStat("Rating",
             stats.rating() == null ? "—" : "★ " + ratingText(stats.rating()));
@@ -136,7 +131,15 @@ public class OwnerDashboardView extends LkPage {
         if (Capabilities.has(Capability.VIEW_COMPANY_SALES)) {
             row.add(new LkStat("Revenue · 30d", "$" + String.format("%,.0f", stats.revenue30d())));
         }
-        row.add(inquiries);
+        // Open inquiries is inquiry-handling data — only members with RESPOND_TO_INQUIRIES
+        // (RESPOND_INQUIRIES) see it, matching the "Customer Inquiries" tile gate below.
+        if (Capabilities.has(Capability.RESPOND_INQUIRIES)) {
+            LkStat inquiries = new LkStat("Open inquiries", String.valueOf(stats.openInquiries()));
+            if (stats.openInquiries() > 0) {
+                inquiries.delta("needs reply", LkStat.Tone.warn);
+            }
+            row.add(inquiries);
+        }
         return row;
     }
 
