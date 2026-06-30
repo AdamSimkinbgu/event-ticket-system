@@ -363,8 +363,9 @@ public class CompanyEventListView extends LkPage {
         row.put("venue", venue);
 
         // Cheapest ticket price (the same value the catalog's price-range filter matches on); "—"
-        // for events with no venue/zones yet (e.g. drafts).
-        row.put("from", ev.minPrice() > 0 ? "$" + (long) ev.minPrice() : "—");
+        // for events with no venue/zones yet (e.g. drafts). Format with cents so it matches the
+        // actual ticket price (e.g. $49.99, not a truncated $49).
+        row.put("from", ev.minPrice() > 0 ? String.format("$%,.2f", ev.minPrice()) : "—");
 
         row.put("rating", ev.rating() == null ? "—" : "★ " + ratingText(ev.rating()));
 

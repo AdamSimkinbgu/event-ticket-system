@@ -10,6 +10,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
@@ -45,8 +46,15 @@ import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 //
 // The "test" context is shared across methods, so every persona/company uses a unique name and
 // assertions are written to tolerate co-resident data (membership by id, not absolute totals).
+//
+// registerAdmin() saves admins with custom usernames straight into the shared in-memory admin pool.
+// Because the platform's default-admin bootstrap only fires when NO admin exists (existsAny), those
+// rogue admins would otherwise suppress creation of the default "admin"/"admin" for every later test
+// in the shared context — breaking any test that signs in as the default admin (e.g. to open the
+// market). @DirtiesContext rebuilds the context after this class so that leakage stays contained.
 @SpringBootTest
 @ActiveProfiles("test")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class MessagingAcceptanceTest {
 
     @Autowired private AuthenticationService authService;
