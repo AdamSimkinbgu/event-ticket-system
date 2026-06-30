@@ -213,15 +213,15 @@ class CompanyEventListPresenterTest {
     }
 
     @Test
-    void deleteEvent_withPurchaseHistory_returnsFailureWithMessage() {
-        doThrow(new BusinessRuleViolationException("Can't delete event with purchase history"))
+    void deleteEvent_withSalesHistory_returnsFailureWithMessage() {
+        doThrow(new BusinessRuleViolationException("Can't delete an event with sales history"))
                 .when(eventService).deleteEvent(TOKEN, EVENT_ID);
 
         CompanyEventListPresenter.ActionOutcome.Failure fail =
                 assertInstanceOf(CompanyEventListPresenter.ActionOutcome.Failure.class,
                         presenter.deleteEvent(TOKEN, EVENT_ID));
 
-        assertEquals("Can't delete event with purchase history", fail.reason());
+        assertEquals("Can't delete an event with sales history", fail.reason());
     }
 
     // ── changeEventStatus ─────────────────────────────────────────────────────

@@ -784,7 +784,7 @@ public class EventManagementService {
             // permanently delete one that still has purchase history, which would orphan its
             // OrderReceipt/Ticket records (referenced by eventId, no cascade).
             if (!orderReceiptRepository.findByEventId(eventId).isEmpty()) {
-                throw new BusinessRuleViolationException("Can't delete event with purchase history");
+                throw new BusinessRuleViolationException("Can't delete an event with sales history");
             }
             eventRepository.delete(eventId);
             log.info("Event {} deleted by user {}", eventId, userId);

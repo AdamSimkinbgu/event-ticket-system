@@ -450,7 +450,7 @@ public class CompanyEventListView extends LkPage {
                 case CompanyEventListPresenter.ActionOutcome.NotAuthenticated ignored2 ->
                     Toasts.warn("Your session has expired — please sign in again.");
                 case CompanyEventListPresenter.ActionOutcome.Failure fail ->
-                    Toasts.failure("Could not remove the event — please try again.");
+                    Toasts.failure(actionFailureMessage(fail.reason(), "Could not remove the event — please try again."));
             }
         });
         dialog.open();
@@ -486,13 +486,13 @@ public class CompanyEventListView extends LkPage {
             }
             switch (presenter.changeEventStatus(AuthSession.token(), Integer.parseInt(ev.eventId()), target)) {
                 case CompanyEventListPresenter.ActionOutcome.Success ignored2 -> {
-                    Toasts.success("Event status updated.");
+                    Toasts.success(statusChangeSuccessMessage(target));
                     reload();
                 }
                 case CompanyEventListPresenter.ActionOutcome.NotAuthenticated ignored2 ->
                     Toasts.warn("Your session has expired — please sign in again.");
                 case CompanyEventListPresenter.ActionOutcome.Failure fail ->
-                    Toasts.failure("Could not change the event status — please try again.");
+                    Toasts.failure(actionFailureMessage(fail.reason(), "Could not change the event status — please try again."));
             }
         });
         dialog.open();
@@ -503,6 +503,25 @@ public class CompanyEventListView extends LkPage {
             case DRAFT -> List.of(EventStatus.SCHEDULED);
             case SCHEDULED -> List.of(EventStatus.ON_SALE);
             default -> List.of();
+        };
+    }
+
+    /**
+     * Surface the real reason the service refused an action (e.g. "Can't delete an event with sales
+     * history", or "Event cannot be scheduled without a venue map and at least one inventory zone")
+     * instead of a generic toast — so the owner understands why. Falls back to {@code fallback} only
+     * when the service gave no message.
+     */
+    private static String actionFailureMessage(String reason, String fallback) {
+        return (reason == null || reason.isBlank()) ? fallback : reason;
+    }
+
+    /** Informative, status-specific confirmation for a successful status change. */
+    private static String statusChangeSuccessMessage(EventStatus target) {
+        return switch (target) {
+            case SCHEDULED -> "Event scheduled — you can publish it (put it On Sale) when ready.";
+            case ON_SALE   -> "Event is now On Sale — tickets are available to buyers.";
+            default        -> "Event status updated.";
         };
     }
 
