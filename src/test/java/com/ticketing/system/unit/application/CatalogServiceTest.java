@@ -142,6 +142,11 @@ class CatalogServiceTest {
         when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of(event1, event2));
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(highRated);
         when(mockCompanyRepository.getCompanyById(20)).thenReturn(lowRated);
+        // Company rating is derived from the company's events: 4.5 (>=3.5) vs 2.0 (<3.5).
+        Event company10Event = eventRated(4.5);
+        Event company20Event = eventRated(2.0);
+        when(mockEventRepository.findByCompanyId(10)).thenReturn(List.of(company10Event));
+        when(mockEventRepository.findByCompanyId(20)).thenReturn(List.of(company20Event));
 
         List<EventSummaryDTO> results = catalogService.searchGlobal(VALID_TOKEN, filters);
 
@@ -164,6 +169,11 @@ class CatalogServiceTest {
         when(mockEventRepository.searchONSALE(filters)).thenReturn(List.of(event1, event2));
         when(mockCompanyRepository.getCompanyById(10)).thenReturn(highRated);
         when(mockCompanyRepository.getCompanyById(20)).thenReturn(lowRated);
+        // Company rating is derived from the company's events: 4.5 (>3.0) vs 2.0 (<=3.0).
+        Event company10Event = eventRated(4.5);
+        Event company20Event = eventRated(2.0);
+        when(mockEventRepository.findByCompanyId(10)).thenReturn(List.of(company10Event));
+        when(mockEventRepository.findByCompanyId(20)).thenReturn(List.of(company20Event));
 
         List<EventSummaryDTO> results = catalogService.searchGlobal(VALID_TOKEN, filters);
 
@@ -781,6 +791,13 @@ class CatalogServiceTest {
         when(mockCompany.getRating()).thenReturn(rating);
         when(mockCompany.getStatus()).thenReturn(CompanyStatus.ACTIVE);
         return mockCompany;
+    }
+
+    // A bare event carrying only a rating — company rating is derived from these (CompanyRatings).
+    private Event eventRated(double rating) {
+        Event e = mock(Event.class);
+        when(e.getRating()).thenReturn(rating);
+        return e;
     }
 
     // A fully-stubbed event for getEventDetail tests (mapper reads

@@ -28,7 +28,7 @@ class LandingPresenterTest {
 
     private static EventSummaryDTO event(int id, String name) {
         return new EventSummaryDTO(id, name, "ON_SALE", 4.5, "Acme", "MUSIC",
-            "Tel Aviv", List.of(), 80.0, 250.0, false);
+            "Tel Aviv", List.of(), 80.0, 250.0, false, List.of(name));
     }
 
     @Test

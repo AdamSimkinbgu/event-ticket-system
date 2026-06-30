@@ -93,6 +93,12 @@ public class JpaEventRepository implements IEventRepository {
     }
 
     @Override
+    @Transactional
+    public void delete(int eventId) {
+        data.deleteById(eventId);
+    }
+
+    @Override
     public List<Event> findByCompanyId(int companyId) {
         return data.findByCompanyId(companyId);
     }
@@ -113,6 +119,11 @@ public class JpaEventRepository implements IEventRepository {
     }
 
     @Override
+    public List<Event> findAll() {
+        return data.findAll();
+    }
+
+    @Override
     public List<Event> searchAll(CatalogSearchFiltersDTO filters) {
         return data.findAll(EventSearchSpecification.from(filters));
     }
@@ -121,6 +132,14 @@ public class JpaEventRepository implements IEventRepository {
     public List<Event> searchONSALE(CatalogSearchFiltersDTO filters) {
         Specification<Event> spec = EventSearchSpecification.from(filters)
                 .and((root, query, cb) -> cb.equal(root.get("status"), EventStatus.ON_SALE));
+        return data.findAll(spec);
+    }
+
+    @Override
+    public List<Event> searchByCompanyAll(int companyId, CatalogSearchFiltersDTO filters) {
+        // "comapnyid" is the Event field name (a domain typo) — see SpringDataEventRepository.
+        Specification<Event> spec = EventSearchSpecification.from(filters)
+                .and((root, query, cb) -> cb.equal(root.get("comapnyid"), companyId));
         return data.findAll(spec);
     }
 }

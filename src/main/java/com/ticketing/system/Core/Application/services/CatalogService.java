@@ -3,8 +3,10 @@ package com.ticketing.system.Core.Application.services;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import lombok.extern.slf4j.Slf4j;
@@ -34,9 +36,11 @@ import com.ticketing.system.Core.Domain.events.IEventRepository;
 // Separated from EventManagementService (which is owner-side / write-heavy) so the two audiences
 // don't share an API surface — see design_walkthrough_summary.md §6.
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
+@Transactional(readOnly = true)
 public class CatalogService {
 
     private final ISessionManager sessionManager;
@@ -131,18 +135,37 @@ public class CatalogService {
 
         List<EventSummaryDTO> results = new ArrayList<>();
 
+        // Company rating is DERIVED from a company's events (see CompanyRatings) — compute it only
+        // when an Organizer-rating filter is active, cached per company for this search.
+        boolean filterByCompanyRating =
+                effectiveFilters.minCompanyRating() != null || effectiveFilters.maxCompanyRating() != null;
+        Map<Integer, Double> companyRatingCache = new HashMap<>();
+
         // Iterate over all events returned by the eventRepository.searchONSALE() method, applying the effective filters.
         for (Event event : eventRepository.searchONSALE(effectiveFilters)) {
             // Check if the event is associated with an active company and is publicly visible (ON_SALE).
-            
             ProductionCompany company = activeCompanyOrNull(event.getCompanyId());
 
             // If the event is not publicly visible or the company does not match the company rating filters, skip to the next event.
             if (!isCompanyPubliclyVisible(company)) {
                 continue;
             }
-            if (!matchesCompanyRating(company, effectiveFilters)) {
-                continue;
+            if (filterByCompanyRating) {
+                // NOTE: don't use computeIfAbsent — a derived company rating is null when none of
+                // the company's events are rated, and computeIfAbsent does NOT store a null result,
+                // so it would re-query findByCompanyId for every event of an unrated company. Cache
+                // the null explicitly via containsKey/put so each company is looked up at most once.
+                Integer companyId = event.getCompanyId();
+                Double companyRating;
+                if (companyRatingCache.containsKey(companyId)) {
+                    companyRating = companyRatingCache.get(companyId);
+                } else {
+                    companyRating = CompanyRatings.fromEvents(eventRepository.findByCompanyId(companyId));
+                    companyRatingCache.put(companyId, companyRating);
+                }
+                if (!matchesCompanyRating(companyRating, effectiveFilters)) {
+                    continue;
+                }
             }
 
             results.add(mapper.convertEventToEventSummaryDTO(event, productionCompanyRepository));
@@ -276,8 +299,15 @@ public class CatalogService {
                 .filter(c -> needle.isEmpty()
                         || (c.getName() != null && c.getName().toLowerCase().contains(needle)))
                 .sorted(Comparator.comparing(ProductionCompany::getName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
-                .map(c -> new CompanySummaryDTO(c.getCompanyId(), c.getName(), c.getRating()))
+                .map(c -> new CompanySummaryDTO(c.getCompanyId(), c.getName(),
+                        CompanyRatings.fromEvents(eventRepository.findByCompanyId(c.getCompanyId()))))
                 .toList();
+    }
+
+    //* A company's DERIVED rating — the mean of its events' ratings (CompanyRatings), or null when
+    //* it has no rated events. Backs the organizer line on the event-details page.
+    public Double companyRating(int companyId) {
+        return CompanyRatings.fromEvents(eventRepository.findByCompanyId(companyId));
     }
 
     // *HELPER METHOD* — "city, country" label for an event's venue, or null if it has no location.
@@ -361,18 +391,15 @@ public class CatalogService {
         return company != null && company.getStatus() == CompanyStatus.ACTIVE;
     }
 
-    // *HELPER METHOD* to check if a ProductionCompany's rating matches the min/max company rating filters, returning true if it does, false otherwise.
-    private boolean matchesCompanyRating(ProductionCompany company, CatalogSearchFiltersDTO filters) {
-        Double rating = company.getRating();
-
+    // *HELPER METHOD* — does the company's DERIVED rating (mean of its events' ratings) satisfy the
+    // min/max company-rating filters? A null rating (no rated events) fails any active bound.
+    private boolean matchesCompanyRating(Double rating, CatalogSearchFiltersDTO filters) {
         if (filters.minCompanyRating() != null && (rating == null || rating < filters.minCompanyRating())) {
             return false;
         }
-
         if (filters.maxCompanyRating() != null && (rating == null || rating > filters.maxCompanyRating())) {
             return false;
         }
-
         return true;
     }
 

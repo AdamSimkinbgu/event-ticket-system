@@ -6,6 +6,7 @@ import java.util.List;
 import com.ticketing.system.Core.Application.dto.MemberSearchResultDTO;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Read-only queries on the User aggregate that the presentation layer
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Service;
  * surface stays focused.
  */
 @Service
+@Transactional(readOnly = true)
 public class MemberQueryService {
 
     private final IUserRepository userRepository;

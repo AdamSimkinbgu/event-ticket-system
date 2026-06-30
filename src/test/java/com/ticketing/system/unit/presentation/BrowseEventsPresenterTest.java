@@ -32,7 +32,7 @@ class BrowseEventsPresenterTest {
 
     private static EventSummaryDTO summary() {
         return new EventSummaryDTO(1, "Coldplay", "ON_SALE", 4.8, "Live Nation",
-                "CONCERT", "Tel Aviv, Israel", List.of(), 90.0, 250.0, false);
+                "CONCERT", "Tel Aviv, Israel", List.of(), 90.0, 250.0, false, List.of("Coldplay"));
     }
 
     @Test

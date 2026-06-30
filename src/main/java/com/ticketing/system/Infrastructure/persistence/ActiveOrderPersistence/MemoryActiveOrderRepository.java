@@ -100,6 +100,11 @@ public class MemoryActiveOrderRepository implements IActiveOrderRepository {
         return result;
     }
 
+    @Override
+    public List<ActiveOrder> findAll() {
+        return new ArrayList<>(carts);
+    }
+
     private boolean sameIdentity(ActiveOrder a, ActiveOrder b) {
         // Member identity collapses on userId.
         if (a.userIdOrNull() != null && a.userIdOrNull().equals(b.userIdOrNull())) {

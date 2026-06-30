@@ -1,6 +1,7 @@
 package com.ticketing.system.unit.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
@@ -87,6 +88,12 @@ class CompanyAnalyticsServiceTest {
         return c;
     }
 
+    private static Event ratedEvent(Double rating) {
+        Event e = mock(Event.class);
+        when(e.getRating()).thenReturn(rating);
+        return e;
+    }
+
     @Test
     void dashboard_aggregatesLiveCountersForTheCompany() {
         LocalDateTime now = LocalDateTime.now();
@@ -133,6 +140,21 @@ class CompanyAnalyticsServiceTest {
         assertEquals(0, stats.ticketsSold30d());
         assertEquals(0.0, stats.revenue30d());
         assertEquals(0, stats.openInquiries());
+        assertNull(stats.rating()); // no events → no derived rating
+    }
+
+    @Test
+    void dashboard_derivesRatingAsMeanOfCompanyEventRatings() {
+        when(eventRepository.findActiveByCompany(COMPANY_ID)).thenReturn(List.of());
+        when(eventRepository.findIdsByCompany(COMPANY_ID)).thenReturn(List.of());
+        when(conversationRepository.findByCompanyAsCounterparty(COMPANY_ID)).thenReturn(List.of());
+        // Two rated events + one unrated: mean(4.8, 4.9) = 4.85 -> 4.9 (unrated ignored).
+        Event r1 = ratedEvent(4.8);
+        Event r2 = ratedEvent(4.9);
+        Event unrated = ratedEvent(null);
+        when(eventRepository.findByCompanyId(COMPANY_ID)).thenReturn(List.of(r1, r2, unrated));
+
+        assertEquals(4.9, service.dashboard(COMPANY_ID).rating(), 0.0001);
     }
 
 

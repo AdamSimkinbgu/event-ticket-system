@@ -34,6 +34,7 @@ import lombok.extern.slf4j.Slf4j;
 // UC-1 (Initialize), UC-31 (Global History), UC-32 (Open/Close Market).
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
@@ -301,6 +302,7 @@ public class SystemAdminService {
 
     // UC-31 — global purchase history with filters (admin-only RBAC enforced inside).
     // this function filters by buyer, production company, or specific event, and by date range. All filters are optional and can be combined.
+    @Transactional(readOnly = true)
     public List<PurchaseHistoryDTO> viewGlobalHistory(String token, GlobalHistoryFiltersDTO filters) {
         log.info("Admin request to view global purchase history with filters: {}", filters);
         requireSystemAdmin(token);

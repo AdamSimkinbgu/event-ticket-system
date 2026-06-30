@@ -55,7 +55,8 @@ public final class Capabilities {
             Capability.APPOINT_CO_OWNER,
             Capability.EDIT_MANAGER_PERMISSIONS,
             Capability.REVOKE_MANAGER,
-            Capability.CANCEL_EVENT));
+            Capability.CANCEL_EVENT,
+            Capability.VIEW_COMPANY_ORG_TREE));
 
     /** Extra capabilities the founder holds on top of {@link #OWNER_BUNDLE}. */
     private static final Set<Capability> FOUNDER_EXTRA = unmodifiable(EnumSet.of(
@@ -99,7 +100,12 @@ public final class Capabilities {
         Set<Capability> caps = EnumSet.copyOf(GUEST_BASE);
 
         if (AuthSession.isAdmin()) {
+            // Admins are a SEPARATE pool from members — the admin's id lives in the `admins` table,
+            // not `users`. Return here so we never resolve company memberships for an admin: falling
+            // through to listForUser(userId) -> getUserById(userId) throws UserNotFoundException
+            // whenever no member happens to share that id (always, on a clean DB).
             caps.addAll(ADMIN_BUNDLE);
+            return caps;
         }
 
         if (!AuthSession.isSignedIn()) {

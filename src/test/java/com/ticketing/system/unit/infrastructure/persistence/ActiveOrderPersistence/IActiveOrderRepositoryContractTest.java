@@ -142,6 +142,20 @@ abstract class IActiveOrderRepositoryContractTest {
     }
 
     @Test
+    void findAll_returnsEveryCart() {
+        repo.save(ActiveOrder.forMember(5, "sid-M"));
+        repo.save(ActiveOrder.forGuest("sid-G"));
+
+        java.util.List<ActiveOrder> all = repo.findAll();
+        assertEquals(2, all.size());
+    }
+
+    @Test
+    void findAll_emptyWhenNoCarts() {
+        assertTrue(repo.findAll().isEmpty());
+    }
+
+    @Test
     void save_persistsCartItems() {
         // A member cart with items survives save/reload (the "cart survives a restart" acceptance).
         ActiveOrder cart = ActiveOrder.forMember(5, "sid-A");

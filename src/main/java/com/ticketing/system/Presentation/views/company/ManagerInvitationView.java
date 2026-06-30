@@ -110,7 +110,7 @@ private final ManagerInvitationPresenter presenter;
             case ManagerInvitationPresenter.Outcome.UserNotFound u ->
                 Toasts.failure("User \"" + u.username() + "\" was not found.");
             case ManagerInvitationPresenter.Outcome.Failure fail ->
-                Toasts.failure("Could not send invitation: " + fail.reason());
+                Toasts.failure("Could not send the invitation — please try again.");
         }
     }
     

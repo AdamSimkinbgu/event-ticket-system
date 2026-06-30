@@ -14,6 +14,7 @@ import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
+import com.ticketing.system.Presentation.components.kit.LkTextRows;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.presenters.company.EventManagementPresenter;
 import com.ticketing.system.Presentation.security.Capabilities;
@@ -27,6 +28,7 @@ import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.select.Select;
+import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.BeforeEnterEvent;
@@ -50,9 +52,10 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     private final Select<String> category = new Select<>();
     private final TextField country = new TextField("Country");
     private final TextField city = new TextField("City");
-    private final TextField artists = new TextField("Artists");
+    private final LkTextRows artists = new LkTextRows("Artists", "+ Add artist").placeholder("e.g. The Beatles");
     private final DateTimePicker start = new DateTimePicker("Starts");
     private final DateTimePicker end = new DateTimePicker("Ends");
+    private final NumberField rating = new NumberField("Rating (0–5)");
     private final TextArea description = new TextArea("Description");
 
     /** Status badge lives in its own slot so the loader can fill it after the DTO arrives. */
@@ -89,11 +92,11 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             title("Create Event");
             subtitle("Create the event as a draft, then configure its venue and publish it.");
             saveBtn.label("Create Event");
-            artists.setReadOnly(false);
+            artists.readOnly(false);
             // Linked editors, status and the danger zone all act on a persisted event.
             sideCol.setVisible(false);
         } else {
-            artists.setReadOnly(true);
+            artists.readOnly(true);
             loadEvent(eventId);
         }
     }
@@ -106,7 +109,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             case EventManagementPresenter.LoadOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case EventManagementPresenter.LoadOutcome.Failure fail ->
-                Toasts.failure("Could not load event: " + fail.reason());
+                Toasts.failure("Could not load the event — please try again.");
         }
     }
 
@@ -114,7 +117,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
     private void applyEvent(EventDetailDTO ev) {
         title.setValue(ev.name() != null ? ev.name() : "");
         category.setValue(ev.category() != null ? ev.category().name() : null);
-        artists.setValue(ev.artistsNames() == null ? "" : String.join(", ", ev.artistsNames()));
+        artists.setValues(ev.artistsNames());
         if (ev.location() != null) {
             country.setValue(ev.location().country() != null ? ev.location().country() : "");
             city.setValue(ev.location().city() != null ? ev.location().city() : "");
@@ -124,6 +127,9 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             start.setValue(loadedShowDates.get(0).getStartTime());
             end.setValue(loadedShowDates.get(0).getEndTime());
         }
+        // Rating isn't part of EventUpdateDTO (set only at creation) — show it read-only here.
+        rating.setValue(ev.rating());
+        rating.setReadOnly(true);
         description.setValue(ev.description() != null ? ev.description() : "");
         renderStatus(ev.status());
     }
@@ -164,7 +170,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             case EventManagementPresenter.SaveOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case EventManagementPresenter.SaveOutcome.Failure fail ->
-                Toasts.failure("Could not save event: " + fail.reason());
+                Toasts.failure("Could not save the event — please try again.");
         }
     }
 
@@ -193,12 +199,14 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             return;
         }
 
-        List<String> artistList = parseArtists(artists.getValue());
+        List<String> artistList = artists.getValues();
         if (artistList.isEmpty()) { Toasts.failure("Please list at least one artist."); return; }
+
+        if (rating.getValue() == null) { Toasts.failure("Please set a rating (0–5)."); return; }
 
         switch (presenter.create(AuthSession.token(), CurrentCompanies.currentCompanyId(),
                 name, blankToNull(description.getValue()), category.getValue(),
-                co, ci, start.getValue(), end.getValue(), artistList)) {
+                co, ci, start.getValue(), end.getValue(), artistList, rating.getValue())) {
             case EventManagementPresenter.CreateOutcome.Success ok -> {
                 Toasts.success("Event created as a draft — configure the venue map and publish when ready.");
                 UI.getCurrent().navigate("owner/events/" + ok.eventId());
@@ -210,19 +218,8 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             case EventManagementPresenter.CreateOutcome.InvalidInput bad ->
                 Toasts.failure(bad.reason());
             case EventManagementPresenter.CreateOutcome.Failure fail ->
-                Toasts.failure("Could not create event: " + fail.reason());
+                Toasts.failure("Could not create the event — please try again.");
         }
-    }
-
-    /** Split a comma-separated artists field into a trimmed, blank-free list. */
-    private static List<String> parseArtists(String csv) {
-        if (csv == null || csv.isBlank()) {
-            return List.of();
-        }
-        return Arrays.stream(csv.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isBlank())
-                .toList();
     }
 
     /** Location is country+city in the domain; both are required, so only send it when both are present. */
@@ -279,10 +276,15 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
         city.setWidthFull();
 
         artists.setWidthFull();
-        artists.setHelperText("Comma-separated");
 
         start.setWidthFull();
         end.setWidthFull();
+
+        rating.setMin(0);
+        rating.setMax(5);
+        rating.setStep(0.5);
+        rating.setRequiredIndicatorVisible(true);
+        rating.setWidthFull();
 
         description.setMinHeight("120px");
         description.setWidthFull();
@@ -292,10 +294,10 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
                 .set("display", "grid")
                 .set("grid-template-columns", "repeat(auto-fit, minmax(min(100%, 220px), 1fr))")
                 .set("gap", "14px");
-        grid.add(title, category, country, city, artists, start, end);
+        grid.add(title, category, country, city, start, end, rating);
 
         LkCol col = new LkCol().gap(14);
-        col.add(grid, description);
+        col.add(grid, artists, description);
         card.add(col);
         return card;
     }
@@ -369,7 +371,7 @@ public class EventManagementView extends LkPage implements BeforeEnterObserver {
             case EventManagementPresenter.CancelOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case EventManagementPresenter.CancelOutcome.Failure fail ->
-                Toasts.failure("Could not cancel event: " + fail.reason());
+                Toasts.failure("Could not cancel the event — please try again.");
         }
     }
 }

@@ -8,9 +8,11 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
+import com.ticketing.system.Core.Domain.notifications.INotificationRepository;
 import com.ticketing.system.Core.Domain.notifications.Notification;
 import com.ticketing.system.Core.Domain.notifications.NotificationStatus;
 import com.ticketing.system.Core.Domain.notifications.NotificationType;
+import lombok.extern.slf4j.Slf4j;
 
 import lombok.RequiredArgsConstructor;
 
@@ -20,9 +22,11 @@ import lombok.RequiredArgsConstructor;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class NotificationService implements INotificationService {
 
     private final NotificationDispatchService dispatcher;
+    private final INotificationRepository notificationRepository;
 
     @Override
     public void notifyPurchaseCompleted(int userId, double totalPrice, List<Integer> ticketIds) {
@@ -194,5 +198,33 @@ public class NotificationService implements INotificationService {
                         "snippet", safeSnippet)
         );
         dispatcher.dispatch(notification);
+    }
+
+    @Override
+    public void markRead(int userId, String notificationId) {
+        try {
+            Notification n = notificationRepository.findById(notificationId);
+            if (n == null || n.getRecipientUserId() != userId || n.isRead()) return;
+            n.markRead();
+            notificationRepository.save(n);
+        } catch (Exception e) {
+            log.warn("markRead failed for userId={} notifId={}: {}", userId, notificationId, e.getMessage());
+        }
+    }
+
+    @Override
+    public void revertSentToPending(int userId) {
+        List<Notification> sent = notificationRepository.findByRecipientAndStatus(userId, NotificationStatus.SENT);
+        for (Notification n : sent) {
+            try {
+                n.markPending();
+                notificationRepository.save(n);
+            } catch (Exception e) {
+                log.warn("revertSentToPending failed for notifId={}: {}", n.getId(), e.getMessage());
+            }
+        }
+        if (!sent.isEmpty()) {
+            log.info("reverted {} SENT notification(s) to PENDING for userId={}", sent.size(), userId);
+        }
     }
 }

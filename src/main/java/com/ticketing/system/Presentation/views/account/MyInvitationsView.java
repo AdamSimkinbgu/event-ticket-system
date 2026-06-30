@@ -171,7 +171,7 @@ public class MyInvitationsView extends LkPage {
             case MyInvitationsPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case MyInvitationsPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not accept invitation: " + fail.reason());
+                Toasts.failure("Could not accept the invitation — please try again.");
         }
     }
 
@@ -184,7 +184,7 @@ public class MyInvitationsView extends LkPage {
             case MyInvitationsPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case MyInvitationsPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not decline invitation: " + fail.reason());
+                Toasts.failure("Could not decline the invitation — please try again.");
         }
     }
 

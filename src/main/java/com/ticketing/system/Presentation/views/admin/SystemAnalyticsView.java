@@ -100,11 +100,11 @@ public class SystemAnalyticsView extends LkPage {
                 applyStatus(ok.market());
             }
             case SystemAnalyticsPresenter.MarketActionOutcome.NotAuthenticated ignored ->
-                Toasts.failure("Your admin session has expired — sign in again to control the market.");
+                Toasts.failure("Your session has expired — please sign in again.");
             case SystemAnalyticsPresenter.MarketActionOutcome.Rejected r ->
-                Toasts.failure("Cannot " + (open ? "open" : "close") + " the market: " + r.reason());
+                Toasts.failure("Couldn't " + (open ? "open" : "close") + " the market — please try again.");
             case SystemAnalyticsPresenter.MarketActionOutcome.Failure f ->
-                Toasts.failure("Market action failed: " + f.reason());
+                Toasts.failure("Market action failed — please try again.");
         }
     }
 

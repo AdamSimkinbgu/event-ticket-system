@@ -15,5 +15,6 @@ public record EventSummaryDTO(
     List<ShowDateDTO> showDates,
     double minPrice,
     double maxPrice,
-    boolean soldOut
+    boolean soldOut,
+    List<String> artistsNames
 ) {}

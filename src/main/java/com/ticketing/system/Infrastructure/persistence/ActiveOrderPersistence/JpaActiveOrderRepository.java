@@ -88,4 +88,9 @@ public class JpaActiveOrderRepository implements IActiveOrderRepository {
         LocalDateTime cutoff = LocalDateTime.now().minus(CartLineItem.getExpirationLimit());
         return data.findWithItemAddedBefore(cutoff);
     }
+
+    @Override
+    public List<ActiveOrder> findAll() {
+        return data.findAll();
+    }
 }

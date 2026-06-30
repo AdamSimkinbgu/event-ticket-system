@@ -2,14 +2,11 @@ package com.ticketing.system.Presentation.views.admin;
 
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.PurchaseRecordDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.TicketRecordDTO;
-import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
-import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkFilterChip;
 import com.ticketing.system.Presentation.components.kit.LkGrid;
-import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStat;
@@ -56,9 +53,6 @@ public class GlobalHistoryView extends LkPage {
 
         title("Global Purchase History");
         subtitle("Every order across the platform — filter by date, company, event, or status.");
-        actions(new LkBtn("Export CSV").variant(LkBtn.Variant.secondary)
-            .icon(new LkIcon("chart", 15))
-            .onClick(e -> Toasts.success("Global history exported (mock).")));
 
         add(buildFilters());
         statsSlot = new Div();

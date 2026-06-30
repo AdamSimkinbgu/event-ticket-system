@@ -6,7 +6,7 @@ package com.ticketing.system.Core.Domain.events;
 //   SCHEDULED  → ON_SALE    (UC-32: market opened or per-event publish)
 //   ON_SALE    → SOLD_OUT   (no AVAILABLE tickets remain)
 //   *          → CANCELED   (UC-4 trigger for refunds)
-//   ON_SALE    → COMPLETED  (event date passed)
+//   ON_SALE / SOLD_OUT → COMPLETED  (last show date passed)
 public enum EventStatus {
     DRAFT,
     SCHEDULED,

@@ -45,12 +45,13 @@ import java.util.stream.Stream;
  * {@code seed.mode} reset-safety work, #366). So this cleaner keeps working through the
  * whole Memory→JPA migration without edits.
  *
- * <p>{@code @Profile("dev")} only — never instantiated in production.
+ * <p>{@code @Profile("!jpa")} — active on the in-memory backends (test / default-fast). Under the
+ * {@code jpa} profile (dev / supabase / deploy) {@code JpaRepoCleaner} performs the wipe instead.
  */
 @Component
-@Profile("dev")
+@Profile("!jpa")
 @Slf4j
-public class MemoryRepoCleaner {
+public class MemoryRepoCleaner implements RepoCleaner {
 
     private final List<Object> repositories;
 
@@ -75,6 +76,7 @@ public class MemoryRepoCleaner {
             .toList();
     }
 
+    @Override
     public void clearAll() {
         for (Object repo : repositories) {
             try {

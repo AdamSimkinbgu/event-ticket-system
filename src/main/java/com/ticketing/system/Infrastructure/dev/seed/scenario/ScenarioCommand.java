@@ -82,4 +82,24 @@ public final class ScenarioCommand {
         String v = named.get(key);
         return v == null ? fallback : Boolean.parseBoolean(v.trim());
     }
+
+    /** Named arg parsed as a {@code Double}, or {@code null} if absent. Located error on bad numbers. */
+    public Double doubleNamed(String key) {
+        String v = named.get(key);
+        if (v == null) {
+            return null;
+        }
+        try {
+            double parsed = Double.parseDouble(v.trim());
+            // Double.parseDouble accepts "NaN"/"Infinity"; reject them so seeded data can't bypass
+            // range checks that rely on < / > (both false for NaN) and corrupt ratings downstream.
+            if (!Double.isFinite(parsed)) {
+                throw new IllegalArgumentException(
+                        "line " + line + " (" + op + "): " + key + " must be a finite number, got '" + v + "'");
+            }
+            return parsed;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("line " + line + " (" + op + "): " + key + " must be a number, got '" + v + "'");
+        }
+    }
 }

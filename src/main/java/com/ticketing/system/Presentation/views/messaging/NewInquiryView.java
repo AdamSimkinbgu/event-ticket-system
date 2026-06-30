@@ -120,7 +120,7 @@ public class NewInquiryView extends LkPage implements BeforeEnterObserver {
         switch (presenter.searchCompanies(query)) {
             case NewInquiryPresenter.SearchOutcome.Success ok -> renderResults(ok.companies());
             case NewInquiryPresenter.SearchOutcome.Failure fail ->
-                Toasts.failure("Could not search companies: " + fail.reason());
+                Toasts.failure("Could not search companies — please try again.");
         }
     }
 
@@ -180,7 +180,7 @@ public class NewInquiryView extends LkPage implements BeforeEnterObserver {
             case NewInquiryPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case NewInquiryPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not submit inquiry: " + fail.reason());
+                Toasts.failure("Could not submit the inquiry — please try again.");
         }
     }
 }

@@ -22,7 +22,8 @@ import jakarta.persistence.criteria.Predicate;
  * layer depends only on {@code IOrderReceiptRepository}, never on Spring Data. Owned receipt-line and
  * transaction value lists ({@code @ElementCollection}) persist by cascade with the receipt.
  *
- * <p>{@code lockForUpdate}/{@code unlock} are no-ops (concurrency via {@code @Version}). {@code save}
+ * <p>{@code lockForUpdate} issues a real {@code SELECT … FOR UPDATE} (the refund critical section's row
+ * lock, #410); {@code unlock} is a no-op because the lock releases at transaction commit. {@code save}
  * delegates to {@code data.save} under {@code @Version} and is {@code @Transactional}. {@link #nextId()}
  * keeps the assigned-id design but seeds an in-memory counter from {@code max(receiptId)} on first use
  * so ids survive a restart. {@link #findGlobal} assembles the optional admin filters into a dynamic
@@ -42,10 +43,18 @@ public class JpaOrderReceiptRepository implements IOrderReceiptRepository {
     }
 
     @Override
-    public void lockForUpdate(Integer id) { /* no-op — @Version optimistic locking */ }
+    public void lockForUpdate(Integer id) {
+        // Real pessimistic row-lock (SELECT … FOR UPDATE) on the receipt — serialises the refund
+        // critical section (#410). Requires an active transaction (RefundService wraps it in one); the
+        // lock is held until that transaction commits, so a concurrent refund of the same receipt blocks
+        // here, then sees is_refunded=true and bails before a second gateway.refund(). Other writes use
+        // optimistic @Version, but @Version can't prevent the double gateway call (it fails only at
+        // commit, after the gateway was already hit), so this one path is pessimistic.
+        data.findByIdForUpdate(id);
+    }
 
     @Override
-    public void unlock(Integer id) { /* no-op */ }
+    public void unlock(Integer id) { /* no-op — the pessimistic lock releases at transaction commit */ }
 
     @Override
     public int nextId() {

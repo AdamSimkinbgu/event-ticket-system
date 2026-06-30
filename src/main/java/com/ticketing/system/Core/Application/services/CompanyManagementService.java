@@ -1,6 +1,7 @@
 package com.ticketing.system.Core.Application.services;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +58,7 @@ import com.ticketing.system.Core.Domain.policies.purchase.MinTicketsPurchasePoli
 import com.ticketing.system.Core.Domain.policies.purchase.MaxTicketsPurchasePolicy;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
@@ -83,6 +85,7 @@ public class CompanyManagementService {
     }
 
     // UC-23 — Owner appoints another Member as co-Owner (PENDING).
+    @Transactional
     public void appointOwner(String token, OwnerAppointmentRequestDTO request) {
         if (request.companyId() <= 0 || request.targetUserId() <= 0) {
             log.warn("Invalid appointment request: companyId and targetUserId must be positive integers");
@@ -121,6 +124,7 @@ public class CompanyManagementService {
     }
 
     // UC-24 — Owner appoints a Manager with explicit granular permissions.
+    @Transactional
     public void appointManager(String token, ManagerAppointmentRequestDTO request) {
         if (request.companyId() <= 0 || request.targetUserId() <= 0) {
             log.warn("Invalid manager appointment request: companyId and targetUserId must be positive integers");
@@ -149,6 +153,7 @@ public class CompanyManagementService {
 
     // UC-23 / UC-24 — target accepts or rejects a pending owner/manager
     // appointment.
+    @Transactional
     public void respondToAppointment(String token, AppointmentResponseDTO response) {
         if (response.companyId() <= 0) {
             log.warn("Invalid appointment response: companyId must be a positive integer");
@@ -188,6 +193,7 @@ public class CompanyManagementService {
     }
 
     // UC-24 — edit a Manager's permission set (only by the original appointer).
+    @Transactional
     public void editManagerPermissions(String token, PermissionEditDTO edit) {
         int ownerId = authenticate(token);
 
@@ -221,6 +227,7 @@ public class CompanyManagementService {
                 edit.companyId());
     }
 
+    @Transactional
     public void RevokeAppointment(String token, AppointmentRevokeDTO revokeRequest) {
         int ownerId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(revokeRequest.companyId());
@@ -250,6 +257,7 @@ public class CompanyManagementService {
     }
 
     // Resolves a username-or-email string to a userId — used by the invite flow.
+    @Transactional(readOnly = true)
     public int resolveUserId(String identifier) {
         if (identifier == null || identifier.isBlank())
             throw new IllegalArgumentException("Identifier must not be blank");
@@ -270,6 +278,7 @@ public class CompanyManagementService {
     // ---------------------------------------------------------------------------
 
     // II.4.7.1 — active managers of a company (owner-only view).
+    @Transactional(readOnly = true)
     public List<AppointmentInfoDTO> listManagers(String token, int companyId) {
         int requesterId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
@@ -296,6 +305,7 @@ public class CompanyManagementService {
     }
 
     // II.4.7.1 — pending invitations (manager + owner offers) awaiting acceptance.
+    @Transactional(readOnly = true)
     public List<AppointmentInfoDTO> listPendingInvitations(String token, int companyId) {
         int requesterId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
@@ -324,6 +334,7 @@ public class CompanyManagementService {
     // Bridges token -> companyId for the owner workspace until a real
     // current-company
     // selector lands (V2-CADMIN-05).
+    @Transactional(readOnly = true)
     public List<ProductionCompanyDTO> findOwnedCompanies(String token) {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
@@ -357,6 +368,7 @@ public class CompanyManagementService {
     // (V2-WIRE-OWNER-DASH);
     // unlike findOwnedCompanies it keeps managers, since /owner is reachable by
     // them too.
+    @Transactional(readOnly = true)
     public List<MyCompanyDTO> findMyCompanies(String token) {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
@@ -392,6 +404,7 @@ public class CompanyManagementService {
     // resolved ACTIVE/REJECTED/REVOKED rows (history). Names are resolved per row,
     // mirroring
     // listPendingInvitations.
+    @Transactional(readOnly = true)
     public List<InvitationDTO> listMyInvitations(String token) {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
@@ -433,6 +446,7 @@ public class CompanyManagementService {
 
     // UC-18 — register a new Production Company; appoints Founder/Owner in same
     // transaction.
+    @Transactional
     public ProductionCompanyDTO registerCompany(String token, CompanyRegistrationDTO request) {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
@@ -460,7 +474,7 @@ public class CompanyManagementService {
                     request.getName().trim(),
                     CompanyStatus.ACTIVE,
                     request.getDescription().trim(),
-                    null);
+                    0.0);
 
             // IProductionCompanyRepository.save returns void; the new instance IS the saved
             // one.
@@ -483,6 +497,7 @@ public class CompanyManagementService {
         }
     }
 
+    @Transactional
     public void setCompanyPolicies(String token, CompanyPolicyConfigDTO config) {
         if (config == null) {
             throw new IllegalArgumentException("Company policy config cannot be null");
@@ -492,7 +507,11 @@ public class CompanyManagementService {
         if (company == null) {
             throw new CompanyNotFoundException(config.companyId());
         }
-        company.checkowner(userId);
+        User user = userRepository.getUserById(userId);
+        if (user == null) {
+            throw new RuntimeException("User not found");
+        }
+        user.requirePermissionInCompany(config.companyId(), Permission.EDIT_POLICIES);
         PurchasePolicy policy = buildPurchasePolicyFromDTO(config.defaultPurchasePolicy());
         company.setPurchasePolicy(policy);
         companyRepository.save(company);
@@ -507,6 +526,7 @@ public class CompanyManagementService {
     // for events of this company (the rest are filtered out). This way we return
     // the full receipt details for each relevant purchase, but only
     // include the tickets that are relevant to this company's sales history.
+    @Transactional(readOnly = true)
     public List<PurchaseHistoryDTO> viewSalesHistory(String token, int companyId) {
         log.info("Attempting to view sales history for company {}", companyId);
 
@@ -560,6 +580,7 @@ public class CompanyManagementService {
     }
 
     // UC-25 — recursive organizational tree (Owners only per II.4.15).
+    @Transactional(readOnly = true)
     public OrganizationalTreeNodeDTO viewOrganizationalTree(String token, int companyId) {
         log.info("Attempting to view organizational tree for company {}", companyId);
 
@@ -585,6 +606,37 @@ public class CompanyManagementService {
         log.info("Successfully retrieved organizational tree for company {}", companyId);
         // using the helper method to build the tree starting from the founder (root of
         // the tree)
+        return buildOrganizationalTree(companyId, company.getFounderId());
+    }
+
+    // Admin-only: list every company in the system regardless of ownership.
+    public List<ProductionCompanyDTO> adminListAllCompanies(String token) {
+        authenticate(token);
+        if (!sessionManager.isAdminToken(token)) {
+            throw new InvalidTokenException("Admin privileges required");
+        }
+        // Sort by companyId so the default selection (the presenter falls back to the first
+        // entry) is deterministic — repository iteration order is not guaranteed.
+        return companyRepository.findAll().stream()
+                .sorted(Comparator.comparingInt(ProductionCompany::getCompanyId))
+                .map(c -> new ProductionCompanyDTO(
+                        c.getCompanyId(), c.getName(), c.getDescription(),
+                        c.getStatus().name(), c.getFounderId()))
+                .toList();
+    }
+
+    // Admin-only: build org tree for any company, bypassing the ownership check.
+    public OrganizationalTreeNodeDTO adminViewOrgTree(String token, int companyId) {
+        authenticate(token);
+        if (!sessionManager.isAdminToken(token)) {
+            throw new InvalidTokenException("Admin privileges required");
+        }
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null) {
+            log.warn("Company {} not found", companyId);
+            throw new CompanyNotFoundException(companyId);
+        }
+        log.info("Admin viewing organizational tree for company {}", companyId);
         return buildOrganizationalTree(companyId, company.getFounderId());
     }
 
@@ -634,6 +686,7 @@ public class CompanyManagementService {
         return userIdToNodeMap.get(founderId);
     }
 
+    @Transactional(readOnly = true)
     public List<UserCompanyDTO> listForUser(int userId) {
         User user = userRepository.getUserById(userId);
         if (user == null) {
@@ -656,6 +709,7 @@ public class CompanyManagementService {
         return memberships;
     }
 
+    @Transactional(readOnly = true)
     public boolean isOwnerOf(int userId, int companyId) {
         User user = userRepository.getUserById(userId);
         if (user == null) {
@@ -748,12 +802,16 @@ public class CompanyManagementService {
         }
     }
 
+    @Transactional(readOnly = true)
     public PurchasePolicyDTO getCompanyPurchasePolicy(String token, int companyId) {
         int userId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null)
             throw new RuntimeException("Company not found");
-        company.checkowner(userId);
+        User user = userRepository.getUserById(userId);
+        if (user == null)
+            throw new RuntimeException("User not found");
+        user.requirePermissionInCompany(companyId, Permission.EDIT_POLICIES);
         return policyToDTO(company.getPurchasePolicy());
     }
 
