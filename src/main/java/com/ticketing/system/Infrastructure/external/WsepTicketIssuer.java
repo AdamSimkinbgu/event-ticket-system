@@ -53,7 +53,9 @@ public class WsepTicketIssuer implements ITicketIssuer {
     @Override
     public boolean verifyConnection() {
         try {
-            boolean ok = "OK".equalsIgnoreCase(http.post(WsepHttpClient.action("handshake")));
+            // Retried (idempotent handshake): a cold-starting WSEP endpoint may miss the first attempt
+            // but answer a later one, so a transient blip doesn't leave the market closed at boot (#455).
+            boolean ok = "OK".equalsIgnoreCase(http.postWithRetry(WsepHttpClient.action("handshake")));
             log.debug("wsep handshake (issuer): reachable={}", ok);
             return ok;
         } catch (RuntimeException e) {

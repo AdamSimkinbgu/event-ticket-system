@@ -91,3 +91,12 @@ platform:
 # the single koyeb endpoint both adapters POST to.
 wsep:
   base-url: ${WSEP_BASE_URL:https://damp-lynna-wsep-1984852e.koyeb.app/}
+  # The reachability handshake is retried (idempotent) so a cold-starting WSEP host doesn't leave the
+  # market closed at boot (#455/#365). pay/issue/refund are never retried (non-idempotent).
+  handshake-attempts: ${WSEP_HANDSHAKE_ATTEMPTS:3}
+  handshake-backoff-ms: ${WSEP_HANDSHAKE_BACKOFF_MS:1000}
+
+# Market self-heal (dev): if a transient external-service outage leaves the market closed at boot,
+# MarketSelfHealScheduler re-attempts the open on this interval until it succeeds (recover, no restart).
+market:
+  self-heal-delay-ms: ${MARKET_SELF_HEAL_DELAY_MS:30000}
