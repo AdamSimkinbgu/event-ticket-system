@@ -91,6 +91,42 @@ public class CatalogService {
                 .toList();
     }
 
+    //* Browse filters: distinct countries that currently have publicly-visible ON_SALE events, sorted.
+    //* Visibility-gated exactly like searchGlobal so the dropdown never lists a country whose only ON_SALE
+    //* events belong to an inactive company (which Browse would then show zero results for). No credential —
+    //* the browse page is anonymous, like featured() above.
+    public List<String> onSaleCountries() {
+        Map<Integer, Boolean> visibleByCompany = new HashMap<>();
+        return eventRepository.searchONSALE(CatalogSearchFiltersDTO.empty()).stream()
+                .filter(e -> isCompanyPubliclyVisibleCached(e.getCompanyId(), visibleByCompany))
+                .map(this::eventCountry)
+                .filter(c -> c != null && !c.isBlank())
+                .distinct()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+    }
+
+    //* Browse filters: distinct cities of publicly-visible ON_SALE events in the chosen country, sorted.
+    public List<String> onSaleCitiesInCountry(String country) {
+        if (country == null) return List.of();
+        Map<Integer, Boolean> visibleByCompany = new HashMap<>();
+        return eventRepository.searchONSALE(CatalogSearchFiltersDTO.empty()).stream()
+                .filter(e -> isCompanyPubliclyVisibleCached(e.getCompanyId(), visibleByCompany))
+                .filter(e -> country.equalsIgnoreCase(eventCountry(e)))
+                .map(this::eventCity)
+                .filter(c -> c != null && !c.isBlank())
+                .distinct()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+    }
+
+    // *HELPER METHOD* — per-call memoized company-visibility lookup. Many ON_SALE events share a
+    // company, so caching companyId→visibility avoids re-hitting the company repository once per
+    // event (an N+1 under the JPA backend) while keeping the same semantics as a direct lookup.
+    private boolean isCompanyPubliclyVisibleCached(int companyId, Map<Integer, Boolean> cache) {
+        return cache.computeIfAbsent(companyId, id -> isCompanyPubliclyVisible(activeCompanyOrNull(id)));
+    }
+
 
 
 
@@ -316,6 +352,17 @@ public class CatalogService {
             return null;
         }
         return event.getVenueMap().getLocation().toString();
+    }
+
+    // *HELPER METHOD* — an event's country / city, or null when it has no bound venue/location.
+    private String eventCountry(Event event) {
+        return (event.getVenueMap() != null && event.getVenueMap().getLocation() != null)
+                ? event.getVenueMap().getLocation().country() : null;
+    }
+
+    private String eventCity(Event event) {
+        return (event.getVenueMap() != null && event.getVenueMap().getLocation() != null)
+                ? event.getVenueMap().getLocation().city() : null;
     }
 
     

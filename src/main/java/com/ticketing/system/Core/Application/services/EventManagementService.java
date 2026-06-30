@@ -132,7 +132,7 @@ public class EventManagementService {
         }
 
         User user = userRepository.getUserById(ownerId);
-        user.requirePermissionInCompany(request.companyId(), Permission.CONFIGURE_VENUE);
+        user.requirePermissionInCompany(request.companyId(), Permission.MANAGE_INVENTORY);
 
         int newEventId = eventRepository.nextId();
         VenueMap venueMap = new VenueMap(eventRepository.nextVenueMapId(), request.location(), List.of());
@@ -193,7 +193,11 @@ public class EventManagementService {
             throw new CompanyNotFoundException("Company not found for ID: " + companyId);
         }
 
-        user.requirePermissionInCompany(companyId, Permission.MANAGE_INVENTORY);
+        // The events list is a read-only management hub. Any active member of the company may see
+        // it (so e.g. a venue/sales manager can reach the per-event venue editor); the per-event
+        // mutations (configure venue, edit details, policies, cancel) stay gated by their own
+        // permission at their own service entry points.
+        user.requireMemberInCompany(companyId);
 
         EventMapper mapper = new EventMapper();
         return eventRepository.searchByCompanyAll(companyId, filters.withoutCompanyRating()).stream()
@@ -229,7 +233,8 @@ public class EventManagementService {
             company.getName(),
             event.getStatus(),
             event.getShowDates(),
-            event.getArtistsNames()
+            event.getArtistsNames(),
+            EventMapper.minZonePrice(event)
             );
     }
 
@@ -391,7 +396,7 @@ public class EventManagementService {
             Event event = eventRepository.findById(eventId);
 
             User user = userRepository.getUserById(userId);
-            user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+            user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
 
             EventCategory newCategory = null;
             if (update.category() != null && !update.category().isBlank()) {
@@ -728,7 +733,10 @@ public class EventManagementService {
         ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
 
         User user = userRepository.getUserById(userId);
-        user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+        // Read-only detail: any active member may load it. The pages that reach this (event-detail
+        // editor, venue editor) are each route-gated by their own capability, so this serves both a
+        // MANAGE_INVENTORY metadata editor and a CONFIGURE_VENUE venue editor.
+        user.requireMemberInCompany(event.getCompanyId());
 
         return new EventMapper().toEventDetailDTO(event, company.getName());
     }
@@ -750,7 +758,7 @@ public class EventManagementService {
             }
 
             User user = userRepository.getUserById(userId);
-            user.requirePermissionInCompany(companyId, Permission.CONFIGURE_VENUE);
+            user.requirePermissionInCompany(companyId, Permission.MANAGE_INVENTORY);
 
             event.transitionToOnSale(); // SCHEDULED -> ON_SALE (idempotent if already ON_SALE)
             eventRepository.save(event);
@@ -761,14 +769,14 @@ public class EventManagementService {
         }
     }
 
-    // Permanently removes a CANCELED event. Only callable by a user with CONFIGURE_VENUE.
+    // Permanently removes a CANCELED event. Only callable by a user with MANAGE_INVENTORY.
     public void deleteEvent(String token, int eventId) {
         int userId = validateTokenAndGetUserId(token);
         eventRepository.lockForUpdate(eventId);
         try {
             Event event = eventRepository.findById(eventId);
             User user = userRepository.getUserById(userId);
-            user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+            user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
             if (event.getStatus() != EventStatus.CANCELED) {
                 throw new InvalidStateTransitionException("Only CANCELED events can be deleted");
             }
@@ -776,7 +784,7 @@ public class EventManagementService {
             // permanently delete one that still has purchase history, which would orphan its
             // OrderReceipt/Ticket records (referenced by eventId, no cascade).
             if (!orderReceiptRepository.findByEventId(eventId).isEmpty()) {
-                throw new BusinessRuleViolationException("Can't delete event with purchase history");
+                throw new BusinessRuleViolationException("Can't delete an event with sales history");
             }
             eventRepository.delete(eventId);
             log.info("Event {} deleted by user {}", eventId, userId);
@@ -793,7 +801,7 @@ public class EventManagementService {
         try {
             Event event = eventRepository.findById(eventId);
             User user = userRepository.getUserById(userId);
-            user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+            user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
             switch (targetStatus) {
                 case SCHEDULED -> event.transitionToScheduled();
                 case ON_SALE -> event.transitionToOnSale();
@@ -820,7 +828,7 @@ public class EventManagementService {
         try {
             Event event = eventRepository.findById(eventId); // throws if not found, which is what we want here.
             User user = userRepository.getUserById(ownerId);
-            user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+            user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
 
             if (event.getStatus() == EventStatus.CANCELED) {
                 return;

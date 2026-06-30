@@ -18,7 +18,7 @@ import org.mockito.ArgumentCaptor;
 
 import com.ticketing.system.Core.Application.dto.EventCreationDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
-import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.events.EventCategory;
@@ -48,8 +48,8 @@ class EventManagementPresenterTest {
         presenter = new EventManagementPresenter(eventService, companyService);
     }
 
-    private static ProductionCompanyDTO company(int id) {
-        return new ProductionCompanyDTO(id, "Company " + id, "desc", "ACTIVE", 1);
+    private static MyCompanyDTO company(int id) {
+        return new MyCompanyDTO(id, "Company " + id, "Co-owner");
     }
 
     private static LocalDateTime futureStart() {
@@ -68,7 +68,7 @@ class EventManagementPresenterTest {
 
     @Test
     void create_success_returnsNewEventId() {
-        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(1)));
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of(company(1)));
         when(eventService.addEvent(eq(TOKEN), any())).thenReturn(detailWithId("5"));
 
         EventManagementPresenter.CreateOutcome outcome = createWith(null, futureStart(), futureEnd());
@@ -80,7 +80,7 @@ class EventManagementPresenterTest {
 
     @Test
     void create_prefersSelectedCompanyWhenOwned() {
-        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(1), company(2)));
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of(company(1), company(2)));
         when(eventService.addEvent(eq(TOKEN), any())).thenReturn(detailWithId("9"));
 
         createWith(2, futureStart(), futureEnd());
@@ -93,7 +93,7 @@ class EventManagementPresenterTest {
     @Test
     void create_preferredNotOwned_returnsNoCompany() {
         // A selected company the caller doesn't own must not silently retarget to another company.
-        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(1), company(2)));
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of(company(1), company(2)));
 
         assertInstanceOf(EventManagementPresenter.CreateOutcome.NoCompany.class,
                 createWith(99, futureStart(), futureEnd()));
@@ -102,7 +102,7 @@ class EventManagementPresenterTest {
 
     @Test
     void create_noOwnedCompany_returnsNoCompany() {
-        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of());
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of());
 
         assertInstanceOf(EventManagementPresenter.CreateOutcome.NoCompany.class,
                 createWith(null, futureStart(), futureEnd()));
@@ -121,7 +121,7 @@ class EventManagementPresenterTest {
 
     @Test
     void create_invalidToken_returnsNotAuthenticated() {
-        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(1)));
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of(company(1)));
         when(eventService.addEvent(eq(TOKEN), any())).thenThrow(new InvalidTokenException());
 
         assertInstanceOf(EventManagementPresenter.CreateOutcome.NotAuthenticated.class,
@@ -163,7 +163,7 @@ class EventManagementPresenterTest {
 
     @Test
     void create_pastShowDate_returnsInvalidInput() {
-        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(1)));
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of(company(1)));
 
         // A past start makes the domain ShowDate constructor reject the request before addEvent.
         EventManagementPresenter.CreateOutcome outcome =
@@ -175,7 +175,7 @@ class EventManagementPresenterTest {
 
     @Test
     void create_serviceFailure_returnsFailure() {
-        when(companyService.findOwnedCompanies(TOKEN)).thenReturn(List.of(company(1)));
+        when(companyService.findMyCompanies(TOKEN)).thenReturn(List.of(company(1)));
         when(eventService.addEvent(eq(TOKEN), any())).thenThrow(new RuntimeException("boom"));
 
         assertInstanceOf(EventManagementPresenter.CreateOutcome.Failure.class,
@@ -185,6 +185,6 @@ class EventManagementPresenterTest {
     private static EventDetailDTO detailWithId(String id) {
         return new EventDetailDTO(id, "Gala Night", null, "A great show", EventCategory.COMEDY,
                 new Location("Israel", "Tel Aviv"), "1", "Company 1", EventStatus.DRAFT,
-                List.of(), List.of("Headliner"));
+                List.of(), List.of("Headliner"), 0.0);
     }
 }

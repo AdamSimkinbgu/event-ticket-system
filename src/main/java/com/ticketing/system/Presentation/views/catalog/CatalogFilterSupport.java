@@ -5,7 +5,6 @@ import java.time.LocalDate;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Shared, layout-independent options and pure helpers for the catalogue event filters — the single
@@ -24,13 +23,6 @@ public final class CatalogFilterSupport {
 
     public static final List<String> CATEGORIES = List.of(
             CAT_ALL, "Concerts", "Sports", "Theatre", "Festivals", "Comedy");
-
-    public static final Map<String, List<String>> CITIES_BY_COUNTRY = Map.of(
-            "Israel", List.of("Tel Aviv", "Jerusalem", "Haifa", "Caesarea", "Be'er Sheva"),
-            "USA",    List.of("New York", "Los Angeles", "Chicago"),
-            "UK",     List.of("London", "Manchester", "Birmingham"));
-
-    public static final List<String> COUNTRIES = List.of(COUNTRY_ALL, "Israel", "USA", "UK");
 
     /** A resolved from/to date range for a date-range preset; either bound may be null (unbounded). */
     public record DateWindow(LocalDate from, LocalDate to) { }
@@ -72,13 +64,19 @@ public final class CatalogFilterSupport {
         return null;
     }
 
-    /** City options for a country: "All cities" first, then the country's cities (or just "All cities"). */
-    public static List<String> cityOptionsFor(String country) {
-        List<String> cities = CITIES_BY_COUNTRY.get(country);
-        if (cities == null) return List.of(CITY_ALL);
-        List<String> opts = new ArrayList<>(cities.size() + 1);
+    /** Country select options: COUNTRY_ALL first, then the supplied countries (caller supplies them distinct/sorted). */
+    public static List<String> countryOptions(List<String> countries) {
+        List<String> opts = new ArrayList<>();
+        opts.add(COUNTRY_ALL);
+        if (countries != null) opts.addAll(countries);
+        return opts;
+    }
+
+    /** City select options: CITY_ALL first, then the supplied cities (caller supplies them distinct/sorted). */
+    public static List<String> cityOptions(List<String> cities) {
+        List<String> opts = new ArrayList<>();
         opts.add(CITY_ALL);
-        opts.addAll(cities);
+        if (cities != null) opts.addAll(cities);
         return opts;
     }
 

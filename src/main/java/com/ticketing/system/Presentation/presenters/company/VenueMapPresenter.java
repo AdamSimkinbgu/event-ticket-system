@@ -1,15 +1,11 @@
 package com.ticketing.system.Presentation.presenters.company;
 
-import java.util.List;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.ticketing.system.Core.Application.dto.GridPlacementDTO;
-import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
 import com.ticketing.system.Core.Application.dto.VenueLayoutDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
-import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 
@@ -17,13 +13,10 @@ import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
 public class VenueMapPresenter {
 
     private final EventManagementService eventService;
-    private final CompanyManagementService companyManagementService;
 
     @Autowired
-    public VenueMapPresenter(EventManagementService eventService,
-                             CompanyManagementService companyManagementService) {
+    public VenueMapPresenter(EventManagementService eventService) {
         this.eventService = eventService;
-        this.companyManagementService = companyManagementService;
     }
 
     public LoadOutcome loadZones(String token, int eventId) {
@@ -41,9 +34,12 @@ public class VenueMapPresenter {
     public SaveOutcome saveMap(String token, String eventId, VenueMapConfigDTO config) {
         if (token == null) return new SaveOutcome.NotAuthenticated();
         try {
-            List<ProductionCompanyDTO> owned = companyManagementService.findOwnedCompanies(token);
-            if (owned.isEmpty()) return new SaveOutcome.NoCompany();
-            int companyId = owned.get(0).companyId();
+            // The venue map must be saved to the EVENT's own company — not "the caller's first
+            // company". Resolving from the event (a) targets the correct company for a multi-company
+            // owner and (b) works for a manager granted CONFIGURE_VENUE, who has no Owner appointment
+            // for an owner-only lookup to return. getEventDetail itself requires CONFIGURE_VENUE.
+            int companyId = Integer.parseInt(
+                    eventService.getEventDetail(token, Integer.parseInt(eventId)).companyId());
             eventService.configureVenueMap(token, companyId, config);
             return new SaveOutcome.Success();
         } catch (InvalidTokenException e) {

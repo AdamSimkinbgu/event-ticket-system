@@ -3,8 +3,10 @@ package com.ticketing.system.Core.Application.services;
 import java.util.Comparator;
 import java.util.List;
 
+import com.ticketing.system.Core.Application.dto.MemberDTO;
 import com.ticketing.system.Core.Application.dto.MemberSearchResultDTO;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
+import com.ticketing.system.Core.Domain.users.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +39,17 @@ public class MemberQueryService {
     public boolean usernameExists(String username) {
         if (username == null || username.isBlank()) return false;
         return userRepository.existsByUsername(username.trim());
+    }
+
+    /**
+     * The member's profile projection (id, username, email) by id — backs {@code MyProfileView}.
+     * Returns a {@link MemberDTO}, never the domain object or anything sensitive (no passwordHash).
+     *
+     * @throws com.ticketing.system.Core.Domain.exceptions.UserNotFoundException if no user with that id exists
+     */
+    public MemberDTO getMemberProfile(int userId) {
+        User u = userRepository.getUserById(userId);
+        return new MemberDTO(u.getUserId(), u.getUsername(), u.getEmail());
     }
 
     /**

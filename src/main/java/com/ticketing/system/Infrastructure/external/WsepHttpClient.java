@@ -32,10 +32,14 @@ import org.springframework.stereotype.Component;
 public class WsepHttpClient {
 
     private final String baseUrl;
+    private final long requestTimeoutSeconds;
     private final HttpClient http;
 
-    public WsepHttpClient(@Value("${wsep.base-url:https://damp-lynna-wsep-1984852e.koyeb.app/}") String baseUrl) {
+    public WsepHttpClient(
+            @Value("${wsep.base-url:https://damp-lynna-wsep-1984852e.koyeb.app/}") String baseUrl,
+            @Value("${wsep.request-timeout-seconds:20}") long requestTimeoutSeconds) {
         this.baseUrl = baseUrl;
+        this.requestTimeoutSeconds = requestTimeoutSeconds;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
@@ -79,7 +83,7 @@ public class WsepHttpClient {
     public String post(Form form) {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl))
-                .timeout(Duration.ofSeconds(20))
+                .timeout(Duration.ofSeconds(requestTimeoutSeconds))
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(form.encoded(), StandardCharsets.UTF_8))
                 .build();

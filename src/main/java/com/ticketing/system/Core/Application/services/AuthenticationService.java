@@ -285,7 +285,7 @@ public class AuthenticationService {
         try {
             user = userRepository.findByUsername(request.username())
                     .orElseThrow(AuthenticationFailedException::new);
-            if (!user.verifyPassword(request.rawPassword(), passwordHasher)) {
+            if (!passwordHasher.matches(request.rawPassword(), user.getPasswordHash())) {
                 throw new AuthenticationFailedException();
             }
         } catch (AuthenticationFailedException e) {

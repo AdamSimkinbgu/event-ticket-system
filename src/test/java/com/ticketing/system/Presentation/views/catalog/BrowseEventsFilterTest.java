@@ -97,25 +97,31 @@ class BrowseEventsFilterTest {
         assertNull(CatalogFilterSupport.locationFilter("All cities", "All countries"));
     }
 
-    // ── cityOptionsFor ────────────────────────────────────────────────────────
+    // ── countryOptions / cityOptions ──────────────────────────────────────────
+    // Pure prepend helpers — the data source supplies the (already distinct/sorted) values.
 
     @Test
-    void cityOptionsFor_knownCountry_prependsAllCities() {
-        List<String> opts = CatalogFilterSupport.cityOptionsFor("Israel");
-        assertEquals("All cities", opts.get(0));
-        assertTrue(opts.contains("Tel Aviv"));
-        assertTrue(opts.contains("Jerusalem"));
-        assertTrue(opts.contains("Haifa"));
+    void countryOptions_prependsAllCountries() {
+        assertEquals(List.of("All countries", "Israel", "USA"),
+                CatalogFilterSupport.countryOptions(List.of("Israel", "USA")));
     }
 
     @Test
-    void cityOptionsFor_unknownCountry_returnsOnlyAllCities() {
-        assertEquals(List.of("All cities"), CatalogFilterSupport.cityOptionsFor("Mars"));
+    void countryOptions_emptyOrNull_isJustSentinel() {
+        assertEquals(List.of("All countries"), CatalogFilterSupport.countryOptions(List.of()));
+        assertEquals(List.of("All countries"), CatalogFilterSupport.countryOptions(null));
     }
 
     @Test
-    void cityOptionsFor_allCountries_returnsOnlyAllCities() {
-        assertEquals(List.of("All cities"), CatalogFilterSupport.cityOptionsFor("All countries"));
+    void cityOptions_prependsAllCities() {
+        assertEquals(List.of("All cities", "Tel Aviv", "Haifa"),
+                CatalogFilterSupport.cityOptions(List.of("Tel Aviv", "Haifa")));
+    }
+
+    @Test
+    void cityOptions_emptyOrNull_isJustSentinel() {
+        assertEquals(List.of("All cities"), CatalogFilterSupport.cityOptions(List.of()));
+        assertEquals(List.of("All cities"), CatalogFilterSupport.cityOptions(null));
     }
 
     // ── isValidCustomRange ────────────────────────────────────────────────────

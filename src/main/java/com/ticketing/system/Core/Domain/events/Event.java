@@ -8,6 +8,7 @@ import java.util.List;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
+import com.ticketing.system.Core.Domain.exceptions.PolicyViolationException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -654,7 +655,11 @@ public class Event implements InvariantChecked {
         PurchasePolicy company = companyPolicy == null ? new NoPurchasePolicy() : companyPolicy;
         PurchasePolicy effective = new AndPurchasePolicy(company, purchasePolicy);
         if (!effective.isSatisfiedBy(context)) {
-            throw new IllegalStateException(effective.getFailureMessage());
+            // Typed domain exception (not IllegalStateException): the Presentation layer maps
+            // PolicyViolationException -> PayOutcome.PolicyRejected so the buyer sees the clear,
+            // specific reason ("Cannot purchase: you can buy at most 4 tickets") rather than the
+            // generic failure toast. The merged failure message is unchanged.
+            throw new PolicyViolationException(effective.getFailureMessage());
         }
     }
 

@@ -194,8 +194,10 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
 
     private void handleReply(String text) {
         switch (presenter.reply(AuthSession.token(), selectedId, text)) {
-            case SupportInboxPresenter.ActionOutcome.Success ignored ->
+            case SupportInboxPresenter.ActionOutcome.Success ignored -> {
+                Toasts.success("Reply sent.");
                 reload(); // refresh thread, ordering, and unread badges; keeps selection
+            }
             case SupportInboxPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case SupportInboxPresenter.ActionOutcome.Failure fail ->

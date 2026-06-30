@@ -39,4 +39,24 @@ public class BrowseEventsPresenter {
             return List.of();
         }
     }
+
+    /** Distinct countries that currently have on-sale events; empty list on failure. */
+    public List<String> countries() {
+        try {
+            return catalogService.onSaleCountries();
+        } catch (RuntimeException e) {
+            log.warn("Browse countries failed: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Distinct cities of on-sale events in {@code country}; empty list on failure. */
+    public List<String> cities(String country) {
+        try {
+            return catalogService.onSaleCitiesInCountry(country);
+        } catch (RuntimeException e) {
+            log.warn("Browse cities failed: {}", e.getMessage());
+            return List.of();
+        }
+    }
 }

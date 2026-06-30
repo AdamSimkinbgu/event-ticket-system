@@ -16,6 +16,7 @@ import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.order.CheckoutPresenter;
+import com.ticketing.system.Presentation.session.OrderSession;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.DetachEvent;
@@ -458,7 +459,7 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
 
             switch (outcome) {
                 case CheckoutPresenter.PayOutcome.Success ok -> {
-                    presenter.setOrderSession(ok.result());
+                    OrderSession.setResult(ok.result());
                     clearIdempotencyKey();
                     Toasts.success("Payment successful — "
                             + formatCents(Money.toCents(ok.result().totalCharged()))
@@ -470,6 +471,8 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
                     Toasts.failure("This purchase isn't allowed under the event's purchase policy.");
                 case CheckoutPresenter.PayOutcome.PaymentDeclined d ->
                     Toasts.failure("Your payment was declined — please check your card details and try again.");
+                case CheckoutPresenter.PayOutcome.GatewayUnavailable g ->
+                    Toasts.failure("An unexpected error occurred. Please try again in a moment.");
                 case CheckoutPresenter.PayOutcome.SoldOut s ->
                     Toasts.failure("Those seats just sold out. Please choose again.");
                 case CheckoutPresenter.PayOutcome.OrderExpired e ->
