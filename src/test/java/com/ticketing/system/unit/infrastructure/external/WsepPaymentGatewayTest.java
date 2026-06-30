@@ -20,6 +20,7 @@ import com.ticketing.system.Core.Application.dto.PaymentRequestDTO;
 import com.ticketing.system.Core.Application.dto.PaymentResultDTO;
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
 import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
+import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayUnreachableException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
 import com.ticketing.system.Infrastructure.external.WsepCommunicationException;
 import com.ticketing.system.Infrastructure.external.WsepHttpClient;
@@ -81,21 +82,32 @@ class WsepPaymentGatewayTest {
     }
 
     @Test
-    void charge_minusOneIsDeclined() {
+    void charge_minusOneIsDecline_notUnreachable() {
         when(http.post(any())).thenReturn("-1");
-        assertThrows(PaymentGatewayException.class, () -> gateway.charge(request()));
+        // A real WSEP "-1" decline must be the base PaymentGatewayException, NOT the unreachable
+        // subtype — that's what keeps the buyer's "Payment declined" UX distinct from the generic one.
+        PaymentGatewayException ex =
+                assertThrows(PaymentGatewayException.class, () -> gateway.charge(request()));
+        assertFalse(ex instanceof PaymentGatewayUnreachableException,
+                "a real decline must NOT be the unreachable subtype");
     }
 
     @Test
-    void charge_unparseableBodyThrows() {
+    void charge_unparseableBodyIsUnreachable_notDecline() {
         when(http.post(any())).thenReturn("not-a-number");
-        assertThrows(PaymentGatewayException.class, () -> gateway.charge(request()));
+        assertThrows(PaymentGatewayUnreachableException.class, () -> gateway.charge(request()));
     }
 
     @Test
-    void charge_transportFailureBecomesPaymentGatewayException() {
+    void charge_nonPositiveBodyIsUnreachable_notDecline() {
+        when(http.post(any())).thenReturn("0");
+        assertThrows(PaymentGatewayUnreachableException.class, () -> gateway.charge(request()));
+    }
+
+    @Test
+    void charge_transportFailureIsUnreachable_notDecline() {
         when(http.post(any())).thenThrow(new WsepCommunicationException("refused", new RuntimeException()));
-        assertThrows(PaymentGatewayException.class, () -> gateway.charge(request()));
+        assertThrows(PaymentGatewayUnreachableException.class, () -> gateway.charge(request()));
     }
 
     @Test

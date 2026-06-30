@@ -6,10 +6,10 @@ import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
-import com.ticketing.system.Presentation.components.kit.LkFilterChip;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
+import com.ticketing.system.Presentation.components.kit.LkSelect;
 import com.ticketing.system.Presentation.components.messaging.MdConvRow;
 import com.ticketing.system.Presentation.components.messaging.MdThread;
 import com.ticketing.system.Presentation.layouts.PlatformAdminLayout;
@@ -29,7 +29,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * System-admin complaint queue (#269): lists the platform-wide member complaints, lets an admin
@@ -50,6 +49,7 @@ import java.util.Set;
 public class AdminComplaintQueueView extends LkPage {
 
     private static final String ALL = "All";
+    private static final List<String> STATUS_OPTIONS = List.of(ALL, "Open", "Resolved");
 
     private final AdminComplaintQueuePresenter presenter;
 
@@ -60,7 +60,7 @@ public class AdminComplaintQueueView extends LkPage {
     private List<ConversationDTO> complaints = List.of();
     private final List<MdConvRow> convRows = new ArrayList<>();
     private String selectedId;
-    private String statusFilter = ALL;   // server-side filter, re-queried on change
+    private String statusFilter = ALL;   // status group (All/Open/Resolved); re-queried on change
     private LkCard detailCard;
 
     public AdminComplaintQueueView(AdminComplaintQueuePresenter presenter) {
@@ -109,13 +109,13 @@ public class AdminComplaintQueueView extends LkPage {
 
     private Component buildFilters() {
         LkRow row = new LkRow().gap(8);
-        List<String> applied = ALL.equals(statusFilter) ? List.of() : List.of(statusFilter);
-        LkFilterChip status = new LkFilterChip("Status",
-            List.of("Open", "Responded", "Resolved", "Closed"), true, applied);
-        status.onApply(() -> {
-            Set<String> selected = status.getSelected();
-            statusFilter = selected.isEmpty() ? ALL : selected.iterator().next();
-            reload();   // server-side re-query
+        // Three coarse groups: All / Open (OPEN+RESPONDED) / Resolved (RESOLVED+CLOSED). The presenter
+        // fetches the whole queue and groups in-memory, so each option shows only its complaints.
+        LkSelect status = new LkSelect(statusFilter, STATUS_OPTIONS).label("Status");
+        status.onChange(v -> {
+            if (statusFilter.equals(v)) return;
+            statusFilter = v;
+            reload();
         });
         row.add(status);
         return row;

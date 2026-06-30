@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 import com.ticketing.system.Core.Application.dto.CompanyPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
-import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
@@ -55,7 +55,8 @@ public class PurchasePolicyEditorPresenter {
     public ContextOutcome resolveContext(String token) {
         if (token == null) return new ContextOutcome.NotAuthenticated();
         try {
-            List<ProductionCompanyDTO> companies = companyManagementService.findOwnedCompanies(token);
+            // Manager-inclusive: an EDIT_POLICIES manager (not just owners) must reach the editor.
+            List<MyCompanyDTO> companies = companyManagementService.findMyCompanies(token);
             if (companies.isEmpty()) return new ContextOutcome.NoCompany();
             return new ContextOutcome.Ready(companies);
         } catch (InvalidTokenException e) {
@@ -76,7 +77,7 @@ public class PurchasePolicyEditorPresenter {
     }
 
     public sealed interface ContextOutcome {
-        record Ready(List<ProductionCompanyDTO> companies) implements ContextOutcome { }
+        record Ready(List<MyCompanyDTO> companies) implements ContextOutcome { }
         record NotAuthenticated() implements ContextOutcome { }
         record NoCompany() implements ContextOutcome { }
         record Failure(String reason) implements ContextOutcome { }

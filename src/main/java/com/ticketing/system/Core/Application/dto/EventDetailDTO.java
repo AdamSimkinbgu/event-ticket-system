@@ -20,6 +20,7 @@ public record EventDetailDTO(
         String companyName,
         EventStatus status, // event status
         List<ShowDate> showDates,
-        List<String> artistsNames // lineup (Event.getArtistsNames())
+        List<String> artistsNames, // lineup (Event.getArtistsNames())
+        double minPrice // cheapest ticket price across the event's zones (0 when it has no venue/zones)
 ) {
 }

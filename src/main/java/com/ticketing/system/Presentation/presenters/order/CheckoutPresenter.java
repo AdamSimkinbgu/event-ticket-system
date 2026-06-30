@@ -19,10 +19,10 @@ import com.ticketing.system.Core.Domain.exceptions.IdempotencyConflictException;
 import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
+import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayUnreachableException;
 import com.ticketing.system.Core.Domain.exceptions.PolicyViolationException;
 import com.ticketing.system.Presentation.components.Money;
 import com.ticketing.system.Presentation.session.SessionIdentity;
-import com.vaadin.flow.server.VaadinSession;
 
 @Component
 @Slf4j
@@ -108,6 +108,13 @@ public class CheckoutPresenter {
         } catch (RuntimeException e) {
             Throwable cause = (e.getCause() != null) ? e.getCause() : e;
             if (cause instanceof PolicyViolationException)       return new PayOutcome.PolicyRejected(cause.getMessage());
+            // MUST precede the PaymentGatewayException arm: unreachable is a subtype of it. A timeout
+            // is expected transport noise, not a bug -> warn (not error), and a GENERIC outcome that
+            // carries no reason so no gateway/WSEP wording can leak to the buyer.
+            if (cause instanceof PaymentGatewayUnreachableException) {
+                log.warn("Checkout aborted: payment gateway unreachable", e);
+                return new PayOutcome.GatewayUnavailable();
+            }
             if (cause instanceof PaymentGatewayException)        return new PayOutcome.PaymentDeclined(cause.getMessage());
             if (cause instanceof InsufficientInventoryException) return new PayOutcome.SoldOut(cause.getMessage());
             if (cause instanceof InvalidStateTransitionException) return new PayOutcome.OrderExpired("Order expired during checkout");
@@ -143,15 +150,6 @@ public class CheckoutPresenter {
             return Integer.parseInt(value);
         } catch (NumberFormatException e) {
             return 0;
-        }
-    }
-
-    // ---- session --------------------------------------------------------
-
-    public void setOrderSession(CheckoutResultDTO result) {
-        VaadinSession s = VaadinSession.getCurrent();
-        if (s != null) {
-            s.setAttribute("checkout.result", result);
         }
     }
 
@@ -195,6 +193,7 @@ public class CheckoutPresenter {
         record SoldOut(String reason)                implements PayOutcome { }
         record OrderExpired(String reason)           implements PayOutcome { }
         record DuplicateSubmission()                 implements PayOutcome { }
+        record GatewayUnavailable()                  implements PayOutcome { }
         record Failure(String reason)                implements PayOutcome { }
     }
 }

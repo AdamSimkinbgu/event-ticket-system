@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 import com.ticketing.system.Core.Application.dto.EventCreationDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
-import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import com.ticketing.system.Core.Application.services.CompanyManagementService;
 import com.ticketing.system.Core.Application.services.EventManagementService;
 import com.ticketing.system.Core.Domain.events.EventCategory;
@@ -59,8 +59,8 @@ public class EventManagementPresenter {
 
     /**
      * Creates a new event in DRAFT state under the caller's company. The company is resolved from
-     * the caller's owned companies — {@code preferredCompanyId} (the workspace's currently selected
-     * company) when it is one of them, otherwise the first owned company (matching how
+     * the caller's companies — {@code preferredCompanyId} (the workspace's currently selected
+     * company) when it is one of them, otherwise the first (matching how
      * {@code CompanyEventListPresenter} picks the company for the event list the user came from).
      * Domain value objects ({@link Location}, {@link ShowDate}) are assembled here so the view stays
      * free of domain construction.
@@ -113,22 +113,23 @@ public class EventManagementPresenter {
     }
 
     /**
-     * Resolve the company to create under from the caller's <em>owned</em> companies. When a company
-     * is selected ({@code preferredCompanyId} non-null) it must be one the caller owns — otherwise we
-     * return {@code null} ({@code → NoCompany}) rather than silently retargeting to a different
-     * company (e.g. a manager viewing a company they don't own). With no selection, use the first
-     * owned company. {@code null} when the caller owns none.
+     * Resolve the company to create under from the caller's companies (manager-inclusive via
+     * {@code findMyCompanies}, so a MANAGE_INVENTORY manager can create under their company). When a
+     * company is selected ({@code preferredCompanyId} non-null) it must be one of the caller's —
+     * otherwise we return {@code null} ({@code → NoCompany}) rather than silently retargeting to a
+     * different company. With no selection, use the first. {@code null} when the caller has none.
+     * The {@code addEvent} service still enforces the MANAGE_INVENTORY permission.
      */
     private Integer resolveCompanyId(String token, Integer preferredCompanyId) {
-        List<ProductionCompanyDTO> owned = companyService.findOwnedCompanies(token);
-        if (owned.isEmpty()) return null;
+        List<MyCompanyDTO> companies = companyService.findMyCompanies(token);
+        if (companies.isEmpty()) return null;
         if (preferredCompanyId != null) {
-            for (ProductionCompanyDTO c : owned) {
+            for (MyCompanyDTO c : companies) {
                 if (c.companyId() == preferredCompanyId) return preferredCompanyId;
             }
-            return null;   // selected company isn't owned — don't create under a different one
+            return null;   // selected company isn't one of the caller's — don't create elsewhere
         }
-        return owned.get(0).companyId();
+        return companies.get(0).companyId();
     }
 
     private static boolean isBlank(String s) {

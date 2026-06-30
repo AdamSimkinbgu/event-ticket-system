@@ -1,7 +1,7 @@
 package com.ticketing.system.Presentation.layouts;
 
-import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Presentation.components.NotificationBellComponent;
+import com.ticketing.system.Presentation.presenters.notifications.NotificationBellPresenter;
 import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkSideNav;
@@ -50,11 +50,11 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
     private LkTopBar topBar;
     private LkSideNav adminNav;
     private final SignOutFlow signOutFlow;
-    private final INotificationService notificationService;
+    private final NotificationBellPresenter bellPresenter;
 
-    public PlatformAdminLayout(SignOutFlow signOutFlow, INotificationService notificationService) {
+    public PlatformAdminLayout(SignOutFlow signOutFlow, NotificationBellPresenter bellPresenter) {
         this.signOutFlow = signOutFlow;
-        this.notificationService = notificationService;
+        this.bellPresenter = bellPresenter;
         rebuildTopBar();
         buildDrawerOnce();
     }
@@ -72,10 +72,7 @@ public class PlatformAdminLayout extends AppLayout implements AfterNavigationObs
             // No navigation target — the brand is inert; "Back to Site" (right) is the way out.
             .brand("Event Ticket Platform", " · Admin")
             .rightLink("Back to Site", "arrowLeft", LandingView.class)
-            .bell(new NotificationBellComponent(notifId -> {
-                Integer userId = AuthSession.userId();
-                if (userId != null) notificationService.markRead(userId, notifId);
-            }))
+            .bell(new NotificationBellComponent(bellPresenter::markRead))
             .account(initials(name), name, buildAdminMenu(name), "#fff", "#c2410c");
         addToNavbar(topBar);
     }

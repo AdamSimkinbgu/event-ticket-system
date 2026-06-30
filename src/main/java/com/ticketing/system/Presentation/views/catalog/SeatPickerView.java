@@ -228,7 +228,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
                 UI.getCurrent().navigate(CartView.class);
             }
             case SeatPickerPresenter.ReserveOutcome.Failure f ->
-                Toasts.failure("Couldn't reserve those tickets — please try again.");
+                Toasts.failure(reserveFailureMessage(f.message()));
         }
     }
 
@@ -283,8 +283,15 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
                 UI.getCurrent().navigate(CartView.class);
             }
             case SeatPickerPresenter.ReserveOutcome.Failure f ->
-                Toasts.failure("Couldn't reserve those tickets — please try again.");
+                Toasts.failure(reserveFailureMessage(f.message()));
         }
+    }
+
+    /** Surface the real reserve-failure reason when present, else a friendly fallback. */
+    private static String reserveFailureMessage(String raw) {
+        return (raw == null || raw.isBlank())
+            ? "Couldn't reserve those tickets — please try again."
+            : raw;
     }
 
     private Component buildBreadcrumb(String trailText) {

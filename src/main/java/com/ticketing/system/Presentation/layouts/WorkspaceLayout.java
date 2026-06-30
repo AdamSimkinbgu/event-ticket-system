@@ -1,7 +1,7 @@
 package com.ticketing.system.Presentation.layouts;
 
-import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Presentation.components.NotificationBellComponent;
+import com.ticketing.system.Presentation.presenters.notifications.NotificationBellPresenter;
 import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkSideNav;
@@ -82,11 +82,11 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
     private LkSideNav ownerNav;
     private final Div drawerWrap = new Div();
     private final SignOutFlow signOutFlow;
-    private final INotificationService notificationService;
+    private final NotificationBellPresenter bellPresenter;
 
-    public WorkspaceLayout(SignOutFlow signOutFlow, INotificationService notificationService) {
+    public WorkspaceLayout(SignOutFlow signOutFlow, NotificationBellPresenter bellPresenter) {
         this.signOutFlow = signOutFlow;
-        this.notificationService = notificationService;
+        this.bellPresenter = bellPresenter;
         rebuildTopBar();
         addToDrawer(drawerWrap);
         rebuildDrawer(null);
@@ -107,10 +107,7 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
                 new LkTopBar.NavItem("Browse",     BrowseEventsView.class),
                 new LkTopBar.NavItem("My Tickets", MyAccountView.class)
             ), null)
-            .bell(new NotificationBellComponent(notifId -> {
-                Integer userId = AuthSession.userId();
-                if (userId != null) notificationService.markRead(userId, notifId);
-            }))
+            .bell(new NotificationBellComponent(bellPresenter::markRead))
             .account(initials(name), name, buildOwnerMenu(name));
         addToNavbar(topBar);
     }

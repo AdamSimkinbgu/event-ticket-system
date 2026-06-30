@@ -17,9 +17,11 @@ import com.ticketing.system.Presentation.components.kit.LkSelect;
 import com.ticketing.system.Presentation.components.kit.LkStatusDot;
 import com.ticketing.system.Presentation.layouts.WorkspaceLayout;
 import com.ticketing.system.Presentation.presenters.company.CompanyEventListPresenter;
+import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.session.CurrentCompanies;
 import com.ticketing.system.Presentation.views.admin.CompanySalesView;
 import com.ticketing.system.Presentation.views.catalog.CatalogFilterSupport;
 import com.vaadin.flow.component.Component;
@@ -38,6 +40,7 @@ import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +56,9 @@ public class CompanyEventListView extends LkPage {
     private static final String STATUS_ALL = "All statuses";
     private static final List<String> STATUS_OPTIONS = List.of(
             STATUS_ALL, "Draft", "Scheduled", "On sale", "Sold out", "Cancelled", "Completed");
+
+    /** Human-readable start date + time, e.g. "Jul 19, 2026 · 5:41 PM" (no ISO "T"/seconds gibberish). */
+    private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("MMM d, yyyy · h:mm a");
 
     private final CompanyEventListPresenter presenter;
     private final LkCard eventsCard = new LkCard().pad(0);
@@ -92,11 +98,18 @@ public class CompanyEventListView extends LkPage {
         this.presenter = presenter;
         title("My Events");
         subtitle("All events under the selected company.");
-        actions(
-            new LkBtn("New Event").variant(LkBtn.Variant.primary)
-                .icon(new LkIcon("plus", 15))
-                .onClick(e -> UI.getCurrent().navigate("owner/events/new"))
-        );
+        LkBtn bulkExport = new LkBtn("Bulk Export").variant(LkBtn.Variant.secondary)
+            .onClick(e -> Toasts.success("Event list exported to CSV (mock)."));
+        // "New Event" is an event-management action — hidden for a member who can't edit events
+        // (e.g. a venue-only manager), so the page is browse + per-event venue/sales for them.
+        if (Capabilities.has(Capability.EDIT_COMPANY_EVENTS)) {
+            actions(bulkExport,
+                new LkBtn("New Event").variant(LkBtn.Variant.primary)
+                    .icon(new LkIcon("plus", 15))
+                    .onClick(e -> UI.getCurrent().navigate("owner/events/new")));
+        } else {
+            actions(bulkExport);
+        }
         add(buildFilters());
         add(eventsCard);
         Span hint = Lk.muted("Row actions → Edit metadata · Venue map · Policies · Sales · Status · Cancel.");
@@ -111,10 +124,11 @@ public class CompanyEventListView extends LkPage {
             .col("Event",   "name")
             .col("Date",    "date")
             .col("Venue",   "venue")
+            .col("From",    "from", LkGrid.Align.RIGHT)
             .col("Rating",  "rating", LkGrid.Align.RIGHT)
             .col("Status",  "status")
             .col("Actions", "act", LkGrid.Align.RIGHT);
-        switch (presenter.load(AuthSession.token(), currentFilters())) {
+        switch (presenter.load(AuthSession.token(), CurrentCompanies.currentCompanyId(), currentFilters())) {
             case CompanyEventListPresenter.Outcome.Success ok -> {
                 // Status isn't a CatalogSearchFiltersDTO field — apply it client-side on the result.
                 EventStatus wanted = statusValue(filterStatus);
@@ -132,7 +146,7 @@ public class CompanyEventListView extends LkPage {
                 }
             }
             case CompanyEventListPresenter.Outcome.NoCompany ignored ->
-                eventsCard.add(Lk.muted("You don't own a company yet."));
+                eventsCard.add(Lk.muted("You're not part of a company workspace yet."));
             case CompanyEventListPresenter.Outcome.NotAuthenticated ignored ->
                 eventsCard.add(Lk.muted("Your session has expired — please sign in again."));
             case CompanyEventListPresenter.Outcome.Failure fail ->
@@ -176,12 +190,17 @@ public class CompanyEventListView extends LkPage {
         eventRatingMin = ratingField("Min", v -> { filterMinEventRating = v; reload(); });
         eventRatingMax = ratingField("Max", v -> { filterMaxEventRating = v; reload(); });
 
-        countrySelect = new LkSelect(CatalogFilterSupport.COUNTRY_ALL, CatalogFilterSupport.COUNTRIES).label("Country");
+        countrySelect = new LkSelect(CatalogFilterSupport.COUNTRY_ALL,
+                CatalogFilterSupport.countryOptions(
+                        presenter.countries(AuthSession.token(), CurrentCompanies.currentCompanyId()))).label("Country");
         countrySelect.onChange(v -> {
             if (Objects.equals(filterCountry, v)) return;
             filterCountry = v;
             filterCity = CatalogFilterSupport.CITY_ALL;
-            citySelect.setOptions(CatalogFilterSupport.cityOptionsFor(v));
+            citySelect.setOptions(CatalogFilterSupport.COUNTRY_ALL.equals(v)
+                    ? List.of(CatalogFilterSupport.CITY_ALL)
+                    : CatalogFilterSupport.cityOptions(
+                            presenter.cities(AuthSession.token(), CurrentCompanies.currentCompanyId(), v)));
             citySelect.enabled(!CatalogFilterSupport.COUNTRY_ALL.equals(v));
             reload();
         });
@@ -337,11 +356,16 @@ public class CompanyEventListView extends LkPage {
         row.put("name", name);
 
         String date = ev.showDates() != null && !ev.showDates().isEmpty()
-            ? ev.showDates().get(0).getStartTime().toString() : "—";
+            ? ev.showDates().get(0).getStartTime().format(DATE_TIME_FMT) : "—";
         row.put("date", date);
 
         String venue = ev.location() != null ? ev.location().toString() : "—";
         row.put("venue", venue);
+
+        // Cheapest ticket price (the same value the catalog's price-range filter matches on); "—"
+        // for events with no venue/zones yet (e.g. drafts). Format with cents so it matches the
+        // actual ticket price (e.g. $49.99, not a truncated $49).
+        row.put("from", ev.minPrice() > 0 ? String.format("$%,.2f", ev.minPrice()) : "—");
 
         row.put("rating", ev.rating() == null ? "—" : "★ " + ratingText(ev.rating()));
 
@@ -350,20 +374,37 @@ public class CompanyEventListView extends LkPage {
             : LkStatusDot.Tone.warn;
         row.put("status", new LkStatusDot(tone, ev.status().name()));
 
+        // Each action is gated by the capability it actually needs, so a member only sees the
+        // actions they can perform — e.g. a venue-only manager (CONFIGURE_VENUE) sees just "Venue
+        // map", a sales manager just "Sales", an owner the full set.
         LkRow actions = new LkRow().gap(4).noWrap();
-        actions.add(
-            iconBtn("edit",    "Edit metadata", () -> UI.getCurrent().navigate("owner/events/" + ev.eventId())),
-            iconBtn("map",     "Venue map",     () -> UI.getCurrent().navigate("owner/venue/" + ev.eventId())),
-            iconBtn("policy",  "Policies",      () -> UI.getCurrent().navigate(PurchasePolicyEditorView.class)),
-            iconBtn("chart",   "Sales",         () -> UI.getCurrent().navigate(CompanySalesView.class))
-        );
+        if (Capabilities.has(Capability.EDIT_COMPANY_EVENTS)) {
+            actions.add(iconBtn("edit", "Edit metadata", () -> UI.getCurrent().navigate("owner/events/" + ev.eventId())));
+        }
+        if (Capabilities.has(Capability.MANAGE_VENUE_MAPS)) {
+            actions.add(iconBtn("map", "Venue map", () -> UI.getCurrent().navigate("owner/venue/" + ev.eventId())));
+        }
+        if (Capabilities.has(Capability.EDIT_PURCHASE_POLICIES)) {
+            // Deep-link to THIS event's purchase policy (route owner/policies/:companyId?/:eventId?).
+            actions.add(iconBtn("policy", "Policies",
+                    () -> UI.getCurrent().navigate("owner/policies/" + ev.companyId() + "/" + ev.eventId())));
+        }
+        if (Capabilities.has(Capability.VIEW_COMPANY_SALES)) {
+            actions.add(iconBtn("chart", "Sales", () -> UI.getCurrent().navigate(CompanySalesView.class)));
+        }
         if (ev.status() == EventStatus.CANCELED) {
             // A canceled event has no further transitions and can't be canceled again —
             // the only action is to permanently remove it.
-            actions.add(iconBtn("trash", "Remove event", () -> openDeleteDialog(ev)));
+            if (Capabilities.has(Capability.EDIT_COMPANY_EVENTS)) {
+                actions.add(iconBtn("trash", "Remove event", () -> openDeleteDialog(ev)));
+            }
         } else {
-            actions.add(iconBtn("gear",    "Change status", () -> openStatusDialog(ev)));
-            actions.add(iconBtn("warning", "Cancel event",  () -> openCancelDialog(ev)));
+            if (Capabilities.has(Capability.EDIT_COMPANY_EVENTS)) {
+                actions.add(iconBtn("gear", "Change status", () -> openStatusDialog(ev)));
+            }
+            if (Capabilities.has(Capability.CANCEL_EVENT)) {
+                actions.add(iconBtn("warning", "Cancel event", () -> openCancelDialog(ev)));
+            }
         }
         row.put("act", actions);
         grid.row(row);
@@ -410,7 +451,7 @@ public class CompanyEventListView extends LkPage {
                 case CompanyEventListPresenter.ActionOutcome.NotAuthenticated ignored2 ->
                     Toasts.warn("Your session has expired — please sign in again.");
                 case CompanyEventListPresenter.ActionOutcome.Failure fail ->
-                    Toasts.failure("Could not remove the event — please try again.");
+                    Toasts.failure(actionFailureMessage(fail.reason(), "Could not remove the event — please try again."));
             }
         });
         dialog.open();
@@ -446,13 +487,13 @@ public class CompanyEventListView extends LkPage {
             }
             switch (presenter.changeEventStatus(AuthSession.token(), Integer.parseInt(ev.eventId()), target)) {
                 case CompanyEventListPresenter.ActionOutcome.Success ignored2 -> {
-                    Toasts.success("Event status updated.");
+                    Toasts.success(statusChangeSuccessMessage(target));
                     reload();
                 }
                 case CompanyEventListPresenter.ActionOutcome.NotAuthenticated ignored2 ->
                     Toasts.warn("Your session has expired — please sign in again.");
                 case CompanyEventListPresenter.ActionOutcome.Failure fail ->
-                    Toasts.failure("Could not change the event status — please try again.");
+                    Toasts.failure(actionFailureMessage(fail.reason(), "Could not change the event status — please try again."));
             }
         });
         dialog.open();
@@ -463,6 +504,25 @@ public class CompanyEventListView extends LkPage {
             case DRAFT -> List.of(EventStatus.SCHEDULED);
             case SCHEDULED -> List.of(EventStatus.ON_SALE);
             default -> List.of();
+        };
+    }
+
+    /**
+     * Surface the real reason the service refused an action (e.g. "Can't delete an event with sales
+     * history", or "Event cannot be scheduled without a venue map and at least one inventory zone")
+     * instead of a generic toast — so the owner understands why. Falls back to {@code fallback} only
+     * when the service gave no message.
+     */
+    private static String actionFailureMessage(String reason, String fallback) {
+        return (reason == null || reason.isBlank()) ? fallback : reason;
+    }
+
+    /** Informative, status-specific confirmation for a successful status change. */
+    private static String statusChangeSuccessMessage(EventStatus target) {
+        return switch (target) {
+            case SCHEDULED -> "Event scheduled — you can publish it (put it On Sale) when ready.";
+            case ON_SALE   -> "Event is now On Sale — tickets are available to buyers.";
+            default        -> "Event status updated.";
         };
     }
 

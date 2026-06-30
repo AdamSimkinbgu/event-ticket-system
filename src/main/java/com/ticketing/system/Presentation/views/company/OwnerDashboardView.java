@@ -117,11 +117,6 @@ public class OwnerDashboardView extends LkPage {
         Div row = new Div();
         row.addClassName("ow-stats");
 
-        LkStat inquiries = new LkStat("Open inquiries", String.valueOf(stats.openInquiries()));
-        if (stats.openInquiries() > 0) {
-            inquiries.delta("needs reply", LkStat.Tone.warn);
-        }
-
         // Company rating is derived from the average of this company's events' ratings.
         LkStat rating = new LkStat("Rating",
             stats.rating() == null ? "—" : "★ " + ratingText(stats.rating()));
@@ -129,10 +124,22 @@ public class OwnerDashboardView extends LkPage {
         row.add(
             rating,
             new LkStat("Live events",        String.valueOf(stats.activeEvents())),
-            new LkStat("Tickets sold · 30d",  String.format("%,d", stats.ticketsSold30d())),
-            new LkStat("Revenue · 30d",       "$" + String.format("%,.0f", stats.revenue30d())),
-            inquiries
+            new LkStat("Tickets sold · 30d",  String.format("%,d", stats.ticketsSold30d()))
         );
+        // Revenue is sales data — only members with VIEW_SALES (VIEW_COMPANY_SALES) see it, matching
+        // the "Sales History" tile gate below and the VIEW_COMPANY_SALES-gated sales page.
+        if (Capabilities.has(Capability.VIEW_COMPANY_SALES)) {
+            row.add(new LkStat("Revenue · 30d", "$" + String.format("%,.0f", stats.revenue30d())));
+        }
+        // Open inquiries is inquiry-handling data — only members with RESPOND_TO_INQUIRIES
+        // (RESPOND_INQUIRIES) see it, matching the "Customer Inquiries" tile gate below.
+        if (Capabilities.has(Capability.RESPOND_INQUIRIES)) {
+            LkStat inquiries = new LkStat("Open inquiries", String.valueOf(stats.openInquiries()));
+            if (stats.openInquiries() > 0) {
+                inquiries.delta("needs reply", LkStat.Tone.warn);
+            }
+            row.add(inquiries);
+        }
         return row;
     }
 
@@ -175,6 +182,11 @@ public class OwnerDashboardView extends LkPage {
             tiles.add(tile("crown", "Appoint Co-owner",
                 "Invite another member as co-owner. Cycle-prevention enforced.",
                 OwnerAppointmentView.class));
+
+        if (Capabilities.has(Capability.VIEW_COMPANY_ORG_TREE))
+            tiles.add(tile("org", "Organizational Tree",
+                "View your company's founder → owners → managers appointment hierarchy.",
+                CompanyOrgTreeView.class));
 
         if (Capabilities.has(Capability.EDIT_PURCHASE_POLICIES))
             tiles.add(tile("policy", "Purchase Policies",

@@ -7,6 +7,7 @@ import com.ticketing.system.Presentation.components.kit.LkCol;
 import com.ticketing.system.Presentation.components.kit.LkField;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.presenters.account.MyProfilePresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
@@ -20,7 +21,10 @@ import jakarta.annotation.security.PermitAll;
 @PermitAll
 public class MyProfileView extends LkPage {
 
-    public MyProfileView() {
+    private final MyProfilePresenter presenter;
+
+    public MyProfileView(MyProfilePresenter presenter) {
+        this.presenter = presenter;
         title("My Profile");
         subtitle("Your account details.");
         add(buildProfileCard());
@@ -28,7 +32,22 @@ public class MyProfileView extends LkPage {
 
     private Component buildProfileCard() {
         String name = AuthSession.displayName();
-        if (name == null || name.isBlank()) name = "Alex Morgan";
+        if (name == null || name.isBlank()) name = "Guest";
+
+        // Username + email come from the User aggregate via the presenter. When signed out or on a load
+        // error we show a neutral placeholder rather than fabricating a plausible-looking address.
+        String username = "—";
+        String email = "—";
+        switch (presenter.load()) {
+            case MyProfilePresenter.Outcome.Success ok -> {
+                username = ok.member().username();
+                if (ok.member().email() != null && !ok.member().email().isBlank()) {
+                    email = ok.member().email();
+                }
+            }
+            case MyProfilePresenter.Outcome.NotAuthenticated ignored -> { /* keep placeholder */ }
+            case MyProfilePresenter.Outcome.Failure ignored -> { /* keep placeholder */ }
+        }
 
         LkCard card = new LkCard("Profile").pad(20);
 
@@ -44,9 +63,8 @@ public class MyProfileView extends LkPage {
         idRow.add(avatar, info);
 
         LkCol fields = new LkCol().gap(14);
-        fields.add(new LkField().label("Username").value("alex.morgan"));
-        fields.add(new LkField().label("Email").value("alex.morgan@email.com"));
-        fields.add(new LkField().label("Member Since").value("15 Dec 2024"));
+        fields.add(new LkField().label("Username").value(username));
+        fields.add(new LkField().label("Email").value(email));
 
         card.add(idRow, Lk.divider(), fields);
         return card;

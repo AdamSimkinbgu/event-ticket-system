@@ -52,6 +52,17 @@ public abstract class IEventRepositoryContractTest {
                 venueMap, List.of(showDate), new NoPurchasePolicy(), new DiscountPolicy(0));
     }
 
+    // An event whose zones span several prices (cheapest = 30); used for the "cheapest price" filter tests.
+    protected Event buildMultiZoneEvent(int id) {
+        VenueMap venueMap = new VenueMap(id, LOCATION, List.of(
+                new StandingZone(1, "Cheap", 100, 30),
+                new StandingZone(2, "Mid", 100, 50),
+                new StandingZone(3, "Premium", 100, 100)));
+        ShowDate showDate = new ShowDate(FUTURE_START, FUTURE_END);
+        return new Event(id, "Tiered Show", 4.5, List.of("Artist A"), EventCategory.CONCERT, 10,
+                EventStatus.ON_SALE, venueMap, List.of(showDate), new NoPurchasePolicy(), new DiscountPolicy(0));
+    }
+
     // === save ===
 
     @Test
@@ -318,6 +329,27 @@ public abstract class IEventRepositoryContractTest {
         List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
                 null, null, null, null, 100.0, 500.0, null, null, null, null, null, null, null));
 
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void givenMultiZoneEvent_whenCheapestPriceInRange_thenMatches() {
+        eventRepo.save(buildMultiZoneEvent(1)); // zones 30 / 50 / 100, cheapest = 30
+
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
+                null, null, null, null, 20.0, 40.0, null, null, null, null, null, null, null));
+
+        assertEquals(1, result.size()); // the cheapest ticket (30) is within [20, 40]
+    }
+
+    @Test
+    void givenMultiZoneEvent_whenCheapestPriceBelowMin_thenExcludedEvenIfPricierZonesFit() {
+        eventRepo.save(buildMultiZoneEvent(1)); // cheapest = 30
+
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
+                null, null, null, null, 40.0, 200.0, null, null, null, null, null, null, null));
+
+        // Matching is on the cheapest ticket (30), not the 50/100 zones, so the event is excluded.
         assertTrue(result.isEmpty());
     }
 

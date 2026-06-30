@@ -163,15 +163,21 @@ public final class Capabilities {
         if (permissions == null) {
             return caps;
         }
+        // Every manager permission grants VIEW_COMPANY_EVENTS: "My Events" is the read-only hub
+        // every manager lands on, and the per-row actions there are each gated by the specific
+        // capability below, so a manager only sees the buttons for what their permissions allow.
         for (Permission permission : permissions) {
+            caps.add(Capability.VIEW_COMPANY_EVENTS);
             switch (permission) {
                 case VIEW_SALES -> caps.add(Capability.VIEW_COMPANY_SALES);
                 case EDIT_POLICIES -> caps.add(Capability.EDIT_PURCHASE_POLICIES);
                 case RESPOND_TO_INQUIRIES -> caps.add(Capability.RESPOND_INQUIRIES);
                 case CONFIGURE_VENUE -> caps.add(Capability.MANAGE_VENUE_MAPS);
                 case MANAGE_INVENTORY -> {
-                    caps.add(Capability.VIEW_COMPANY_EVENTS);
+                    // Full event lifecycle: edit metadata, create, change status, remove
+                    // (EDIT_COMPANY_EVENTS) and cancel + refund (CANCEL_EVENT).
                     caps.add(Capability.EDIT_COMPANY_EVENTS);
+                    caps.add(Capability.CANCEL_EVENT);
                 }
             }
         }

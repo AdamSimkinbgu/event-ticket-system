@@ -8,6 +8,8 @@ import java.util.TreeMap;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.dto.InventoryZoneDTO;
 import com.ticketing.system.Core.Application.dto.SeatDTO;
@@ -15,11 +17,13 @@ import com.ticketing.system.Core.Application.dto.VenueMapDTO;
 import com.ticketing.system.Core.Application.services.CatalogService;
 import com.ticketing.system.Core.Application.services.ReservationService;
 import com.ticketing.system.Core.Domain.events.ZoneType;
+import com.ticketing.system.Core.Domain.exceptions.DomainException;
 import com.ticketing.system.Presentation.components.venue.VkSeat;
 import com.ticketing.system.Presentation.components.venue.VkSeatedZonePicker;
 import com.ticketing.system.Presentation.session.SessionIdentity;
 
 @Component
+@Slf4j
 public class SeatPickerPresenter {
 
     private final CatalogService catalogService;
@@ -63,8 +67,17 @@ public class SeatPickerPresenter {
                 reservationService.reserveForGuest(identity.guestSessionId(), eventId, zoneId, selection);
             }
             return new ReserveOutcome.Success(selection.getSeatNumbers().size());
-        } catch (RuntimeException e) {
+        } catch (DomainException e) {
+            // Domain rejections (sold out, not on sale, market closed, …) carry buyer-facing messages.
+            log.warn("seated reserve rejected (eventId={}, zoneId={}, seats={}): {}",
+                    eventId, zoneId, selection.getSeatNumbers(), e.getMessage());
             return new ReserveOutcome.Failure(e.getMessage());
+        } catch (RuntimeException e) {
+            // Infrastructure errors (e.g. optimistic-lock contention) have technical messages — log the
+            // full trace but hand the view a null so it shows its friendly fallback, never the raw text.
+            log.warn("seated reserve errored (eventId={}, zoneId={}, seats={})",
+                    eventId, zoneId, selection.getSeatNumbers(), e);
+            return new ReserveOutcome.Failure(null);
         }
     }
 
@@ -77,8 +90,17 @@ public class SeatPickerPresenter {
                 reservationService.reserveForGuest(identity.guestSessionId(), eventId, zoneId, selection);
             }
             return new ReserveOutcome.Success(quantity);
-        } catch (RuntimeException e) {
+        } catch (DomainException e) {
+            // Domain rejections (sold out, not on sale, market closed, …) carry buyer-facing messages.
+            log.warn("standing reserve rejected (eventId={}, zoneId={}, qty={}): {}",
+                    eventId, zoneId, quantity, e.getMessage());
             return new ReserveOutcome.Failure(e.getMessage());
+        } catch (RuntimeException e) {
+            // Infrastructure errors (e.g. optimistic-lock contention) have technical messages — log the
+            // full trace but hand the view a null so it shows its friendly fallback, never the raw text.
+            log.warn("standing reserve errored (eventId={}, zoneId={}, qty={})",
+                    eventId, zoneId, quantity, e);
+            return new ReserveOutcome.Failure(null);
         }
     }
 

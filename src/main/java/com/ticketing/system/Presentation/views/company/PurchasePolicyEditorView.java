@@ -3,7 +3,7 @@ package com.ticketing.system.Presentation.views.company;
 import java.util.List;
 
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
-import com.ticketing.system.Core.Application.dto.ProductionCompanyDTO;
+import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
@@ -63,7 +63,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
     private Span                          validityBadge;
     private Span                          scopeContextLabel;
     private final Div                     loadErrorSlot = new Div();
-    private Select<ProductionCompanyDTO>  companySelect;
+    private Select<MyCompanyDTO>          companySelect;
     private Select<EventDetailDTO>        eventSelect;
     private NativeButton                  companyBtn;
     private NativeButton                  eventBtn;
@@ -106,7 +106,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
             case ContextOutcome.NotAuthenticated na ->
                 disableEditing("Please sign in again to edit policies.");
             case ContextOutcome.NoCompany nc ->
-                disableEditing("You don't own a company yet — register one to set purchase policies.");
+                disableEditing("You're not part of a company workspace yet — join or register one to set purchase policies.");
             case ContextOutcome.Failure f ->
                 showLoadError("Could not load your companies: " + f.reason(), this::initContext);
             case ContextOutcome.Ready ready ->
@@ -114,20 +114,20 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
         }
     }
 
-    private void populateCompanies(List<ProductionCompanyDTO> companies) {
+    private void populateCompanies(List<MyCompanyDTO> companies) {
         companySelect.setEnabled(true);
         companySelect.setItems(companies);
 
-        ProductionCompanyDTO chosen = companies.get(0);
+        MyCompanyDTO chosen = companies.get(0);
         if (routeCompanyId != null) {
-            for (ProductionCompanyDTO c : companies) {
+            for (MyCompanyDTO c : companies) {
                 if (c.companyId() == routeCompanyId) { chosen = c; break; }
             }
         }
         companySelect.setValue(chosen);   // fires onCompanyChosen()
     }
 
-    private void onCompanyChosen(ProductionCompanyDTO c) {
+    private void onCompanyChosen(MyCompanyDTO c) {
         if (c == null) return;
         this.companyId = c.companyId();
 
@@ -218,7 +218,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
 
         companySelect = new Select<>();
         companySelect.setLabel("Company");
-        companySelect.setItemLabelGenerator(ProductionCompanyDTO::name);
+        companySelect.setItemLabelGenerator(MyCompanyDTO::name);
         companySelect.setWidth("220px");
         companySelect.setEnabled(false);
         companySelect.addValueChangeListener(e -> onCompanyChosen(e.getValue()));
@@ -295,7 +295,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
     }
 
     private String currentCompanyName() {
-        ProductionCompanyDTO c = companySelect.getValue();
+        MyCompanyDTO c = companySelect.getValue();
         return c != null ? c.name() : ("#" + companyId);
     }
 

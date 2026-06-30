@@ -58,14 +58,36 @@ class AdminComplaintQueuePresenterTest {
     }
 
     @Test
-    void load_forwardsStatusFilter() {
-        when(messaging.viewAllComplaints(eq(TOKEN), any())).thenReturn(List.of());
+    void load_open_returnsOnlyOpenAndResponded_andQueriesWithoutServerStatus() {
+        ConversationDTO open = complaint("c1", "OPEN");
+        ConversationDTO responded = complaint("c2", "RESPONDED");
+        ConversationDTO resolved = complaint("c3", "RESOLVED");
+        ConversationDTO closed = complaint("c4", "CLOSED");
+        when(messaging.viewAllComplaints(eq(TOKEN), any()))
+            .thenReturn(List.of(open, responded, resolved, closed));
 
-        presenter.load(TOKEN, "Open");
+        AdminComplaintQueuePresenter.Outcome.Success ok =
+            assertInstanceOf(AdminComplaintQueuePresenter.Outcome.Success.class, presenter.load(TOKEN, "Open"));
+        assertEquals(List.of(open, responded), ok.complaints());
 
+        // Grouping is client-side: the service is always queried with no server status filter.
         ArgumentCaptor<ComplaintFilterDTO> captor = ArgumentCaptor.forClass(ComplaintFilterDTO.class);
         verify(messaging).viewAllComplaints(eq(TOKEN), captor.capture());
-        assertEquals("Open", captor.getValue().status());
+        assertNull(captor.getValue().status());
+    }
+
+    @Test
+    void load_resolved_returnsOnlyResolvedAndClosed() {
+        ConversationDTO open = complaint("c1", "OPEN");
+        ConversationDTO responded = complaint("c2", "RESPONDED");
+        ConversationDTO resolved = complaint("c3", "RESOLVED");
+        ConversationDTO closed = complaint("c4", "CLOSED");
+        when(messaging.viewAllComplaints(eq(TOKEN), any()))
+            .thenReturn(List.of(open, responded, resolved, closed));
+
+        AdminComplaintQueuePresenter.Outcome.Success ok =
+            assertInstanceOf(AdminComplaintQueuePresenter.Outcome.Success.class, presenter.load(TOKEN, "Resolved"));
+        assertEquals(List.of(resolved, closed), ok.complaints());
     }
 
     @Test
