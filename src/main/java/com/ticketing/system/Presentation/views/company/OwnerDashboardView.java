@@ -129,10 +129,14 @@ public class OwnerDashboardView extends LkPage {
         row.add(
             rating,
             new LkStat("Live events",        String.valueOf(stats.activeEvents())),
-            new LkStat("Tickets sold · 30d",  String.format("%,d", stats.ticketsSold30d())),
-            new LkStat("Revenue · 30d",       "$" + String.format("%,.0f", stats.revenue30d())),
-            inquiries
+            new LkStat("Tickets sold · 30d",  String.format("%,d", stats.ticketsSold30d()))
         );
+        // Revenue is sales data — only members with VIEW_SALES (VIEW_COMPANY_SALES) see it, matching
+        // the "Sales History" tile gate below and the VIEW_COMPANY_SALES-gated sales page.
+        if (Capabilities.has(Capability.VIEW_COMPANY_SALES)) {
+            row.add(new LkStat("Revenue · 30d", "$" + String.format("%,.0f", stats.revenue30d())));
+        }
+        row.add(inquiries);
         return row;
     }
 
