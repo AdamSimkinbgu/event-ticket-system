@@ -8,6 +8,8 @@ import java.util.TreeMap;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.dto.InventoryZoneDTO;
 import com.ticketing.system.Core.Application.dto.SeatDTO;
@@ -20,6 +22,7 @@ import com.ticketing.system.Presentation.components.venue.VkSeatedZonePicker;
 import com.ticketing.system.Presentation.session.SessionIdentity;
 
 @Component
+@Slf4j
 public class SeatPickerPresenter {
 
     private final CatalogService catalogService;
@@ -64,6 +67,8 @@ public class SeatPickerPresenter {
             }
             return new ReserveOutcome.Success(selection.getSeatNumbers().size());
         } catch (RuntimeException e) {
+            log.warn("seated reserve failed (eventId={}, zoneId={}, seats={}): {}",
+                    eventId, zoneId, selection.getSeatNumbers(), e.getMessage(), e);
             return new ReserveOutcome.Failure(e.getMessage());
         }
     }
@@ -78,6 +83,8 @@ public class SeatPickerPresenter {
             }
             return new ReserveOutcome.Success(quantity);
         } catch (RuntimeException e) {
+            log.warn("standing reserve failed (eventId={}, zoneId={}, qty={}): {}",
+                    eventId, zoneId, quantity, e.getMessage(), e);
             return new ReserveOutcome.Failure(e.getMessage());
         }
     }
