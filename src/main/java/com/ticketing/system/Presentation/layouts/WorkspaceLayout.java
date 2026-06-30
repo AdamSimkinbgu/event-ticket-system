@@ -18,6 +18,7 @@ import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.ticketing.system.Presentation.views.company.CompanyEventListView;
 import com.ticketing.system.Presentation.views.company.CompanyInquiryInboxView;
 import com.ticketing.system.Presentation.views.company.CompanyOrgTreeView;
+import com.ticketing.system.Presentation.views.company.CompanySalesView;
 import com.ticketing.system.Presentation.views.company.ManagerListView;
 import com.ticketing.system.Presentation.views.company.MyCompaniesView;
 import com.ticketing.system.Presentation.views.company.OwnerAppointmentView;
