@@ -11,6 +11,13 @@ import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.TicketRecord
  * Refund-aware headline figures for the Company Sales History page, derived from the order
  * records the grid shows. Refunded orders are excluded from every figure (they remain listed and
  * tagged in the grid). Pure (no Vaadin) so it is unit-testable.
+ *
+ * <p><b>Known limitation (see issue #457):</b> {@code refunded()} reflects the order-level
+ * {@code OrderReceipt.isRefunded} flag, which an event cancellation flips for the whole receipt even
+ * when only that one event's lines were refunded. So an order mixing multiple events or companies that
+ * then has one event cancelled is excluded in full — understating revenue for its still-valid tickets.
+ * Single-event orders and full-order member refunds are unaffected; a proper fix needs per-line refund
+ * granularity rather than this whole-order boolean.
  */
 public record SalesSummary(double revenue, int ticketsSold, double avgOrderValue, String topEvent) {
 
