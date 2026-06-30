@@ -253,6 +253,48 @@ class SystemAdminServiceTest {
         assertThrows(UnauthorizedActionException.class, () -> svc.closeMarket(request));
     }
 
+    // --- #455: ensureMarketOpen (system self-heal — no admin token, recovers from a boot-time outage) ---
+
+    @Test
+    void givenReachableServices_whenEnsureMarketOpen_thenOpens() {
+        when(adminRepository.existsAny()).thenReturn(true);
+        SystemAdminService svc = serviceWith(List.of(reachablePayment()), List.of(reachableIssuer()));
+        svc.ensureMarketOpen();   // UNINITIALIZED -> READY -> OPEN in one shot
+        assertTrue(svc.isMarketOpen());
+    }
+
+    @Test
+    void givenServicesDownThenUp_whenEnsureMarketOpenTwice_thenSelfHealsToOpen() {
+        when(adminRepository.existsAny()).thenReturn(true);
+        IPaymentGateway gateway = mock(IPaymentGateway.class);
+        when(gateway.verifyConnection()).thenReturn(false);   // WSEP cold / unreachable at boot
+        SystemAdminService svc = serviceWith(List.of(gateway), List.of(reachableIssuer()));
+
+        svc.ensureMarketOpen();                               // can't reach payment -> stays closed, no throw
+        assertFalse(svc.isMarketOpen());
+
+        when(gateway.verifyConnection()).thenReturn(true);    // WSEP recovers
+        svc.ensureMarketOpen();                               // self-heal -> opens
+        assertTrue(svc.isMarketOpen());
+    }
+
+    @Test
+    void givenAdminClosedMarket_whenEnsureMarketOpen_thenStaysClosed() {
+        SystemAdminService svc = readyService();
+        svc.openMarket(openRequest());
+        svc.closeMarket(closeRequest());                      // admin deliberately closes the market
+        svc.ensureMarketOpen();                               // must NOT auto-reopen a deliberate close
+        assertFalse(svc.isMarketOpen());
+        assertEquals("CLOSED", svc.viewMarketState().currentStatus());
+    }
+
+    @Test
+    void givenNoReachableServices_whenEnsureMarketOpen_thenNeverThrowsAndStaysClosed() {
+        SystemAdminService svc = serviceWith(List.of(), List.of());
+        assertDoesNotThrow(svc::ensureMarketOpen);            // self-heal must never throw out to its caller
+        assertFalse(svc.isMarketOpen());
+    }
+
     @Test
     void givenInitializedPlatform_whenViewMarketState_thenReportsHealth() {
         SystemAdminService svc = readyService();
