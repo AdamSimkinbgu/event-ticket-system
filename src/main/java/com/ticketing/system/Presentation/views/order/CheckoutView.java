@@ -490,7 +490,8 @@ public class CheckoutView extends LkPage implements BeforeEnterObserver, AfterNa
                 case CheckoutPresenter.PayOutcome.DuplicateSubmission dup ->
                     Toasts.warn("This order was already submitted.");
                 case CheckoutPresenter.PayOutcome.Failure f ->
-                    Toasts.failure("Payment could not be completed. Please try again or contact support.");
+                    Toasts.failure("Payment could not be completed. Please try again or contact support."
+                            + (f.reason() != null && !f.reason().isBlank() ? " (" + f.reason() + ")" : ""));
             }
         } finally {
             paymentInProgress.set(false);
