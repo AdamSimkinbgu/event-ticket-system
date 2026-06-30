@@ -22,7 +22,7 @@ import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.CurrentCompanies;
-import com.ticketing.system.Presentation.views.admin.CompanySalesView;
+import com.ticketing.system.Presentation.views.company.CompanySalesView;
 import com.ticketing.system.Presentation.views.catalog.CatalogFilterSupport;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
