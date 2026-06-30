@@ -551,7 +551,7 @@ public class BrowseEventsView extends LkPage implements BeforeEnterObserver {
         row.put("cat", ev.category);
         row.put("venue", ev.venue);
         row.put("date", ev.date);
-        row.put("from", "$" + (ev.priceCents / 100));
+        row.put("from", ev.priceCents > 0 ? String.format("$%,.2f", ev.priceCents / 100.0) : "—");
         row.put("rating", ev.rating == null ? "—" : "★ " + ratingText(ev.rating));
         row.put("status", new LkStatusDot(ev.tone, ev.status));
         LkBtn reserve = new LkBtn("Reserve")
