@@ -4,6 +4,7 @@ import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
 import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Core.Domain.exceptions.AccountLockedException;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
+import com.ticketing.system.Presentation.support.ServiceErrors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -31,6 +32,11 @@ public class AdminLoginPresenter {
         } catch (AuthenticationFailedException e) {
             return new Outcome.InvalidCredentials();
         } catch (RuntimeException e) {
+            // A DB outage surfaces here as a connectivity exception — tell it apart from a real
+            // failure so the user sees "service unavailable", not a misleading "sign-in failed".
+            if (ServiceErrors.isDatabaseUnavailable(e)) {
+                return new Outcome.ServiceUnavailable();
+            }
             return new Outcome.Failure(e.getMessage());
         }
     }
@@ -39,6 +45,7 @@ public class AdminLoginPresenter {
         record Success(AuthTokenDTO authToken) implements Outcome { }
         record InvalidCredentials() implements Outcome { }
         record Locked(String reason) implements Outcome { }
+        record ServiceUnavailable() implements Outcome { }
         record Failure(String reason) implements Outcome { }
     }
 }
