@@ -94,7 +94,7 @@ public class CompanySalesView extends LkPage {
             }
             case CompanySalesPresenter.Outcome.Failure fail -> {
                 subtitle("");
-                content.add(Lk.muted("Could not load sales: " + fail.reason()));
+                content.add(Lk.muted(Lk.withReason("Could not load sales", fail.reason())));
             }
         }
     }

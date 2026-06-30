@@ -65,7 +65,7 @@ public class MyInvitationsView extends LkPage {
             case MyInvitationsPresenter.Outcome.NotAuthenticated ignored -> content.add(banner(
                 "Your session has expired — please sign in again."));
             case MyInvitationsPresenter.Outcome.Failure fail -> content.add(banner(
-                "Could not load invitations: " + fail.reason()));
+                Lk.withReason("Could not load invitations", fail.reason())));
         }
     }
 

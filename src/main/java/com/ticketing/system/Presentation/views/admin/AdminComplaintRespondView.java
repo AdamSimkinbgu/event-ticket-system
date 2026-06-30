@@ -3,6 +3,7 @@ package com.ticketing.system.Presentation.views.admin;
 import com.ticketing.system.Core.Application.dto.ConversationDTO;
 import com.ticketing.system.Core.Application.dto.MessageDTO;
 import com.ticketing.system.Presentation.components.Toasts;
+import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
@@ -71,7 +72,7 @@ public class AdminComplaintRespondView extends LkPage implements BeforeEnterObse
             case AdminComplaintQueuePresenter.SingleOutcome.NotAuthenticated ignored ->
                 content.add(banner("Your session has expired — please sign in again."));
             case AdminComplaintQueuePresenter.SingleOutcome.Failure fail ->
-                content.add(banner("Could not load the complaint: " + fail.reason()));
+                content.add(banner(Lk.withReason("Could not load the complaint", fail.reason())));
         }
     }
 

@@ -3,6 +3,7 @@ package com.ticketing.system.Presentation.views.company;
 import com.ticketing.system.Core.Application.dto.ConversationDTO;
 import com.ticketing.system.Core.Application.dto.MessageDTO;
 import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
+import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
@@ -88,7 +89,7 @@ public class CompanyInquiryInboxView extends LkPage {
             case CompanyInquiryInboxPresenter.Outcome.NotAuthenticated ignored -> showBanner(
                 "Your session has expired — please sign in again.");
             case CompanyInquiryInboxPresenter.Outcome.Failure fail -> showBanner(
-                "Could not load inquiries: " + fail.reason());
+                Lk.withReason("Could not load inquiries", fail.reason()));
         }
     }
 
