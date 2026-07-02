@@ -19,6 +19,7 @@ import com.ticketing.system.Presentation.presenters.auth.LoginPresenter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.CannotCreateTransactionException;
 
 class LoginPresenterTest {
 
@@ -93,5 +94,17 @@ class LoginPresenterTest {
         LoginPresenter.Outcome.Failure fail =
             assertInstanceOf(LoginPresenter.Outcome.Failure.class, outcome);
         assertEquals("database down", fail.reason());
+    }
+
+    @Test
+    void databaseUnavailable_returnsServiceUnavailable() {
+        // A real DB outage surfaces as a connectivity exception (here, can't open a transaction)
+        // — it must map to ServiceUnavailable, not the generic Failure shown for unexpected errors.
+        when(authenticationService.login(any()))
+            .thenThrow(new CannotCreateTransactionException("Could not open JPA EntityManager for transaction"));
+
+        LoginPresenter.Outcome outcome = presenter.attemptLogin("adam", "password123", "guest-sid");
+
+        assertInstanceOf(LoginPresenter.Outcome.ServiceUnavailable.class, outcome);
     }
 }
