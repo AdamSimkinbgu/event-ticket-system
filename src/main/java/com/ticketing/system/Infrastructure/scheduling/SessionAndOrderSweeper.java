@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.system.Core.Application.events.OrderExpiredEvent;
 import com.ticketing.system.Core.Application.interfaces.ISystemMetrics;
@@ -76,6 +77,9 @@ public class SessionAndOrderSweeper {
     }
     
     @Scheduled(fixedDelayString = "${sweeper.fixed-delay-ms:60000}")
+    // F3/#371: the tick's inventory releases + row deletes commit as one transaction; an optimistic-lock
+    // conflict rolls the tick back and the next @Scheduled pass re-sweeps (retry via cadence — no Spring-Retry dep).
+    @Transactional
     public void sweep() {
         Instant now = clock.instant();
         int sessionsCleaned = sweepExpiredSessions(now);
