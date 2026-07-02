@@ -39,7 +39,7 @@ public class EditPermissionsDialog {
                                  List<String> currentPermissionNames,
                                  Consumer<List<String>> onSave) {
         dialog.setHeaderTitle("Edit permissions");
-        dialog.setWidth("460px");
+        dialog.setWidth("min(460px, 100vw - 32px)");
         dialog.setMaxWidth("92vw");
 
         LkCol col = new LkCol().gap(14);

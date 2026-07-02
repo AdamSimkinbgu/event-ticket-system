@@ -376,7 +376,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
     private void openRuleDialog(Rule r) {
         Dialog d = new Dialog();
         d.setHeaderTitle("Edit rule");
-        d.setWidth("420px");
+        d.setWidth("min(420px, 100vw - 32px)");
 
         Select<RuleType> typeSelect = new Select<>();
         typeSelect.setLabel("Rule type");
@@ -427,7 +427,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
     private void openGroupDialog(Group g) {
         Dialog d = new Dialog();
         d.setHeaderTitle("Edit group");
-        d.setWidth("440px");
+        d.setWidth("min(440px, 100vw - 32px)");
 
         RadioButtonGroup<Op> opGroup = new RadioButtonGroup<>();
         opGroup.setLabel("Operator");

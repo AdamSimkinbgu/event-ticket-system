@@ -41,7 +41,8 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 @AnonymousAllowed
 public class SeatPickerView extends LkPage implements BeforeEnterObserver {
 
-    private static final int SEAT_STEP = 34;
+    // Derived from the tile size so seats never overlap or drift — one source of truth.
+    private static final int SEAT_STEP = VkSeatedZonePicker.TILE_PX + 6;
 
     private final SeatPickerPresenter presenter;
 
@@ -173,9 +174,12 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
             selectionListCol.add(hint);
             return;
         }
+        Div list = new Div();
+        list.addClassName("vz-sellist");
         for (String label : labels) {
-            selectionListCol.add(selectedSeatRow(label));
+            list.add(selectedSeatRow(label));
         }
+        selectionListCol.add(list);
         selectionListCol.add(Lk.divider());
 
         double total = labels.size() * zonePrice;
