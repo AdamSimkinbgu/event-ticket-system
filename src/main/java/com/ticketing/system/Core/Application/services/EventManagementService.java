@@ -1123,12 +1123,12 @@ public class EventManagementService {
             throw new RuntimeException("Event not found");
         if (event.getCompanyId() != companyId)
             throw new RuntimeException("Event does not belong to this company");
-        PurchasePolicy stored = event.getPurchasePolicy();
-        if (stored instanceof AndPurchasePolicy a) {
-            return policyToDTO(a.getRightPolicy());
+        // PurchasePolicy stored = event.getPurchasePolicy();
+        // if (stored instanceof AndPurchasePolicy a) {
+        //     return policyToDTO(a.getRightPolicy());
+        // }
+            return policyToDTO(event.getPurchasePolicy());
         }
-        return policyToDTO(stored);
-    }
 
     private PurchasePolicyDTO policyToDTO(PurchasePolicy policy) {
         if (policy == null || policy instanceof NoPurchasePolicy)
