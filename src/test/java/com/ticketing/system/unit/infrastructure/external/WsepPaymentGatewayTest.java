@@ -46,13 +46,14 @@ class WsepPaymentGatewayTest {
 
     @Test
     void verifyConnection_trueOnOk_falseOtherwise_falseOnTransportError() {
-        when(http.post(any())).thenReturn("OK");
+        // verifyConnection now goes through the retrying postWithRetry (idempotent handshake).
+        when(http.postWithRetry(any())).thenReturn("OK");
         assertTrue(gateway.verifyConnection());
 
-        when(http.post(any())).thenReturn("down");
+        when(http.postWithRetry(any())).thenReturn("down");
         assertFalse(gateway.verifyConnection());
 
-        when(http.post(any())).thenThrow(new WsepCommunicationException("x", new RuntimeException()));
+        when(http.postWithRetry(any())).thenThrow(new WsepCommunicationException("x", new RuntimeException()));
         assertFalse(gateway.verifyConnection());
     }
 
