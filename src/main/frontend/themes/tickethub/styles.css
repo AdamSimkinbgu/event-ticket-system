@@ -4,7 +4,7 @@
     --text:#1f2937; --muted:#6b7280; --faint:#9ca3af;
     --bg:#fafbfc; --card:#ffffff; --border:#e5e7eb; --border-strong:#cbd5e1;
     --ok:#16a34a; --warn:#f59e0b; --err:#dc2626;
-    --radius:12px; --radius-s:8px;
+    --radius:12px; --radius-s:8px; --vk-seat-size:30px;
     --font:'Segoe UI',Tahoma,'Helvetica Neue',Arial,sans-serif;
     --mono:'Menlo','SFMono-Regular','Consolas',monospace;
   }
@@ -248,8 +248,8 @@
   .bz-barcode{letter-spacing:.05em;color:#475569}
 
   /* ============ VENUE / SEAT (centerpiece) ============ */
-  .vk-seat{width:26px;height:26px;border-radius:6px;border:1.5px solid;font-size:.62rem;font-weight:700;display:inline-flex;
-    align-items:center;justify-content:center;flex:none;font-family:var(--mono)}
+  .vk-seat{width:var(--vk-seat-size);height:var(--vk-seat-size);border-radius:6px;border:1.5px solid;font-size:.62rem;font-weight:700;display:inline-flex;
+    align-items:center;justify-content:center;flex:none;font-family:var(--mono);white-space:nowrap;overflow:hidden;padding:0 1px;line-height:1}
   .vk-seat-free{background:#ecfdf3;border-color:#34d399;color:#047857}
   .vk-seat-free:hover{background:#d1fae5}
   .vk-seat-mine{background:var(--warn);border-color:#d97706;color:#fff}
@@ -523,7 +523,7 @@
   .mob-stage{background:#0f172a;color:#fff;text-align:center;font-size:.62rem;font-weight:800;letter-spacing:.25em;padding:6px;border-radius:6px;margin-bottom:12px}
   .mob-seats{display:flex;flex-direction:column;gap:5px;align-items:center}
   .mob-seatrow{display:flex;gap:4px;align-items:center}
-  .mob-seatrow .vk-seat{width:19px;height:19px;border-radius:5px}
+  .mob-seatrow .vk-seat{width:19px;height:19px;border-radius:5px;font-size:.5rem}
   .mob-rl{width:12px;text-align:center;font-size:.58rem;color:var(--faint);font-weight:700}
   .mob-sheet{background:#fff;border-top:1px solid var(--border);padding:14px 16px 18px;display:flex;flex-direction:column;gap:10px;box-shadow:0 -6px 16px -10px rgba(15,23,42,.2)}
   .mob-sheet-grab{width:38px;height:4px;border-radius:999px;background:#cbd5e1;margin:0 auto 2px}

@@ -24,7 +24,8 @@ import java.util.Set;
  */
 public class VkSeatedZonePicker extends Div {
 
-    private static final int TILE_PX = 28; // keep in sync with vk-seat CSS width/height
+    // Single source of truth for the seat-tile size; MUST equal --vk-seat-size in tickethub/styles.css.
+    public static final int TILE_PX = 30;
 
     /**
      * Presentation-layer seat descriptor — decoupled from the domain {@code Seat}
@@ -47,7 +48,7 @@ public class VkSeatedZonePicker extends Div {
 
         double maxX = 0, maxY = 0;
         for (SeatModel seat : seats) {
-            VkSeat tile = new VkSeat(seat.initialState(), null);
+            VkSeat tile = new VkSeat(seat.initialState(), seat.label());
             tile.getElement().setAttribute("title", seat.label());
             tile.getStyle()
                     .set("position", "absolute")
