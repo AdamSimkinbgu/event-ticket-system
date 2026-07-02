@@ -30,6 +30,7 @@ import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchaseContext;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchaseStage;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.MarketNotOpenException;
 
 
@@ -693,8 +694,7 @@ public class ReservationService {
         // enrich the DTO with event and zone details for each line item (for better UX in the frontend; avoids extra calls from frontend to get event/zone details for each line)
         List<ActiveOrderDTO.CartLineDTO> enrichedLines = new ArrayList<>();
         for (ActiveOrderDTO.CartLineDTO line : activeOrderDTO.lines()) {
-            Event event = eventRepository.findById(line.eventId());
-            String eventName = (event != null) ? event.getName() : "Unknown Event";
+            String eventName = eventNameFor(line.eventId());
             enrichedLines.add(new ActiveOrderDTO.CartLineDTO(
                     line.eventId(),
                     eventName,
@@ -721,8 +721,7 @@ public class ReservationService {
                     ActiveOrderDTO dto = order.toDTO();
                     List<ActiveOrderDTO.CartLineDTO> enrichedLines = new ArrayList<>();
                     for (ActiveOrderDTO.CartLineDTO line : dto.lines()) {
-                        Event event = eventRepository.findById(line.eventId());
-                        String eventName = (event != null) ? event.getName() : "Unknown Event";
+                        String eventName = eventNameFor(line.eventId());
                         enrichedLines.add(new ActiveOrderDTO.CartLineDTO(
                                 line.eventId(), eventName, line.zoneId(),
                                 line.seatNumber(), line.pricePerTicket(), line.addedAt()));
@@ -734,6 +733,16 @@ public class ReservationService {
                     log.info("No active order found for sessionId={}, returning null", sessionId);
                     return null;
                 });
+    }
+
+    /** Best-effort event name for cart-line enrichment — a since-deleted event must not break restore. */
+    private String eventNameFor(int eventId) {
+        try {
+            Event event = eventRepository.findById(eventId);
+            return (event != null) ? event.getName() : "Unknown Event";
+        } catch (EventNotFoundException e) {
+            return "Unknown Event";
+        }
     }
 
     // When a buyer enters the checkout page, reset the hold timer of every reserved ticket

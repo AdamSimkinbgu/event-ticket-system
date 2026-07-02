@@ -167,27 +167,16 @@ public class AuthenticationService {
     /**
      * Registers a new Member. UC-11.
      *
-     * <<<<<<< HEAD
      * <p>
-     * Session intentionally remains Guest per II.1.4 — caller must explicitly
-     * log in to upgrade to Member-Visitor.
+     * Per II.1.4 / D10a: requires an active Guest session (via
+     * {@link RegisterRequestDTO#guestSessionId()}). The session intentionally remains
+     * Guest after register — {@link #login(LoginRequestDTO)} is the explicit promotion
+     * step to Member-Visitor.
      *
      * @throws InvalidEmailFormatException email fails format check
      * @throws WeakPasswordException       password fails strength rules
      * @throws DuplicateUsernameException  username already taken
      * @throws DuplicateEmailException     email already registered
-     *                                     =======
-     *                                     <p>
-     *                                     Per II.1.4 / D10a:
-     *                                     <ul>
-     *                                     <li>Requires an active Guest session (via
-     *                                     {@link RegisterRequestDTO#guestSessionId()}).</li>
-     *                                     <li>The session intentionally remains
-     *                                     Guest after register —
-     *                                     {@link #login(LoginRequestDTO)} is the
-     *                                     explicit promotion step.</li>
-     *                                     </ul>
-     *                                     >>>>>>> dev
      */
     @Transactional
     public void register(RegisterRequestDTO request) {
@@ -252,15 +241,9 @@ public class AuthenticationService {
      * Authenticates a Member and promotes their Guest session to a Member
      * session in place. UC-12.
      *
-     * <<<<<<< HEAD
      * <p>
-     * "Unknown username" and "wrong password" raise the same exception to
-     * avoid username enumeration via the response.
-     * =======
-     * <p>
-     * "Unknown username" and "wrong password" raise the same exception
-     * to prevent username enumeration via the response.
-     * >>>>>>> dev
+     * "Unknown username" and "wrong password" raise the same exception to avoid
+     * username enumeration via the response.
      *
      * @throws GuestSessionRequiredException no / unknown / expired / non-guest
      *                                       sessionId
@@ -447,23 +430,14 @@ public class AuthenticationService {
      * Terminates the authenticated session by deleting the underlying
      * Session row (via {@link ISessionManager#invalidate}). UC-14 / D8 (L1).
      *
-     * <<<<<<< HEAD
      * <p>
-     * Per II.3.1 the session state downgrades back to Guest-Visitor. Cart
-     * state is not touched here (II.3.0.1 / II.3.0.3 govern Active Orders
-     * separately). Idempotent: logout with a {@code null} / blank /
-     * already-revoked token is a no-op.
-     * =======
-     * <p>
-     * Per II.3.1 the user is downgraded back to Guest-Visitor. To act
-     * again they must call {@link #startGuestSession()} for a fresh
-     * sessionId — the old one is dead. (D9a: Member cart persists by userId
-     * and is restored on next login — that wiring lives in Phase 4/5.)
+     * Per II.3.1 the session state downgrades back to Guest-Visitor — to act again the
+     * visitor must {@link #startGuestSession()} for a fresh sessionId (the old one is dead).
+     * The Member cart is not touched here: it persists by userId (II.3.0.1) and is restored
+     * on the next login (UC-13 / D9a, via {@link #handleCartOnPromotion}).
      *
      * <p>
-     * Idempotent: logout with a {@code null} / blank / already-revoked
-     * token is a no-op.
-     * >>>>>>> dev
+     * Idempotent: logout with a {@code null} / blank / already-revoked token is a no-op.
      */
     @Transactional
     public void logout(LogoutRequestDTO request) {
