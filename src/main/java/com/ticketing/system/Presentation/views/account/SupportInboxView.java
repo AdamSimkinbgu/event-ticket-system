@@ -3,6 +3,7 @@ package com.ticketing.system.Presentation.views.account;
 import com.ticketing.system.Core.Application.dto.ConversationDTO;
 import com.ticketing.system.Core.Application.dto.MessageDTO;
 import com.ticketing.system.Presentation.components.Toasts;
+import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
@@ -97,7 +98,7 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
             case SupportInboxPresenter.Outcome.NotAuthenticated ignored -> showBanner(
                 "Your session has expired — please sign in again.");
             case SupportInboxPresenter.Outcome.Failure fail -> showBanner(
-                "Could not load your conversations: " + fail.reason());
+                  Lk.withReason("Could not load your conversations", fail.reason()));
         }
     }
 

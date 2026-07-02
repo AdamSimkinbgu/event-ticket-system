@@ -15,6 +15,7 @@ import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.events.OrderExpiredEvent;
 import com.ticketing.system.Core.Application.services.CheckoutService;
 import com.ticketing.system.Core.Application.services.ReservationService;
+import com.ticketing.system.Core.Domain.exceptions.DomainException;
 import com.ticketing.system.Core.Domain.exceptions.IdempotencyConflictException;
 import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
@@ -119,8 +120,11 @@ public class CheckoutPresenter {
             if (cause instanceof InsufficientInventoryException) return new PayOutcome.SoldOut(cause.getMessage());
             if (cause instanceof InvalidStateTransitionException) return new PayOutcome.OrderExpired("Order expired during checkout");
             if (cause instanceof IdempotencyConflictException)   return new PayOutcome.DuplicateSubmission();
+            // Surface the reason only for domain (business) exceptions — their messages are safe to show.
+            // Anything else is an unexpected/internal error: log it server-side, show only the generic message.
+            if (cause instanceof DomainException)                return new PayOutcome.Failure(cause.getMessage());
             log.error("Checkout failed unexpectedly", e);
-            return new PayOutcome.Failure(cause.getMessage());
+            return new PayOutcome.Failure(null);
         }
     }
 

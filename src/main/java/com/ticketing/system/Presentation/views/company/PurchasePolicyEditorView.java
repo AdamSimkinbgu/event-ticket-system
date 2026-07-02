@@ -5,6 +5,7 @@ import java.util.List;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.MyCompanyDTO;
 import com.ticketing.system.Presentation.components.Toasts;
+import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
@@ -108,7 +109,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
             case ContextOutcome.NoCompany nc ->
                 disableEditing("You're not part of a company workspace yet — join or register one to set purchase policies.");
             case ContextOutcome.Failure f ->
-                showLoadError("Could not load your companies: " + f.reason(), this::initContext);
+                showLoadError(Lk.withReason("Could not load your companies", f.reason()), this::initContext);
             case ContextOutcome.Ready ready ->
                 populateCompanies(ready.companies());
         }
@@ -193,7 +194,7 @@ public class PurchasePolicyEditorView extends LkPage implements BeforeEnterObser
             }
             case LoadOutcome.Failure f -> {
                 this.root = presenter.emptyPolicy();
-                showLoadError("Could not load existing policy: " + f.reason(),
+                showLoadError(Lk.withReason("Could not load existing policy", f.reason()),
                     () -> { loadExistingPolicy(); rebuildTree(); });
             }
         }

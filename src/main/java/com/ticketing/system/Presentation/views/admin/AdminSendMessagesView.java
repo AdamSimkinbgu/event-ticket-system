@@ -224,8 +224,8 @@ public class AdminSendMessagesView extends LkPage {
             case AdminSendMessagesPresenter.Outcome.NotAuthenticated ignored -> historySlot.add(
                     banner("Your session has expired — please sign in again."));
             case AdminSendMessagesPresenter.Outcome.Failure fail -> historySlot.add(
-                    banner("Could not load message history: " + fail.reason()));
-        }
+                    banner(Lk.withReason("Could not load message history", fail.reason())));        
+                }
     }
 
     private Component buildHistoryCard(List<SentOutreach> history) {

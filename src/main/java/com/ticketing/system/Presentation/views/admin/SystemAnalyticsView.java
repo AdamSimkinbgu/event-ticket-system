@@ -3,6 +3,7 @@ package com.ticketing.system.Presentation.views.admin;
 import com.ticketing.system.Core.Application.dto.MarketStateDTO;
 import com.ticketing.system.Core.Application.dto.SystemAnalyticsDTO;
 import com.ticketing.system.Presentation.components.Toasts;
+import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
@@ -119,7 +120,7 @@ public class SystemAnalyticsView extends LkPage {
             case SystemAnalyticsPresenter.Outcome.Failure f -> {
                 statsSlot.removeAll();
                 statsSlot.add(new LkBanner(LkBanner.Tone.warn, new LkIcon("warning", 18),
-                    "Could not load analytics: " + f.reason()));
+                    Lk.withReason("Could not load analytics", f.reason())));
             }
         }
     }

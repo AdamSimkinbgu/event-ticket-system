@@ -73,7 +73,7 @@ public class ManagerListView extends LkPage {
             case ManagerListPresenter.Outcome.NotAuthenticated ignored -> content.add(banner(
                 "Your session has expired — please sign in again."));
             case ManagerListPresenter.Outcome.Failure fail -> content.add(banner(
-                "Could not load managers: " + fail.reason()));
+                Lk.withReason("Could not load managers", fail.reason()))); 
         }
     }
 

@@ -3,6 +3,7 @@ package com.ticketing.system.Presentation.views.company;
 import com.ticketing.system.Core.Application.dto.OrganizationalTreeNodeDTO;
 import com.ticketing.system.Presentation.components.admin.OrgTreeLegend;
 import com.ticketing.system.Presentation.components.admin.OrgTreeRenderer;
+import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkIcon;
@@ -59,7 +60,7 @@ public class CompanyOrgTreeView extends LkPage {
                     "You have no owned companies yet."));
             case OrgTreePresenter.Outcome.Failure fail ->
                 body.add(new LkBanner(LkBanner.Tone.error, new LkIcon("warning", 16),
-                    "Could not load the tree: " + fail.reason()));
+                     Lk.withReason("Could not load the tree", fail.reason())));
             case OrgTreePresenter.Outcome.Success ok -> {
                 body.add(buildTreeCard(ok.selected().name(), ok.tree()));
                 body.add(buildLegendCard());

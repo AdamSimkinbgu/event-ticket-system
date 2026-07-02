@@ -59,4 +59,8 @@ public final class Lk {
         d.addClassName("bz-divider");
         return d;
     }
+
+    public static String withReason(String base, String reason) {
+        return (reason != null && !reason.isBlank()) ? base + ": " + reason : base + ".";
+    }
 }

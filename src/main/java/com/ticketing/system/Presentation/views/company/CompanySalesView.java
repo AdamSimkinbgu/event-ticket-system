@@ -1,4 +1,4 @@
-package com.ticketing.system.Presentation.views.admin;
+package com.ticketing.system.Presentation.views.company;
 
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Presentation.components.Money;
@@ -17,6 +17,8 @@ import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.CurrentCompanies;
+import com.ticketing.system.Presentation.views.admin.SalesDateRange;
+import com.ticketing.system.Presentation.views.admin.SalesSummary;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
@@ -92,7 +94,7 @@ public class CompanySalesView extends LkPage {
             }
             case CompanySalesPresenter.Outcome.Failure fail -> {
                 subtitle("");
-                content.add(Lk.muted("Could not load sales: " + fail.reason()));
+                content.add(Lk.muted(Lk.withReason("Could not load sales", fail.reason())));
             }
         }
     }

@@ -2,6 +2,7 @@ package com.ticketing.system.Presentation.views.company;
 
 import com.ticketing.system.Core.Application.dto.UserCompanyDTO;
 import com.ticketing.system.Presentation.presenters.company.MyCompaniesPresenter.Outcome;
+import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
@@ -43,7 +44,7 @@ public class MyCompaniesView extends LkPage {
             case Outcome.Success s                              -> add(buildGridCard(s.companies(), membershipPresenter));
             case Outcome.NotAuthenticated na                    -> add(buildEmptyState());
             case Outcome.Failure f -> {
-                Span msg = new Span("Could not load your companies: " + f.reason());
+                Span msg = new Span(Lk.withReason("Could not load your companies", f.reason()));
                 msg.getStyle().set("display", "block").set("margin-bottom", "12px").set("color", "#b91c1c");
                 add(msg);
                 add(buildEmptyState());
