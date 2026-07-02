@@ -98,17 +98,12 @@ public class CompanyEventListView extends LkPage {
         this.presenter = presenter;
         title("My Events");
         subtitle("All events under the selected company.");
-        LkBtn bulkExport = new LkBtn("Bulk Export").variant(LkBtn.Variant.secondary)
-            .onClick(e -> Toasts.success("Event list exported to CSV (mock)."));
         // "New Event" is an event-management action — hidden for a member who can't edit events
         // (e.g. a venue-only manager), so the page is browse + per-event venue/sales for them.
         if (Capabilities.has(Capability.EDIT_COMPANY_EVENTS)) {
-            actions(bulkExport,
-                new LkBtn("New Event").variant(LkBtn.Variant.primary)
-                    .icon(new LkIcon("plus", 15))
-                    .onClick(e -> UI.getCurrent().navigate("owner/events/new")));
-        } else {
-            actions(bulkExport);
+            actions(new LkBtn("New Event").variant(LkBtn.Variant.primary)
+                .icon(new LkIcon("plus", 15))
+                .onClick(e -> UI.getCurrent().navigate("owner/events/new")));
         }
         add(buildFilters());
         add(eventsCard);
