@@ -517,10 +517,12 @@
   .vz-seatscroll::-webkit-scrollbar-track{background:transparent}
   .vz-selseat{display:flex;align-items:center;justify-content:space-between;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:9px 13px}
   .vz-selseat-x{color:#b45309;cursor:pointer;font-weight:700}
-  .vz-selchips{display:flex;flex-wrap:wrap;gap:8px}
-  .vz-selchip{display:inline-flex;align-items:center;gap:5px;background:#fffbeb;border:1px solid #fcd34d;border-radius:999px;padding:5px 7px 5px 12px;font-size:.86rem;font-weight:700;color:#0f172a;line-height:1}
-  .vz-selchip-x{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:999px;color:#b45309;cursor:pointer}
-  .vz-selchip-x:hover{background:#fde68a}
+  /* Selected-seats list: capped height + internal scroll so a long selection
+     never pushes the total / Add-to-Cart button down the page. */
+  .vz-sellist{display:flex;flex-direction:column;gap:10px;max-height:min(340px,42vh);overflow-y:auto;padding-right:4px;scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}
+  .vz-sellist::-webkit-scrollbar{width:8px}
+  .vz-sellist::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:999px}
+  .vz-sellist::-webkit-scrollbar-track{background:transparent}
   .vz-split2{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
   .vz-state-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
   .vz-state-cell{display:flex;align-items:center;gap:11px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:10px 12px}

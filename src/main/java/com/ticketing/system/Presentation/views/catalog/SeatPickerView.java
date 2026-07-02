@@ -174,12 +174,12 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
             selectionListCol.add(hint);
             return;
         }
-        Div chips = new Div();
-        chips.addClassName("vz-selchips");
+        Div list = new Div();
+        list.addClassName("vz-sellist");
         for (String label : labels) {
-            chips.add(selectedSeatChip(label));
+            list.add(selectedSeatRow(label));
         }
-        selectionListCol.add(chips);
+        selectionListCol.add(list);
         selectionListCol.add(Lk.divider());
 
         double total = labels.size() * zonePrice;
@@ -195,20 +195,26 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
             .onClick(e -> reserveSeated()));
     }
 
-    private Component selectedSeatChip(String label) {
-        Span chip = new Span();
-        chip.addClassName("vz-selchip");
-        chip.add(new Span(label));
+    private Component selectedSeatRow(String label) {
+        Div row = new Div();
+        row.addClassName("vz-selseat");
+        Div info = new Div();
+        Span name = new Span();
+        name.getElement().setProperty("innerHTML", "<b>Seat " + escape(label) + "</b>");
+        Span subline = Lk.muted(zone.getName() + " · " + money(zonePrice));
+        subline.getStyle().set("font-size", "12.5px").set("display", "block");
+        info.add(name, subline);
+
         Span remove = new Span();
-        remove.addClassName("vz-selchip-x");
-        remove.add(new LkIcon("close", 12));
+        remove.addClassName("vz-selseat-x");
+        remove.add(new LkIcon("close", 15));
         remove.getElement().addEventListener("click", e -> {
             if (seatPicker != null) {
                 seatPicker.deselect(label);
             }
         });
-        chip.add(remove);
-        return chip;
+        row.add(info, remove);
+        return row;
     }
 
     private void reserveSeated() {
