@@ -128,6 +128,7 @@ public class EventDetailsView extends LkPage implements BeforeEnterObserver {
 
         Div title = new Div();
         title.addClassName("bz-evt-title");
+        title.addClassName("lk-clamp-2");
         title.setText(detail.name());
 
         meta.add(badges, title);

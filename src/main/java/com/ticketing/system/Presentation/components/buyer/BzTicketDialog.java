@@ -33,7 +33,7 @@ public final class BzTicketDialog {
     public static void show(TicketInfo ticket) {
         Dialog d = new Dialog();
         d.setHeaderTitle("Your ticket");
-        d.setWidth("440px");
+        d.setWidth("min(440px, 100vw - 32px)");
         d.setMaxWidth("92vw");
         d.add(buildCard(ticket));
 

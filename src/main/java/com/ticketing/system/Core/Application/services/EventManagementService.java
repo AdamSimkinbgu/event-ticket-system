@@ -17,6 +17,7 @@ import com.ticketing.system.Core.Domain.exceptions.CompanyNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
@@ -128,7 +129,7 @@ public class EventManagementService {
             company = companyRepository.getCompanyById(request.companyId());
         } catch (RuntimeException e) {
             log.error("Error - company not found: {}, {}", request.companyId(), e.getMessage());
-            throw new RuntimeException("Company not found");
+            throw new CompanyNotFoundException();
         }
 
         User user = userRepository.getUserById(ownerId);
@@ -177,12 +178,12 @@ public class EventManagementService {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
         if (user == null) {
-            throw new UserNotFoundException(userId);
+            throw new UserNotFoundException();
         }
 
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            throw new CompanyNotFoundException("Company not found for ID: " + companyId);
+            throw new CompanyNotFoundException();
         }
 
         // The events list is a read-only management hub. Any active member of the company may see
@@ -202,16 +203,16 @@ public class EventManagementService {
         int userId = validateTokenAndGetUserId(token);
         Event event = eventRepository.findById(eventId);
         if (event == null) {
-            throw new EventNotFoundException(eventId);
+            throw new EventNotFoundException();
         }
         User user = userRepository.getUserById(userId);
         if (user == null) {
-            throw new UserNotFoundException(userId);
+            throw new UserNotFoundException();
         }
         user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
         ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
         if (company == null) {
-            throw new CompanyNotFoundException("Company not found for ID: " + event.getCompanyId());
+            throw new CompanyNotFoundException();
         }
 
         return new EventDetailDTO(
@@ -241,11 +242,11 @@ public class EventManagementService {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
         if (user == null) {
-            throw new UserNotFoundException(userId);
+            throw new UserNotFoundException();
         }
         Event event = eventRepository.findById(eventId);
         if (event == null) {
-            throw new EventNotFoundException("Event not found for ID: " + eventId);
+            throw new EventNotFoundException();
         }
         user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
 
@@ -310,7 +311,7 @@ public class EventManagementService {
             Event event = eventRepository.findById(eventId);
 
             if (event.getCompanyId() != companyId) {
-                throw new RuntimeException("Event does not belong to this company");
+                throw new UnauthorizedActionException("act on an event that does not belong to this company");
             }
 
             List<InventoryZone> zones = new ArrayList<>();
@@ -645,7 +646,7 @@ public class EventManagementService {
             companyRepository.getCompanyById(companyId);
         } catch (RuntimeException e) {
             log.error("Error - company not found: {}, {}", companyId, e.getMessage());
-            throw new RuntimeException("Company not found");
+            throw new CompanyNotFoundException();
         }
 
         user.requirePermissionInCompany(companyId, Permission.CONFIGURE_VENUE);
@@ -655,11 +656,11 @@ public class EventManagementService {
             event = eventRepository.findById(eventId);
         } catch (EventNotFoundException e) {
             log.warn("Event {} not found", eventId);
-            throw new RuntimeException("Event not found");
+            throw new EventNotFoundException();
         }
 
         if (event.getCompanyId() != companyId) {
-            throw new RuntimeException("Event does not belong to this company");
+            throw new UnauthorizedActionException("act on an event that does not belong to this company");
         }
 
         return event;
@@ -746,7 +747,7 @@ public class EventManagementService {
             Event event = eventRepository.findById(eventId);
 
             if (event.getCompanyId() != companyId) {
-                throw new RuntimeException("Event does not belong to this company");
+                throw new UnauthorizedActionException("act on an event that does not belong to this company");
             }
 
             User user = userRepository.getUserById(userId);
@@ -909,16 +910,15 @@ public class EventManagementService {
 
             log.info("Event {} canceled and refund flow completed", eventId);
 
-        } catch (EventNotFoundException e) { // TODO: check if these Catches are good
+        } catch (EventNotFoundException e) {
             log.warn("Event {} not found for cancellation", eventId);
-            throw new RuntimeException("Event not found");
+            throw e;
         } catch (RefundFailedException e) {
             log.error("Refund failed during cancellation of event {}: {}", eventId, e.getMessage());
-            throw new RuntimeException("Refund failed: " + e.getMessage());
-        } catch (Exception e) {
+            throw e;
+        } catch (RuntimeException e) {
             log.error("Unexpected error during cancellation of event {}: {}", eventId, e.getMessage());
-            throw new RuntimeException("Error during cancellation: " + e.getMessage());
-
+            throw e;
         } finally {
             eventRepository.unlock(eventId);
         }
@@ -978,7 +978,7 @@ public class EventManagementService {
     @Transactional
     public void setEventPolicies(String token, EventPolicyConfigDTO config) {
         if (!sessionManager.validateToken(token)) {
-            throw new RuntimeException("Invalid token");
+            throw new InvalidTokenException();
         }
 
         if (config == null) {
@@ -992,22 +992,22 @@ public class EventManagementService {
 
             ProductionCompany company = companyRepository.getCompanyById(config.companyId());
             if (company == null) {
-                throw new RuntimeException("Company not found");
+                throw new CompanyNotFoundException();
             }
 
             User user = userRepository.getUserById(userId);
             if (user == null) {
-                throw new RuntimeException("User not found");
+                throw new UserNotFoundException();
             }
             user.requirePermissionInCompany(config.companyId(), Permission.EDIT_POLICIES);
 
             Event event = eventRepository.findById(config.eventId());
             if (event == null) {
-                throw new RuntimeException("Event not found");
+                throw new EventNotFoundException();
             }
 
             if (event.getCompanyId() != config.companyId()) {
-                throw new RuntimeException("Event does not belong to this company");
+                throw new UnauthorizedActionException("act on an event that does not belong to this company");
             }
 
            PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(config.purchasePolicy());
@@ -1109,18 +1109,18 @@ public class EventManagementService {
     @Transactional(readOnly = true)
     public PurchasePolicyDTO getEventPurchasePolicy(String token, int companyId, int eventId) {
         if (!sessionManager.validateToken(token))
-            throw new RuntimeException("Invalid token");
+            throw new InvalidTokenException();
         int userId = sessionManager.extractUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null)
-            throw new RuntimeException("Company not found");
+            throw new CompanyNotFoundException();
         User user = userRepository.getUserById(userId);
         if (user == null)
-            throw new RuntimeException("User not found");
+            throw new UserNotFoundException();
         user.requirePermissionInCompany(companyId, Permission.EDIT_POLICIES);
         Event event = eventRepository.findById(eventId);
         if (event == null)
-            throw new RuntimeException("Event not found");
+            throw new EventNotFoundException();
         if (event.getCompanyId() != companyId)
             throw new RuntimeException("Event does not belong to this company");
         // PurchasePolicy stored = event.getPurchasePolicy();

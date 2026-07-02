@@ -28,7 +28,9 @@ import com.ticketing.system.Core.Domain.company.CompanyStatus;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
 import com.ticketing.system.Core.Domain.exceptions.CompanyNotFoundException;
+import com.ticketing.system.Core.Domain.exceptions.DomainException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
 import com.ticketing.system.Core.Domain.Tickets.Ticket;
@@ -100,7 +102,7 @@ public class CompanyManagementService {
             targetUser = userRepository.getUserById(request.targetUserId());
         } catch (UserNotFoundException e) {
             log.warn("User appointer/appointee not found during appointment: {}", e.getMessage());
-            throw new RuntimeException("User not found");
+            throw e;
         }
 
         appointer.requireOwnerInCompany(request.companyId()); // check if appointer has permissions
@@ -202,7 +204,7 @@ public class CompanyManagementService {
             manager = userRepository.getUserById(edit.targetUserId());
         } catch (UserNotFoundException e) {
             log.warn("Manager not found during permission edit: {}", e.getMessage());
-            throw new RuntimeException("Manager not found");
+            throw e;
         }
 
         if (edit.newPermissions() == null || edit.newPermissions().isEmpty()) {
@@ -236,7 +238,7 @@ public class CompanyManagementService {
         if (company.getFounderId() == revokeRequest.targetUserId()) {
             log.warn("Cannot revoke appointment: target user {} is the founder of company {}",
                     revokeRequest.targetUserId(), company.getCompanyId());
-            throw new RuntimeException("Cannot revoke appointment of the founder");
+            throw new UnauthorizedActionException("revoke the appointment of a company founder");
         }
 
         targetUser.revokeAppointment(revokeRequest.companyId(), ownerId); // checks done in here.
@@ -270,7 +272,7 @@ public class CompanyManagementService {
         if (byEmail.isPresent())
             return byEmail.get().getUserId();
 
-        throw new UserNotFoundException(identifier);
+        throw new UserNotFoundException();
     }
 
     // ---------------------------------------------------------------------------
@@ -283,11 +285,11 @@ public class CompanyManagementService {
         int requesterId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            throw new CompanyNotFoundException(companyId);
+            throw new CompanyNotFoundException();
         }
         User requester = userRepository.getUserById(requesterId);
         if (requester == null) {
-            throw new UserNotFoundException(requesterId);
+            throw new UserNotFoundException();
         }
         requester.requireOwnerInCompany(companyId);
 
@@ -310,11 +312,11 @@ public class CompanyManagementService {
         int requesterId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
-            throw new CompanyNotFoundException(companyId);
+            throw new CompanyNotFoundException();
         }
         User requester = userRepository.getUserById(requesterId);
         if (requester == null) {
-            throw new UserNotFoundException(requesterId);
+            throw new UserNotFoundException();
         }
         requester.requireOwnerInCompany(companyId);
 
@@ -339,7 +341,7 @@ public class CompanyManagementService {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
         if (user == null) {
-            throw new UserNotFoundException(userId);
+            throw new UserNotFoundException();
         }
 
         List<ProductionCompanyDTO> owned = new ArrayList<>();
@@ -373,7 +375,7 @@ public class CompanyManagementService {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
         if (user == null) {
-            throw new UserNotFoundException(userId);
+            throw new UserNotFoundException();
         }
 
         List<MyCompanyDTO> companies = new ArrayList<>();
@@ -409,7 +411,7 @@ public class CompanyManagementService {
         int userId = authenticate(token);
         User user = userRepository.getUserById(userId);
         if (user == null) {
-            throw new UserNotFoundException(userId);
+            throw new UserNotFoundException();
         }
 
         List<InvitationDTO> invitations = new ArrayList<>();
@@ -491,6 +493,8 @@ public class CompanyManagementService {
                     newProductionCompany.getFounderId() // DTO field is founderId
             );
 
+        } catch (DomainException e) {
+            throw e; // a known business failure (e.g. duplicate) keeps its type/message; don't mask it
         } catch (Exception e) {
             log.error("Error occurred while saving company '{}': {}", request.getName(), e.getMessage());
             throw new RuntimeException("Failed to register company due to a server error", e);
@@ -505,11 +509,11 @@ public class CompanyManagementService {
         int userId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(config.companyId());
         if (company == null) {
-            throw new CompanyNotFoundException(config.companyId());
+            throw new CompanyNotFoundException();
         }
         User user = userRepository.getUserById(userId);
         if (user == null) {
-            throw new RuntimeException("User not found");
+            throw new UserNotFoundException();
         }
         user.requirePermissionInCompany(config.companyId(), Permission.EDIT_POLICIES);
         PurchasePolicy policy = buildPurchasePolicyFromDTO(config.defaultPurchasePolicy());
@@ -534,17 +538,17 @@ public class CompanyManagementService {
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
             log.warn("Company {} not found", companyId);
-            throw new RuntimeException("Company not found");
+            throw new CompanyNotFoundException();
         }
 
         User currUser = userRepository.getUserById(requesterId);
         if (currUser == null) {
             log.warn("User {} not found", requesterId);
-            throw new RuntimeException("User not found");
+            throw new UserNotFoundException();
         }
         if (!currUser.hasPermissionInCompany(companyId, Permission.VIEW_SALES)) {
             log.warn("User {} does not have permission to view sales history for company {}", requesterId, companyId);
-            throw new RuntimeException("Insufficient permissions");
+            throw new UnauthorizedActionException("view this company's data");
         }
 
         List<Integer> companyEventIds = eventRepository.findIdsByCompany(companyId);
@@ -588,19 +592,19 @@ public class CompanyManagementService {
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
             log.warn("Company {} not found", companyId);
-            throw new RuntimeException("Company not found");
+            throw new CompanyNotFoundException();
         }
 
         User currUser = userRepository.getUserById(requesterId);
         if (currUser == null) {
             log.warn("User {} not found", requesterId);
-            throw new RuntimeException("User not found");
+            throw new UserNotFoundException();
         }
         if (!currUser.isOwnerInCompany(companyId)) {
             log.warn("User {} does not have permission to view organizational tree for company {}, he's not an owner",
                     requesterId,
                     companyId);
-            throw new RuntimeException("Insufficient permissions");
+            throw new UnauthorizedActionException("view this company's data");
         }
 
         log.info("Successfully retrieved organizational tree for company {}", companyId);
@@ -634,7 +638,7 @@ public class CompanyManagementService {
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null) {
             log.warn("Company {} not found", companyId);
-            throw new CompanyNotFoundException(companyId);
+            throw new CompanyNotFoundException();
         }
         log.info("Admin viewing organizational tree for company {}", companyId);
         return buildOrganizationalTree(companyId, company.getFounderId());
@@ -690,7 +694,7 @@ public class CompanyManagementService {
     public List<UserCompanyDTO> listForUser(int userId) {
         User user = userRepository.getUserById(userId);
         if (user == null) {
-            throw new UserNotFoundException(userId);
+            throw new UserNotFoundException();
         }
         List<UserCompanyDTO> memberships = new ArrayList<>();
         for (CompanyAppointment appointment : user.getAllCompanyAppointments()) {
@@ -713,7 +717,7 @@ public class CompanyManagementService {
     public boolean isOwnerOf(int userId, int companyId) {
         User user = userRepository.getUserById(userId);
         if (user == null) {
-            throw new UserNotFoundException(userId);
+            throw new UserNotFoundException();
         }
         CompanyAppointment appointment = user.getActiveCompanyAppointment(companyId);
         return appointment != null && appointment.getRole() == CompanyRole.Owner;
@@ -807,10 +811,10 @@ public class CompanyManagementService {
         int userId = authenticate(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null)
-            throw new RuntimeException("Company not found");
+            throw new CompanyNotFoundException();
         User user = userRepository.getUserById(userId);
         if (user == null)
-            throw new RuntimeException("User not found");
+            throw new UserNotFoundException();
         user.requirePermissionInCompany(companyId, Permission.EDIT_POLICIES);
         return policyToDTO(company.getPurchasePolicy());
     }

@@ -9,6 +9,7 @@ import com.ticketing.system.Presentation.presenters.auth.LoginPresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.GuestSession;
 import com.ticketing.system.Presentation.session.NotificationSession;
+import com.ticketing.system.Presentation.support.ServiceErrors;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.vaadin.flow.component.Key;
@@ -114,6 +115,8 @@ public class LoginView extends LkAuthCard {
                 Toasts.warn("Your session timed out — reloading…");
                 UI.getCurrent().getPage().reload();
             }
+            case LoginPresenter.Outcome.ServiceUnavailable ignored ->
+                Toasts.failure(ServiceErrors.DB_UNAVAILABLE_MESSAGE);
             case LoginPresenter.Outcome.Failure fail ->
                 Toasts.failure("Sign-in failed — please try again.");
         }

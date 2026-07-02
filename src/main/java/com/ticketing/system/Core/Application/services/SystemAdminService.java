@@ -157,7 +157,14 @@ public class SystemAdminService {
     // are gated on this state (see isMarketOpen()).
     public synchronized MarketStateDTO openMarket(MarketControlRequestDTO request) {
         requireSystemAdmin(tokenOf(request));
+        return doOpenMarket();
+    }
 
+    // Core market-open logic, shared by the admin-gated openMarket() and the system-internal
+    // ensureMarketOpen() recovery hook. Re-verifies both external services + structural invariants
+    // before flipping to OPEN; idempotent on an already-open market; re-opens from CLOSED; rejects an
+    // UNINITIALIZED platform.
+    private MarketStateDTO doOpenMarket() {
         if (status == PlatformStatus.OPEN) {
             log.info("Market already open; ignoring open request.");
             return buildMarketState();
@@ -179,6 +186,27 @@ public class SystemAdminService {
         this.lastOpenedAt = LocalDateTime.now();
         log.info("Market opened.");
         return buildMarketState();
+    }
+
+    // System-internal, idempotent recovery hook (#455): bring the market to OPEN if it safely can.
+    // Used by the dev auto-opener and the self-heal scheduler so a transient external-service blip at
+    // boot (e.g. a cold-starting WSEP endpoint) doesn't leave the market closed with no recovery
+    // (V3 Req 6). NOT admin-gated — the platform acts on itself, not on a user request. Respects an
+    // admin's deliberate close: never auto-reopens a CLOSED market. Never throws.
+    public synchronized void ensureMarketOpen() {
+        if (status == PlatformStatus.OPEN || status == PlatformStatus.CLOSED) {
+            return; // already open, or deliberately closed by an admin — leave it alone
+        }
+        try {
+            if (status == PlatformStatus.UNINITIALIZED) {
+                initializePlatform();   // UNINITIALIZED -> READY (the WSEP handshake now retries internally)
+            }
+            if (status == PlatformStatus.READY) {
+                doOpenMarket();         // READY -> OPEN
+            }
+        } catch (RuntimeException e) {
+            log.warn("Market auto-open attempt did not succeed (will retry): {}", e.getMessage());
+        }
     }
 
     // UC-32 — close the trading market (admin/ops incident control; no dedicated

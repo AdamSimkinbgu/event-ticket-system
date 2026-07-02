@@ -37,13 +37,14 @@ class WsepTicketIssuerTest {
 
     @Test
     void verifyConnection_trueOnOk_falseOtherwise() {
-        when(http.post(any())).thenReturn("OK");
+        // verifyConnection now goes through the retrying postWithRetry (idempotent handshake).
+        when(http.postWithRetry(any())).thenReturn("OK");
         assertTrue(issuer.verifyConnection());
 
-        when(http.post(any())).thenReturn("down");
+        when(http.postWithRetry(any())).thenReturn("down");
         assertFalse(issuer.verifyConnection());
 
-        when(http.post(any())).thenThrow(new WsepCommunicationException("x", new RuntimeException()));
+        when(http.postWithRetry(any())).thenThrow(new WsepCommunicationException("x", new RuntimeException()));
         assertFalse(issuer.verifyConnection());
     }
 
