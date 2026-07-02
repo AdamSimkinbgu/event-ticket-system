@@ -3,6 +3,7 @@ package com.ticketing.system.Presentation.views.account;
 import com.ticketing.system.Core.Application.dto.ConversationDTO;
 import com.ticketing.system.Core.Application.dto.MessageDTO;
 import com.ticketing.system.Presentation.components.Toasts;
+import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBanner;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
@@ -14,6 +15,7 @@ import com.ticketing.system.Presentation.components.messaging.MdThread;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.messaging.SupportInboxPresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.views.messaging.NewInquiryView;
 import com.ticketing.system.Presentation.views.messaging.SubmitComplaintView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -62,13 +64,13 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
     public SupportInboxView(SupportInboxPresenter presenter) {
         this.presenter = presenter;
 
-        title("Support inbox");
+        title("Support Inbox");
         subtitle("Your conversations with organizers and the TicketHub team.");
         actions(
-            new LkBtn("New inquiry").variant(LkBtn.Variant.secondary)
+            new LkBtn("New Inquiry").variant(LkBtn.Variant.secondary)
                 .icon(new LkIcon("comment", 15))
-                .onClick(e -> Toasts.warn("New-inquiry composer wires with V2-MSG-04.")),
-            new LkBtn("Submit complaint").variant(LkBtn.Variant.primary)
+                .onClick(e -> UI.getCurrent().navigate(NewInquiryView.class)),
+            new LkBtn("Submit Complaint").variant(LkBtn.Variant.primary)
                 .icon(new LkIcon("warning", 15))
                 .onClick(e -> UI.getCurrent().navigate(SubmitComplaintView.class))
         );
@@ -96,7 +98,7 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
             case SupportInboxPresenter.Outcome.NotAuthenticated ignored -> showBanner(
                 "Your session has expired — please sign in again.");
             case SupportInboxPresenter.Outcome.Failure fail -> showBanner(
-                "Could not load your conversations: " + fail.reason());
+                  Lk.withReason("Could not load your conversations", fail.reason()));
         }
     }
 
@@ -109,8 +111,8 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
             return;
         }
 
-        // Selection priority: ?c= focus (once), then the previously selected thread,
-        // then the first (newest) one.
+        // Selection priority: ?c= focus (once), then the previously selected thread, then the first.
+        // Closed admin outreach stays selectable so the member can still read it (the reply bar is hidden).
         int selIdx = -1;
         if (focusId != null) {
             selIdx = indexOf(focusId);
@@ -134,6 +136,12 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
                 relativeTime(c.lastMessageAt()), unreadBadge(c.unreadCountForViewer()));
             if (c.conversationId().equals(selectedId)) row.active();
             row.onSelect(() -> selectById(c.conversationId()));
+            if (isLocked(c)) {
+                // Admin closed this outreach: still selectable/readable, just dimmed as a "closed" cue.
+                // renderDetail() hides the reply bar for terminal threads, so the member can read the
+                // history but can't reply until the admin starts a new conversation.
+                row.getStyle().set("opacity", "0.7");
+            }
             convRows.add(row);
             card.add(row);
         }
@@ -165,24 +173,36 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
 
         detailCard.title(conv.subject());
         detailCard.subtitle(whoFor(conv) + " · " + humanizeStatus(conv.status()));
-        detailCard.add(new MdThread(toThreadMessages(conv.messages())));
+        detailCard.add(new MdThread(toThreadMessages(conv)));
 
-        // Terminal threads (RESOLVED / CLOSED) accept no further messages.
-        if (!isTerminal(conv.status())) {
+        if ("COMPLAINT".equals(conv.type())) {
+            // Complaints are one-shot — the member never replies; show the status instead of a reply bar.
+            String note = isTerminal(conv.status())
+                ? "This complaint has been reviewed and resolved — no further replies are accepted."
+                : "Your complaint is with the TicketHub admin team. Their response will appear here.";
+            detailCard.add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 17), note));
+        } else if (!isTerminal(conv.status())) {
+            // Inquiries and admin outreach are two-way chats (until closed).
             MdReplyBar reply = new MdReplyBar();
             reply.onSend(this::handleReply);
             detailCard.add(reply);
+        } else {
+            // Closed inquiry / admin outreach — read-only history, no reply bar.
+            detailCard.add(new LkBanner(LkBanner.Tone.info, new LkIcon("info", 17),
+                "This conversation has been closed — you can read the history, but replies are no longer accepted."));
         }
     }
 
     private void handleReply(String text) {
         switch (presenter.reply(AuthSession.token(), selectedId, text)) {
-            case SupportInboxPresenter.ActionOutcome.Success ignored ->
+            case SupportInboxPresenter.ActionOutcome.Success ignored -> {
+                Toasts.success("Reply sent.");
                 reload(); // refresh thread, ordering, and unread badges; keeps selection
+            }
             case SupportInboxPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case SupportInboxPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not send your reply: " + fail.reason());
+                Toasts.failure("Could not send your reply — please try again.");
         }
     }
 
@@ -211,31 +231,32 @@ public class SupportInboxView extends LkPage implements BeforeEnterObserver {
         return idx < 0 ? null : conversations.get(idx);
     }
 
+    /** A closed admin → member outreach thread: read-only for the member (readable, but no reply). */
+    private static boolean isLocked(ConversationDTO c) {
+        return "DIRECT".equals(c.type()) && isTerminal(c.status());
+    }
+
     // -- Display mapping ------------------------------------------------------
 
-    private static List<MdThread.Message> toThreadMessages(List<MessageDTO> messages) {
+    private static List<MdThread.Message> toThreadMessages(ConversationDTO conv) {
+        String other = whoFor(conv);
         List<MdThread.Message> out = new ArrayList<>();
-        for (MessageDTO m : messages) {
+        for (MessageDTO m : conv.messages()) {
             boolean me = "MEMBER".equals(m.senderType());
-            String from = me ? "You" : labelForSide(m.senderType());
-            out.add(new MdThread.Message(from, relativeTime(m.sentAt()), me, m.body()));
+            out.add(new MdThread.Message(me ? "You" : other, relativeTime(m.sentAt()), me, m.body()));
         }
         return out;
     }
 
-    /** Master-row / detail label for the member's counterparty. */
+    /**
+     * Label for the member's counterparty — the resolved display name of whichever party isn't the
+     * member. On inquiries/complaints the member initiated, that's the counterparty (company /
+     * "TicketHub Support"); on admin outreach the member is the counterparty, so it's the initiator.
+     */
     private static String whoFor(ConversationDTO c) {
-        return labelForSide(c.counterpartyType());
-    }
-
-    private static String labelForSide(String participantType) {
-        return switch (participantType) {
-            case "ADMIN", "ADMIN_GROUP" -> "TicketHub Support";
-            // Member → company inquiries aren't UI-creatable yet (V2-MSG-04), so this
-            // branch is effectively unused; the DTO carries no company display name.
-            case "COMPANY" -> "Production company";
-            default -> "TicketHub";
-        };
+        return "MEMBER".equals(c.initiatorType())
+            ? c.counterpartyDisplayName()
+            : c.initiatorDisplayName();
     }
 
     private static String iconFor(String type) {

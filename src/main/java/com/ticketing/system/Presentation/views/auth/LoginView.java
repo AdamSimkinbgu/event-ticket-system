@@ -8,6 +8,8 @@ import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.auth.LoginPresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.GuestSession;
+import com.ticketing.system.Presentation.session.NotificationSession;
+import com.ticketing.system.Presentation.support.ServiceErrors;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.vaadin.flow.component.Key;
@@ -24,7 +26,7 @@ import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
 @Route(value = "login", layout = MainLayout.class)
-@PageTitle("Sign in · TicketHub")
+@PageTitle("Sign In · TicketHub")
 @AnonymousAllowed
 public class LoginView extends LkAuthCard {
 
@@ -109,15 +111,20 @@ public class LoginView extends LkAuthCard {
             case LoginPresenter.Outcome.Success ok -> onSuccess(ok.loginDTO());
             case LoginPresenter.Outcome.InvalidCredentials ignored ->
                 Toasts.failure("Invalid username or password.");
-            case LoginPresenter.Outcome.GuestSessionMissing miss ->
-                Toasts.failure("Session expired — please refresh the page. (" + miss.reason() + ")");
+            case LoginPresenter.Outcome.GuestSessionMissing miss -> {
+                Toasts.warn("Your session timed out — reloading…");
+                UI.getCurrent().getPage().reload();
+            }
+            case LoginPresenter.Outcome.ServiceUnavailable ignored ->
+                Toasts.failure(ServiceErrors.DB_UNAVAILABLE_MESSAGE);
             case LoginPresenter.Outcome.Failure fail ->
-                Toasts.failure("Sign-in failed: " + fail.reason());
+                Toasts.failure("Sign-in failed — please try again.");
         }
     }
 
     private void onSuccess(LoginDTO dto) {
         AuthSession.storeAuth(dto.authToken());
+        NotificationSession.store(dto.notifications());
         String name = dto.authToken().username();
         if (AuthSession.isAdmin()) {
             Toasts.success("Signed in as admin · " + name);

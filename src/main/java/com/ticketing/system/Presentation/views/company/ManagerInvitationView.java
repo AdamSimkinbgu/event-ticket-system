@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.Map;
 
 @Route(value = "owner/managers/invite", layout = WorkspaceLayout.class)
-@PageTitle("Invite manager · TicketHub")
+@PageTitle("Invite Manager · TicketHub")
 @PermitAll
 @RequireCapability(Capability.APPOINT_MANAGER)
 public class ManagerInvitationView extends LkPage {
@@ -48,7 +48,7 @@ private final ManagerInvitationPresenter presenter;
     private final Map<LkCheckRow, Permission> checkRows = new LinkedHashMap<>();
     public ManagerInvitationView(ManagerInvitationPresenter presenter) {
         this.presenter = presenter;
-        title("Invite a manager");
+        title("Invite a Manager");
         subtitle("Grant a member scoped access to manage this company.");
         add(buildForm());
     }
@@ -77,7 +77,7 @@ private final ManagerInvitationPresenter presenter;
         actions.add(
             new LkBtn("Cancel").variant(LkBtn.Variant.tertiary)
                 .onClick(e -> UI.getCurrent().navigate(ManagerListView.class)),
-            new LkBtn("Send invitation").variant(LkBtn.Variant.primary)
+            new LkBtn("Send Invitation").variant(LkBtn.Variant.primary)
                 .onClick(e -> sendInvitation())
         );
 
@@ -110,7 +110,7 @@ private final ManagerInvitationPresenter presenter;
             case ManagerInvitationPresenter.Outcome.UserNotFound u ->
                 Toasts.failure("User \"" + u.username() + "\" was not found.");
             case ManagerInvitationPresenter.Outcome.Failure fail ->
-                Toasts.failure("Could not send invitation: " + fail.reason());
+                Toasts.failure("Could not send the invitation — please try again.");
         }
     }
     

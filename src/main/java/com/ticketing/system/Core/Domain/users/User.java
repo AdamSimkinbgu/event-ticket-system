@@ -4,20 +4,56 @@ import java.util.EnumSet;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
+// V3: mapped to JPA. userId is an ASSIGNED @Id (minted by IUserRepository.nextId(), never
+// @GeneratedValue); email is unique; @Version drives optimistic locking. companyAppointments are
+// owned children (@OneToMany cascade-all + orphan-removal) loaded eagerly so a detached User is
+// fully usable, exactly like the in-memory version. A protected no-arg ctor lets Hibernate
+// hydrate; the public ctor still enforces the invariants.
+@Entity
+@Table(name = "users")
 public class User implements InvariantChecked {
 
+    @Id
     private int userId;
+
+    @Column(nullable = false)
     private String username;
+
+    @Column(nullable = false, unique = true)
     private String email;
+
+    @Column(nullable = false)
     private String password;
+
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "user_id")
+    @Fetch(FetchMode.SUBSELECT)
     private List<CompanyAppointment> companyAppointments;
     // max num of pending appointments per user is 1 per company
     // max num of active appointments per user is 1 per company (can be either manager or owner, not both)
+    @Column(nullable = false)
     private int age;
 
+    @Version
+    private Long version;
+
+    /** For JPA only — do not call from application code. */
+    protected User() { }
 
     public User(int userId, String username, String email, String password, int age) {
         this.userId = userId;
@@ -215,6 +251,23 @@ public class User implements InvariantChecked {
         }
     }
 
+    // True when the user holds any ACTIVE appointment (owner or manager) in the company.
+    public boolean isMemberInCompany(int companyId) {
+        return getActiveCompanyAppointment(companyId) != null;
+    }
+
+    /**
+     * Will throw if the user is not an active member (owner or manager) of the company.
+     * Used to gate read-only company-management views that any member may see — e.g. the
+     * events hub a venue/sales manager opens to reach the per-event venue editor — while the
+     * per-action mutations stay gated by their specific {@link Permission}.
+     */
+    public void requireMemberInCompany(int companyId) {
+        if (!isMemberInCompany(companyId)) {
+            throw new RuntimeException("User is not a member of this company");
+        }
+    }
+
 
 
     /**
@@ -260,15 +313,12 @@ public int getAge() {
 }
 
     /**
-     * Verifies a candidate raw password against the stored hash. UC-12.
-     *
-     * <p>
-     * The hash never leaves this entity — the hasher does the comparison
-     * in place. The {@link IPasswordHasher} collaborator is passed in rather
-     * than held as a field so the entity stays a pure domain object.
+     * The stored password hash. UC-12. The Application layer owns the password hasher and does the
+     * raw-vs-hash comparison (mirrors {@code Admin.getPasswordHash()}), keeping this entity free of
+     * any Application/Infrastructure dependency.
      */
-    public boolean verifyPassword(String rawPassword, IPasswordHasher hasher) {
-        return hasher.matches(rawPassword, this.password);
+    public String getPasswordHash() {
+        return password;
     }
 
     public List<CompanyAppointment> getAllCompanyAppointments() {

@@ -42,13 +42,17 @@ public enum Capability {
     EDIT_PURCHASE_POLICIES,
     RESPOND_INQUIRIES,
     MANAGE_VENUE_MAPS,
+    // Rides with MANAGE_INVENTORY as part of the full event lifecycle. Cancelling an event refunds
+    // every buyer, so it is a weighty action — but it belongs to whoever manages the event, not to a
+    // separate owner-only tier. Owners hold it unconditionally via OWNER_BUNDLE.
+    CANCEL_EVENT,
 
     // ---- Owner-only (Founder + Co-owner; NOT manager-grantable) ----
     APPOINT_MANAGER,
     APPOINT_CO_OWNER,
     EDIT_MANAGER_PERMISSIONS,
     REVOKE_MANAGER,
-    CANCEL_EVENT,
+    VIEW_COMPANY_ORG_TREE,
 
     // ---- Founder-only ----
     DISSOLVE_COMPANY,

@@ -4,14 +4,38 @@ import java.time.LocalDateTime;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
+
+/**
+ * V3: an {@code @Embeddable} value object — one row in the owning OrderReceipt's
+ * {@code receipt_lines} element collection (no identity of its own). Fields are non-final
+ * with a protected no-arg ctor so Hibernate can hydrate; the public ctor still enforces
+ * the invariants.
+ */
+@Embeddable
 public class ReceiptLine implements InvariantChecked {
 
-    private final int ticketId;
-    private final double price;
-    private final int eventid;
-    private final LocalDateTime addedAt;
-    private final int zoneId;
-    private final String seatNumber;
+    @Column(name = "ticket_id", nullable = false)
+    private int ticketId;
+
+    @Column(nullable = false)
+    private double price;
+
+    @Column(name = "event_id", nullable = false)
+    private int eventid;
+
+    @Column(name = "added_at", nullable = false)
+    private LocalDateTime addedAt;
+
+    @Column(name = "zone_id", nullable = false)
+    private int zoneId;
+
+    @Column(name = "seat_number")
+    private String seatNumber;
+
+    /** For JPA only — do not call from application code. */
+    protected ReceiptLine() { }
 
     public ReceiptLine(int ticketId, double price, int eventid, int zoneId, String seatNumber, LocalDateTime addedAt) {
         this.ticketId = ticketId;

@@ -18,17 +18,17 @@ import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
  * {@code SupportInboxPresenter} / {@code CompanyInquiryInboxPresenter}).
  *
  * <p>Lists the platform-wide complaint queue ({@code viewAllComplaints}, admin-gated, status
- * filtered server-side). Both "reply" and "mark resolved" go through {@code respondToComplaint}:
- * a reply leaves the status to auto-flip OPEN→RESPONDED, while resolve passes RESOLVED. Because
- * the domain forbids blank message bodies and the service always appends one, resolve sends a
- * short canned note (no participant-callable "resolve without a message" exists for a complaint).
+ * filtered server-side). Complaints are one-shot: {@code respond} sends the admin's single reply
+ * via {@code respondToComplaint}, which appends the message and resolves the thread (the member
+ * can never reply). {@code loadOne} fetches a single complaint for the dedicated respond page.
  */
 @Component
 public class AdminComplaintQueuePresenter {
 
     private static final String ALL = "All";
+    private static final String GROUP_OPEN = "Open";
+    private static final String GROUP_RESOLVED = "Resolved";
     private static final String RESOLVED = "RESOLVED";
-    private static final String RESOLVED_NOTE = "Marked as resolved.";
 
     private final MessagingService messagingService;
 
@@ -37,17 +37,23 @@ public class AdminComplaintQueuePresenter {
         this.messagingService = messagingService;
     }
 
-    /** Loads the complaint queue, optionally filtered to a single status ("All"/blank → no filter). */
-    public Outcome load(String token, String statusFilter) {
+    /**
+     * Loads the complaint queue grouped by the UI status filter: "All" → everything, "Open" →
+     * OPEN+RESPONDED (not yet resolved), "Resolved" → RESOLVED+CLOSED (terminal). A single
+     * server-side status can't express those groups, so the whole queue is fetched and grouped
+     * in-memory ("All"/blank → no grouping).
+     */
+    public Outcome load(String token, String group) {
         if (token == null) {
             return new Outcome.NotAuthenticated();
         }
         try {
-            String status = (statusFilter == null || statusFilter.isBlank() || ALL.equals(statusFilter))
-                ? null : statusFilter;
-            List<ConversationDTO> complaints = messagingService.viewAllComplaints(
-                token, new ComplaintFilterDTO(status, null, null, null));
-            return new Outcome.Success(complaints);
+            List<ConversationDTO> all = messagingService.viewAllComplaints(
+                token, new ComplaintFilterDTO(null, null, null, null));
+            List<ConversationDTO> filtered = all.stream()
+                .filter(c -> inGroup(c.status(), group))
+                .toList();
+            return new Outcome.Success(filtered);
         } catch (InvalidTokenException e) {
             return new Outcome.NotAuthenticated();
         } catch (RuntimeException e) {
@@ -55,35 +61,45 @@ public class AdminComplaintQueuePresenter {
         }
     }
 
-    /** Appends an admin response (status auto-flips to RESPONDED); the admin is resolved from the token. */
-    public ActionOutcome reply(String token, String conversationId, String body) {
+    /** UI status group → which raw ConversationStatus values it includes. "All"/blank → everything. */
+    private static boolean inGroup(String status, String group) {
+        if (group == null || group.isBlank() || ALL.equals(group)) {
+            return true;
+        }
+        return switch (group) {
+            case GROUP_OPEN     -> "OPEN".equals(status) || "RESPONDED".equals(status);
+            case GROUP_RESOLVED -> "RESOLVED".equals(status) || "CLOSED".equals(status);
+            default             -> true;
+        };
+    }
+
+    /** Loads a single complaint thread for the dedicated respond page. */
+    public SingleOutcome loadOne(String token, String conversationId) {
         if (token == null) {
-            return new ActionOutcome.NotAuthenticated();
+            return new SingleOutcome.NotAuthenticated();
         }
         try {
-            // adminId is ignored by the service (it resolves the caller from the token); null
-            // newStatus leaves the transition to addMessage (OPEN → RESPONDED).
-            messagingService.respondToComplaint(token,
-                new RespondToComplaintRequestDTO(conversationId, 0, body, null));
-            return new ActionOutcome.Success();
+            return new SingleOutcome.Success(messagingService.viewConversation(token, conversationId));
         } catch (InvalidTokenException e) {
-            return new ActionOutcome.NotAuthenticated();
+            return new SingleOutcome.NotAuthenticated();
         } catch (RuntimeException e) {
-            return new ActionOutcome.Failure(e.getMessage());
+            return new SingleOutcome.Failure(e.getMessage());
         }
     }
 
     /**
-     * Marks a complaint resolved. The only RESOLVED path is {@code respondToComplaint}, which always
-     * appends a (non-blank) message, so we send a short canned closing note alongside the transition.
+     * Sends the admin's single response to a complaint, which resolves it (one-shot — the member
+     * cannot reply). The admin is resolved from the token by the service.
      */
-    public ActionOutcome resolve(String token, String conversationId) {
+    public ActionOutcome respond(String token, String conversationId, String body) {
         if (token == null) {
             return new ActionOutcome.NotAuthenticated();
         }
         try {
+            // adminId is ignored by the service (it resolves the caller from the token); RESOLVED is
+            // the terminal status the response always lands in.
             messagingService.respondToComplaint(token,
-                new RespondToComplaintRequestDTO(conversationId, 0, RESOLVED_NOTE, RESOLVED));
+                new RespondToComplaintRequestDTO(conversationId, 0, body, RESOLVED));
             return new ActionOutcome.Success();
         } catch (InvalidTokenException e) {
             return new ActionOutcome.NotAuthenticated();
@@ -99,7 +115,14 @@ public class AdminComplaintQueuePresenter {
         record Failure(String reason) implements Outcome { }
     }
 
-    /** Result of a reply / resolve the view reacts to. */
+    /** Sealed outcome for loading a single complaint thread (respond page). */
+    public sealed interface SingleOutcome {
+        record Success(ConversationDTO conversation) implements SingleOutcome { }
+        record NotAuthenticated() implements SingleOutcome { }
+        record Failure(String reason) implements SingleOutcome { }
+    }
+
+    /** Result of a respond the view reacts to. */
     public sealed interface ActionOutcome {
         record Success() implements ActionOutcome { }
         record NotAuthenticated() implements ActionOutcome { }

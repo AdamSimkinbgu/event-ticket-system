@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.dto.ReservationResultDTO;
@@ -15,6 +16,8 @@ import com.ticketing.system.Core.Application.dto.BuyerContextDTO;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Application.interfaces.ISystemMetrics;
+import com.ticketing.system.Core.Application.interfaces.MetricType;
 import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
@@ -27,6 +30,8 @@ import com.ticketing.system.Core.Domain.users.User;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchaseContext;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchaseStage;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
+import com.ticketing.system.Core.Domain.exceptions.MarketNotOpenException;
 
 
 @Service
@@ -38,6 +43,8 @@ public class ReservationService {
     private final INotificationService notificationService;
     private final IProductionCompanyRepository companyRepository;
     private final IUserRepository userRepository;
+    private final SystemAdminService systemAdminService;
+    private final ISystemMetrics systemMetrics;
 
     @Value("${constants.ticket-reservation-duration}")
     private int reservationTimeoutMinutes;
@@ -48,34 +55,42 @@ public class ReservationService {
             ISessionManager iSessionManager,
             INotificationService notificationService,
             IProductionCompanyRepository companyRepository,
-            IUserRepository userRepository) {
+            IUserRepository userRepository,
+            SystemAdminService systemAdminService,
+            ISystemMetrics systemMetrics) {
         this.eventRepository = eventRepository;
         this.activeOrderRepository = activeOrderRepository;
         this.iSessionManager = iSessionManager;
         this.notificationService = notificationService;
         this.companyRepository = companyRepository;
         this.userRepository = userRepository;
+        this.systemAdminService = systemAdminService;
+        this.systemMetrics = systemMetrics;
     }
 
     // ---------------------------------------------------------------------
     // Public API - use these methods from new code/controllers/tests
     // ---------------------------------------------------------------------
 
+    @Transactional
     public ReservationResultDTO reserveForMember(String token, int eventId, int zoneId,
             InventorySelectionDTO selectionDto) {
         return reserve(authenticateMember(token), eventId, zoneId, toDomainSelection(selectionDto));
     }
 
+    @Transactional
     public ReservationResultDTO reserveForGuest(String sessionId, int eventId, int zoneId,
             InventorySelectionDTO selectionDto) {
         return reserve(authenticateGuest(sessionId), eventId, zoneId, toDomainSelection(selectionDto));
     }
 
+    @Transactional
     public ReservationResultDTO removeForMember(String token, int eventId, int zoneId,
             InventorySelectionDTO selectionDto) {
         return remove(authenticateMember(token), eventId, zoneId, toDomainSelection(selectionDto));
     }
 
+    @Transactional
     public ReservationResultDTO removeForGuest(String sessionId, int eventId, int zoneId,
             InventorySelectionDTO selectionDto) {
         return remove(authenticateGuest(sessionId), eventId, zoneId, toDomainSelection(selectionDto));
@@ -94,6 +109,13 @@ public class ReservationService {
                 selection == null ? null : selection.getSeatNumbers());
 
         validateReservationArguments(eventId, zoneId, selection);
+
+        // UC-32 / I.2.1 — no tickets may be held while the trading market is closed.
+        // Checked before any locks are acquired. (Removing items from an existing
+        // cart is intentionally NOT gated.)
+        if (!systemAdminService.isMarketOpen()) {
+            throw new MarketNotOpenException();
+        }
 
         Event event = null;
         ActiveOrder activeOrder = null;
@@ -153,6 +175,7 @@ public class ReservationService {
             activeOrderRepository.save(activeOrder);
             // Notify the member of the successful reservation. For guests, we do not have a user ID to send notifications to, so we skip this step for guests. The notification can be used to trigger email notifications, app push notifications, etc. to inform the member of their successful reservation and any details they may need (e.g. event name, zone, quantity reserved, etc.).
             notifySuccessAfterUnlock = true;
+            systemMetrics.record(MetricType.RESERVATION);
             // Return the reservation result, which includes details about the reservation such as event ID, zone ID, quantity reserved, seat numbers if applicable, and the expiration time of the reservation (based on the current time plus the configured reservation timeout). This information can be used by the frontend to show the user their current reservations and how long they have before they expire, etc.
             return buildReservationResult(eventId, zoneId, selection);
 
@@ -260,6 +283,16 @@ public class ReservationService {
             InventoryZone zone = getZoneOrThrow(event, zoneId); // validates venue map + zone exists before touching the order
             removedPricePerTicket = zone.getprice();
             activeOrder = getActiveOrderOrThrow(buyer);
+
+            // CheckoutService marks orders CHECKOUT_IN_PROGRESS and releases the order lock during Phase 2.
+            // Reject remove attempts in that state so a concurrent removal can't mutate the cart snapshot
+            // checkout is pricing/charging against. Fails fast here (before releasing inventory) instead of
+            // letting the domain throw mid-flow and forcing a rollback — mirrors the guard in reserve(...).
+            if (activeOrder.isCheckoutInProgress()) {
+                log.warn("Request rejected: cannot modify active order during checkout. eventId={}, zoneId={}, userId={}, sessionId={}",
+                        eventId, zoneId, buyer.isMember() ? buyer.userId() : null, buyer.isMember() ? null : buyer.sessionId());
+                throw new IllegalStateException("Cannot modify active order during checkout");
+            }
 
             // Validate first so we do not release inventory for tickets that are not in the active order.
             activeOrder.validateContainsReservation(eventId, zoneId, selection);
@@ -649,6 +682,7 @@ public class ReservationService {
     }
 
     // method to restore an active order for a user (member) - this is used by the frontend when a user logs in or returns to the site after navigating away, to restore their active order and show them their current reservations in the cart. For members, we look up the active order by their user ID. For guests, we look up the active order by their session ID. If an active order is found, we convert it to an ActiveOrderDTO and return it. If no active order is found, we return null. We also enrich the DTO with event names for better UX in the frontend, so that the frontend can show the event names directly in the cart without needing to make extra calls to get event details for each line item.
+    @Transactional(readOnly = true)
     public ActiveOrderDTO restoreActiveOrder(int userId) {
         ActiveOrder activeOrder = activeOrderRepository.getByUserId(userId);
         if (activeOrder == null) {
@@ -660,8 +694,7 @@ public class ReservationService {
         // enrich the DTO with event and zone details for each line item (for better UX in the frontend; avoids extra calls from frontend to get event/zone details for each line)
         List<ActiveOrderDTO.CartLineDTO> enrichedLines = new ArrayList<>();
         for (ActiveOrderDTO.CartLineDTO line : activeOrderDTO.lines()) {
-            Event event = eventRepository.findById(line.eventId());
-            String eventName = (event != null) ? event.getName() : "Unknown Event";
+            String eventName = eventNameFor(line.eventId());
             enrichedLines.add(new ActiveOrderDTO.CartLineDTO(
                     line.eventId(),
                     eventName,
@@ -680,6 +713,7 @@ public class ReservationService {
                 enrichedLines);
     }
 
+    @Transactional(readOnly = true)
     public ActiveOrderDTO restoreActiveOrderForGuest(String sessionId) {
         return activeOrderRepository.getBySessionId(sessionId)
                 .map(order -> {
@@ -687,8 +721,7 @@ public class ReservationService {
                     ActiveOrderDTO dto = order.toDTO();
                     List<ActiveOrderDTO.CartLineDTO> enrichedLines = new ArrayList<>();
                     for (ActiveOrderDTO.CartLineDTO line : dto.lines()) {
-                        Event event = eventRepository.findById(line.eventId());
-                        String eventName = (event != null) ? event.getName() : "Unknown Event";
+                        String eventName = eventNameFor(line.eventId());
                         enrichedLines.add(new ActiveOrderDTO.CartLineDTO(
                                 line.eventId(), eventName, line.zoneId(),
                                 line.seatNumber(), line.pricePerTicket(), line.addedAt()));
@@ -702,6 +735,16 @@ public class ReservationService {
                 });
     }
 
+    /** Best-effort event name for cart-line enrichment — a since-deleted event must not break restore. */
+    private String eventNameFor(int eventId) {
+        try {
+            Event event = eventRepository.findById(eventId);
+            return (event != null) ? event.getName() : "Unknown Event";
+        } catch (EventNotFoundException e) {
+            return "Unknown Event";
+        }
+    }
+
     // When a buyer enters the checkout page, reset the hold timer of every reserved ticket
     // in their active order to a fresh full window (CartLineItem.EXPIRATION_LIMIT, 10 min),
     // so the buyer gets the maximum time to complete payment. We only renew when the cart is
@@ -709,6 +752,7 @@ public class ReservationService {
     // leave it untouched so the existing expiry/sweeper path can reject the stale cart. The
     // reset runs under the per-order lock (the same lock the expiry sweeper acquires first),
     // so it cannot race the sweeper. The enriched DTO is built by reusing restoreActiveOrder.
+    @Transactional
     public ActiveOrderDTO renewReservationsForMemberCheckout(int userId) {
         String orderLockKey = "user:" + userId;
         activeOrderRepository.lockForUpdate(orderLockKey);
@@ -726,6 +770,7 @@ public class ReservationService {
         return restoreActiveOrder(userId);
     }
 
+    @Transactional
     public ActiveOrderDTO renewReservationsForGuestCheckout(String sessionId) {
         String orderLockKey = "sess:" + sessionId;
         activeOrderRepository.lockForUpdate(orderLockKey);
@@ -744,6 +789,7 @@ public class ReservationService {
     }
 
     // Helper method to abandon the active order for a user (member or guest) - this is used by the frontend when a user explicitly clicks "Abandon Cart" or when they log out, to clear their active order and release any reserved inventory back to the events. For members, we look up the active order by their user ID. For guests, we look up the active order by their session ID. If an active order is found, we release any reserved inventory back to the events and then delete the active order. If no active order is found, we simply return without doing anything. This ensures that we do not leave any reserved inventory hanging around for abandoned carts, which keeps our inventory accurate and allows other users to purchase those tickets if they are still available.
+    @Transactional
     public void abandonActiveOrder(BuyerContextDTO buyer) {
         if (buyer == null) {
             throw new IllegalArgumentException("Buyer context is required");
@@ -847,6 +893,7 @@ public class ReservationService {
     * Removes a line from the cart, automatically determining whether the user is a Member or Guest.
     * The UI just calls this method, no need to handle InventorySelectionDTO or user type.
     */
+    @Transactional
     public ReservationResultDTO removeLine(String userTokenOrSessionId, int eventId, int zoneId,
             InventorySelectionDTO selection) {
 
@@ -883,6 +930,7 @@ public class ReservationService {
     }
 
     // Helper method to view the current active order for a user (member or guest). For members, we look up the active order by their user ID. For guests, we look up the active order by their session ID. If an active order is found, we convert it to an ActiveOrderDTO and return it. If no active order is found, we return null. This allows the frontend to show the user their current reservations in the cart when they navigate to the cart page, etc.
+    @Transactional(readOnly = true)
     public ActiveOrderDTO viewMyActiveOrder(String userOrSessionId) {
         if (userOrSessionId == null || userOrSessionId.isBlank()) {
             return null;

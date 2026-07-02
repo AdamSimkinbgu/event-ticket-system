@@ -2,6 +2,8 @@ package com.ticketing.system.unit.application;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -20,6 +22,8 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import com.ticketing.system.Core.Application.dto.GlobalHistoryFiltersDTO;
+import com.ticketing.system.Core.Application.dto.MarketControlRequestDTO;
+import com.ticketing.system.Core.Application.dto.MarketStateDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
@@ -36,7 +40,11 @@ import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.exceptions.ExternalServiceUnavailableException;
+import com.ticketing.system.Core.Domain.exceptions.InitializationIntegrityException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
+import com.ticketing.system.Core.Domain.exceptions.MarketNotOpenException;
 import com.ticketing.system.Core.Domain.exceptions.MissingDefaultAdminException;
+import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
@@ -136,8 +144,166 @@ class SystemAdminServiceTest {
         assertDoesNotThrow(svc::initializePlatform);
     }
 
-    @Test @Disabled("UC-32: openMarket re-runs all verifications + flips state")
-    void givenInitializedPlatform_whenOpenMarket_thenStateOpen() {}
+    // --- UC-32: market lifecycle (open / close / view) ---
+
+    @Test
+    void givenInitializedPlatform_whenOpenMarket_thenStateOpen() {
+        SystemAdminService svc = readyService();
+        MarketStateDTO state = svc.openMarket(openRequest());
+        assertEquals("OPEN", state.currentStatus());
+        assertNotNull(state.lastOpenedAt());
+        assertTrue(svc.isMarketOpen());
+    }
+
+    @Test
+    void givenUninitializedPlatform_whenOpenMarket_thenThrowsMarketNotOpen() {
+        SystemAdminService svc = serviceWith(List.of(reachablePayment()), List.of(reachableIssuer()));
+        assertThrows(MarketNotOpenException.class, () -> svc.openMarket(openRequest()));
+    }
+
+    @Test
+    void givenPaymentDownAtOpen_whenOpenMarket_thenThrowsAndStaysReady() {
+        when(adminRepository.existsAny()).thenReturn(true);
+        IPaymentGateway gateway = reachablePayment();
+        SystemAdminService svc = serviceWith(List.of(gateway), List.of(reachableIssuer()));
+        svc.initializePlatform();                          // READY
+        when(gateway.verifyConnection()).thenReturn(false); // gateway drops before open
+        assertThrows(ExternalServiceUnavailableException.class, () -> svc.openMarket(openRequest()));
+        assertEquals("READY", svc.viewMarketState().currentStatus());
+    }
+
+    @Test
+    void givenIssuerDownAtOpen_whenOpenMarket_thenThrowsAndStaysReady() {
+        when(adminRepository.existsAny()).thenReturn(true);
+        ITicketIssuer issuer = reachableIssuer();
+        SystemAdminService svc = serviceWith(List.of(reachablePayment()), List.of(issuer));
+        svc.initializePlatform();                          // READY
+        when(issuer.verifyConnection()).thenReturn(false);  // issuer drops before open
+        assertThrows(ExternalServiceUnavailableException.class, () -> svc.openMarket(openRequest()));
+        assertEquals("READY", svc.viewMarketState().currentStatus());
+    }
+
+    @Test
+    void givenNoAdminAtOpen_whenOpenMarket_thenThrowsAndStaysReady() {
+        when(adminRepository.existsAny()).thenReturn(true);
+        SystemAdminService svc = serviceWith(List.of(reachablePayment()), List.of(reachableIssuer()));
+        svc.initializePlatform();                          // READY
+        when(adminRepository.existsAny()).thenReturn(false); // admin removed before open
+        assertThrows(InitializationIntegrityException.class, () -> svc.openMarket(openRequest()));
+        assertEquals("READY", svc.viewMarketState().currentStatus());
+    }
+
+    @Test
+    void givenNonAdminToken_whenOpenMarket_thenRejected() {
+        when(sessionManager.validateToken("member-token")).thenReturn(true);
+        when(sessionManager.isAdminToken("member-token")).thenReturn(false);
+        SystemAdminService svc = readyService();
+        MarketControlRequestDTO request = new MarketControlRequestDTO("OPEN", "x", "member-token");
+        assertThrows(UnauthorizedActionException.class, () -> svc.openMarket(request));
+    }
+
+    @Test
+    void givenOpenMarket_whenOpenAgain_thenStillOpenNoError() {
+        SystemAdminService svc = readyService();
+        svc.openMarket(openRequest());
+        MarketStateDTO state = assertDoesNotThrow(() -> svc.openMarket(openRequest()));
+        assertEquals("OPEN", state.currentStatus());
+    }
+
+    @Test
+    void givenOpenMarket_whenCloseMarket_thenStateClosed() {
+        SystemAdminService svc = readyService();
+        svc.openMarket(openRequest());
+        MarketStateDTO state = svc.closeMarket(closeRequest());
+        assertEquals("CLOSED", state.currentStatus());
+        assertFalse(svc.isMarketOpen());
+    }
+
+    @Test
+    void givenClosedMarket_whenCloseAgain_thenStillClosedNoError() {
+        SystemAdminService svc = readyService();
+        svc.openMarket(openRequest());
+        svc.closeMarket(closeRequest());
+        MarketStateDTO state = assertDoesNotThrow(() -> svc.closeMarket(closeRequest()));
+        assertEquals("CLOSED", state.currentStatus());
+    }
+
+    @Test
+    void givenClosedMarket_whenOpenMarket_thenReopens() {
+        SystemAdminService svc = readyService();
+        svc.openMarket(openRequest());
+        svc.closeMarket(closeRequest());
+        MarketStateDTO state = svc.openMarket(openRequest());
+        assertEquals("OPEN", state.currentStatus());
+    }
+
+    @Test
+    void givenNeverOpened_whenCloseMarket_thenThrows() {
+        SystemAdminService svc = readyService(); // READY, never opened
+        assertThrows(InvalidStateTransitionException.class, () -> svc.closeMarket(closeRequest()));
+    }
+
+    @Test
+    void givenNonAdminToken_whenCloseMarket_thenRejected() {
+        when(sessionManager.validateToken("member-token")).thenReturn(true);
+        when(sessionManager.isAdminToken("member-token")).thenReturn(false);
+        SystemAdminService svc = readyService();
+        svc.openMarket(openRequest());
+        MarketControlRequestDTO request = new MarketControlRequestDTO("CLOSE", "x", "member-token");
+        assertThrows(UnauthorizedActionException.class, () -> svc.closeMarket(request));
+    }
+
+    // --- #455: ensureMarketOpen (system self-heal — no admin token, recovers from a boot-time outage) ---
+
+    @Test
+    void givenReachableServices_whenEnsureMarketOpen_thenOpens() {
+        when(adminRepository.existsAny()).thenReturn(true);
+        SystemAdminService svc = serviceWith(List.of(reachablePayment()), List.of(reachableIssuer()));
+        svc.ensureMarketOpen();   // UNINITIALIZED -> READY -> OPEN in one shot
+        assertTrue(svc.isMarketOpen());
+    }
+
+    @Test
+    void givenServicesDownThenUp_whenEnsureMarketOpenTwice_thenSelfHealsToOpen() {
+        when(adminRepository.existsAny()).thenReturn(true);
+        IPaymentGateway gateway = mock(IPaymentGateway.class);
+        when(gateway.verifyConnection()).thenReturn(false);   // WSEP cold / unreachable at boot
+        SystemAdminService svc = serviceWith(List.of(gateway), List.of(reachableIssuer()));
+
+        svc.ensureMarketOpen();                               // can't reach payment -> stays closed, no throw
+        assertFalse(svc.isMarketOpen());
+
+        when(gateway.verifyConnection()).thenReturn(true);    // WSEP recovers
+        svc.ensureMarketOpen();                               // self-heal -> opens
+        assertTrue(svc.isMarketOpen());
+    }
+
+    @Test
+    void givenAdminClosedMarket_whenEnsureMarketOpen_thenStaysClosed() {
+        SystemAdminService svc = readyService();
+        svc.openMarket(openRequest());
+        svc.closeMarket(closeRequest());                      // admin deliberately closes the market
+        svc.ensureMarketOpen();                               // must NOT auto-reopen a deliberate close
+        assertFalse(svc.isMarketOpen());
+        assertEquals("CLOSED", svc.viewMarketState().currentStatus());
+    }
+
+    @Test
+    void givenNoReachableServices_whenEnsureMarketOpen_thenNeverThrowsAndStaysClosed() {
+        SystemAdminService svc = serviceWith(List.of(), List.of());
+        assertDoesNotThrow(svc::ensureMarketOpen);            // self-heal must never throw out to its caller
+        assertFalse(svc.isMarketOpen());
+    }
+
+    @Test
+    void givenInitializedPlatform_whenViewMarketState_thenReportsHealth() {
+        SystemAdminService svc = readyService();
+        MarketStateDTO state = svc.viewMarketState();
+        assertEquals("READY", state.currentStatus());
+        assertTrue(state.paymentGatewayHealthy());
+        assertTrue(state.ticketIssuerHealthy());
+        assertTrue(state.defaultAdminPresent());
+    }
 
     @Test @Disabled("UC-31: viewGlobalHistory admin-only RBAC")
     void givenNonAdmin_whenViewGlobalHistory_thenRejected() {}
@@ -247,6 +413,23 @@ class SystemAdminServiceTest {
 
 
     // --- helpers ---
+
+    // An initialized (READY) service with one reachable gateway + issuer and an
+    // existing admin — the precondition for opening the market.
+    private SystemAdminService readyService() {
+        when(adminRepository.existsAny()).thenReturn(true);
+        SystemAdminService svc = serviceWith(List.of(reachablePayment()), List.of(reachableIssuer()));
+        svc.initializePlatform();
+        return svc;
+    }
+
+    private MarketControlRequestDTO openRequest() {
+        return new MarketControlRequestDTO("OPEN", "test open", ADMIN_TOKEN);
+    }
+
+    private MarketControlRequestDTO closeRequest() {
+        return new MarketControlRequestDTO("CLOSE", "test close", ADMIN_TOKEN);
+    }
 
     private SystemAdminService serviceWith(List<IPaymentGateway> gateways, List<ITicketIssuer> issuers) {
         return new SystemAdminService(

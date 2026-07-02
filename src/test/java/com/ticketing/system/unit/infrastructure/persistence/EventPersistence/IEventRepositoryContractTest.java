@@ -2,7 +2,6 @@ package com.ticketing.system.unit.infrastructure.persistence.EventPersistence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDate;
@@ -45,12 +44,23 @@ public abstract class IEventRepositoryContractTest {
 
     // Builds a minimal valid Event with specified category and one zone priced at
     // 50.
-    private Event buildEvent(int id, String name, Double rating, int companyId, EventStatus status,
+    protected Event buildEvent(int id, String name, Double rating, int companyId, EventStatus status,
             EventCategory category) {
         VenueMap venueMap = new VenueMap(id, LOCATION, List.of(new StandingZone(1, "Floor", 100, 50)));
         ShowDate showDate = new ShowDate(FUTURE_START, FUTURE_END);
         return new Event(id, name, rating, List.of("Artist A"), category, companyId, status,
                 venueMap, List.of(showDate), new NoPurchasePolicy(), new DiscountPolicy(0));
+    }
+
+    // An event whose zones span several prices (cheapest = 30); used for the "cheapest price" filter tests.
+    protected Event buildMultiZoneEvent(int id) {
+        VenueMap venueMap = new VenueMap(id, LOCATION, List.of(
+                new StandingZone(1, "Cheap", 100, 30),
+                new StandingZone(2, "Mid", 100, 50),
+                new StandingZone(3, "Premium", 100, 100)));
+        ShowDate showDate = new ShowDate(FUTURE_START, FUTURE_END);
+        return new Event(id, "Tiered Show", 4.5, List.of("Artist A"), EventCategory.CONCERT, 10,
+                EventStatus.ON_SALE, venueMap, List.of(showDate), new NoPurchasePolicy(), new DiscountPolicy(0));
     }
 
     // === save ===
@@ -150,6 +160,25 @@ public abstract class IEventRepositoryContractTest {
         assertTrue(result.isEmpty());
     }
 
+    // === findAll (#372 boot-time integrity scan) ===
+
+    @Test
+    void givenEventsAcrossCompaniesAndStatuses_whenFindAll_thenReturnsEveryEvent() {
+        eventRepo.save(buildEvent(1, "Event A", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(2, "Event B", 3.8, 20, EventStatus.DRAFT, EventCategory.CONCERT));
+
+        List<Event> all = eventRepo.findAll();
+
+        assertEquals(2, all.size());
+        assertTrue(all.stream().anyMatch(e -> e.getId() == 1));
+        assertTrue(all.stream().anyMatch(e -> e.getId() == 2));
+    }
+
+    @Test
+    void givenNoEvents_whenFindAll_thenReturnsEmptyList() {
+        assertTrue(eventRepo.findAll().isEmpty());
+    }
+
     // === searchAll — eventName ===
 
     @Test
@@ -182,7 +211,7 @@ public abstract class IEventRepositoryContractTest {
         Event event = new Event(1, "Concert", 4.5, List.of("John Doe", "Jane Smith"),
                 EventCategory.CONCERT, 10, EventStatus.ON_SALE, vm,
                 List.of(new ShowDate(FUTURE_START, FUTURE_END)),
-                 new NoPurchasePolicy(), new DiscountPolicy(0));
+                new NoPurchasePolicy(), new DiscountPolicy(0));
         eventRepo.save(event);
 
         List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
@@ -303,6 +332,64 @@ public abstract class IEventRepositoryContractTest {
         assertTrue(result.isEmpty());
     }
 
+    @Test
+    void givenMultiZoneEvent_whenCheapestPriceInRange_thenMatches() {
+        eventRepo.save(buildMultiZoneEvent(1)); // zones 30 / 50 / 100, cheapest = 30
+
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
+                null, null, null, null, 20.0, 40.0, null, null, null, null, null, null, null));
+
+        assertEquals(1, result.size()); // the cheapest ticket (30) is within [20, 40]
+    }
+
+    @Test
+    void givenMultiZoneEvent_whenCheapestPriceBelowMin_thenExcludedEvenIfPricierZonesFit() {
+        eventRepo.save(buildMultiZoneEvent(1)); // cheapest = 30
+
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
+                null, null, null, null, 40.0, 200.0, null, null, null, null, null, null, null));
+
+        // Matching is on the cheapest ticket (30), not the 50/100 zones, so the event is excluded.
+        assertTrue(result.isEmpty());
+    }
+
+    // === searchAll — event rating range ===
+
+    @Test
+    void givenEventRatingAtOrAboveMin_whensearchAll_thenReturnsMatchingEvent() {
+        eventRepo.save(buildEvent(1, "Top Rated", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(2, "Low Rated", 2.0, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
+                null, null, null, null, null, null, null, null, null, 4.0, null, null, null));
+
+        assertEquals(1, result.size());
+        assertEquals("Top Rated", result.get(0).getName());
+    }
+
+    @Test
+    void givenEventRatingAboveMax_whensearchAll_thenReturnsEmpty() {
+        eventRepo.save(buildEvent(1, "Top Rated", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
+                null, null, null, null, null, null, null, null, null, null, 4.0, null, null));
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void givenEventRatingWithinRange_whensearchAll_thenReturnsOnlyEventInBand() {
+        eventRepo.save(buildEvent(1, "Mid Rated", 3.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(2, "Low Rated", 1.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(3, "Top Rated", 5.0, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+
+        List<Event> result = eventRepo.searchAll(new CatalogSearchFiltersDTO(
+                null, null, null, null, null, null, null, null, null, 3.0, 4.0, null, null));
+
+        assertEquals(1, result.size());
+        assertEquals("Mid Rated", result.get(0).getName());
+    }
+
     // === searchAll — all-null filters ===
 
     @Test
@@ -314,5 +401,32 @@ public abstract class IEventRepositoryContractTest {
                 null, null, null, null, null, null, null, null, null, null, null, null, null));
 
         assertEquals(2, result.size());
+    }
+
+    // === searchByCompanyAll — company scope (all statuses) + filters ===
+
+    @Test
+    void givenEventsForMultipleCompanies_whenSearchByCompanyAll_thenReturnsOnlyThatCompanyAllStatuses() {
+        eventRepo.save(buildEvent(1, "Draft One", 4.5, 10, EventStatus.DRAFT, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(2, "Live One", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(3, "Other Co", 4.5, 20, EventStatus.ON_SALE, EventCategory.CONCERT));
+
+        List<Event> result = eventRepo.searchByCompanyAll(10, CatalogSearchFiltersDTO.empty());
+
+        assertEquals(2, result.size());
+        assertTrue(result.stream().allMatch(e -> e.getCompanyId() == 10));
+    }
+
+    @Test
+    void givenCompanyEvents_whenSearchByCompanyAllWithNameFilter_thenFiltersWithinThatCompany() {
+        eventRepo.save(buildEvent(1, "Jazz Night", 4.5, 10, EventStatus.DRAFT, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(2, "Rock Show", 4.5, 10, EventStatus.ON_SALE, EventCategory.CONCERT));
+        eventRepo.save(buildEvent(3, "Jazz Night", 4.5, 20, EventStatus.ON_SALE, EventCategory.CONCERT));
+
+        List<Event> result = eventRepo.searchByCompanyAll(10, new CatalogSearchFiltersDTO(
+                "Jazz", null, null, null, null, null, null, null, null, null, null, null, null));
+
+        assertEquals(1, result.size());
+        assertEquals(1, result.get(0).getId());
     }
 }

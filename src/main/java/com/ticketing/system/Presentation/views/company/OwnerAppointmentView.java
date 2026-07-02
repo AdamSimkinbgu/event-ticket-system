@@ -22,25 +22,27 @@ import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
 @Route(value = "owner/owners/appoint", layout = WorkspaceLayout.class)
-@PageTitle("Appoint co-owner · TicketHub")
+@PageTitle("Appoint Co-Owner · TicketHub")
 @PermitAll
 @RequireCapability(Capability.APPOINT_CO_OWNER)
 public class OwnerAppointmentView extends LkPage {
 
+   private final MyCompaniesPresenter membershipPresenter;
     private final TextField invitee = new TextField("Invitee username or email");
     private final TextField scope   = new TextField("Scope");
 
     public OwnerAppointmentView(MyCompaniesPresenter membershipPresenter) {
-        title("Appoint co-owner");
+        this.membershipPresenter = membershipPresenter;
+        title("Appoint Co-Owner");
         subtitle("Co-owners have full company access, except removing the founder.");
-        add(buildForm(membershipPresenter));
+        add(buildForm());
     }
 
-    private Component buildForm(MyCompaniesPresenter membershipPresenter) {
+    private Component buildForm() {
         Div narrow = new Div();
         narrow.addClassName("form-narrow");
 
-        LkCard card = new LkCard("Appoint co-owner").pad(20);
+        LkCard card = new LkCard("Appoint Co-Owner").pad(20);
 
         invitee.setPlaceholder("Who do you want to appoint?");
         invitee.setRequired(true);
@@ -66,17 +68,32 @@ public class OwnerAppointmentView extends LkPage {
         actions.add(
             new LkBtn("Cancel").variant(LkBtn.Variant.tertiary)
                 .onClick(e -> UI.getCurrent().navigate(MyCompaniesView.class)),
-            new LkBtn("Send invitation").variant(LkBtn.Variant.primary)
-                .onClick(e -> {
-                    if (invitee.isEmpty()) {
-                        Toasts.failure("Enter a username or email to appoint.");
-                        return;
-                    }
-                    Toasts.success(invitee.getValue() + " invited as co-owner — they'll see it in their invitations.");
-                    UI.getCurrent().navigate(MyCompaniesView.class);
-                })
+            new LkBtn("Send Invitation").variant(LkBtn.Variant.primary)
+                .onClick(e -> sendInvitation())
         );
         narrow.add(actions);
         return narrow;
+    }
+
+    private void sendInvitation() {
+        if (invitee.isEmpty()) {
+            Toasts.failure("Enter a username or email to appoint.");
+            return;
+        }
+        String ident = invitee.getValue().trim();
+         switch (membershipPresenter.appoint(ident)) {
+            case MyCompaniesPresenter.AppointOutcome.Success ignored -> {
+                Toasts.success(ident + " invited as co-owner — they'll see it in their invitations.");
+                UI.getCurrent().navigate(MyCompaniesView.class);
+            }
+            case MyCompaniesPresenter.AppointOutcome.NotAuthenticated ignored ->
+                Toasts.failure("Your session has expired — please sign in again.");
+            case MyCompaniesPresenter.AppointOutcome.NoCompany ignored ->
+                Toasts.failure("You don't own a company — register one first.");
+            case MyCompaniesPresenter.AppointOutcome.UserNotFound u ->
+                Toasts.failure("User \"" + u.username() + "\" was not found.");
+            case MyCompaniesPresenter.AppointOutcome.Failure fail ->
+                Toasts.failure("Could not complete the appointment — please try again.");
+        }
     }
 }

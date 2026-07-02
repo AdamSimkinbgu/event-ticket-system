@@ -16,10 +16,11 @@ import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
  * unit-testable in isolation (the view passes {@code AuthSession.token()} in,
  * mirroring {@code SubmitComplaintPresenter} / {@code MyInvitationsPresenter}).
  *
- * <p>Lists the member's <em>outgoing</em> threads — complaints and company inquiries
- * they initiated — and excludes admin → member announcements (where the member is the
- * counterparty, not the initiator). Replies append to an existing conversation; the
- * member's side is resolved from the token by the service.
+ * <p>Lists the member's Support Inbox — the inquiries and complaints they opened plus admin →
+ * member outreach (where the member is the counterparty). The service's {@code viewMyConversations}
+ * already scopes this correctly via {@code findMemberInbox}, so the presenter does no filtering.
+ * Replies append to an existing conversation; the member's side is resolved from the token by the
+ * service (complaints reject replies — they are one-shot).
  */
 @Component
 public class SupportInboxPresenter {
@@ -33,16 +34,13 @@ public class SupportInboxPresenter {
         this.messagingService = messagingService;
     }
 
-    /** Loads the signed-in member's outgoing conversations, newest first. */
+    /** Loads the signed-in member's Support Inbox conversations, newest first. */
     public Outcome load(String token) {
         if (token == null) {
             return new Outcome.NotAuthenticated();
         }
         try {
-            List<ConversationDTO> outgoing = messagingService.viewMyConversations(token).stream()
-                .filter(c -> MEMBER.equals(c.initiatorType()))
-                .toList();
-            return new Outcome.Success(outgoing);
+            return new Outcome.Success(messagingService.viewMyConversations(token));
         } catch (InvalidTokenException e) {
             return new Outcome.NotAuthenticated();
         } catch (RuntimeException e) {

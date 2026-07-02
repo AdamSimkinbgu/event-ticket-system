@@ -9,19 +9,27 @@ import lombok.extern.slf4j.Slf4j;
 // Owner / Manager-side write service for the Event aggregate and its lifecycle.
 // UC-19 (Manage Event Catalog), UC-20 (Configure Venue Map & Inventory), UC-21 (Configure Policies).
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.system.Core.Application.dto.RefundResultDTO;
+import com.ticketing.system.Core.Domain.exceptions.BusinessRuleViolationException;
+import com.ticketing.system.Core.Domain.exceptions.CompanyNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.EventNotFoundException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
+import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
 import com.ticketing.system.Core.Domain.exceptions.RefundFailedException;
 import com.ticketing.system.Core.Domain.orders.TransactionRecord;
 import com.ticketing.system.Core.Application.dto.EventCreationDTO;
+import com.ticketing.system.Core.Application.dto.CatalogSearchFiltersDTO;
 import com.ticketing.system.Core.Application.dto.EventDetailDTO;
 import com.ticketing.system.Core.Application.dto.EventPolicyConfigDTO;
 import com.ticketing.system.Core.Application.dto.EventUpdateDTO;
 import com.ticketing.system.Core.Application.dto.PurchasePolicyDTO;
 import com.ticketing.system.Core.Application.dto.GridPlacementDTO;
 import com.ticketing.system.Core.Application.dto.VenueLayoutDTO;
+import com.ticketing.system.Core.Application.dtoMappers.EventMapper;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.dto.ZoneDetailDTO;
 import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
@@ -111,6 +119,7 @@ public class EventManagementService {
     // a second step.
 
     // UC-19 — Owner adds an Event in DRAFT state.
+    @Transactional
     public EventDetailDTO addEvent(String token, EventCreationDTO request) {
         int ownerId = validateTokenAndGetUserId(token);
 
@@ -120,11 +129,11 @@ public class EventManagementService {
             company = companyRepository.getCompanyById(request.companyId());
         } catch (RuntimeException e) {
             log.error("Error - company not found: {}, {}", request.companyId(), e.getMessage());
-            throw new RuntimeException("Company not found");
+            throw new CompanyNotFoundException();
         }
 
         User user = userRepository.getUserById(ownerId);
-        user.requirePermissionInCompany(request.companyId(), Permission.CONFIGURE_VENUE);
+        user.requirePermissionInCompany(request.companyId(), Permission.MANAGE_INVENTORY);
 
         int newEventId = eventRepository.nextId();
         VenueMap venueMap = new VenueMap(eventRepository.nextVenueMapId(), request.location(), List.of());
@@ -134,17 +143,9 @@ public class EventManagementService {
         // outside right now.
         DiscountPolicy discountPolicy = new DiscountPolicy(0);
 
-        PurchasePolicy companyPurchasePolicy = company.getPurchasePolicy();
-        if (companyPurchasePolicy == null) {
-            companyPurchasePolicy = new NoPurchasePolicy();
-        }
-
+        
         PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(request.purchasePolicy());
-
-        PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
-                companyPurchasePolicy,
-                eventSpecificPurchasePolicy);
-
+       
         Event newEvent = new Event(
                 newEventId,
                 request.name(),
@@ -156,52 +157,97 @@ public class EventManagementService {
                 EventStatus.DRAFT,
                 venueMap,
                 request.showDates(),
-                inheritedAndExtendedPurchasePolicy,
+                eventSpecificPurchasePolicy ,
                 discountPolicy);
         eventRepository.save(newEvent);
 
         log.info("Event {} created successfully with ID {}", request.name(), newEventId);
-        return new EventDetailDTO(
-                String.valueOf(newEventId),
-                newEvent.getName(),
-                newEvent.getRating(),
-                newEvent.getDescription(),
-                newEvent.getCategory(),
-                request.location(),
-                String.valueOf(newEvent.getCompanyId()),
-                company.getName(),
-                newEvent.getStatus(),
-                newEvent.getShowDates());
+        return new EventMapper().toEventDetailDTO(newEvent, company.getName());
     }
 
     // II.4.1.1 — Owner lists all events under their company.
+    @Transactional(readOnly = true)
     public List<EventDetailDTO> listEventsForCompany(String token, int companyId) {
+        return listEventsForCompany(token, companyId, CatalogSearchFiltersDTO.empty());
+    }
+
+    // II.4.1.1 — Owner lists their company's events narrowed by the catalogue filters (company-rating
+    // filters don't apply to a single company, so they're stripped).
+    @Transactional(readOnly = true)
+    public List<EventDetailDTO> listEventsForCompany(String token, int companyId, CatalogSearchFiltersDTO filters) {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
-        user.requirePermissionInCompany(companyId, Permission.MANAGE_INVENTORY);
-        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (user == null) {
+            throw new UserNotFoundException();
+        }
 
-        return eventRepository.findByCompanyId(companyId).stream()
-                .map(e -> new EventDetailDTO(
-                        String.valueOf(e.getId()),
-                        e.getName(),
-                        e.getRating(),
-                        e.getDescription(),
-                        e.getCategory(),
-                        e.getVenueMap() != null ? e.getVenueMap().getLocation() : null,
-                        String.valueOf(companyId),
-                        company.getName(),
-                        e.getStatus(),
-                        e.getShowDates()))
-                .toList();
+        ProductionCompany company = companyRepository.getCompanyById(companyId);
+        if (company == null) {
+            throw new CompanyNotFoundException();
+        }
+
+        // The events list is a read-only management hub. Any active member of the company may see
+        // it (so e.g. a venue/sales manager can reach the per-event venue editor); the per-event
+        // mutations (configure venue, edit details, policies, cancel) stay gated by their own
+        // permission at their own service entry points.
+        user.requireMemberInCompany(companyId);
+
+        EventMapper mapper = new EventMapper();
+        return eventRepository.searchByCompanyAll(companyId, filters.withoutCompanyRating()).stream()
+            .map(e -> mapper.toEventDetailDTO(e, company.getName()))
+            .toList();
     }
+
+    @Transactional(readOnly = true)
+    public EventDetailDTO getEvent(String token, int eventId) {
+        int userId = validateTokenAndGetUserId(token);
+        Event event = eventRepository.findById(eventId);
+        if (event == null) {
+            throw new EventNotFoundException();
+        }
+        User user = userRepository.getUserById(userId);
+        if (user == null) {
+            throw new UserNotFoundException();
+        }
+        user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
+        ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
+        if (company == null) {
+            throw new CompanyNotFoundException();
+        }
+
+        return new EventDetailDTO(
+            String.valueOf(event.getId()),
+            event.getName(),
+            event.getRating(),
+            null,
+            event.getCategory(),
+            event.getVenueMap() != null ? event.getVenueMap().getLocation() : null,
+            String.valueOf(event.getCompanyId()),
+            company.getName(),
+            event.getStatus(),
+            event.getShowDates(),
+            event.getArtistsNames(),
+            EventMapper.minZonePrice(event)
+            );
+    }
+
+    
+
+
 
     // II.4.2.3 — Read back the current zone states from the domain so the
     // editor reflects real-time inventory (capacity consumed by sales, etc.).
+    @Transactional(readOnly = true)
     public VenueLayoutDTO getEventZones(String token, int eventId) {
         int userId = validateTokenAndGetUserId(token);
         User user = userRepository.getUserById(userId);
+        if (user == null) {
+            throw new UserNotFoundException();
+        }
         Event event = eventRepository.findById(eventId);
+        if (event == null) {
+            throw new EventNotFoundException();
+        }
         user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
 
         VenueMap map = event.getVenueMap();
@@ -249,6 +295,7 @@ public class EventManagementService {
     // It also allows for a more iterative setup process where the owner/manager can
     // first create the event with basic details and then configure the venue map in
     // a second step.
+    @Transactional
     public void configureVenueMap(String token, int companyId, VenueMapConfigDTO config) {
         int eventId = Integer.parseInt(config.eventId());
 
@@ -264,7 +311,7 @@ public class EventManagementService {
             Event event = eventRepository.findById(eventId);
 
             if (event.getCompanyId() != companyId) {
-                throw new RuntimeException("Event does not belong to this company");
+                throw new UnauthorizedActionException("act on an event that does not belong to this company");
             }
 
             List<InventoryZone> zones = new ArrayList<>();
@@ -326,6 +373,7 @@ public class EventManagementService {
 
     // UC-19 — partial update; immutability rules enforced inside
     // Event.editDetails().
+    @Transactional
     public void editEventDetails(String token, EventUpdateDTO update) {
         int userId = validateTokenAndGetUserId(token);
 
@@ -341,7 +389,7 @@ public class EventManagementService {
             Event event = eventRepository.findById(eventId);
 
             User user = userRepository.getUserById(userId);
-            user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+            user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
 
             EventCategory newCategory = null;
             if (update.category() != null && !update.category().isBlank()) {
@@ -371,6 +419,7 @@ public class EventManagementService {
         }
     }
 
+    @Transactional
     public int addInventoryZone(String token, int companyId, int eventId, VenueMapConfigDTO.ZoneConfigDTO zoneConfig) {
 
         eventRepository.lockForUpdate(eventId);
@@ -419,6 +468,7 @@ public class EventManagementService {
         }
     }
 
+    @Transactional
     public void removeInventoryZone(String token, int companyId, int eventId, int zoneId) {
 
         eventRepository.lockForUpdate(eventId);
@@ -440,6 +490,7 @@ public class EventManagementService {
 
     // addPlacesToStandingZone is a helper function that allows the owner/manager to
     // add more places to a standing zone.
+    @Transactional
     public void addPlacesToStandingZone(String token, int companyId, int eventId, int zoneId, int placesToAdd) {
         eventRepository.lockForUpdate(eventId);
 
@@ -456,6 +507,7 @@ public class EventManagementService {
 
     // removePlacesFromStandingZone is a helper function that allows the
     // owner/manager to remove a specified number of places from a standing zone.
+    @Transactional
     public void removePlacesFromStandingZone(String token, int companyId, int eventId, int zoneId, int placesToRemove) {
         eventRepository.lockForUpdate(eventId);
 
@@ -472,6 +524,7 @@ public class EventManagementService {
 
     // addSeatsToSeatedZone is a helper function that allows the owner/manager to
     // add specific seats to a seated zone.
+    @Transactional
     public void addSeatsToSeatedZone(
             String token,
             int companyId,
@@ -494,6 +547,7 @@ public class EventManagementService {
 
     // removeSeatsFromSeatedZone is a helper function that allows the owner/manager
     // to remove specific seats from a seated zone.
+    @Transactional
     public void removeSeatsFromSeatedZone(
             String token,
             int companyId,
@@ -516,6 +570,7 @@ public class EventManagementService {
 
     // addSeatRowToSeatedZone is a helper function that allows the owner/manager to
     // add an entire row of seats to a seated zone.
+    @Transactional
     public void addSeatRowToSeatedZone(
             String token,
             int companyId,
@@ -557,6 +612,7 @@ public class EventManagementService {
     // based on the existing seat layout in the zone.
     // * This ensures that all seats in the specified row are removed consistently.
     // */
+    @Transactional
     public void removeSeatRowFromSeatedZone(
             String token,
             int companyId,
@@ -590,7 +646,7 @@ public class EventManagementService {
             companyRepository.getCompanyById(companyId);
         } catch (RuntimeException e) {
             log.error("Error - company not found: {}, {}", companyId, e.getMessage());
-            throw new RuntimeException("Company not found");
+            throw new CompanyNotFoundException();
         }
 
         user.requirePermissionInCompany(companyId, Permission.CONFIGURE_VENUE);
@@ -600,11 +656,11 @@ public class EventManagementService {
             event = eventRepository.findById(eventId);
         } catch (EventNotFoundException e) {
             log.warn("Event {} not found", eventId);
-            throw new RuntimeException("Event not found");
+            throw new EventNotFoundException();
         }
 
         if (event.getCompanyId() != companyId) {
-            throw new RuntimeException("Event does not belong to this company");
+            throw new UnauthorizedActionException("act on an event that does not belong to this company");
         }
 
         return event;
@@ -661,6 +717,7 @@ public class EventManagementService {
     }
 
     // Detail view for owner-side editing pages.
+    @Transactional(readOnly = true)
     public EventDetailDTO getEventDetail(String token, int eventId) {
         int userId = validateTokenAndGetUserId(token);
 
@@ -669,27 +726,19 @@ public class EventManagementService {
         ProductionCompany company = companyRepository.getCompanyById(event.getCompanyId());
 
         User user = userRepository.getUserById(userId);
-        user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+        // Read-only detail: any active member may load it. The pages that reach this (event-detail
+        // editor, venue editor) are each route-gated by their own capability, so this serves both a
+        // MANAGE_INVENTORY metadata editor and a CONFIGURE_VENUE venue editor.
+        user.requireMemberInCompany(event.getCompanyId());
 
-        Location location = event.getVenueMap() != null ? event.getVenueMap().getLocation() : null;
-
-        return new EventDetailDTO(
-                String.valueOf(event.getId()),
-                event.getName(),
-                event.getRating(),
-                event.getDescription(),
-                event.getCategory(),
-                location,
-                String.valueOf(event.getCompanyId()),
-                company.getName(),
-                event.getStatus(),
-                event.getShowDates());
+        return new EventMapper().toEventDetailDTO(event, company.getName());
     }
 
     // UC-19 — owner opens an event's sales: SCHEDULED -> ON_SALE.
     // The actual transition (and its venue-map/show-date/invariant guards) lives in
     // Event.transitionToOnSale(); this method enforces auth, ownership, and
     // locking.
+    @Transactional
     public void publishEvent(String token, int companyId, int eventId) {
         int userId = validateTokenAndGetUserId(token);
 
@@ -698,11 +747,11 @@ public class EventManagementService {
             Event event = eventRepository.findById(eventId);
 
             if (event.getCompanyId() != companyId) {
-                throw new RuntimeException("Event does not belong to this company");
+                throw new UnauthorizedActionException("act on an event that does not belong to this company");
             }
 
             User user = userRepository.getUserById(userId);
-            user.requirePermissionInCompany(companyId, Permission.CONFIGURE_VENUE);
+            user.requirePermissionInCompany(companyId, Permission.MANAGE_INVENTORY);
 
             event.transitionToOnSale(); // SCHEDULED -> ON_SALE (idempotent if already ON_SALE)
             eventRepository.save(event);
@@ -713,8 +762,55 @@ public class EventManagementService {
         }
     }
 
+    // Permanently removes a CANCELED event. Only callable by a user with MANAGE_INVENTORY.
+    public void deleteEvent(String token, int eventId) {
+        int userId = validateTokenAndGetUserId(token);
+        eventRepository.lockForUpdate(eventId);
+        try {
+            Event event = eventRepository.findById(eventId);
+            User user = userRepository.getUserById(userId);
+            user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
+            if (event.getStatus() != EventStatus.CANCELED) {
+                throw new InvalidStateTransitionException("Only CANCELED events can be deleted");
+            }
+            // Soft-cancel keeps events "for historical and reporting purposes": refuse to
+            // permanently delete one that still has purchase history, which would orphan its
+            // OrderReceipt/Ticket records (referenced by eventId, no cascade).
+            if (!orderReceiptRepository.findByEventId(eventId).isEmpty()) {
+                throw new BusinessRuleViolationException("Can't delete an event with sales history");
+            }
+            eventRepository.delete(eventId);
+            log.info("Event {} deleted by user {}", eventId, userId);
+        } finally {
+            eventRepository.unlock(eventId);
+        }
+    }
+
+    // Owner/Manager changes an event's status to a target state (non-cancel transitions only).
+    // Cancel with refund pipeline uses cancelEventAndRefund.
+    public void changeEventStatus(String token, int eventId, EventStatus targetStatus) {
+        int userId = validateTokenAndGetUserId(token);
+        eventRepository.lockForUpdate(eventId);
+        try {
+            Event event = eventRepository.findById(eventId);
+            User user = userRepository.getUserById(userId);
+            user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
+            switch (targetStatus) {
+                case SCHEDULED -> event.transitionToScheduled();
+                case ON_SALE -> event.transitionToOnSale();
+                default -> throw new InvalidStateTransitionException("Cannot manually set status to " + targetStatus);
+            }
+            eventRepository.save(event);
+            log.info("Event {} status changed to {} by user {}", eventId, targetStatus, userId);
+        } finally {
+            eventRepository.unlock(eventId);
+        }
+    }
+
     // UC-19 — soft cancel; fires EventCancelled domain event for UC-4 refund
     // pipeline.
+    // Intentionally NOT @Transactional: this calls the external payment gateway (refund) mid-flow,
+    // so its transaction boundary is restructured separately (externals outside the tx) in V3-TX-02.
     public void cancelEventAndRefund(String token, int eventId) {
         int ownerId = validateTokenAndGetUserId(token);
         // We lock the event for update to prevent concurrent modifications during the
@@ -725,7 +821,7 @@ public class EventManagementService {
         try {
             Event event = eventRepository.findById(eventId); // throws if not found, which is what we want here.
             User user = userRepository.getUserById(ownerId);
-            user.requirePermissionInCompany(event.getCompanyId(), Permission.CONFIGURE_VENUE);
+            user.requirePermissionInCompany(event.getCompanyId(), Permission.MANAGE_INVENTORY);
 
             if (event.getStatus() == EventStatus.CANCELED) {
                 return;
@@ -786,7 +882,7 @@ public class EventManagementService {
             // PAID or ISSUED, it should be marked as REFUNDED; otherwise, it can be marked
             // as VOIDED. In a real system, we might want to handle this more robustly (e.g.
             // consider different ticket statuses, handle partial refunds, etc.).
-            List<Ticket> tickets = ticketRepository.findByEventId(String.valueOf(eventId));
+            List<Ticket> tickets = ticketRepository.findByEventId(eventId);
             // Note: we update ticket statuses after processing refunds to avoid
             // complications where we mark tickets as refunded but then encounter an error
             // during the refund process. By only updating ticket statuses after we've
@@ -814,16 +910,15 @@ public class EventManagementService {
 
             log.info("Event {} canceled and refund flow completed", eventId);
 
-        } catch (EventNotFoundException e) { // TODO: check if these Catches are good
+        } catch (EventNotFoundException e) {
             log.warn("Event {} not found for cancellation", eventId);
-            throw new RuntimeException("Event not found");
+            throw e;
         } catch (RefundFailedException e) {
             log.error("Refund failed during cancellation of event {}: {}", eventId, e.getMessage());
-            throw new RuntimeException("Refund failed: " + e.getMessage());
-        } catch (Exception e) {
+            throw e;
+        } catch (RuntimeException e) {
             log.error("Unexpected error during cancellation of event {}: {}", eventId, e.getMessage());
-            throw new RuntimeException("Error during cancellation: " + e.getMessage());
-
+            throw e;
         } finally {
             eventRepository.unlock(eventId);
         }
@@ -880,9 +975,10 @@ public class EventManagementService {
     // to the event's purchase policy while we're updating it. This ensures that we
     // have a consistent view of the event's state and that we don't accidentally
     // overwrite changes made by another user at the same time.
+    @Transactional
     public void setEventPolicies(String token, EventPolicyConfigDTO config) {
         if (!sessionManager.validateToken(token)) {
-            throw new RuntimeException("Invalid token");
+            throw new InvalidTokenException();
         }
 
         if (config == null) {
@@ -896,32 +992,27 @@ public class EventManagementService {
 
             ProductionCompany company = companyRepository.getCompanyById(config.companyId());
             if (company == null) {
-                throw new RuntimeException("Company not found");
+                throw new CompanyNotFoundException();
             }
 
-            company.checkowner(userId);
+            User user = userRepository.getUserById(userId);
+            if (user == null) {
+                throw new UserNotFoundException();
+            }
+            user.requirePermissionInCompany(config.companyId(), Permission.EDIT_POLICIES);
 
             Event event = eventRepository.findById(config.eventId());
             if (event == null) {
-                throw new RuntimeException("Event not found");
+                throw new EventNotFoundException();
             }
 
             if (event.getCompanyId() != config.companyId()) {
-                throw new RuntimeException("Event does not belong to this company");
+                throw new UnauthorizedActionException("act on an event that does not belong to this company");
             }
 
-            PurchasePolicy companyPurchasePolicy = company.getPurchasePolicy();
-            if (companyPurchasePolicy == null) {
-                companyPurchasePolicy = new NoPurchasePolicy();
-            }
+           PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(config.purchasePolicy());
 
-            PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(config.purchasePolicy());
-
-            PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
-                    companyPurchasePolicy,
-                    eventSpecificPurchasePolicy);
-
-            event.setPurchasePolicy(inheritedAndExtendedPurchasePolicy);
+            event.setPurchasePolicy(eventSpecificPurchasePolicy);
 
             eventRepository.save(event);
 
@@ -1015,24 +1106,24 @@ public class EventManagementService {
         return sessionManager.extractUserId(token);
     }
 
+    @Transactional(readOnly = true)
     public PurchasePolicyDTO getEventPurchasePolicy(String token, int companyId, int eventId) {
         if (!sessionManager.validateToken(token))
-            throw new RuntimeException("Invalid token");
+            throw new InvalidTokenException();
         int userId = sessionManager.extractUserId(token);
         ProductionCompany company = companyRepository.getCompanyById(companyId);
         if (company == null)
-            throw new RuntimeException("Company not found");
-        company.checkowner(userId);
+            throw new CompanyNotFoundException();
+        User user = userRepository.getUserById(userId);
+        if (user == null)
+            throw new UserNotFoundException();
+        user.requirePermissionInCompany(companyId, Permission.EDIT_POLICIES);
         Event event = eventRepository.findById(eventId);
         if (event == null)
-            throw new RuntimeException("Event not found");
+            throw new EventNotFoundException();
         if (event.getCompanyId() != companyId)
-            throw new RuntimeException("Event does not belong to this company");
-        PurchasePolicy stored = event.getPurchasePolicy();
-        if (stored instanceof AndPurchasePolicy a) {
-            return policyToDTO(a.getRightPolicy());
-        }
-        return policyToDTO(stored);
+            throw new UnauthorizedActionException("act on an event that does not belong to this company");
+        return policyToDTO(event.getPurchasePolicy());
     }
 
     private PurchasePolicyDTO policyToDTO(PurchasePolicy policy) {

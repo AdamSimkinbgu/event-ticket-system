@@ -34,28 +34,28 @@ public class LkAccountMenu extends Div {
 
     public static LkAccountMenu buyer(String initials, String name, String email) {
         LkMenu menu = new LkMenu(
-            new LkMenu.Item("ticket", "My tickets"),
-            new LkMenu.Item("chart",  "Order history"),
-            new LkMenu.Item("star",   "Saved events"),
-            new LkMenu.Item("card",   "Payment methods"),
-            new LkMenu.Item("gear",   "Account settings"),
+            new LkMenu.Item("ticket", "My Tickets"),
+            new LkMenu.Item("chart",  "Order History"),
+            new LkMenu.Item("star",   "Saved Events"),
+            new LkMenu.Item("card",   "Payment Methods"),
+            new LkMenu.Item("gear",   "Account Settings"),
             new LkMenu.Divider(),
-            new LkMenu.Item("building", "Switch to organizer"),
-            new LkMenu.Item("info",     "Help & support"),
+            new LkMenu.Item("building", "Switch to Organizer"),
+            new LkMenu.Item("info",     "Help & Support"),
             new LkMenu.Divider(),
-            new LkMenu.Item("logout", "Sign out").danger()
+            new LkMenu.Item("logout", "Sign Out").danger()
         );
         return new LkAccountMenu(initials, name, email, menu, null, null);
     }
 
     public static LkAccountMenu admin(String initials, String name) {
         LkMenu menu = new LkMenu(
-            new LkMenu.Item("gear",   "Admin settings"),
-            new LkMenu.Item("chart",  "Platform analytics"),
+            new LkMenu.Item("gear",   "Admin Settings"),
+            new LkMenu.Item("chart",  "Platform Analytics"),
             new LkMenu.Divider(),
-            new LkMenu.Item("arrowLeft", "Back to buyer site"),
+            new LkMenu.Item("arrowLeft", "Back to Buyer Site"),
             new LkMenu.Divider(),
-            new LkMenu.Item("logout", "Sign out").danger()
+            new LkMenu.Item("logout", "Sign Out").danger()
         );
         return new LkAccountMenu(initials, name, "System administrator", menu, "#fff", "#c2410c");
     }

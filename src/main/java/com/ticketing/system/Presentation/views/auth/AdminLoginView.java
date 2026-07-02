@@ -5,6 +5,7 @@ import com.ticketing.system.Presentation.components.kit.LkAuthCard;
 import com.ticketing.system.Presentation.layouts.MainLayout;
 import com.ticketing.system.Presentation.presenters.auth.AdminLoginPresenter;
 import com.ticketing.system.Presentation.session.AuthSession;
+import com.ticketing.system.Presentation.support.ServiceErrors;
 import com.ticketing.system.Presentation.views.admin.AdminDashboardView;
 import com.vaadin.flow.component.Key;
 import com.vaadin.flow.component.UI;
@@ -22,7 +23,7 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
  * member pool. Members reach their own form at {@code /login}.
  */
 @Route(value = "admin/sign-in", layout = MainLayout.class)
-@PageTitle("Admin sign in · TicketHub")
+@PageTitle("Admin Sign In · TicketHub")
 @AnonymousAllowed
 public class AdminLoginView extends LkAuthCard {
 
@@ -68,9 +69,11 @@ public class AdminLoginView extends LkAuthCard {
             case AdminLoginPresenter.Outcome.InvalidCredentials ignored ->
                 Toasts.failure("Invalid admin username or password.");
             case AdminLoginPresenter.Outcome.Locked locked ->
-                Toasts.failure(locked.reason());
+                Toasts.failure("Your account is temporarily locked after too many failed attempts. Please try again later.");
+            case AdminLoginPresenter.Outcome.ServiceUnavailable ignored ->
+                Toasts.failure(ServiceErrors.DB_UNAVAILABLE_MESSAGE);
             case AdminLoginPresenter.Outcome.Failure fail ->
-                Toasts.failure("Sign-in failed: " + fail.reason());
+                Toasts.failure("Sign-in failed — please try again.");
         }
     }
 }

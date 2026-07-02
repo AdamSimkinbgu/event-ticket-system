@@ -227,9 +227,12 @@
   </p>
 
   <div class="callout">
-    Per <strong>Tier C</strong> there's no suspension view (II.6.7–9 exempt),
-    no real-time push (notification bell refreshes on view-load / login flush),
-    and no discount-policy editor — only the purchase-policy editor.
+    Per <strong>Tier C</strong> there's no suspension view (II.6.7–9 exempt) and
+    no discount-policy editor — only the purchase-policy editor. There's no
+    WebSocket/SSE push; instead the <strong>Client (browser)</strong> receives
+    delayed notifications over Vaadin <code>@Push</code> (<code>LONG_POLLING</code>):
+    a <code>NotificationPollingScheduler</code> flushes pending notifications to the
+    bell, plus an immediate flush on login / view-load.
   </div>
 
   <div class="mermaid-wrap">
@@ -238,6 +241,9 @@ flowchart LR
     classDef viewCluster fill:#dbeafe,stroke:#1e40af,color:#1e3a8a,stroke-width:2px
     classDef ctrl fill:#dbeafe,stroke:#1e40af,color:#1e3a8a,stroke-dasharray:5 3
     classDef svc fill:#e9d5ff,stroke:#6b21a8,color:#581c87,stroke-width:2px
+    classDef client fill:#dcfce7,stroke:#15803d,color:#14532d,stroke-width:2px
+
+    CLIENT["Client (browser)<br/>Vaadin @Push · long-polling"]:::client
 
     subgraph V["Vaadin Views (each + matching FooPresenter)"]
         direction TB
@@ -299,6 +305,10 @@ flowchart LR
     CmpC  --> CmpS
     AdmC  --> SysS
     AdmC  --> MsgS
+
+    %% communication channel: user actions in, delayed-notification push out
+    CLIENT --> V
+    NOT -. "@Push (LONG_POLLING)" .-> CLIENT
     </pre>
   </div>
 </section>
@@ -980,7 +990,10 @@ classDiagram
     The full picture in a single canvas: four layer boxes stacked top to bottom,
     every cross-layer arrow drawn. Each layer's contents are auto-laid-out
     horizontally inside its box, so the canvas is wide — scroll horizontally
-    inside the container if needed.
+    inside the container if needed. The <strong>Client (browser)</strong> sits on
+    top, and the communication / notification delivery path is drawn explicitly:
+    a scheduled long-poll pushes delayed notifications down to the bell via
+    Vaadin <code>@Push</code>.
   </p>
 
   <div class="callout warn">
@@ -1003,6 +1016,12 @@ flowchart TB
     classDef infra fill:#fed7aa,stroke:#9a3412,color:#7c2d12
     classDef adapter fill:#fed7aa,stroke:#9a3412,color:#7c2d12,stroke-width:2px
     classDef xcut fill:#fed7aa,stroke:#9a3412,color:#7c2d12,stroke-dasharray:5 3
+    classDef client fill:#dcfce7,stroke:#15803d,color:#14532d,stroke-width:2px
+
+    subgraph CLIENTL["CLIENT (browser)"]
+        direction LR
+        CLIENT["Browser UI · Vaadin<br/>@Push transport = LONG_POLLING"]:::client
+    end
 
     subgraph PRES["PRESENTATION LAYER (V2 NEW)"]
         direction LR
@@ -1069,6 +1088,8 @@ flowchart TB
         STI["StubTicketIssuer"]:::adapter
         INS["InMemoryNotificationService"]:::adapter
         VN["VaadinNotifier (V2)"]:::adapter
+        AUR["ActiveUiRegistry<br/><i>tracks live UIs</i>"]:::infra
+        NPS["NotificationPollingScheduler<br/><i>@Scheduled long-poll</i>"]:::xcut
         RL["RepositoryLocks"]:::xcut
         LA["LoggingAspect"]:::xcut
     end
@@ -1144,6 +1165,14 @@ flowchart TB
     STI -.implements.-> TI
     INS -.implements.-> NS
     VN  -.implements.-> NI
+
+    %% ====== COMMUNICATION / NOTIFICATION DELIVERY (long-poll push path) ======
+    CLIENT -->|"user actions"| BV
+    CLIENT -->|"user actions"| OV
+    NPS -->|reads live UIs| AUR
+    NPS -->|"deliverPending(userId)"| NotS
+    NPS -.->|"merge + refresh bell"| CC
+    CC  -.->|"@Push (LONG_POLLING)"| CLIENT
     </pre>
   </div>
 

@@ -4,19 +4,28 @@ import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.dto.ReservationResultDTO;
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Application.interfaces.ISystemMetrics;
 import com.ticketing.system.Core.Application.services.ReservationService;
+import com.ticketing.system.Core.Application.services.SystemAdminService;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
+import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventorySelection;
 import com.ticketing.system.Core.Domain.events.InventoryZone;
+import com.ticketing.system.Core.Domain.events.Seat;
+import com.ticketing.system.Core.Domain.events.SeatStatus;
+import com.ticketing.system.Core.Domain.events.SeatedZone;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import org.mockito.ArgumentCaptor;
+
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -24,7 +33,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -49,13 +59,18 @@ public class ReservationAcceptanceTests {
         sessionManager = mock(ISessionManager.class);
         notificationService = mock(INotificationService.class);
 
+        SystemAdminService systemAdminService = mock(SystemAdminService.class);
+        when(systemAdminService.isMarketOpen()).thenReturn(true);
+
         reservationService = new ReservationService(
                 eventRepository,
                 activeOrderRepository,
                 sessionManager,
                 notificationService,
                 mock(IProductionCompanyRepository.class),
-                mock(IUserRepository.class)
+                mock(IUserRepository.class),
+                systemAdminService,
+                mock(ISystemMetrics.class)
         );
 
         event = mock(Event.class, RETURNS_DEEP_STUBS);
@@ -367,23 +382,121 @@ void GivenNotEnoughTickets_WhenreserveStandingTicketsForMember_ThenThrowExceptio
 
 
 
-    // more acceptance tests:
+    // more acceptance tests: seated venue maps
+
+    // A real SeatedZone wired into the deep-stub event lets these exercise the actual per-seat
+    // locking; no dedicated test-data builder is required.
 
     @Test
-    @Disabled("Enable after test-data builder supports seated venue maps")
     void GivenMemberSelectsAvailableSeats_WhenReserveSeats_ThenSeatsAreLockedAndCartShowsSeatNumbers() {
-        
+        SeatedZone seatedZone = new SeatedZone(1, "Orchestra", 120.0,
+                List.of(new Seat("A1", 0, 0), new Seat("A2", 1, 0), new Seat("A3", 2, 0)));
+        when(event.getVenueMap().getZone(1)).thenReturn(seatedZone);
+        doAnswer(inv -> {
+            InventorySelection selection = inv.getArgument(1);
+            seatedZone.reserve(selection);
+            return null;
+        }).when(event).reserveInventory(eq(1), any(InventorySelection.class));
+
+        ReservationResultDTO result = reservationService.reserveForMember(
+                "validToken", 100, 1, InventorySelectionDTO.seated(List.of("A1", "A2")));
+
+        assertEquals(List.of("A1", "A2"), result.getSeatNumbers());
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A1"));
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("A2"));
+        assertEquals(SeatStatus.AVAILABLE, seatedZone.getSeatStatus("A3"));
+
+        assertEquals(List.of("A1", "A2"),
+                activeOrder.getItems().stream().map(CartLineItem::getSeatNumber).toList());
     }
 
     @Test
-    @Disabled("Enable after test-data builder supports seated venue maps")
-    void GivenTwoMembersSelectSameSeat_WhenReserveConcurrently_ThenOnlyOneReservationSucceeds() {
-        
+    void GivenTwoMembersSelectSameSeat_WhenReserveConcurrently_ThenOnlyOneReservationSucceeds()
+            throws InterruptedException {
+
+        int numberOfThreads = 2;
+        String contestedSeat = "A1";
+
+        SeatedZone seatedZone = new SeatedZone(1, "Orchestra", 120.0,
+                List.of(new Seat("A1", 0, 0), new Seat("A2", 1, 0)));
+        when(event.getVenueMap().getZone(1)).thenReturn(seatedZone);
+        doAnswer(inv -> {
+            InventorySelection selection = inv.getArgument(1);
+            seatedZone.reserve(selection);
+            return null;
+        }).when(event).reserveInventory(eq(1), any(InventorySelection.class));
+
+        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
+        CountDownLatch readyLatch = new CountDownLatch(numberOfThreads);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(numberOfThreads);
+
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger failureCount = new AtomicInteger(0);
+
+        for (int i = 0; i < numberOfThreads; i = i + 1) {
+            final String token = "member-token-" + i;
+            final int userId = i + 1;
+
+            when(sessionManager.validateToken(token)).thenReturn(true);
+            when(sessionManager.extractUserId(token)).thenReturn(userId);
+            when(activeOrderRepository.getByUserId(userId)).thenReturn(null);
+
+            executorService.submit(() -> {
+                try {
+                    readyLatch.countDown();
+                    startLatch.await();
+
+                    reservationService.reserveForMember(token, 100, 1, InventorySelectionDTO.seated(List.of(contestedSeat)));
+
+                    successCount.incrementAndGet();
+
+                } catch (Exception e) {
+                    failureCount.incrementAndGet();
+
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        readyLatch.await();
+        startLatch.countDown();
+
+        boolean finished = doneLatch.await(5, TimeUnit.SECONDS);
+        executorService.shutdown();
+
+        assertEquals(true, finished);
+        assertEquals(1, successCount.get());
+        assertEquals(numberOfThreads - 1, failureCount.get());
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus(contestedSeat));
+        assertEquals(1, seatedZone.getReservedAmount());
     }
 
     @Test
-    @Disabled("Enable after test-data builder supports seated venue maps")
     void GivenGuestSelectsSeats_WhenReserveSeats_ThenGuestCartContainsSeatNumbers() {
-        
+        SeatedZone seatedZone = new SeatedZone(1, "Balcony", 80.0,
+                List.of(new Seat("C1", 0, 0), new Seat("C2", 1, 0)));
+        when(event.getVenueMap().getZone(1)).thenReturn(seatedZone);
+        doAnswer(inv -> {
+            InventorySelection selection = inv.getArgument(1);
+            seatedZone.reserve(selection);
+            return null;
+        }).when(event).reserveInventory(eq(1), any(InventorySelection.class));
+        when(activeOrderRepository.getBySessionId("guest-session")).thenReturn(Optional.empty());
+
+        ReservationResultDTO result = reservationService.reserveForGuest(
+                "guest-session", 100, 1, InventorySelectionDTO.seated(List.of("C1", "C2")));
+
+        assertEquals(List.of("C1", "C2"), result.getSeatNumbers());
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("C1"));
+        assertEquals(SeatStatus.RESERVED, seatedZone.getSeatStatus("C2"));
+
+        ArgumentCaptor<ActiveOrder> orderCaptor = ArgumentCaptor.forClass(ActiveOrder.class);
+        verify(activeOrderRepository).save(orderCaptor.capture());
+        ActiveOrder savedGuestOrder = orderCaptor.getValue();
+        assertTrue(savedGuestOrder.isGuest());
+        assertEquals(List.of("C1", "C2"),
+                savedGuestOrder.getItems().stream().map(CartLineItem::getSeatNumber).toList());
     }
 }

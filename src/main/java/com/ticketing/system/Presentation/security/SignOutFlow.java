@@ -6,6 +6,7 @@ import com.ticketing.system.Core.Application.services.AuthenticationService;
 import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.session.CurrentCompanies;
 import com.ticketing.system.Presentation.session.GuestSession;
+import com.ticketing.system.Presentation.session.NotificationSession;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -56,6 +57,7 @@ public class SignOutFlow {
 
         AuthSession.signOut();
         CurrentCompanies.clearCurrentCompany();
+        NotificationSession.clear();
 
         try {
             GuestSessionDTO fresh = authenticationService.startGuestSession();

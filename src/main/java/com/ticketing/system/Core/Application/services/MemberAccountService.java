@@ -5,8 +5,10 @@ import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.PurchaseRecordDTO;
 import com.ticketing.system.Core.Application.dtoMappers.OrderReceiptMapper;
 import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
-import com.ticketing.system.Core.Domain.events.Event;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.exceptions.EntityNotFoundException;
+import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.exceptions.UnauthorizedActionException;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 
@@ -20,12 +22,15 @@ import lombok.extern.slf4j.Slf4j;
 // Separated from AuthenticationService (which is auth-flow only) so personal-data reads don't
 // stretch the auth boundary — see design_walkthrough_summary.md §6.
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
+@Transactional(readOnly = true)
 public class MemberAccountService {
 
-    private final AuthenticationService authenticationService; // For user identity verification, if needed for future methods.
+    private final AuthenticationService authenticationService; // For user identity verification, if needed for future
+                                                               // methods.
     private final IOrderReceiptRepository orderReceiptRepository;
     private final ITicketRepository ticketRepository;
     private final IEventRepository eventRepository; // For event name lookups in history records.
@@ -47,12 +52,12 @@ public class MemberAccountService {
     // user.
     public PurchaseHistoryDTO viewMyHistory(AuthTokenDTO authToken) {
         try {
-            log.info("Received request to view purchase history with authToken: {}", authToken.token());
+            log.debug("Received request to view purchase history.");
             if (!authenticationService.validateToken(authToken.token())) {
                 throw new SecurityException("Invalid auth token");
             }
             int userId = authenticationService.extractUserId(authToken.token());
-            System.out.println("User " + userId + " requested purchase history.");
+            log.debug("User {} requested purchase history.", userId);
             List<OrderReceipt> receipts = orderReceiptRepository.findByHolderUserId(userId);
             List<PurchaseRecordDTO> purchaseRecords = new ArrayList<>();
 
@@ -78,5 +83,34 @@ public class MemberAccountService {
         return new PurchaseHistoryDTO(new ArrayList<>()); // Return empty history on failure.
     }
 
+    // UC-16 (single receipt): one member-owned order, enriched for the receipt page
+    // (#276).
+    // Unlike viewMyHistory (which degrades to an empty list), this THROWS so the
+    // presenter can
+    // tell apart auth failure, a missing receipt, and a receipt that isn't the
+    // caller's (403).
+    public PurchaseRecordDTO viewMyReceipt(String token, int receiptId) {
+        log.info("Received request to view receipt {} for the authenticated member", receiptId);
+        if (!authenticationService.validateToken(token)) {
+            throw new InvalidTokenException();
+        }
+        int userId = authenticationService.extractUserId(token);
+
+        OrderReceipt receipt = orderReceiptRepository.findByOrderReceiptId(receiptId)
+                .orElseThrow(() -> new EntityNotFoundException("OrderReceipt", receiptId));
+
+        // Authorization is a domain concern: a member may only view their own receipt.
+        Integer holderUserId = receipt.getHolderUserId();
+        if (holderUserId == null || holderUserId != userId) {
+            throw new UnauthorizedActionException("view receipt " + receiptId, userId);
+        }
+
+        // Buyer is the member themselves and company isn't shown on the receipt, so
+        // pass null for
+        // those repos (the mapper yields null for the unresolved names — see
+        // OrderReceiptMapper).
+        return new OrderReceiptMapper().toPurchaseRecordDTO(
+                receipt, ticketRepository, eventRepository, null, null);
+    }
 
 }

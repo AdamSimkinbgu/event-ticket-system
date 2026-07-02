@@ -13,21 +13,20 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
- * Boot-time seed for the {@code dev} profile: registers two known users
- * the {@link DevPanel} can sign in as via the real
- * {@link AuthenticationService} login path.
+ * Boot-time seed for the {@code dev} profile: registers the single
+ * {@code dev.member} persona the {@link DevPanel} signs in as via the
+ * real {@link AuthenticationService} login path.
  *
- * <p>Idempotent — if the users already exist (e.g., a JPA-backed dev
+ * <p>Idempotent — if the user already exists (e.g. a JPA-backed dev
  * environment that persists across restarts) the seeder logs and moves
- * on. With the current Memory* repositories the users always need
+ * on. With the current Memory* repositories the user needs
  * (re-)creating on every boot.
  *
- * <p>{@code dev.admin} is intentionally added to
- * {@link com.ticketing.system.Presentation.session.AuthSession#ADMIN_USERNAMES}
- * so a login as that user routes to the admin shell. Production is
- * unaffected: this bean only loads under {@code @Profile("dev")} and
- * {@code RegisterView} refuses to register admin-pool names from the
- * public form, so prod users can never shadow the dev seed.
+ * <p>There is no dev admin persona. Admin access goes through the real
+ * admin sign-in ({@code /admin/sign-in}) with the default platform admin
+ * from {@code platform.admin.*} in {@code application.yml}; the DevPanel
+ * "Admin" toggle drives that flow. This bean only loads under
+ * {@code @Profile("dev")}.
  */
 @Component
 @Profile("dev")
@@ -37,8 +36,6 @@ public class DevUserSeeder implements ApplicationRunner {
 
     static final String MEMBER_USERNAME = "dev.member";
     static final String MEMBER_EMAIL    = "dev.member@dev.test";
-    static final String ADMIN_USERNAME  = "dev.admin";
-    static final String ADMIN_EMAIL     = "dev.admin@dev.test";
     static final String SHARED_PASSWORD = "password123";
     static final int    SEED_AGE        = 25;
 
@@ -51,7 +48,6 @@ public class DevUserSeeder implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         seed(MEMBER_USERNAME, MEMBER_EMAIL);
-        seed(ADMIN_USERNAME, ADMIN_EMAIL);
     }
 
     private void seed(String username, String email) {

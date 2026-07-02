@@ -16,7 +16,8 @@ import com.ticketing.system.Core.Domain.messaging.Message;
  */
 public class ConversationMapper {
 
-    public ConversationDTO toDTO(Conversation conversation, int viewerId) {
+    public ConversationDTO toDTO(Conversation conversation, int viewerId,
+            String initiatorDisplayName, String counterpartyDisplayName) {
         List<MessageDTO> messages = conversation.getMessages().stream()
                 .map(this::toMessageDTO)
                 .toList();
@@ -32,7 +33,9 @@ public class ConversationMapper {
                 conversation.getCreatedAt(),
                 conversation.getLastMessageAt(),
                 conversation.unreadCountFor(viewerId),
-                messages);
+                messages,
+                initiatorDisplayName,
+                counterpartyDisplayName);
     }
 
     public MessageDTO toMessageDTO(Message message) {

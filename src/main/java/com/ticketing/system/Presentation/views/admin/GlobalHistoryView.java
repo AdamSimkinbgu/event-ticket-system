@@ -2,14 +2,11 @@ package com.ticketing.system.Presentation.views.admin;
 
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.PurchaseRecordDTO;
 import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO.TicketRecordDTO;
-import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
-import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
 import com.ticketing.system.Presentation.components.kit.LkFilterChip;
 import com.ticketing.system.Presentation.components.kit.LkGrid;
-import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.components.kit.LkStat;
@@ -24,6 +21,7 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
@@ -34,7 +32,7 @@ import java.util.Objects;
 import java.util.Set;
 
 @Route(value = "admin/global-history", layout = PlatformAdminLayout.class)
-@PageTitle("Global purchase history · Admin")
+@PageTitle("Global Purchase History · Admin")
 @PermitAll
 @RequireCapability(Capability.VIEW_GLOBAL_HISTORY)
 public class GlobalHistoryView extends LkPage {
@@ -54,11 +52,8 @@ public class GlobalHistoryView extends LkPage {
     public GlobalHistoryView(GlobalHistoryPresenter presenter) {
         this.records = presenter.loadAllRecords();
 
-        title("Global purchase history");
+        title("Global Purchase History");
         subtitle("Every order across the platform — filter by date, company, event, or status.");
-        actions(new LkBtn("Export CSV").variant(LkBtn.Variant.secondary)
-            .icon(new LkIcon("chart", 15))
-            .onClick(e -> Toasts.success("Global history exported (mock).")));
 
         add(buildFilters());
         statsSlot = new Div();
@@ -99,15 +94,9 @@ public class GlobalHistoryView extends LkPage {
         Set<String> sel = dateChip.getSelected();
         if (sel.isEmpty() || sel.contains(DATE_ALL)) return true;
         if (r.purchasedAt() == null) return false;
-        LocalDateTime now = LocalDateTime.now();
-        String pick = sel.iterator().next();
-        LocalDateTime from = switch (pick) {
-            case "Last 7 days" -> now.minusDays(7);
-            case "Last 30 days" -> now.minusDays(30);
-            case "This quarter" -> now.minusMonths(3);
-            case "This year" -> now.minusYears(1);
-            default -> null;
-        };
+        // Calendar-correct windows ("This quarter"/"This year" start on the quarter/year boundary),
+        // shared with the Company Sales page filter.
+        LocalDateTime from = SalesDateRange.startOf(sel.iterator().next(), LocalDate.now());
         return from == null || !r.purchasedAt().isBefore(from);
     }
 

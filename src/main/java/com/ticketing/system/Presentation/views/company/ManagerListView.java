@@ -54,7 +54,7 @@ public class ManagerListView extends LkPage {
 
         title("Managers");
         subtitle("Roster and permissions for your production company.");
-        actions(new LkBtn("Invite manager")
+        actions(new LkBtn("Invite Manager")
             .variant(LkBtn.Variant.primary)
             .icon(new LkIcon("plus", 15))
             .onClick(e -> UI.getCurrent().navigate(ManagerInvitationView.class)));
@@ -73,14 +73,14 @@ public class ManagerListView extends LkPage {
             case ManagerListPresenter.Outcome.NotAuthenticated ignored -> content.add(banner(
                 "Your session has expired — please sign in again."));
             case ManagerListPresenter.Outcome.Failure fail -> content.add(banner(
-                "Could not load managers: " + fail.reason()));
+                Lk.withReason("Could not load managers", fail.reason()))); 
         }
     }
 
     private void renderRosters(ManagerListPresenter.Outcome.Success ok) {
-        content.add(Lk.h2("Active managers"));
+        content.add(Lk.h2("Active Managers"));
         content.add(buildActiveCard(ok.activeManagers()));
-        content.add(Lk.h2("Pending invitations"));
+        content.add(Lk.h2("Pending Invitations"));
         content.add(buildPendingCard(ok.pendingInvitations()));
     }
 
@@ -150,7 +150,7 @@ public class ManagerListView extends LkPage {
             case ManagerListPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case ManagerListPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not update permissions: " + fail.reason());
+                Toasts.failure("Could not update permissions — please try again.");
         }
     }
 
@@ -163,7 +163,7 @@ public class ManagerListView extends LkPage {
             case ManagerListPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case ManagerListPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not revoke manager: " + fail.reason());
+                Toasts.failure("Could not revoke the manager — please try again.");
         }
     }
 

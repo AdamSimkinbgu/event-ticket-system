@@ -45,11 +45,12 @@ public class CartView extends LkPage {
             case CartPresenter.LoadOutcome.NotAuthenticated na -> clearCart();
             case CartPresenter.LoadOutcome.Failure f -> {
                 clearCart();
-                Toasts.failure("Could not load your cart: " + f.reason());
+                Toasts.failure("Could not load your cart — please try again."
+                        + (f.reason() != null && !f.reason().isBlank() ? " (" + f.reason() + ")" : ""));
             }
         }
 
-        title("Your cart");
+        title("Your Cart");
         renderHeaderSubtitle();
         add(buildSplit());
     }
@@ -113,7 +114,8 @@ public class CartView extends LkPage {
                         Toasts.success("Removed from cart.");
                     }
                     case CartPresenter.RemoveOutcome.Failure f ->
-                        Toasts.failure("Failed to remove item: " + f.reason());
+                        Toasts.failure("Could not remove the item — please try again."
+                                + (f.reason() != null && !f.reason().isBlank() ? " (" + f.reason() + ")" : ""));
                 }
             });
 
@@ -145,7 +147,7 @@ public class CartView extends LkPage {
             "  s--; " +
             "  window.cartTimerId = setTimeout(tick,1000);" +
             "}" +
-            "tick();", remainingSeconds);
+            "tick();", (int) remainingSeconds);   // Vaadin's JsonCodec can't encode Long — pass an int (a hold timer never overflows)
 
         timer.addDetachListener(ev ->
             timer.getElement().executeJs("if(window.cartTimerId) { clearTimeout(window.cartTimerId); }"));
@@ -189,7 +191,7 @@ public class CartView extends LkPage {
         col.add(Lk.divider());
         col.add(totalRow("Total", total));
 
-        proceedBtn = new LkBtn("Proceed to checkout →")
+        proceedBtn = new LkBtn("Proceed to Checkout →")
             .variant(LkBtn.Variant.primary)
             .size(LkBtn.Size.l)
             .full()

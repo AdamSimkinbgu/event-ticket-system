@@ -8,28 +8,82 @@ import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 import com.ticketing.system.Core.Domain.policies.purchase.AndPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.NoPurchasePolicy;
 import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicy;
+import com.ticketing.system.Core.Domain.policies.purchase.PurchasePolicyJsonConverter;
 
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+import jakarta.persistence.Version;
+
+// V3: mapped to JPA. companyId is an ASSIGNED @Id (minted by nextId(), never @GeneratedValue);
+// founderId is a plain by-id column; status is stored by name; @Version drives optimistic locking.
+// ownerIds and managers map to two @ElementCollection by-id side-tables (the owner/manager
+// mutual-exclusion rule stays enforced in checkInvariants, not at the DB). The recursive
+// purchasePolicy tree is stored as one JSON text column (PurchasePolicyJsonConverter). The
+// discountPolicies are empty company-level stubs carrying no state, so they are @Transient. A
+// protected no-arg ctor lets Hibernate hydrate; the public ctor still enforces the invariants.
+@Entity
+@Table(name = "companies")
 public class ProductionCompany implements InvariantChecked {
-    private final int companyId;
+    @Id
+    private int companyId;
     /**
      * The original creator of the company. Immutable: the founder cannot be
      * removed from {@link #ownerIds} and cannot self-resign. The founder
      * always remains an owner — the two roles are coupled by design.
      */
-    private final int founderId;
+    @Column(name = "founder_id", nullable = false)
+    private int founderId;
     /**
      * All current owners (includes {@link #founderId} at all times). Any owner
      * can add or remove another owner; non-founder owners can also self-resign.
      */
-    private final List<Integer> ownerIds;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "company_owner_ids", joinColumns = @JoinColumn(name = "company_id"))
+    @Column(name = "owner_id")
+    private List<Integer> ownerIds;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private CompanyStatus companyStatus;
+
+    @Column(nullable = false)
     private String name;
+
+    @Column
     private String description;
+
+    @Column
     private Double rating;
-    private List<DiscountPolicy> discountPolicies;
+
+    // Empty company-level policy stubs carry no state — not persisted; kept as an empty list.
+    @Transient
+    private List<DiscountPolicy> discountPolicies = new ArrayList<>();
+
+    @Convert(converter = PurchasePolicyJsonConverter.class)
+    @Column(name = "purchase_policy", columnDefinition = "text", nullable = false)
     private PurchasePolicy purchasePolicy;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "company_managers", joinColumns = @JoinColumn(name = "company_id"))
+    @Column(name = "manager_id")
     private List<Integer> managers;
-    
+
+    @Version
+    private Long version;
+
+    /** For JPA only — do not call from application code. */
+    protected ProductionCompany() { }
+
     public ProductionCompany(int companyId, int founderId, String name, CompanyStatus companyStatus, String description, Double rating) {
         this.companyId = companyId;
         this.founderId = founderId;
@@ -225,8 +279,16 @@ public class ProductionCompany implements InvariantChecked {
     }
 
     public void setRating(Double rating) {
+        // Validate-before-commit: roll back if the new rating is out of range, so a rejected
+        // call never leaves the company with a corrupted rating.
+        Double previous = this.rating;
         this.rating = rating;
-        checkInvariants();
+        try {
+            checkInvariants();
+        } catch (RuntimeException ex) {
+            this.rating = previous;
+            throw ex;
+        }
     }
 
     // UC-18 — Founder is the original creator, immutable for the lifetime of the
@@ -264,6 +326,10 @@ public class ProductionCompany implements InvariantChecked {
         }
         if (name == null || name.isBlank()) {
             throw new IllegalStateException("ProductionCompany invariant violated: name must be non-blank");
+        }
+        if (rating != null && (!Double.isFinite(rating) || rating < 0 || rating > 5)) {
+            throw new IllegalStateException(
+                    "ProductionCompany invariant violated: rating must be a finite value between 0 and 5 (was " + rating + ")");
         }
         if (companyStatus == null) {
             throw new IllegalStateException("ProductionCompany invariant violated: status must not be null");

@@ -10,6 +10,7 @@ import com.ticketing.system.Presentation.components.kit.LkIcon;
 import com.ticketing.system.Presentation.components.kit.LkPage;
 import com.ticketing.system.Presentation.components.kit.LkRow;
 import com.ticketing.system.Presentation.layouts.MainLayout;
+import com.ticketing.system.Presentation.session.OrderSession;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.vaadin.flow.component.Component;
@@ -21,14 +22,13 @@ import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
-import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Route(value = "order-confirmed", layout = MainLayout.class)
-@PageTitle("Order confirmed · TicketHub")
+@PageTitle("Order Confirmed · TicketHub")
 @AnonymousAllowed
 public class OrderConfirmationView extends LkPage implements BeforeEnterObserver {
 
@@ -36,23 +36,24 @@ public class OrderConfirmationView extends LkPage implements BeforeEnterObserver
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
-        VaadinSession s = VaadinSession.getCurrent();
-        if (s == null) {
-            result = null;
-        } else {
-            result = (CheckoutResultDTO) s.getAttribute("checkout.result");
-            s.setAttribute("checkout.result", null);
-        }
+        // Read-once: grab the result handed over by CheckoutView, then clear it so a
+        // refresh / re-navigation reroutes to Browse instead of re-showing the receipt.
+        result = OrderSession.result();
+        OrderSession.clear();
         if (result == null) {
             event.rerouteTo(BrowseEventsView.class);
             return;
         }
-    }
-
-    public OrderConfirmationView() {
+        // Build the page here, not in the constructor: the constructor runs before
+        // beforeEnter, when `result` is still null — building there would render an
+        // empty receipt (no tickets, "—" ids/barcodes).
         add(buildConfirmHero());
         add(buildTicketsCard());
         add(buildActions());
+    }
+
+    public OrderConfirmationView() {
+        // Intentionally empty — content is built in beforeEnter once `result` is set.
     }
 
     private Component buildConfirmHero() {
@@ -73,8 +74,11 @@ public class OrderConfirmationView extends LkPage implements BeforeEnterObserver
         String totalDisplay = (result != null)
             ? Money.format(Money.toCents(result.totalCharged()))
             : "$0.00";
+        // The real gateway transaction id (what WSEP `pay` returned), shown as-is so
+        // it matches the receipt's "Transaction <externalTransactionId>" — not a
+        // hex-mangled derivative.
         String transactionDisplay = (result != null)
-            ? String.format("%04x", result.paymentTransactionId())
+            ? String.valueOf(result.paymentTransactionId())
             : "—";
 
         Span sub = new Span(receiptDisplay + " · Transaction " + transactionDisplay
@@ -87,18 +91,18 @@ public class OrderConfirmationView extends LkPage implements BeforeEnterObserver
     }
 
     private Component buildTicketsCard() {
-        LkCard card = new LkCard("Your tickets").pad(0);
+        LkCard card = new LkCard("Your Tickets").pad(0);
 
         LkGrid grid = new LkGrid()
             .col("Ticket ID",  "ticketId")
             .col("Barcode",    "barcode");
 
-        if (result != null && result.issuedTicketIds() != null && !result.issuedTicketIds().isEmpty()) {
-            for (int ticketId : result.issuedTicketIds()) {
-                ticketRow(grid, ticketId);
+        if (result != null && result.issuedTickets() != null && !result.issuedTickets().isEmpty()) {
+            for (CheckoutResultDTO.IssuedTicketDTO ticket : result.issuedTickets()) {
+                ticketRow(grid, ticket.ticketId(), ticket.barcode());
             }
         } else {
-            ticketRow(grid, 0);
+            ticketRow(grid, 0, null);
         }
 
         grid.build();
@@ -106,28 +110,31 @@ public class OrderConfirmationView extends LkPage implements BeforeEnterObserver
         return card;
     }
 
-    private void ticketRow(LkGrid grid, int ticketId) {
+    private void ticketRow(LkGrid grid, int ticketId, String barcodeValue) {
         Map<String, Object> row = new LinkedHashMap<>();
-        
+
         if (ticketId > 0) {
             row.put("ticketId", String.valueOf(ticketId));
-            Span barcode = Lk.mono("▮▯▮▯▮ " + String.format("%04X-%04X", ticketId >> 16, ticketId & 0xFFFF));
+            // Show the barcode the issuer actually returned (real WSEP TIX code / stub code),
+            // not a value fabricated from the ticket id.
+            String value = (barcodeValue != null && !barcodeValue.isBlank()) ? barcodeValue : "Not yet issued";
+            Span barcode = Lk.mono(value);
             barcode.addClassName("bz-barcode");
             row.put("barcode", barcode);
         } else {
             row.put("ticketId", "—");
             row.put("barcode", "—");
         }
-        
+
         grid.row(row);
     }
 
     private Component buildActions() {
         LkRow row = new LkRow().gap(10);
-        row.add(new LkBtn("View my tickets")
+        row.add(new LkBtn("View My Tickets")
             .variant(LkBtn.Variant.primary)
             .onClick(e -> UI.getCurrent().navigate(MyAccountView.class)));
-        row.add(new LkBtn("Browse more events")
+        row.add(new LkBtn("Browse More Events")
             .variant(LkBtn.Variant.secondary)
             .onClick(e -> UI.getCurrent().navigate(BrowseEventsView.class)));
         return row;

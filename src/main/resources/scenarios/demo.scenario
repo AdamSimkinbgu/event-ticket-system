@@ -1,0 +1,70 @@
+# ============================================================================
+#  DEMO SCENARIO  —  rich seeded data for day-to-day dev use
+# ============================================================================
+#  Same engine and operation vocabulary as review.scenario (see that file's
+#  header for the full operation reference). This one boots a populated system:
+#  two companies, several events with seated + standing zones, member and guest
+#  purchases, a sold-out event, a cancelled + refunded event, and messaging.
+#
+#  Default password for every seeded member is "password123".
+#  Run it with:  ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+#  (this is the default scenario; override with --seed.scenario=classpath:scenarios/review.scenario)
+# ============================================================================
+
+# --- people: 2 founders, 3 buyers, a guest, and the platform admin ---
+register alice password123 alice@demo.test 34
+register bob   password123 bob@demo.test   29
+register carol password123 carol@demo.test 26
+register dave  password123 dave@demo.test  31
+register erin  password123 erin@demo.test  23
+login alice
+login bob
+login carol
+login dave
+login erin
+guest g1
+login-admin admin admin admin
+
+# --- companies + an accepted manager appointment (bob manages Live Nation) ---
+open-company alice live "Live Nation Israel" "Arena tours and festivals"
+appoint-manager alice live bob perms=CONFIGURE_VENUE,VIEW_SALES
+confirm bob live
+open-company carol habima "Habima Theatre" "Israel's national theatre"
+
+# --- events (published, on sale) ---
+add-event alice live   coldplay seated:3x8@220 seated:4x10@140 standing:250@90 name="Coldplay" category=CONCERT days=20 rating=4.8 publish=true
+add-event alice live   beyonce  standing:200@320 standing:500@180             name="Beyonce"  category=CONCERT days=35 rating=4.9 publish=true
+add-event carol habima othello  seated:4x10@200 seated:3x10@130               name="Othello"  category=THEATER days=14 rating=4.6 publish=true
+
+# --- purchases: member standing, member seated, and a guest ---
+reserve carol coldplay standing qty=2
+checkout carol
+reserve dave othello seated qty=3
+checkout dave
+reserve g1 beyonce standing qty=2
+checkout g1 email=g1@guest.demo.test age=27
+
+# --- a reservation left pending in erin's cart on first load ---
+reserve erin coldplay standing qty=2
+
+# --- sold-out: a one-zone event bought out entirely, then asserted SOLD_OUT ---
+add-event alice live indie standing:6@80 name="Indie Night" category=CONCERT days=25 rating=4.3 publish=true
+reserve dave indie standing qty=6
+checkout dave
+assert-status indie SOLD_OUT by=alice
+
+# --- cancellation + refund: a buyer, then cancel, then asserted CANCELED ---
+add-event carol habima gala standing:50@150 name="Postponed Gala" category=OTHER days=30 rating=4.0 publish=true
+reserve carol gala standing qty=2
+checkout carol
+cancel-event carol gala
+assert-status gala CANCELED by=carol
+
+# --- negative check: reserving on an unpublished (SCHEDULED) event must fail ---
+add-event alice live draft standing:100@100 name="Not On Sale Yet" days=40 rating=4.2
+expect-error reserve carol draft standing qty=1
+
+# --- messaging (centralized Conversation aggregate) ---
+contact-company carol live subject="Parking at the venue" body="Is there free parking near the arena, or should I plan for a paid lot?"
+submit-complaint dave subject="Refund delay" body="My refund from a cancelled show hasn't reached my card yet. Can you check?"
+announce admin title="Reduced support hours" body="Customer support runs reduced hours over the holidays; refunds may take an extra business day." audience=BROADCAST_MEMBERS

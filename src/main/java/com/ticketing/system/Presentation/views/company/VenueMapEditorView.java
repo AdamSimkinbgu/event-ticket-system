@@ -3,6 +3,7 @@ package com.ticketing.system.Presentation.views.company;
 import com.ticketing.system.Core.Application.dto.GridPlacementDTO;
 import com.ticketing.system.Core.Application.dto.VenueMapConfigDTO;
 import com.ticketing.system.Core.Application.dto.ZoneDetailDTO;
+import com.ticketing.system.Core.Domain.events.SeatLabels;
 import com.ticketing.system.Presentation.components.Toasts;
 import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
@@ -36,7 +37,7 @@ import java.util.List;
 import java.util.Locale;
 
 @Route(value = "owner/venue/:eventId", layout = WorkspaceLayout.class)
-@PageTitle("Venue map · TicketHub")
+@PageTitle("Venue Map · TicketHub")
 @PermitAll
 @RequireCapability(Capability.MANAGE_VENUE_MAPS)
 public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
@@ -76,12 +77,12 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     public VenueMapEditorView(VenueMapPresenter presenter) {
         this.presenter = presenter;
         zoneStates.add(new ZoneState("Zone 1", true, 10, 20, 0, 100.0, defaultPlacement(0)));
-        title("Venue map editor");
+        title("Venue Map Editor");
         subtitle("Place zones on the " + gridRows + "×" + gridCols + " venue grid, then define seats.");
         actions(
             new LkBtn("Cancel").variant(LkBtn.Variant.tertiary)
                 .onClick(e -> UI.getCurrent().navigate(CompanyEventListView.class)),
-            new LkBtn("Save map").variant(LkBtn.Variant.primary)
+            new LkBtn("Save Map").variant(LkBtn.Variant.primary)
                 .onClick(e -> saveMap())
         );
         add(buildSplit());
@@ -120,7 +121,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
             case VenueMapPresenter.LoadOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case VenueMapPresenter.LoadOutcome.Failure fail ->
-                Toasts.failure("Could not load the venue map: " + fail.reason());
+                Toasts.failure("Could not load the venue map — please try again.");
         }
     }
 
@@ -140,7 +141,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     }
 
     private Component buildCanvasCard() {
-        LkCard card = new LkCard("Venue grid").pad(14);
+        LkCard card = new LkCard("Venue Grid").pad(14);
         gridRowsField.setMin(1); gridRowsField.setMax(MAX_GRID); gridRowsField.setValue(gridRows);
         gridColsField.setMin(1); gridColsField.setMax(MAX_GRID); gridColsField.setValue(gridCols);
         gridRowsField.addValueChangeListener(e -> applyCanvasSize());
@@ -213,7 +214,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     }
 
     private Component buildMapCard() {
-        LkCard card = new LkCard("Map preview").pad(14);
+        LkCard card = new LkCard("Map Preview").pad(14);
         card.add(mapHolder);
         Span hint = Lk.muted("Zones are positioned from their grid placement. Click a zone to edit it.");
         hint.getStyle().set("font-size", "12px").set("margin-top", "8px").set("display", "block");
@@ -265,7 +266,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
     // ── Zone editor ──────────────────────────────────────────────────────────
 
     private Component buildZoneEditorCard() {
-        LkCard card = new LkCard("Edit zone").pad(20);
+        LkCard card = new LkCard("Edit Zone").pad(20);
 
         zoneNameField.setWidthFull();
         priceField.setPrefixComponent(new Span("$"));
@@ -301,7 +302,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
             standingEditor.setVisible(!seated);
         });
 
-        LkCard placementCard = new LkCard("Grid placement (" + gridRows + "×" + gridCols + ")").pad(12);
+        LkCard placementCard = new LkCard("Grid Placement (" + gridRows + "×" + gridCols + ")").pad(12);
         Div placeGrid = new Div();
         placeGrid.getStyle().set("display", "grid").set("grid-template-columns", "1fr 1fr").set("gap", "12px");
         configurePlacementField(gridRowField, gridRows);
@@ -316,7 +317,7 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
         zoneActions.add(
             new LkBtn("Revert").variant(LkBtn.Variant.secondary)
                 .onClick(e -> loadZoneIntoEditor(selectedZoneIdx)),
-            new LkBtn("Apply zone").variant(LkBtn.Variant.primary)
+            new LkBtn("Apply Zone").variant(LkBtn.Variant.primary)
                 .onClick(e -> saveZone())
         );
 
@@ -449,16 +450,16 @@ public class VenueMapEditorView extends LkPage implements BeforeEnterObserver {
             case VenueMapPresenter.SaveOutcome.NoCompany ignored ->
                 Toasts.failure("You don't own a company — register one first.");
             case VenueMapPresenter.SaveOutcome.Failure fail ->
-                Toasts.failure("Could not save venue map: " + fail.reason());
+                Toasts.failure("Could not save the venue map — please try again.");
         }
     }
 
     private List<VenueMapConfigDTO.SeatConfigDTO> generateSeats(int rows, int seatsPerRow) {
         List<VenueMapConfigDTO.SeatConfigDTO> seats = new ArrayList<>();
         for (int r = 0; r < rows; r++) {
-            char rowLabel = (char) ('A' + r);
+            String rowLabel = SeatLabels.rowLabel(r);
             for (int c = 1; c <= seatsPerRow; c++) {
-                seats.add(new VenueMapConfigDTO.SeatConfigDTO(rowLabel + "" + c, c, r));
+                seats.add(new VenueMapConfigDTO.SeatConfigDTO(rowLabel + c, c, r));
             }
         }
         return seats;

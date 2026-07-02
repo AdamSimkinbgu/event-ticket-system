@@ -37,11 +37,12 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
  * {@link VkQuantitySelector} for STANDING.
  */
 @Route(value = "events/:eventId/seats/:zoneId", layout = MainLayout.class)
-@PageTitle("Pick tickets · TicketHub")
+@PageTitle("Pick Tickets · TicketHub")
 @AnonymousAllowed
 public class SeatPickerView extends LkPage implements BeforeEnterObserver {
 
-    private static final int SEAT_STEP = 34;
+    // Derived from the tile size so seats never overlap or drift — one source of truth.
+    private static final int SEAT_STEP = VkSeatedZonePicker.TILE_PX + 6;
 
     private final SeatPickerPresenter presenter;
 
@@ -152,7 +153,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
 
     private Component buildSelectionRail() {
         LkCol rail = new LkCol().gap(14);
-        LkCard selection = new LkCard("Your selection").pad(16);
+        LkCard selection = new LkCard("Your Selection").pad(16);
         selectionListCol = new LkCol().gap(10);
         selection.add(selectionListCol);
         rail.add(selection);
@@ -173,9 +174,12 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
             selectionListCol.add(hint);
             return;
         }
+        Div list = new Div();
+        list.addClassName("vz-sellist");
         for (String label : labels) {
-            selectionListCol.add(selectedSeatRow(label));
+            list.add(selectedSeatRow(label));
         }
+        selectionListCol.add(list);
         selectionListCol.add(Lk.divider());
 
         double total = labels.size() * zonePrice;
@@ -186,7 +190,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         totalRow.add(totalDisplay);
         selectionListCol.add(totalRow);
 
-        selectionListCol.add(new LkBtn("Add to cart →")
+        selectionListCol.add(new LkBtn("Add to Cart →")
             .variant(LkBtn.Variant.primary).size(LkBtn.Size.l).full()
             .onClick(e -> reserveSeated()));
     }
@@ -228,7 +232,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
                 UI.getCurrent().navigate(CartView.class);
             }
             case SeatPickerPresenter.ReserveOutcome.Failure f ->
-                Toasts.failure(f.message());
+                Toasts.failure(reserveFailureMessage(f.message()));
         }
     }
 
@@ -236,10 +240,10 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         Div wrap = new Div();
         wrap.add(buildBreadcrumb(zone.getName() + " · standing"));
 
-        LkCard card = new LkCard("General Admission · standing").pad(18);
+        LkCard card = new LkCard("General Admission · Standing").pad(18);
         LkCol col = new LkCol().gap(16);
-        col.add(new VkStandingZone(zone.getName(), zone.getSoldAmount(), zone.getCapacity(),
-                money(zonePrice) + " each"));
+        col.add(new VkStandingZone(zone.getName(), zone.getSoldAmount(), zone.getReservedAmount(),
+                zone.getCapacity(), money(zonePrice) + " each"));
 
         qtySelector = new VkQuantitySelector(
                 Math.max(0, zone.getAvailableAmount()),
@@ -248,7 +252,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
         col.add(qtySelector);
         col.add(Lk.divider());
 
-        holdButton = new LkBtn("Hold tickets →").variant(LkBtn.Variant.primary).full()
+        holdButton = new LkBtn("Hold Tickets →").variant(LkBtn.Variant.primary).full()
                 .onClick(e -> reserveStanding());
         col.add(holdButton);
         updateHoldButton();
@@ -283,8 +287,15 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
                 UI.getCurrent().navigate(CartView.class);
             }
             case SeatPickerPresenter.ReserveOutcome.Failure f ->
-                Toasts.failure(f.message());
+                Toasts.failure(reserveFailureMessage(f.message()));
         }
+    }
+
+    /** Surface the real reserve-failure reason when present, else a friendly fallback. */
+    private static String reserveFailureMessage(String raw) {
+        return (raw == null || raw.isBlank())
+            ? "Couldn't reserve those tickets — please try again."
+            : raw;
     }
 
     private Component buildBreadcrumb(String trailText) {
@@ -300,7 +311,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
     }
 
     private Component buildLockingExplainerCard() {
-        LkCard card = new LkCard("How locking works").pad(16);
+        LkCard card = new LkCard("How Locking Works").pad(16);
         LkCol col = new LkCol().gap(9);
         col.add(lockLegendRow("mine", "<b>In your order</b> — held for you for 10 minutes."));
         col.add(lockLegendRow("held", "<b>Locked by others</b> — another buyer is mid-purchase."));
@@ -326,7 +337,7 @@ public class SeatPickerView extends LkPage implements BeforeEnterObserver {
     }
 
     private Component buildStatesReferenceCard() {
-        LkCard card = new LkCard("Race-condition states")
+        LkCard card = new LkCard("Race-Condition States")
             .subtitle("What the seat colours mean under load")
             .pad(18);
         Div grid = new Div();

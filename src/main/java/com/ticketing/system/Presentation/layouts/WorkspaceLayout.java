@@ -1,5 +1,7 @@
 package com.ticketing.system.Presentation.layouts;
 
+import com.ticketing.system.Presentation.components.NotificationBellComponent;
+import com.ticketing.system.Presentation.presenters.notifications.NotificationBellPresenter;
 import com.ticketing.system.Presentation.components.kit.LkAccountMenu;
 import com.ticketing.system.Presentation.components.kit.LkMenu;
 import com.ticketing.system.Presentation.components.kit.LkSideNav;
@@ -11,11 +13,12 @@ import com.ticketing.system.Presentation.session.AuthSession;
 import com.ticketing.system.Presentation.views.account.MyAccountView;
 import com.ticketing.system.Presentation.views.account.MyInvitationsView;
 import com.ticketing.system.Presentation.views.account.MyProfileView;
-import com.ticketing.system.Presentation.views.admin.CompanySalesView;
 import com.ticketing.system.Presentation.views.auth.LoginView;
 import com.ticketing.system.Presentation.views.catalog.BrowseEventsView;
 import com.ticketing.system.Presentation.views.company.CompanyEventListView;
 import com.ticketing.system.Presentation.views.company.CompanyInquiryInboxView;
+import com.ticketing.system.Presentation.views.company.CompanyOrgTreeView;
+import com.ticketing.system.Presentation.views.company.CompanySalesView;
 import com.ticketing.system.Presentation.views.company.ManagerListView;
 import com.ticketing.system.Presentation.views.company.MyCompaniesView;
 import com.ticketing.system.Presentation.views.company.OwnerAppointmentView;
@@ -58,7 +61,8 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
         new DrawerEntry(new LkSideNav.Item("comment",   "Inquiries",         CompanyInquiryInboxView.class),  Capability.RESPOND_INQUIRIES),
         new DrawerEntry(new LkSideNav.Item("chart",     "Company Sales",     CompanySalesView.class),         Capability.VIEW_COMPANY_SALES),
         new DrawerEntry(new LkSideNav.Item("users",     "Managers",          ManagerListView.class),          Capability.APPOINT_MANAGER),
-        new DrawerEntry(new LkSideNav.Item("crown",     "Appoint Co-owner",  OwnerAppointmentView.class),     Capability.APPOINT_CO_OWNER),
+        new DrawerEntry(new LkSideNav.Item("crown",     "Appoint Co-Owner",  OwnerAppointmentView.class),     Capability.APPOINT_CO_OWNER),
+        new DrawerEntry(new LkSideNav.Item("org",       "Organizational Tree", CompanyOrgTreeView.class),     Capability.VIEW_COMPANY_ORG_TREE),
         new DrawerEntry(new LkSideNav.Item("policy",    "Purchase Policies", PurchasePolicyEditorView.class), Capability.EDIT_PURCHASE_POLICIES)
     );
 
@@ -69,7 +73,8 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
         CompanyInquiryInboxView.class,  "Inquiries",
         CompanySalesView.class,         "Company Sales",
         ManagerListView.class,          "Managers",
-        OwnerAppointmentView.class,     "Appoint Co-owner",
+        OwnerAppointmentView.class,     "Appoint Co-Owner",
+        CompanyOrgTreeView.class,       "Organizational Tree",
         PurchasePolicyEditorView.class, "Purchase Policies"
     );
 
@@ -77,9 +82,11 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
     private LkSideNav ownerNav;
     private final Div drawerWrap = new Div();
     private final SignOutFlow signOutFlow;
+    private final NotificationBellPresenter bellPresenter;
 
-    public WorkspaceLayout(SignOutFlow signOutFlow) {
+    public WorkspaceLayout(SignOutFlow signOutFlow, NotificationBellPresenter bellPresenter) {
         this.signOutFlow = signOutFlow;
+        this.bellPresenter = bellPresenter;
         rebuildTopBar();
         addToDrawer(drawerWrap);
         rebuildDrawer(null);
@@ -100,7 +107,7 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
                 new LkTopBar.NavItem("Browse",     BrowseEventsView.class),
                 new LkTopBar.NavItem("My Tickets", MyAccountView.class)
             ), null)
-            .bellDefault(false)
+            .bell(new NotificationBellComponent(bellPresenter::markRead))
             .account(initials(name), name, buildOwnerMenu(name));
         addToNavbar(topBar);
     }
@@ -119,14 +126,14 @@ public class WorkspaceLayout extends AppLayout implements AfterNavigationObserve
 
     private LkAccountMenu buildOwnerMenu(String name) {
         LkMenu menu = new LkMenu(
-            new LkMenu.Item("ticket",    "My account").onClick(() -> UI.getCurrent().navigate(MyAccountView.class)),
-            new LkMenu.Item("users",     "My profile").onClick(() -> UI.getCurrent().navigate(MyProfileView.class)),
-            new LkMenu.Item("crown",     "My invitations").onClick(() -> UI.getCurrent().navigate(MyInvitationsView.class)),
-            new LkMenu.Item("briefcase", "My companies").onClick(() -> UI.getCurrent().navigate(MyCompaniesView.class)),
+            new LkMenu.Item("ticket",    "My Account").onClick(() -> UI.getCurrent().navigate(MyAccountView.class)),
+            new LkMenu.Item("users",     "My Profile").onClick(() -> UI.getCurrent().navigate(MyProfileView.class)),
+            new LkMenu.Item("crown",     "My Invitations").onClick(() -> UI.getCurrent().navigate(MyInvitationsView.class)),
+            new LkMenu.Item("briefcase", "My Companies").onClick(() -> UI.getCurrent().navigate(MyCompaniesView.class)),
             new LkMenu.Divider(),
-            new LkMenu.Item("arrowLeft", "Back to buyer site").onClick(() -> UI.getCurrent().navigate(BrowseEventsView.class)),
+            new LkMenu.Item("arrowLeft", "Back to Buyer Site").onClick(() -> UI.getCurrent().navigate(BrowseEventsView.class)),
             new LkMenu.Divider(),
-            new LkMenu.Item("logout",    "Sign out").danger().onClick(() -> {
+            new LkMenu.Item("logout",    "Sign Out").danger().onClick(() -> {
                 signOutFlow.execute();
                 UI.getCurrent().navigate(LoginView.class);
             })

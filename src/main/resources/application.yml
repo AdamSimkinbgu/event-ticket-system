@@ -9,9 +9,18 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
+    # No explicit dialect: Hibernate auto-detects it per connection (PostgreSQL on the
+    # deploy/run target, H2 in dev and the @DataJpaTest contract tests), so one config
+    # serves every backend — a config-only switch to the cloud DB.
+
+  # Activating the `dev` profile also activates `jpa`, so dev develops on the real
+  # persistence path (JPA + H2 — see application-dev.yml). Deploy/run = `jpa` + Postgres.
+  profiles:
+    group:
+      dev: jpa
+      # Running against Supabase: `supabase` activates the JPA stack + the SSL/pooler datasource
+      # (see application-supabase.yml). Run with SPRING_PROFILES_ACTIVE=supabase + the DB_* env vars.
+      supabase: jpa
 
 # JWT signing secret (consumed by Infrastructure/security/JwtSessionManager — UC-12).
 # In production the secret MUST be supplied via environment variable, never committed.
@@ -37,6 +46,15 @@ constants:
   # System-wide constant
   ticket-reservation-duration: ${TICKET_RESERVATION_DURATION:10}
   order-expiration-duration: ${ORDER_EXPIRATION_DURATION:60}
+
+
+# System Analytics dashboard (UC-46 / #43, #279).
+#  - rate-window-minutes: trailing window the per-minute rates are computed over.
+#  - refresh-interval-ms: how often the dashboard auto-refreshes its KPIs in the
+#    browser (Vaadin poll). 0 disables auto-refresh (manual "Refresh" still works).
+analytics:
+  rate-window-minutes: ${ANALYTICS_RATE_WINDOW_MINUTES:5}
+  refresh-interval-ms: ${ANALYTICS_REFRESH_INTERVAL_MS:5000}
 
 
 # Actuator (SLR.8.1 telemetry / SLR.8.2 logging visibility).
@@ -66,3 +84,19 @@ platform:
   admin:
     username: ${PLATFORM_ADMIN_USERNAME:admin}
     password: ${PLATFORM_ADMIN_PASSWORD:admin}
+
+# WSEP external systems (UC-33 payment / UC-34 issuance). WsepPaymentGateway /
+# WsepTicketIssuer back IPaymentGateway / ITicketIssuer in every real run
+# (@Profile("!test")); the test profile swaps in the in-process stubs. base-url is
+# the single koyeb endpoint both adapters POST to.
+wsep:
+  base-url: ${WSEP_BASE_URL:https://damp-lynna-wsep-1984852e.koyeb.app/}
+  # The reachability handshake is retried (idempotent) so a cold-starting WSEP host doesn't leave the
+  # market closed at boot (#455/#365). pay/issue/refund are never retried (non-idempotent).
+  handshake-attempts: ${WSEP_HANDSHAKE_ATTEMPTS:3}
+  handshake-backoff-ms: ${WSEP_HANDSHAKE_BACKOFF_MS:1000}
+
+# Market self-heal (dev): if a transient external-service outage leaves the market closed at boot,
+# MarketSelfHealScheduler re-attempts the open on this interval until it succeeds (recover, no restart).
+market:
+  self-heal-delay-ms: ${MARKET_SELF_HEAL_DELAY_MS:30000}

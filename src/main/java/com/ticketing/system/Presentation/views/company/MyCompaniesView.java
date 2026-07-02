@@ -2,6 +2,7 @@ package com.ticketing.system.Presentation.views.company;
 
 import com.ticketing.system.Core.Application.dto.UserCompanyDTO;
 import com.ticketing.system.Presentation.presenters.company.MyCompaniesPresenter.Outcome;
+import com.ticketing.system.Presentation.components.kit.Lk;
 import com.ticketing.system.Presentation.components.kit.LkBadge;
 import com.ticketing.system.Presentation.components.kit.LkBtn;
 import com.ticketing.system.Presentation.components.kit.LkCard;
@@ -26,14 +27,14 @@ import java.util.List;
 import java.util.Map;
 
 @Route(value = "my-companies", layout = MainLayout.class)
-@PageTitle("My companies · TicketHub")
+@PageTitle("My Companies · TicketHub")
 @PermitAll
 public class MyCompaniesView extends LkPage {
 
     public MyCompaniesView(MyCompaniesPresenter membershipPresenter) {
-        title("My companies");
+        title("My Companies");
         subtitle("Companies where you are a founder, owner, or manager.");
-        actions(new LkBtn("Register a company")
+        actions(new LkBtn("Register a Company")
             .variant(LkBtn.Variant.primary)
             .icon(new LkIcon("plus", 15))
             .onClick(e -> UI.getCurrent().navigate(CompanyRegistrationView.class)));
@@ -43,7 +44,7 @@ public class MyCompaniesView extends LkPage {
             case Outcome.Success s                              -> add(buildGridCard(s.companies(), membershipPresenter));
             case Outcome.NotAuthenticated na                    -> add(buildEmptyState());
             case Outcome.Failure f -> {
-                Span msg = new Span("Could not load your companies: " + f.reason());
+                Span msg = new Span(Lk.withReason("Could not load your companies", f.reason()));
                 msg.getStyle().set("display", "block").set("margin-bottom", "12px").set("color", "#b91c1c");
                 add(msg);
                 add(buildEmptyState());
@@ -83,7 +84,7 @@ public class MyCompaniesView extends LkPage {
             .set("display", "block").set("margin", "8px auto 18px");
 
         empty.add(iconWrap, title, body,
-            new LkBtn("Register your first company")
+            new LkBtn("Register Your First Company")
                 .variant(LkBtn.Variant.primary)
                 .icon(new LkIcon("plus", 15))
                 .onClick(e -> UI.getCurrent().navigate(CompanyRegistrationView.class)));

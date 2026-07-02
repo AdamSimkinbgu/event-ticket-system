@@ -13,6 +13,7 @@ import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.dto.AuthTokenDTO;
@@ -25,6 +26,8 @@ import com.ticketing.system.Core.Application.dto.RefreshTokenRequestDTO;
 import com.ticketing.system.Core.Application.dto.RegisterRequestDTO;
 import com.ticketing.system.Core.Application.interfaces.IPasswordHasher;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
+import com.ticketing.system.Core.Application.interfaces.ISystemMetrics;
+import com.ticketing.system.Core.Application.interfaces.MetricType;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.exceptions.AuthenticationFailedException;
@@ -40,7 +43,7 @@ import com.ticketing.system.Core.Domain.users.ISessionRepository;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
 import com.ticketing.system.Core.Domain.users.Session;
 import com.ticketing.system.Core.Domain.users.User;
-import com.ticketing.system.Infrastructure.persistence.MemoryActiveOrderRepository;
+import com.ticketing.system.Infrastructure.persistence.ActiveOrderPersistence.MemoryActiveOrderRepository;
 
 
 /**
@@ -67,6 +70,7 @@ public class AuthenticationService {
     private final NotificationDispatchService notificationDispatchService; // for UC-37 notification flush
     private final ISessionRepository sessionRepository;
     private final IActiveOrderRepository activeOrderRepository;
+    private final ISystemMetrics systemMetrics;
     private final Clock clock;
     private final long guestIdleMinutes;
     private final long memberTtlMinutes;
@@ -88,6 +92,7 @@ public class AuthenticationService {
             NotificationDispatchService notificationDispatchService,
             ISessionRepository sessionRepository,
             IActiveOrderRepository activeOrderRepository,
+            ISystemMetrics systemMetrics,
             Clock clock,
             IAdminRepository adminRepository,
             @Value("${session.guest-idle-timeout-minutes}") long guestIdleMinutes,
@@ -101,6 +106,7 @@ public class AuthenticationService {
         this.notificationDispatchService = notificationDispatchService;
         this.sessionRepository = sessionRepository;
         this.activeOrderRepository = activeOrderRepository;
+        this.systemMetrics = systemMetrics;
         this.clock = clock;
         this.adminRepository = adminRepository;
         this.guestIdleMinutes = guestIdleMinutes;
@@ -110,11 +116,13 @@ public class AuthenticationService {
     }
 
     /** Delegates to {@link ISessionManager#extractUserId}. */
+    @Transactional(readOnly = true)
     public int extractUserId(String token) {
         return sessionManager.extractUserId(token);
     }
 
     /** Delegates to {@link ISessionManager#validateToken}. */
+    @Transactional(readOnly = true)
     public boolean validateToken(String token) {
         return sessionManager.validateToken(token);
     }
@@ -127,11 +135,13 @@ public class AuthenticationService {
      * Mints a new Guest session. Entry point for any visitor before
      * register/login.
      */
+    @Transactional
     public GuestSessionDTO startGuestSession() {
         Instant now = clock.instant();
         Instant expiry = now.plus(guestIdleMinutes, ChronoUnit.MINUTES);
         String sid = UUID.randomUUID().toString();
         sessionRepository.save(new Session(sid, null, now, expiry));
+        systemMetrics.record(MetricType.VISITOR_ENTRY);
         log.info("guest session started sid={}", sid);
         return new GuestSessionDTO(sid, now);
     }
@@ -141,10 +151,12 @@ public class AuthenticationService {
      * input is a no-op. Attached cart cleanup is the sweeper's
      * responsibility (Phase 5).
      */
+    @Transactional
     public void endGuestSession(String sessionId) {
         if (sessionId == null || sessionId.isBlank())
             return;
         sessionRepository.delete(sessionId);
+        systemMetrics.record(MetricType.VISITOR_EXIT);
         log.info("guest session ended sid={}", sessionId);
     }
 
@@ -155,28 +167,18 @@ public class AuthenticationService {
     /**
      * Registers a new Member. UC-11.
      *
-     * <<<<<<< HEAD
      * <p>
-     * Session intentionally remains Guest per II.1.4 — caller must explicitly
-     * log in to upgrade to Member-Visitor.
+     * Per II.1.4 / D10a: requires an active Guest session (via
+     * {@link RegisterRequestDTO#guestSessionId()}). The session intentionally remains
+     * Guest after register — {@link #login(LoginRequestDTO)} is the explicit promotion
+     * step to Member-Visitor.
      *
      * @throws InvalidEmailFormatException email fails format check
      * @throws WeakPasswordException       password fails strength rules
      * @throws DuplicateUsernameException  username already taken
      * @throws DuplicateEmailException     email already registered
-     *                                     =======
-     *                                     <p>
-     *                                     Per II.1.4 / D10a:
-     *                                     <ul>
-     *                                     <li>Requires an active Guest session (via
-     *                                     {@link RegisterRequestDTO#guestSessionId()}).</li>
-     *                                     <li>The session intentionally remains
-     *                                     Guest after register —
-     *                                     {@link #login(LoginRequestDTO)} is the
-     *                                     explicit promotion step.</li>
-     *                                     </ul>
-     *                                     >>>>>>> dev
      */
+    @Transactional
     public void register(RegisterRequestDTO request) {
         // 1. Cheap format validation first — bots / garbage fail before any IO.
         validateEmail(request.email());
@@ -202,6 +204,7 @@ public class AuthenticationService {
         // 5. Session stays Guest — just touch the activity timestamp.
         session.touch(clock.instant());
         sessionRepository.save(session);
+        systemMetrics.record(MetricType.REGISTRATION);
 
         log.info("member registered: username={} id={}", user.getUsername(), user.getUserId());
     }
@@ -238,20 +241,15 @@ public class AuthenticationService {
      * Authenticates a Member and promotes their Guest session to a Member
      * session in place. UC-12.
      *
-     * <<<<<<< HEAD
      * <p>
-     * "Unknown username" and "wrong password" raise the same exception to
-     * avoid username enumeration via the response.
-     * =======
-     * <p>
-     * "Unknown username" and "wrong password" raise the same exception
-     * to prevent username enumeration via the response.
-     * >>>>>>> dev
+     * "Unknown username" and "wrong password" raise the same exception to avoid
+     * username enumeration via the response.
      *
      * @throws GuestSessionRequiredException no / unknown / expired / non-guest
      *                                       sessionId
      * @throws AuthenticationFailedException invalid credentials
      */
+    @Transactional
     public LoginDTO login(LoginRequestDTO request) {
         // 1. Guest session must exist.
         Session session = requireActiveGuestSession(request.guestSessionId());
@@ -270,7 +268,7 @@ public class AuthenticationService {
         try {
             user = userRepository.findByUsername(request.username())
                     .orElseThrow(AuthenticationFailedException::new);
-            if (!user.verifyPassword(request.rawPassword(), passwordHasher)) {
+            if (!passwordHasher.matches(request.rawPassword(), user.getPasswordHash())) {
                 throw new AuthenticationFailedException();
             }
         } catch (AuthenticationFailedException e) {
@@ -306,6 +304,11 @@ public class AuthenticationService {
      * — disjoint-pool rule), applies the shared lock-after-N policy, audit-logs every failure, and
      * issues an ADMIN-role JWT so the backend admin gate can authorize it.
      */
+    // Read-WRITE: generateAdminToken persists a brand-new Session row. A read-only transaction
+    // would leave Hibernate in MANUAL flush mode, so the assigned-id INSERT would never flush
+    // under the jpa profile and every admin token would fail validation as "session not found"
+    // (member login is unaffected — it promotes an already-persisted guest session).
+    @Transactional
     public AuthTokenDTO signInAsAdmin(String username, String rawPassword) {
         String lockKey = lockoutKey("a", username);
 
@@ -427,24 +430,16 @@ public class AuthenticationService {
      * Terminates the authenticated session by deleting the underlying
      * Session row (via {@link ISessionManager#invalidate}). UC-14 / D8 (L1).
      *
-     * <<<<<<< HEAD
      * <p>
-     * Per II.3.1 the session state downgrades back to Guest-Visitor. Cart
-     * state is not touched here (II.3.0.1 / II.3.0.3 govern Active Orders
-     * separately). Idempotent: logout with a {@code null} / blank /
-     * already-revoked token is a no-op.
-     * =======
-     * <p>
-     * Per II.3.1 the user is downgraded back to Guest-Visitor. To act
-     * again they must call {@link #startGuestSession()} for a fresh
-     * sessionId — the old one is dead. (D9a: Member cart persists by userId
-     * and is restored on next login — that wiring lives in Phase 4/5.)
+     * Per II.3.1 the session state downgrades back to Guest-Visitor — to act again the
+     * visitor must {@link #startGuestSession()} for a fresh sessionId (the old one is dead).
+     * The Member cart is not touched here: it persists by userId (II.3.0.1) and is restored
+     * on the next login (UC-13 / D9a, via {@link #handleCartOnPromotion}).
      *
      * <p>
-     * Idempotent: logout with a {@code null} / blank / already-revoked
-     * token is a no-op.
-     * >>>>>>> dev
+     * Idempotent: logout with a {@code null} / blank / already-revoked token is a no-op.
      */
+    @Transactional
     public void logout(LogoutRequestDTO request) {
         Optional<Integer> userIdOpt = sessionManager.tryExtractUserId(request.token());
         sessionManager.invalidate(request.token());

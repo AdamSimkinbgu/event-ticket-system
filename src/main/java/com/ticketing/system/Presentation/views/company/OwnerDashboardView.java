@@ -16,7 +16,6 @@ import com.ticketing.system.Presentation.security.Capabilities;
 import com.ticketing.system.Presentation.security.Capability;
 import com.ticketing.system.Presentation.security.RequireCapability;
 import com.ticketing.system.Presentation.session.AuthSession;
-import com.ticketing.system.Presentation.views.admin.CompanySalesView;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.Div;
@@ -59,7 +58,7 @@ public class OwnerDashboardView extends LkPage {
             case OwnerDashboardPresenter.Outcome.NotAuthenticated ignored -> showBanner(
                 "Your session has expired — please sign in again.");
             case OwnerDashboardPresenter.Outcome.Failure fail -> showBanner(
-                "Could not load your workspace: " + fail.reason());
+                Lk.withReason("Could not load your workspace", fail.reason()));
         }
     }
 
@@ -80,7 +79,7 @@ public class OwnerDashboardView extends LkPage {
 
     /** Topbar actions: a company selector (only when the member has >1) plus "New event". */
     private Component[] buildActions(List<MyCompanyDTO> companies, MyCompanyDTO selected) {
-        LkBtn newEvent = new LkBtn("New event")
+        LkBtn newEvent = new LkBtn("New Event")
             .variant(LkBtn.Variant.primary)
             .icon(new LkIcon("plus", 15))
             .onClick(e -> UI.getCurrent().navigate(CompanyEventListView.class));
@@ -117,18 +116,35 @@ public class OwnerDashboardView extends LkPage {
         Div row = new Div();
         row.addClassName("ow-stats");
 
-        LkStat inquiries = new LkStat("Open inquiries", String.valueOf(stats.openInquiries()));
-        if (stats.openInquiries() > 0) {
-            inquiries.delta("needs reply", LkStat.Tone.warn);
-        }
+        // Company rating is derived from the average of this company's events' ratings.
+        LkStat rating = new LkStat("Rating",
+            stats.rating() == null ? "—" : "★ " + ratingText(stats.rating()));
 
         row.add(
+            rating,
             new LkStat("Live events",        String.valueOf(stats.activeEvents())),
-            new LkStat("Tickets sold · 30d",  String.format("%,d", stats.ticketsSold30d())),
-            new LkStat("Revenue · 30d",       "$" + String.format("%,.0f", stats.revenue30d())),
-            inquiries
+            new LkStat("Tickets sold · 30d",  String.format("%,d", stats.ticketsSold30d()))
         );
+        // Revenue is sales data — only members with VIEW_SALES (VIEW_COMPANY_SALES) see it, matching
+        // the "Sales History" tile gate below and the VIEW_COMPANY_SALES-gated sales page.
+        if (Capabilities.has(Capability.VIEW_COMPANY_SALES)) {
+            row.add(new LkStat("Revenue · 30d", "$" + String.format("%,.0f", stats.revenue30d())));
+        }
+        // Open inquiries is inquiry-handling data — only members with RESPOND_TO_INQUIRIES
+        // (RESPOND_INQUIRIES) see it, matching the "Customer Inquiries" tile gate below.
+        if (Capabilities.has(Capability.RESPOND_INQUIRIES)) {
+            LkStat inquiries = new LkStat("Open inquiries", String.valueOf(stats.openInquiries()));
+            if (stats.openInquiries() > 0) {
+                inquiries.delta("needs reply", LkStat.Tone.warn);
+            }
+            row.add(inquiries);
+        }
         return row;
+    }
+
+    /** Rating shown without a trailing ".0" (e.g. 4.5 → "4.5", 4.0 → "4"). */
+    private static String ratingText(double rating) {
+        return rating == Math.floor(rating) ? String.valueOf((int) rating) : String.valueOf(rating);
     }
 
     /**
@@ -147,8 +163,8 @@ public class OwnerDashboardView extends LkPage {
                 CompanyEventListView.class));
 
         if (Capabilities.has(Capability.RESPOND_INQUIRIES))
-            tiles.add(tile("comment", "Member Inquiries",
-                "Respond to questions about your events and mark resolved.",
+            tiles.add(tile("comment", "Customer Inquiries",
+                "View member inquiries (with their username) and respond in a chat thread.",
                 CompanyInquiryInboxView.class));
 
         if (Capabilities.has(Capability.VIEW_COMPANY_SALES))
@@ -165,6 +181,11 @@ public class OwnerDashboardView extends LkPage {
             tiles.add(tile("crown", "Appoint Co-owner",
                 "Invite another member as co-owner. Cycle-prevention enforced.",
                 OwnerAppointmentView.class));
+
+        if (Capabilities.has(Capability.VIEW_COMPANY_ORG_TREE))
+            tiles.add(tile("org", "Organizational Tree",
+                "View your company's founder → owners → managers appointment hierarchy.",
+                CompanyOrgTreeView.class));
 
         if (Capabilities.has(Capability.EDIT_PURCHASE_POLICIES))
             tiles.add(tile("policy", "Purchase Policies",

@@ -2,6 +2,12 @@ package com.ticketing.system.Core.Domain.events;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+import jakarta.persistence.Embeddable;
+
+// V3: an @Embeddable value object embedded in VenueMap (columns country, city). Hibernate 6
+// instantiates the record via its canonical constructor; an all-null embedded location loads back
+// as a null reference, so the validating compact constructor only runs for non-null values.
+@Embeddable
 public record Location(
                 String country,
                 String city) implements InvariantChecked {

@@ -5,13 +5,17 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.ticketing.system.Core.Application.dto.ActiveOrderDTO;
 import com.ticketing.system.Core.Application.dto.InventorySelectionDTO;
 import com.ticketing.system.Core.Application.services.ReservationService;
+import com.ticketing.system.Core.Domain.exceptions.DomainException;
 import com.ticketing.system.Presentation.components.Money;
 import com.ticketing.system.Presentation.session.SessionIdentity;
 
 @Component
+@Slf4j
 public class CartPresenter {
 
     private final ReservationService reservationService;
@@ -34,8 +38,11 @@ public class CartPresenter {
                 return new LoadOutcome.Empty();
             }
             return new LoadOutcome.Shown(toVM(order), subtotalCents(order));
-        } catch (RuntimeException e) {
+        } catch (DomainException e) {
             return new LoadOutcome.Failure(e.getMessage());
+        } catch (RuntimeException e) {
+            log.error("Loading cart failed unexpectedly", e);
+            return new LoadOutcome.Failure(null);
         }
     }
 
@@ -60,8 +67,11 @@ public class CartPresenter {
                 return new RemoveOutcome.Removed(new CartVM(List.of(), 0L), 0L);
             }
             return new RemoveOutcome.Removed(toVM(updated), subtotalCents(updated));
-        } catch (RuntimeException e) {
+        } catch (DomainException e) {
             return new RemoveOutcome.Failure(e.getMessage());
+        } catch (RuntimeException e) {
+            log.error("Removing cart line failed unexpectedly", e);
+            return new RemoveOutcome.Failure(null);
         }
     }
 

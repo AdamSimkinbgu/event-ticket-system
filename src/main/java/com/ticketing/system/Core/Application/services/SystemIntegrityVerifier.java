@@ -1,15 +1,28 @@
 package com.ticketing.system.Core.Application.services;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
+import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
+import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
 import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.company.ProductionCompany;
+import com.ticketing.system.Core.Domain.events.Event;
+import com.ticketing.system.Core.Domain.events.IEventRepository;
+import com.ticketing.system.Core.Domain.events.InventoryZone;
 import com.ticketing.system.Core.Domain.exceptions.SystemIntegrityViolationException;
 import com.ticketing.system.Core.Domain.exceptions.UserNotFoundException;
+import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 import com.ticketing.system.Core.Domain.users.IUserRepository;
+import com.ticketing.system.Core.Domain.users.User;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -67,16 +80,29 @@ public class SystemIntegrityVerifier {
 
     private final IUserRepository userRepository;
     private final IProductionCompanyRepository companyRepository;
+    private final IEventRepository eventRepository;
+    private final IActiveOrderRepository activeOrderRepository;
 
     public SystemIntegrityVerifier(IUserRepository userRepository,
-                                   IProductionCompanyRepository companyRepository) {
+                                   IProductionCompanyRepository companyRepository,
+                                   IEventRepository eventRepository,
+                                   IActiveOrderRepository activeOrderRepository) {
         this.userRepository = userRepository;
         this.companyRepository = companyRepository;
+        this.eventRepository = eventRepository;
+        this.activeOrderRepository = activeOrderRepository;
     }
 
+    // Read-only inside a transaction so the loaded JPA aggregates' lazy collections (event zones,
+    // cart items, show dates, …) stay reachable while the scans traverse them (#372).
+    @Transactional(readOnly = true)
     public void verify() {
-        verifyActiveCompaniesHaveOwner();   // constraint #6
-        verifyProducersAreUsers();          // constraint #4
+        verifyActiveCompaniesHaveOwner();      // constraint #6
+        verifyProducersAreUsers();             // constraint #4
+        revalidateLoadedAggregates();          // #372 — re-run each loaded aggregate's own invariants
+        verifyUniqueUsernames();               // constraint #1
+        verifyOneActiveOrderPerBuyerEvent();   // constraint #8
+        verifyInventoryWithinCapacity();       // constraint #12
         log.info("System integrity verified.");
     }
 
@@ -102,6 +128,93 @@ public class SystemIntegrityVerifier {
                     throw new SystemIntegrityViolationException(
                             "company '" + company.getName() + "' has producer " + userId
                                     + " that is not a registered user");
+                }
+            }
+        }
+    }
+
+    // ---- #372 V3 scans: re-validate the LOADED DB state (no-ops on the empty in-memory stack) ----
+
+    // Re-run every loaded aggregate's own invariant. A row persisted (or hand-edited) into a state
+    // that breaks its aggregate invariant blocks the market from opening.
+    private void revalidateLoadedAggregates() {
+        revalidateEach(userRepository.findAll(), "user");
+        revalidateEach(companyRepository.findAll(), "company");
+        revalidateEach(eventRepository.findAll(), "event");
+        revalidateEach(activeOrderRepository.findAll(), "active order");
+    }
+
+    private void revalidateEach(List<? extends InvariantChecked> aggregates, String type) {
+        for (InvariantChecked aggregate : aggregates) {
+            try {
+                aggregate.checkInvariants();
+            } catch (RuntimeException e) {
+                // checkInvariants throws a plain IllegalStateException; wrap it as a DomainException so
+                // PlatformInitializationRunner's catch leaves the platform uninitialized gracefully.
+                throw new SystemIntegrityViolationException(
+                        "loaded " + type + " violates its invariant: " + e.getMessage());
+            }
+        }
+    }
+
+    // #1 — usernames are system-wide unique. The column has no DB UNIQUE constraint (unlike email),
+    // so a duplicate can physically exist; flag it.
+    private void verifyUniqueUsernames() {
+        Set<String> seen = new HashSet<>();
+        for (User user : userRepository.findAll()) {
+            String username = user.getUsername();
+            if (username != null && !seen.add(username)) {
+                throw new SystemIntegrityViolationException(
+                        "duplicate username '" + username + "' in the member pool");
+            }
+        }
+    }
+
+    // #8 — at most one active order per buyer per event. A buyer is keyed by userId (member) or
+    // sessionId (guest); flag a buyer whose two distinct orders both hold the same event.
+    private void verifyOneActiveOrderPerBuyerEvent() {
+        Map<String, Map<Integer, String>> orderByBuyerEvent = new HashMap<>();
+        for (ActiveOrder order : activeOrderRepository.findAll()) {
+            String buyer = buyerKey(order);
+            if (buyer == null) {
+                continue; // an order with no identity is caught by the aggregate's own checkInvariants
+            }
+            Map<Integer, String> byEvent = orderByBuyerEvent.computeIfAbsent(buyer, b -> new HashMap<>());
+            Set<Integer> eventIds = new HashSet<>();
+            for (CartLineItem item : order.getItems()) {
+                eventIds.add(item.geteventId());
+            }
+            for (Integer eventId : eventIds) {
+                String previous = byEvent.put(eventId, order.getOrderKey());
+                if (previous != null && !previous.equals(order.getOrderKey())) {
+                    throw new SystemIntegrityViolationException(
+                            "buyer " + buyer + " has more than one active order for event " + eventId);
+                }
+            }
+        }
+    }
+
+    private static String buyerKey(ActiveOrder order) {
+        Integer userId = order.userIdOrNull();
+        if (userId != null) {
+            return "user:" + userId;
+        }
+        String sessionId = order.getSessionId();
+        return sessionId == null ? null : "sess:" + sessionId;
+    }
+
+    // #12 — a zone's committed tickets (sold + reserved) must not exceed its physical capacity.
+    private void verifyInventoryWithinCapacity() {
+        for (Event event : eventRepository.findAll()) {
+            if (event.getVenueMap() == null || event.getVenueMap().getInventoryZones() == null) {
+                continue;
+            }
+            for (InventoryZone zone : event.getVenueMap().getInventoryZones()) {
+                int committed = zone.getSoldAmount() + zone.getReservedAmount();
+                if (committed > zone.getCapacity()) {
+                    throw new SystemIntegrityViolationException(
+                            "event " + event.getId() + " has an oversold zone: sold+reserved="
+                                    + committed + " > capacity=" + zone.getCapacity());
                 }
             }
         }

@@ -10,7 +10,10 @@ import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
@@ -41,6 +44,7 @@ import com.ticketing.system.Core.Domain.exceptions.IdempotencyConflictException;
 import com.ticketing.system.Core.Domain.exceptions.InsufficientInventoryException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidStateTransitionException;
 import com.ticketing.system.Core.Domain.exceptions.InvalidTokenException;
+import com.ticketing.system.Core.Domain.exceptions.MarketNotOpenException;
 import com.ticketing.system.Core.Domain.exceptions.PaymentGatewayException;
 import com.ticketing.system.Core.Domain.exceptions.SessionExpiredException;
 import com.ticketing.system.Core.Domain.exceptions.TicketIssuanceFailedException;
@@ -70,6 +74,12 @@ public class CheckoutService {
     private final ISessionManager sessionManager;
     private final IUserRepository userRepository;
     private final IProductionCompanyRepository companyRepository;
+    private final SystemAdminService systemAdminService;
+    // Programmatic transactions for the checkout's Phase-3 DB work. Checkout cannot be a single
+    // @Transactional method because the WSEP charge + issue (Phase 2, 20s HTTP timeouts) must run
+    // OUTSIDE any transaction so a slow gateway never pins a DB connection. This template wraps only
+    // the Phase-3 DB unit (tickets + receipt + RESERVED→SOLD confirm), between the external calls.
+    private final TransactionTemplate transactionTemplate;
 
     // In-memory cache for completed checkouts to handle idempotency. Keyed by a
     // combination of buyer identity and idempotency key, since the same idempotency
@@ -97,7 +107,9 @@ public class CheckoutService {
             INotificationService notificationService,
             ISessionManager sessionManager,
             IUserRepository userRepository,
-            IProductionCompanyRepository companyRepository) {
+            IProductionCompanyRepository companyRepository,
+            SystemAdminService systemAdminService,
+            PlatformTransactionManager transactionManager) {
         this.activeOrderRepository = activeOrderRepository;
         this.eventRepository = eventRepository;
         this.ticketRepository = ticketRepository;
@@ -108,6 +120,25 @@ public class CheckoutService {
         this.sessionManager = sessionManager;
         this.userRepository = userRepository;
         this.companyRepository = companyRepository;
+        this.systemAdminService = systemAdminService;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+    }
+
+    // Result of the atomic Phase-3 persistence unit, surfaced to the orchestrator once the
+    // transaction has committed: the receipt id feeds the result DTO, the lines feed the
+    // post-unlock purchase notification.
+    private record Phase3Persisted(int orderReceiptId, List<ReceiptLine> receiptLines) {
+    }
+
+    // UC-32 / I.2.1 — no money moves while the trading market is closed. This is a
+    // platform-wide gate, orthogonal to the per-event ON_SALE check enforced later
+    // in Phase 3 (validateEventsStillOnSale). Called as a guard clause before the
+    // checkout try-block so it propagates cleanly instead of being wrapped as a
+    // generic checkout failure.
+    private void requireMarketOpen() {
+        if (!systemAdminService.isMarketOpen()) {
+            throw new MarketNotOpenException();
+        }
     }
 
     // The checkoutMember and checkoutGuest methods follow a similar flow but have
@@ -128,13 +159,12 @@ public class CheckoutService {
     // order,
     // confirm inventory sale, persist, mark bought.
     public CheckoutResultDTO checkoutMember(String token, String idempotencyKey, String currency,
-            String paymentMethodToken) {
+            CardDetailsDTO card) {
         int userId = -1;
         ActiveOrder order = null;
         PaymentResultDTO paymentResult = null;
         double totalPrice = 0.0;
         boolean inventorySaleConfirmed = false;
-        boolean phase1Complete = false;
         boolean checkoutSucceeded = false;
         List<ReceiptLine> receiptLinesToNotifyAfterUnlock = null;
 
@@ -147,16 +177,21 @@ public class CheckoutService {
 
         try {
             userId = authenticateAndGetUserId(token);
-            validatePaymentInput(idempotencyKey, currency, paymentMethodToken, userId);
+            validatePaymentInput(idempotencyKey, currency, card, userId);
 
             String buyerKey = memberBuyerKey(userId);
 
-            // Check the cache for an existing completed checkout with the same idempotency
-            // key and buyer. If found, return the cached result to ensure idempotency.
+            // Idempotency short-circuit BEFORE the market gate: a completed purchase must be returned even
+            // if the market has since closed (C1). (Pre-flight validation failures above are still wrapped
+            // by the catch as a checkout failure, matching the existing contract.)
             CheckoutResultDTO cached = getCachedCheckoutResult(idempotencyKey, buyerKey);
             if (cached != null) {
                 return cached;
             }
+
+            // UC-32 / I.2.1 — no money moves while the market is closed (checked after the idempotency
+            // short-circuit). Rethrown raw by the MarketNotOpenException catch below.
+            requireMarketOpen();
 
             // ---------------------------------------------------------------
             // Phase 1: short lock — validate, snapshot, freeze order
@@ -182,7 +217,6 @@ public class CheckoutService {
             activeOrderRepository.save(order);
 
             activeOrderRepository.unlock(orderLockKey);
-            phase1Complete = true;
 
             // ---------------------------------------------------------------
             // Phase 2: no domain locks — slow external calls - cart is frozen here,
@@ -194,7 +228,7 @@ public class CheckoutService {
             List<PricedCartLine> pricedItems = priceItemsOnce(snapshotItems);
             totalPrice = sumPrices(pricedItems);
 
-            paymentResult = chargePayment(userId, null, totalPrice, idempotencyKey, currency, paymentMethodToken);
+            paymentResult = chargePayment(userId, null, totalPrice, idempotencyKey, currency, card);
             validatePaymentResult(paymentResult, totalPrice, currency);
 
             IssuanceResultDTO issuanceResult = issueTickets(userId, null, snapshotItems);
@@ -213,35 +247,40 @@ public class CheckoutService {
             lockedEventIds = eventIds;
             lockEvents(lockedEventIds);
 
-            validateEventsStillOnSale(snapshotItems);
-            // Fail-fast ownership check (read-only): the reservation must still be ours and
-            // RESERVED.
-            validateCanConfirmInventorySale(snapshotItems, orderKey);
+            // ─── Atomic Phase-3 DB unit (one transaction) ───
+            // Re-validate, persist tickets + receipt, then the irreversible RESERVED→SOLD confirm —
+            // all committed together or not at all. The WSEP charge/issue already ran in Phase 2,
+            // OUTSIDE this (and any) transaction, so no DB connection is held across an HTTP call.
+            // If anything here fails — including a @Version conflict at commit when two buyers race
+            // the same seat — the whole unit rolls back, inventorySaleConfirmed stays false, and the
+            // catch below returns the inventory to stock and refunds the charge via the existing path.
+            final int capturedUserId = userId;
+            final double capturedTotalPrice = totalPrice;
+            final PaymentResultDTO capturedPaymentResult = paymentResult;
+            Phase3Persisted persisted = transactionTemplate.execute(status -> {
+                validateEventsStillOnSale(snapshotItems);
+                // Fail-fast ownership check (read-only): the reservation must still be ours and RESERVED.
+                validateCanConfirmInventorySale(snapshotItems, orderKey);
 
-            // Persist tickets + receipt BEFORE the irreversible RESERVED→SOLD confirmation.
-            // If any of
-            // this fails, the inventory is still RESERVED, so the normal
-            // (!inventorySaleConfirmed)
-            // rollback cleanly returns it to stock and refunds — nothing is stranded as
-            // SOLD.
-            int orderReceiptId = orderReceiptRepository.nextId();
-            List<ReceiptLine> receiptLines = saveTicketsAndBuildReceiptLines(userId, orderReceiptId, pricedItems,
-                    issuanceResult);
-            saveMemberReceipt(userId, orderReceiptId, totalPrice, receiptLines, paymentResult, issuanceResult);
+                int receiptId = orderReceiptRepository.nextId();
+                List<ReceiptLine> lines = saveTicketsAndBuildReceiptLines(capturedUserId, receiptId, pricedItems,
+                        issuanceResult);
+                saveMemberReceipt(capturedUserId, receiptId, capturedTotalPrice, lines, capturedPaymentResult, issuanceResult);
 
-            // Point of no return: commit the sale last, once everything fallible has
-            // succeeded.
-            confirmInventorySale(snapshotItems, orderKey);
+                // Point of no return: commit the sale last, once everything fallible has succeeded.
+                confirmInventorySale(snapshotItems, orderKey);
+                return new Phase3Persisted(receiptId, lines);
+            });
             inventorySaleConfirmed = true;
+            int orderReceiptId = persisted.orderReceiptId();
+            List<ReceiptLine> receiptLines = persisted.receiptLines();
 
-            order.buy();
-            // The sale is committed and the receipt is the durable record; the cart has
-            // done its job.
-            // Delete the consumed order (don't save it) — buy() leaves it
-            // CHECKOUT_IN_PROGRESS, so a
-            // save would strand an empty, unmodifiable cart that wedges the buyer's next
-            // reservation.
-            activeOrderRepository.delete(order);
+            // Point of no return passed: the sale is committed and the receipt is the durable record.
+            // Consuming the cart (buy() + delete) is best-effort — a cleanup hiccup must never turn a
+            // committed purchase into a checkout failure (C2). The cart isn't saved: buy() leaves it
+            // CHECKOUT_IN_PROGRESS, so a save would strand an empty, unmodifiable cart that wedges the
+            // buyer's next reservation.
+            finalizeConsumedOrder(order);
 
             CheckoutResultDTO result = buildCheckoutResult(totalPrice, orderReceiptId, paymentResult, issuanceResult);
             cacheCheckoutResult(idempotencyKey, buyerKey, result);
@@ -251,9 +290,13 @@ public class CheckoutService {
 
             return result;
 
+        } catch (MarketNotOpenException marketClosed) {
+            // Pre-Phase-1 gate failure: nothing was reserved or charged, so there is nothing to roll back.
+            // Propagate it raw (callers/tests distinguish a closed market from a mid-checkout failure).
+            throw marketClosed;
         } catch (Exception e) {
             handleCheckoutFailure(order, userId, orderLockKey, paymentResult, totalPrice, inventorySaleConfirmed,
-                    phase1Complete, e);
+                    e);
             // failure handling does not mutate inventory without locks
             // checkout failure handling will: reset CHECKOUT_IN_PROGRESS safely, refund
             // payment if needed, not release inventory without locks, not clear the cart
@@ -290,19 +333,22 @@ public class CheckoutService {
     //
     // See checkoutMember for the 3-phase description.
     public CheckoutResultDTO checkoutGuest(String guestSessionId, String guestEmail, String idempotencyKey,
-            String currency, String paymentMethodToken, int buyerAge) {
+            String currency, CardDetailsDTO card, int buyerAge) {
         ActiveOrder order = null;
         PaymentResultDTO paymentResult = null;
         double totalPrice = 0.0;
         boolean inventorySaleConfirmed = false;
-        boolean phase1Complete = false;
 
         String orderLockKey = null;
         List<Integer> lockedEventIds = List.of();
 
         try {
-            validateGuestCheckoutIdentity(guestSessionId, guestEmail);
-            validatePaymentInput(idempotencyKey, currency, paymentMethodToken, null);
+            // Presence + input + idempotency short-circuit run BEFORE the market gate so a completed
+            // purchase is returned even if the market has since closed (C1). The session-liveness check is
+            // deferred to just after the gate: it doesn't affect the cache key, and the market gate must
+            // win over a stale-session error to honour the market-closed contract.
+            validateGuestIdentityPresent(guestSessionId, guestEmail);
+            validatePaymentInput(idempotencyKey, currency, card, null);
 
             String buyerKey = guestBuyerKey(guestSessionId, guestEmail);
 
@@ -310,6 +356,9 @@ public class CheckoutService {
             if (cached != null) {
                 return cached;
             }
+
+            requireMarketOpen();
+            validateGuestSessionLive(guestSessionId);
 
             // ---------------------------------------------------------------
             // Phase 1: short lock — validate, snapshot, freeze order
@@ -328,7 +377,6 @@ public class CheckoutService {
             activeOrderRepository.save(order);
 
             activeOrderRepository.unlock(orderLockKey);
-            phase1Complete = true;
 
             // ---------------------------------------------------------------
             // Phase 2: no domain locks — slow external calls
@@ -339,7 +387,7 @@ public class CheckoutService {
             List<PricedCartLine> pricedItems = priceItemsOnce(snapshotItems);
             totalPrice = sumPrices(pricedItems);
 
-            paymentResult = chargePayment(null, guestEmail, totalPrice, idempotencyKey, currency, paymentMethodToken);
+            paymentResult = chargePayment(null, guestEmail, totalPrice, idempotencyKey, currency, card);
             validatePaymentResult(paymentResult, totalPrice, currency);
 
             IssuanceResultDTO issuanceResult = issueTickets(null, guestEmail, snapshotItems);
@@ -358,45 +406,46 @@ public class CheckoutService {
             lockedEventIds = eventIds;
             lockEvents(lockedEventIds);
 
-            validateEventsStillOnSale(snapshotItems);
-            // Fail-fast ownership check (read-only): the reservation must still be ours and
-            // RESERVED.
-            validateCanConfirmInventorySale(snapshotItems, orderKey);
+            // ─── Atomic Phase-3 DB unit (one transaction) ─── see checkoutMember for the rationale:
+            // the WSEP charge/issue already ran in Phase 2, outside any transaction; this unit commits
+            // tickets + receipt + the RESERVED→SOLD confirm together, or rolls back and the catch refunds.
+            final double capturedTotalPrice = totalPrice;
+            final PaymentResultDTO capturedPaymentResult = paymentResult;
+            Phase3Persisted persisted = transactionTemplate.execute(status -> {
+                validateEventsStillOnSale(snapshotItems);
+                // Fail-fast ownership check (read-only): the reservation must still be ours and RESERVED.
+                validateCanConfirmInventorySale(snapshotItems, orderKey);
 
-            // Persist tickets + receipt BEFORE the irreversible RESERVED→SOLD confirmation.
-            // If any of
-            // this fails, the inventory is still RESERVED, so the normal
-            // (!inventorySaleConfirmed)
-            // rollback cleanly returns it to stock and refunds — nothing is stranded as
-            // SOLD.
-            int orderReceiptId = orderReceiptRepository.nextId();
-            List<ReceiptLine> receiptLines = saveTicketsAndBuildReceiptLines(null, orderReceiptId, pricedItems,
-                    issuanceResult);
-            saveGuestReceipt(guestEmail, guestSessionId, orderReceiptId, totalPrice, receiptLines, paymentResult,
-                    issuanceResult);
+                int receiptId = orderReceiptRepository.nextId();
+                List<ReceiptLine> lines = saveTicketsAndBuildReceiptLines(null, receiptId, pricedItems, issuanceResult);
+                saveGuestReceipt(guestEmail, guestSessionId, receiptId, capturedTotalPrice, lines, capturedPaymentResult,
+                        issuanceResult);
 
-            // Point of no return: commit the sale last, once everything fallible has
-            // succeeded.
-            confirmInventorySale(snapshotItems, orderKey);
+                // Point of no return: commit the sale last, once everything fallible has succeeded.
+                confirmInventorySale(snapshotItems, orderKey);
+                return new Phase3Persisted(receiptId, lines);
+            });
             inventorySaleConfirmed = true;
+            int orderReceiptId = persisted.orderReceiptId();
 
-            order.buy();
-            // The sale is committed and the receipt is the durable record; the cart has
-            // done its job.
-            // Delete the consumed order (don't save it) — buy() leaves it
-            // CHECKOUT_IN_PROGRESS, so a
-            // save would strand an empty, unmodifiable cart that wedges the buyer's next
-            // reservation.
-            activeOrderRepository.delete(order);
+            // Point of no return passed: the sale is committed and the receipt is the durable record.
+            // Consuming the cart (buy() + delete) is best-effort — a cleanup hiccup must never turn a
+            // committed purchase into a checkout failure (C2). The cart isn't saved: buy() leaves it
+            // CHECKOUT_IN_PROGRESS, so a save would strand an empty, unmodifiable cart that wedges the
+            // buyer's next reservation.
+            finalizeConsumedOrder(order);
 
             CheckoutResultDTO result = buildCheckoutResult(totalPrice, orderReceiptId, paymentResult, issuanceResult);
             cacheCheckoutResult(idempotencyKey, buyerKey, result);
 
             return result;
 
+        } catch (MarketNotOpenException marketClosed) {
+            // Pre-Phase-1 gate failure: nothing reserved or charged, nothing to roll back. Propagate raw.
+            throw marketClosed;
         } catch (Exception e) {
             handleGuestCheckoutFailure(order, guestSessionId, orderLockKey, paymentResult, totalPrice,
-                    inventorySaleConfirmed, phase1Complete, e);
+                    inventorySaleConfirmed, e);
             throw new RuntimeException("Checkout failed, tickets returned to stock", e);
         } finally {
             unlockEvents(lockedEventIds);
@@ -446,17 +495,22 @@ public class CheckoutService {
     // associate the checkout with a specific guest session for tracking and that we
     // have an email to send the receipt to. If any of these validations fail, we
     // throw an exception to prevent the checkout from proceeding.
-    private void validateGuestCheckoutIdentity(String guestSessionId, String guestEmail) {
+    // Presence checks only — needed to form the idempotency cache key, so they run before the market gate.
+    private void validateGuestIdentityPresent(String guestSessionId, String guestEmail) {
         if (guestSessionId == null || guestSessionId.isBlank()) {
             throw new InvalidTokenException("guestSessionId is required");
         }
 
-        if (!sessionManager.validateCredential(guestSessionId)) {
-            throw new SessionExpiredException();
-        }
-
         if (guestEmail == null || guestEmail.isBlank()) {
             throw new InvalidTokenException("guestEmail is required");
+        }
+    }
+
+    // Liveness check — the guest session must still be valid. Runs after the idempotency short-circuit so
+    // a completed purchase can be replayed without a live session.
+    private void validateGuestSessionLive(String guestSessionId) {
+        if (!sessionManager.validateCredential(guestSessionId)) {
+            throw new SessionExpiredException();
         }
     }
 
@@ -468,7 +522,7 @@ public class CheckoutService {
     // reference to the payment method that the user wants to use for the
     // transaction. If any of these validations fail, we throw an exception to
     // prevent the checkout from proceeding with invalid payment information.
-    private void validatePaymentInput(String idempotencyKey, String currency, String paymentMethodToken,
+    private void validatePaymentInput(String idempotencyKey, String currency, CardDetailsDTO card,
             Integer userId) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new IllegalArgumentException("Missing idempotency key");
@@ -478,8 +532,8 @@ public class CheckoutService {
             throw new IllegalArgumentException("Missing currency");
         }
 
-        if (paymentMethodToken == null || paymentMethodToken.isBlank()) {
-            throw new IllegalArgumentException("Missing payment method token");
+        if (card == null || card.cardNumber() == null || card.cardNumber().isBlank()) {
+            throw new IllegalArgumentException("Missing card details");
         }
     }
 
@@ -539,7 +593,10 @@ public class CheckoutService {
                 throw new EventNotFoundException("Event not found: " + eventId);
             }
 
-            if (event.getStatus() != EventStatus.ON_SALE) {
+            // SOLD_OUT is allowed: an event that sold out while these tickets were reserved must still
+            // let the holders complete their purchase (mirrors Event.validateCanConfirmSale). Rejecting
+            // it here blocked the sale of the last tickets of any event.
+            if (event.getStatus() != EventStatus.ON_SALE && event.getStatus() != EventStatus.SOLD_OUT) {
                 throw new EventNotOnSaleException(
                         eventId, "" + event.getStatus());
             }
@@ -599,12 +656,12 @@ public class CheckoutService {
     // the payment gateway will be validated to ensure that the charge was
     // successful and that the amount and currency match what we expected.
     private PaymentResultDTO chargePayment(Integer buyerUserId, String buyerEmail, double totalPrice,
-            String idempotencyKey, String currency, String paymentMethodToken) {
+            String idempotencyKey, String currency, CardDetailsDTO card) {
         PaymentRequestDTO requestToPay = new PaymentRequestDTO(
                 idempotencyKey,
                 totalPrice,
                 currency,
-                paymentMethodToken,
+                card,
                 buyerUserId,
                 buyerEmail);
 
@@ -834,23 +891,60 @@ public class CheckoutService {
     private void confirmInventorySale(List<CartLineItem> boughtItems, String orderKey) {
         Map<Integer, Map<Integer, List<CartLineItem>>> grouped = groupItemsByEventAndZone(boughtItems);
 
-        for (Map.Entry<Integer, Map<Integer, List<CartLineItem>>> eventEntry : grouped.entrySet()) {
-            Event event = eventRepository.findById(eventEntry.getKey());
+        // Confirming across multiple events/zones is not a single atomic step. Track each confirmed unit
+        // so a mid-loop failure can be compensated (SOLD -> AVAILABLE): we must never leave a partial SOLD
+        // end-state, so the normal !inventorySaleConfirmed rollback + refund stays correct (C3).
+        List<ConfirmedUnit> confirmed = new ArrayList<>();
+        try {
+            for (Map.Entry<Integer, Map<Integer, List<CartLineItem>>> eventEntry : grouped.entrySet()) {
+                Event event = eventRepository.findById(eventEntry.getKey());
 
-            for (Map.Entry<Integer, List<CartLineItem>> zoneEntry : eventEntry.getValue().entrySet()) {
-                int zoneId = zoneEntry.getKey();
-                List<CartLineItem> zoneItems = zoneEntry.getValue();
+                for (Map.Entry<Integer, List<CartLineItem>> zoneEntry : eventEntry.getValue().entrySet()) {
+                    int zoneId = zoneEntry.getKey();
+                    List<CartLineItem> zoneItems = zoneEntry.getValue();
 
-                List<String> seatNumbers = extractSeatNumbers(zoneItems);
+                    List<String> seatNumbers = extractSeatNumbers(zoneItems);
+                    InventorySelection selection = seatNumbers.isEmpty()
+                            ? InventorySelection.standing(zoneItems.size(), orderKey)
+                            : InventorySelection.seated(seatNumbers, orderKey);
 
-                if (seatNumbers.isEmpty()) {
-                    event.confirmInventorySale(zoneId, InventorySelection.standing(zoneItems.size(), orderKey));
-                } else {
-                    event.confirmInventorySale(zoneId, InventorySelection.seated(seatNumbers, orderKey));
+                    event.confirmInventorySale(zoneId, selection);
+                    confirmed.add(new ConfirmedUnit(event, zoneId, selection));
                 }
-            }
 
-            eventRepository.save(event);
+                eventRepository.save(event);
+            }
+        } catch (RuntimeException confirmFailure) {
+            compensateConfirmedSales(confirmed);
+            throw confirmFailure;
+        }
+    }
+
+    // Best-effort reversal (SOLD -> AVAILABLE) of units already confirmed when a multi-event confirm
+    // fails partway, so no inventory is stranded SOLD. Runs under the event locks already held in Phase 3.
+    // Failures are logged, not propagated — we are already on the failure path.
+    private void compensateConfirmedSales(List<ConfirmedUnit> confirmed) {
+        for (int i = confirmed.size() - 1; i >= 0; i--) {
+            ConfirmedUnit unit = confirmed.get(i);
+            try {
+                unit.event().returnSoldToStock(unit.zoneId(), unit.selection());
+                eventRepository.save(unit.event());
+            } catch (RuntimeException compensationFailure) {
+                log.error("Failed to compensate a confirmed sale during checkout rollback. zoneId={}",
+                        unit.zoneId(), compensationFailure);
+            }
+        }
+    }
+
+    // Consume the cart after a committed sale: buy() empties it, delete removes it. Best-effort — a
+    // cleanup failure here must not turn a committed purchase into a checkout failure (C2).
+    private void finalizeConsumedOrder(ActiveOrder order) {
+        try {
+            order.buy();
+            activeOrderRepository.delete(order);
+        } catch (RuntimeException cleanupFailure) {
+            log.warn("Sale committed but consumed-order cleanup failed for orderKey={}",
+                    order.getOrderKey(), cleanupFailure);
         }
     }
 
@@ -1030,7 +1124,8 @@ public class CheckoutService {
                 paymentResult.paymentTransactionId(),
                 issuanceResult.barcodes()
                         .stream()
-                        .map(barcode -> barcode.ticketId())
+                        .map(barcode -> new CheckoutResultDTO.IssuedTicketDTO(
+                                barcode.ticketId(), barcode.barcodeValue()))
                         .toList());
     }
 
@@ -1067,7 +1162,6 @@ public class CheckoutService {
             PaymentResultDTO paymentResult,
             double totalPrice,
             boolean inventorySaleConfirmed,
-            boolean phase1Complete,
             Exception originalFailure) {
         log.error(
                 "Checkout failed. userId={}, totalPrice={}, paymentDone={}, inventorySaleConfirmed={}",
@@ -1077,18 +1171,11 @@ public class CheckoutService {
                 inventorySaleConfirmed,
                 originalFailure);
 
-        resetCheckoutStatusAfterFailure(orderLockKey, phase1Complete, inventorySaleConfirmed);
-
-        // Only roll back inventory/cart when the sale was NOT confirmed. Once
-        // confirmInventorySale
-        // has run, the inventory is SOLD and the order is still CHECKOUT_IN_PROGRESS,
-        // so a release
-        // would throw (nothing is RESERVED any more) and clear() would throw
-        // (ensureModifiable).
-        // Mirrors handleGuestCheckoutFailure.
-        if (!inventorySaleConfirmed) {
-            safelyReturnTicketsToStock(order);
-        }
+        // Reset the CHECKOUT_IN_PROGRESS status, return the reserved inventory to stock, and clear the cart
+        // atomically under one lock scope. The guard inside the helper skips the rollback once the sale is
+        // confirmed SOLD (a release would throw and the order is still CHECKOUT_IN_PROGRESS). Mirrors
+        // handleGuestCheckoutFailure.
+        rollbackReservedInventoryAtomically(orderLockKey, order, inventorySaleConfirmed);
 
         if (inventorySaleConfirmed) {
             log.error(
@@ -1096,7 +1183,9 @@ public class CheckoutService {
                     userId);
         }
 
-        if (paymentResult != null) {
+        // Refund only if the sale did NOT commit. Once inventory is confirmed SOLD the purchase is final;
+        // refunding here would leave the buyer holding tickets they were also refunded for (C2).
+        if (paymentResult != null && !inventorySaleConfirmed) {
             safelyRefundPayment(paymentResult, totalPrice);
         }
 
@@ -1128,7 +1217,6 @@ public class CheckoutService {
             PaymentResultDTO paymentResult,
             double totalPrice,
             boolean inventorySaleConfirmed,
-            boolean phase1Complete,
             Exception originalFailure) {
         log.error(
                 "Guest checkout failed. guestSessionId={}, totalPrice={}, paymentDone={}, inventorySaleConfirmed={}",
@@ -1138,11 +1226,8 @@ public class CheckoutService {
                 inventorySaleConfirmed,
                 originalFailure);
 
-        resetCheckoutStatusAfterFailure(orderLockKey, phase1Complete, inventorySaleConfirmed);
-
-        if (!inventorySaleConfirmed) {
-            safelyReturnTicketsToStock(order);
-        }
+        // Roll back inventory + cart + status atomically under one lock scope (see handleCheckoutFailure).
+        rollbackReservedInventoryAtomically(orderLockKey, order, inventorySaleConfirmed);
 
         if (inventorySaleConfirmed) {
             log.error(
@@ -1150,31 +1235,59 @@ public class CheckoutService {
                     guestSessionId);
         }
 
-        if (paymentResult != null) {
+        // Refund only if the sale did NOT commit. Once inventory is confirmed SOLD the purchase is final;
+        // refunding here would leave the buyer holding tickets they were also refunded for (C2).
+        if (paymentResult != null && !inventorySaleConfirmed) {
             safelyRefundPayment(paymentResult, totalPrice);
         }
     }
 
-    // helper
-    private void resetCheckoutStatusAfterFailure(
+    // Atomic checkout-failure rollback: under a single order-write-lock + event-read-lock scope, reset the
+    // CHECKOUT_IN_PROGRESS status, return the reserved inventory to stock, and clear the cart. Folding these
+    // into one lock scope closes the window where a concurrent op (checkout retry, add-to-cart, expiry sweep)
+    // could interleave between the status reset and the cart clear, and lets eventRepository.save run under the
+    // event lock it requires. Reentrant-safe: in a Phase-3 failure the main flow already holds these locks, so
+    // re-acquiring just bumps the hold count and the matching unlocks restore it.
+    private void rollbackReservedInventoryAtomically(
             String orderLockKey,
-            boolean phase1Complete,
+            ActiveOrder fallbackOrder,
             boolean inventorySaleConfirmed) {
-        if (!phase1Complete || inventorySaleConfirmed || orderLockKey == null) {
+        // Skip when the sale already committed (inventory is SOLD — a release would throw while the order is
+        // still CHECKOUT_IN_PROGRESS) or there is no key to lock by (failure before Phase 1 acquired the order,
+        // so nothing was reserved for this checkout to roll back). A Phase-1 validation failure still rolls
+        // back: the status reset below is guarded by isCheckoutInProgress(), so it is simply skipped while the
+        // reserved tickets are still returned to stock and the cart is cleared.
+        if (inventorySaleConfirmed || orderLockKey == null) {
             return;
         }
 
         activeOrderRepository.lockForUpdate(orderLockKey);
+        List<Integer> lockedEventIds = List.of();
         try {
-            ActiveOrder orderToReset = getOrderByLockKey(orderLockKey);
-
-            if (orderToReset != null && orderToReset.isCheckoutInProgress()) {
-                orderToReset.cancelCheckoutInProgress();
-                activeOrderRepository.save(orderToReset);
+            // Re-fetch under the lock; never trust the possibly-stale main-flow reference.
+            ActiveOrder order = getOrderByLockKey(orderLockKey);
+            if (order == null) {
+                order = fallbackOrder;
             }
-        } catch (RuntimeException resetFailure) {
-            log.warn("Could not reset checkout-in-progress state for orderLockKey={}", orderLockKey, resetFailure);
+            if (order == null) {
+                return;
+            }
+
+            // Lock the order's events (sorted, for consistent ordering) so releaseInventory + save are legal.
+            lockedEventIds = extractSortedEventIds(order.getItems());
+            lockEvents(lockedEventIds);
+
+            // Reset status FIRST so the order becomes modifiable (clear() refuses while CHECKOUT_IN_PROGRESS),
+            // then return reserved inventory to stock and clear the cart — all under the held locks.
+            if (order.isCheckoutInProgress()) {
+                order.cancelCheckoutInProgress();
+            }
+            returnTicketsToStock(order);
+        } catch (RuntimeException rollbackFailure) {
+            // Already in the failure path — log, never mask the original checkout failure.
+            log.error("Atomic checkout rollback failed for orderLockKey={}", orderLockKey, rollbackFailure);
         } finally {
+            unlockEvents(lockedEventIds);
             activeOrderRepository.unlock(orderLockKey);
         }
     }
@@ -1191,27 +1304,6 @@ public class CheckoutService {
         }
 
         throw new IllegalArgumentException("Unknown order lock key format: " + orderLockKey);
-    }
-
-    // We attempt to return reserved tickets back to stock during a checkout
-    // rollback. This is done as a safety measure in case the checkout process fails
-    // before we confirm the inventory sale, allowing us to release the reserved
-    // tickets so they can be purchased by other customers. We wrap this in a
-    // try-catch block to ensure that if any exceptions occur during the rollback
-    // (e.g. database issues, event not found), we log the error but do not let it
-    // propagate further since we are already in an error handling flow and we want
-    // to avoid masking the original failure with additional exceptions from the
-    // rollback process.
-    private void safelyReturnTicketsToStock(ActiveOrder order) {
-        if (order == null) {
-            return;
-        }
-
-        try {
-            returnTicketsToStock(order);
-        } catch (RuntimeException rollbackFailure) {
-            log.error("Failed to return reserved tickets to stock during checkout rollback", rollbackFailure);
-        }
     }
 
     // We return the reserved tickets back to stock by iterating through the items
@@ -1433,6 +1525,14 @@ public class CheckoutService {
     private record PricedCartLine(
             CartLineItem item,
             double finalPrice) {
+    }
+
+    // A single (event, zone, selection) that was confirmed SOLD during confirmInventorySale — kept so a
+    // partial-confirm failure can be compensated back to AVAILABLE (C3).
+    private record ConfirmedUnit(
+            Event event,
+            int zoneId,
+            InventorySelection selection) {
     }
 
     // This is the value stored in the idempotency cache. It includes the buyerKey

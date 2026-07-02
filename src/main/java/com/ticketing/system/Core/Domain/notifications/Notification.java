@@ -8,29 +8,69 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
 // Aggregate root for the Notification aggregate (UC-35 / UC-36 / UC-37 design walkthrough).
 // Promoted from a sub-entity of User to its own aggregate so high-volume PENDING storage
 // and login-time delivery don't drag the User aggregate.
 //
 // Cross-aggregate references by ID per course rules:
 //   recipientUserId — User aggregate
+// V3: mapped to JPA. The String @Id is ASSIGNED by the application (a UUID), never
+// @GeneratedValue; recipientUserId is a plain by-id column (never @ManyToOne); the two
+// enums are stored by name (@Enumerated STRING); @Version drives optimistic locking. The
+// data payload is stored as one JSON text column via NotificationDataJsonConverter rather
+// than an @ElementCollection side table. Fields are non-final with a protected no-arg ctor
+// so Hibernate can hydrate; the public ctors still enforce the invariants.
+@Entity
+@Table(name = "notifications")
 public class Notification implements InvariantChecked {
 
-    private final String id;
-    private final int recipientUserId;
-    private final NotificationType type;
+    @Id
+    private String id;
+
+    @Column(name = "recipient_user_id", nullable = false)
+    private int recipientUserId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private NotificationType type;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private NotificationStatus status;
-    private final String message;
-    private final LocalDateTime createdAt;
+
+    @Column
+    private String message;
+
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt;
     /**
      * Structured payload — type-specific key/value data the recipient (or UI) can
      * render. E.g. PURCHASE_CONFIRMED carries {@code orderId}, {@code total},
      * {@code eventName}; EVENT_CANCELLED carries {@code eventId}, {@code reason}.
      * The {@link #message} stays the human-readable summary; {@code data} is the
      * machine-readable companion. Never null — empty map for notifications with
-     * no extra context.
+     * no extra context. Persisted as one JSON text column (see
+     * {@link NotificationDataJsonConverter}).
      */
-    private final Map<String, Object> data;
+    @Convert(converter = NotificationDataJsonConverter.class)
+    @Column(name = "data", columnDefinition = "text", nullable = false)
+    private Map<String, Object> data;
+
+    @Version
+    private Long version;
+
+    /** For JPA only — do not call from application code. */
+    protected Notification() {
+    }
 
     /**
      * Backward-compatible 6-arg constructor — leaves {@link #data} as an empty map.
@@ -91,29 +131,34 @@ public class Notification implements InvariantChecked {
         return Collections.unmodifiableMap(data);
     }
 
-    // Lifecycle transition: invoked by NotificationDispatchService.deliverPending
-    // (UC-37).
-    public void markDelivered() {
+    // Lifecycle transition: PENDING → SENT (notification shown in the bell).
+    public void markSent() {
         if (status != NotificationStatus.PENDING) {
             throw new IllegalStateException(
-                    "Cannot mark as delivered a notification that is not PENDING. Current status: " + status);
+                    "Cannot mark as SENT a notification that is not PENDING. Current status: " + status);
         }
-        this.status = NotificationStatus.DELIVERED;
+        this.status = NotificationStatus.SENT;
         checkInvariants();
     }
 
+    // Lifecycle transition: SENT → PENDING (user disconnected before reading).
     public void markPending() {
-        if (status != NotificationStatus.DELIVERED) {
+        if (status != NotificationStatus.SENT) {
             throw new IllegalStateException(
-                    "Cannot mark as pending a notification that is not DELIVERED. Current status: " + status);
+                    "Cannot mark as PENDING a notification that is not SENT. Current status: " + status);
         }
         this.status = NotificationStatus.PENDING;
         checkInvariants();
     }
 
-    // Lifecycle transition: invoked when the user opens the notification in the UI.
+    // Lifecycle transition: SENT → READ (user clicked the notification item).
     public void markRead() {
-        throw new UnsupportedOperationException("not implemented");
+        if (status != NotificationStatus.SENT) {
+            throw new IllegalStateException(
+                    "Cannot mark as READ a notification that is not SENT. Current status: " + status);
+        }
+        this.status = NotificationStatus.READ;
+        checkInvariants();
     }
 
     // State checks.
@@ -121,8 +166,8 @@ public class Notification implements InvariantChecked {
         return status == NotificationStatus.PENDING;
     }
 
-    public boolean isDelivered() {
-        return status == NotificationStatus.DELIVERED;
+    public boolean isSent() {
+        return status == NotificationStatus.SENT;
     }
 
     public boolean isRead() {
@@ -144,7 +189,8 @@ public class Notification implements InvariantChecked {
             throw new IllegalStateException("Notification invariant violated: id must be non-blank");
         }
         if (recipientUserId <= 0) {
-            throw new IllegalStateException("Notification invariant violated: recipientUserId must be positive (was " + recipientUserId + ")");
+            throw new IllegalStateException(
+                    "Notification invariant violated: recipientUserId must be positive (was " + recipientUserId + ")");
         }
         if (type == null) {
             throw new IllegalStateException("Notification invariant violated: type must not be null");
@@ -156,7 +202,8 @@ public class Notification implements InvariantChecked {
             throw new IllegalStateException("Notification invariant violated: createdAt must not be null");
         }
         if (data == null) {
-            throw new IllegalStateException("Notification invariant violated: data map must not be null (use empty map for no payload)");
+            throw new IllegalStateException(
+                    "Notification invariant violated: data map must not be null (use empty map for no payload)");
         }
     }
 }

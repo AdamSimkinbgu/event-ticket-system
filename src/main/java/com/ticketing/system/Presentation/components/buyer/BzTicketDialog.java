@@ -1,6 +1,5 @@
 package com.ticketing.system.Presentation.components.buyer;
 
-import com.ticketing.system.Presentation.components.Toasts;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -34,18 +33,14 @@ public final class BzTicketDialog {
     public static void show(TicketInfo ticket) {
         Dialog d = new Dialog();
         d.setHeaderTitle("Your ticket");
-        d.setWidth("440px");
+        d.setWidth("min(440px, 100vw - 32px)");
         d.setMaxWidth("92vw");
         d.add(buildCard(ticket));
-
-        Button download = new Button("Download PDF",
-            e -> Toasts.success("Ticket PDF queued for download (mock)."));
-        download.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
         Button close = new Button("Close", e -> d.close());
         close.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
-        d.getFooter().add(download, close);
+        d.getFooter().add(close);
         d.open();
     }
 

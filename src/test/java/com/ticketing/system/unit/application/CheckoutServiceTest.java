@@ -8,9 +8,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -26,8 +28,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
 import com.ticketing.system.Core.Application.dto.BarcodeDTO;
+import com.ticketing.system.testutil.TestTransactions;
+import com.ticketing.system.Core.Application.dto.CardDetailsDTO;
 import com.ticketing.system.Core.Application.dto.CheckoutResultDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceRequestDTO;
 import com.ticketing.system.Core.Application.dto.IssuanceResultDTO;
@@ -38,6 +43,8 @@ import com.ticketing.system.Core.Application.interfaces.IPaymentGateway;
 import com.ticketing.system.Core.Application.interfaces.ISessionManager;
 import com.ticketing.system.Core.Application.interfaces.ITicketIssuer;
 import com.ticketing.system.Core.Application.services.CheckoutService;
+import com.ticketing.system.Core.Application.services.SystemAdminService;
+import com.ticketing.system.Core.Domain.exceptions.MarketNotOpenException;
 import com.ticketing.system.Core.Domain.ActiveOrder.ActiveOrder;
 import com.ticketing.system.Core.Domain.ActiveOrder.CartLineItem;
 import com.ticketing.system.Core.Domain.ActiveOrder.IActiveOrderRepository;
@@ -81,6 +88,7 @@ class CheckoutServiceTest {
     private INotificationService mockNotificationService;
     private ISessionManager mockiSessionManager;
     private IUserRepository mockUserRepository;
+    private SystemAdminService mockSystemAdminService;
 
     private CheckoutService checkoutService;
 
@@ -105,7 +113,8 @@ class CheckoutServiceTest {
 
     private final String IDEMPOTENCY_KEY = "idem-key-1";
     private final String CURRENCY = "ILS";
-    private final String PAYMENT_METHOD_TOKEN = "payment-token";
+    private final CardDetailsDTO PAYMENT_METHOD_TOKEN =
+            new CardDetailsDTO("4111111111111234", "123", 12, 2030, "Test Holder");
 
     private ActiveOrder mockOrder;
     private CartLineItem itemEvent1Zone1;
@@ -134,6 +143,9 @@ class CheckoutServiceTest {
           when(mockUserRepository.getUserById(USER_ID)).thenReturn(mockUser); 
         
 
+        mockSystemAdminService = mock(SystemAdminService.class);
+        when(mockSystemAdminService.isMarketOpen()).thenReturn(true);
+
         checkoutService = new CheckoutService(
                 mockActiveOrderRepo,
                 mockEventRepo,
@@ -144,7 +156,9 @@ class CheckoutServiceTest {
                 mockNotificationService,
                 mockiSessionManager,
                 mockUserRepository,
-                mock(IProductionCompanyRepository.class)
+                mock(IProductionCompanyRepository.class),
+                mockSystemAdminService,
+                TestTransactions.noOpManager()
         );
 
         mockOrder = mock(ActiveOrder.class);
@@ -186,6 +200,27 @@ class CheckoutServiceTest {
 
         when(mockOrder.isCheckoutInProgress()).thenReturn(true);
         when(mockOrder.getOrderKey()).thenReturn("mock-order-key");
+    }
+
+    // --- UC-32 / I.2.1: sales gated on an OPEN market ---
+
+    @Test
+    void GivenMarketClosed_WhenCheckoutMember_ThenThrowsAndNoCharge() {
+        // Events are ON_SALE (see setUp) and the order is valid — the closed market
+        // is the only thing blocking the sale, and it blocks before any charge.
+        when(mockSystemAdminService.isMarketOpen()).thenReturn(false);
+        assertThrows(MarketNotOpenException.class, () ->
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN));
+        verify(mockPaymentGateway, never()).charge(any());
+    }
+
+    @Test
+    void GivenMarketClosed_WhenCheckoutGuest_ThenThrowsAndNoCharge() {
+        when(mockSystemAdminService.isMarketOpen()).thenReturn(false);
+        assertThrows(MarketNotOpenException.class, () ->
+                checkoutService.checkoutGuest("guest-session", "guest@test.com",
+                        IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN, 30));
+        verify(mockPaymentGateway, never()).charge(any());
     }
 
     @Test
@@ -373,6 +408,44 @@ void GivenPaymentFails_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
     assertEquals(5, zone.getAvailableAmount());
     assertEquals(0, zone.getReservedAmount());
 }
+
+    // Regression for the non-atomic rollback (atomic checkout-failure rollback): on a Phase-2 payment failure
+    // the inventory return must run UNDER the event lock, so eventRepository.save is legal (never throws the
+    // "Event must be locked before saving" guard) and the loop reaches the cart clear. We assert the lock is
+    // held across the save via Mockito InOrder: lockForBuyerOperation -> save -> unlockBuyerOperation.
+    @Test
+    void GivenPaymentFails_WhenCheckout_ThenInventoryReturnedUnderEventLock() {
+        ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+        String orderKey = activeOrder.getOrderKey();
+        InventoryZone zone = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+        zone.reserve(InventorySelection.standing(1, orderKey));
+        activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
+
+        when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+        when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
+        when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone);
+        when(event1.calculatePrice(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
+        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(null);   // Phase-2 payment failure
+        when(event1.releaseInventory(ZONE_ID_1, InventorySelection.standing(1))).thenAnswer(invocation -> {
+            zone.release(invocation.getArgument(1));
+            return true;
+        });
+
+        assertThrows(RuntimeException.class, () ->
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN));
+
+        // Inventory + cart were rolled back...
+        assertEquals(0, activeOrder.countTickets(EVENT_ID_1, ZONE_ID_1));
+        assertEquals(5, zone.getAvailableAmount());
+
+        // ...with the event lock held across the save (and released after), proving the save can't hit the
+        // "must be locked" guard and the loop reaches the cart clear.
+        InOrder inOrder = inOrder(mockEventRepo);
+        inOrder.verify(mockEventRepo).lockForBuyerOperation(EVENT_ID_1);
+        inOrder.verify(mockEventRepo).save(event1);
+        inOrder.verify(mockEventRepo).unlockBuyerOperation(EVENT_ID_1);
+    }
+
     @Test
 void GivenTicketIssuanceFailsAfterPayment_WhenCheckout_ThenClearCartAndReturnTicketsToStock() {
     ActiveOrder activeOrder = new ActiveOrder(USER_ID);
@@ -796,7 +869,7 @@ void GivenValidCheckout_WhenCheckout_ThenReturnCheckoutResultAndSaveTicketAndRec
                         100.0,
                         1,
                     PAYMENT_TRANSACTION_ID,
-                    List.of(TICKET_ID_1)
+                    List.of(new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_1, "barcode-value-1"))
             ),
             result
     );
@@ -939,7 +1012,9 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                                     250.0,
                                     1,
                     PAYMENT_TRANSACTION_ID,
-                    List.of(TICKET_ID_1, TICKET_ID_2)
+                    List.of(
+                            new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_1, "barcode-zone-1"),
+                            new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_2, "barcode-zone-2"))
             ),
             result
     );
@@ -1027,7 +1102,9 @@ void GivenMultipleTicketsFromDifferentZonesSameEvent_WhenCheckout_ThenBuyAllTick
                                            300.0,
                                            1,
                                            PAYMENT_TRANSACTION_ID,
-                                           List.of(TICKET_ID_1, TICKET_ID_3)),
+                                           List.of(
+                                                   new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_1, "barcode-event-1"),
+                                                   new CheckoutResultDTO.IssuedTicketDTO(TICKET_ID_3, "barcode-event-2"))),
                            result);
 
            ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
@@ -2434,6 +2511,125 @@ private AtomicBoolean trackReceiptSave() {
         assertEquals(first.totalCharged(), second.totalCharged());
         assertEquals(first.issuedTicketIds(), second.issuedTicketIds());
         verify(mockPaymentGateway, times(1)).charge(any());
+    }
+
+    // --- C3: partial multi-event confirm is compensated (no SOLD stranded) ---
+
+    // Confirming SOLD across multiple events is not a single atomic step. If the second confirm throws
+    // after the first committed, the first must be returned to stock (SOLD -> AVAILABLE), not left SOLD,
+    // and the buyer must be refunded. End state: no inventory SOLD anywhere, both zones available again.
+    @Test
+    void GivenConfirmFailsMidwayAcrossEvents_WhenCheckout_ThenConfirmedSaleCompensatedAndBuyerRefunded() {
+        ActiveOrder activeOrder = new ActiveOrder(USER_ID);
+        String orderKey = activeOrder.getOrderKey();
+
+        StandingZone zone1 = new StandingZone(ZONE_ID_1, "VIP", 5, 100.0);
+        StandingZone zone3 = new StandingZone(ZONE_ID_3, "BALCONY", 5, 200.0);
+        zone1.reserve(InventorySelection.standing(1, orderKey));
+        zone3.reserve(InventorySelection.standing(1, orderKey));
+
+        activeOrder.addStandingReservation(EVENT_ID_1, ZONE_ID_1, 1, 100.0, LocalDateTime.now());
+        activeOrder.addStandingReservation(EVENT_ID_2, ZONE_ID_3, 1, 200.0, LocalDateTime.now());
+
+        when(mockActiveOrderRepo.getByUserId(USER_ID)).thenReturn(activeOrder);
+        when(mockEventRepo.findById(EVENT_ID_1)).thenReturn(event1);
+        when(mockEventRepo.findById(EVENT_ID_2)).thenReturn(event2);
+        when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone1);
+        when(event2.getVenueMap().getZone(ZONE_ID_3)).thenReturn(zone3);
+        when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
+        when(event2.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(200.0);
+
+        PaymentResultDTO paymentResult = new PaymentResultDTO(PAYMENT_TRANSACTION_ID, "gateway", 300.0, "ILS",
+                LocalDateTime.now());
+        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
+        when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(new IssuanceResultDTO(
+                ISSUANCE_TRANSACTION_ID, "issuer", LocalDateTime.now(),
+                List.of(new BarcodeDTO(TICKET_ID_1, "b1", "QR"), new BarcodeDTO(TICKET_ID_3, "b2", "QR"))));
+
+        // First confirm (whichever event the grouping visits first) commits SOLD; the second throws.
+        AtomicInteger confirmCalls = new AtomicInteger();
+        doAnswer(inv -> {
+            if (confirmCalls.incrementAndGet() >= 2) {
+                throw new RuntimeException("confirm boom");
+            }
+            int zoneId = inv.getArgument(0);
+            InventorySelection sel = inv.getArgument(1);
+            if (zoneId == ZONE_ID_1) {
+                zone1.confirmSale(sel);
+            } else {
+                zone3.confirmSale(sel);
+            }
+            return null;
+        }).when(event1).confirmInventorySale(anyInt(), any());
+        doAnswer(inv -> {
+            if (confirmCalls.incrementAndGet() >= 2) {
+                throw new RuntimeException("confirm boom");
+            }
+            int zoneId = inv.getArgument(0);
+            InventorySelection sel = inv.getArgument(1);
+            if (zoneId == ZONE_ID_1) {
+                zone1.confirmSale(sel);
+            } else {
+                zone3.confirmSale(sel);
+            }
+            return null;
+        }).when(event2).confirmInventorySale(anyInt(), any());
+
+        // Compensation (SOLD -> AVAILABLE) and rollback release delegate to the real zones.
+        doAnswer(inv -> { zone1.returnSoldToStock(inv.getArgument(1)); return true; })
+                .when(event1).returnSoldToStock(eq(ZONE_ID_1), any());
+        doAnswer(inv -> { zone3.returnSoldToStock(inv.getArgument(1)); return true; })
+                .when(event2).returnSoldToStock(eq(ZONE_ID_3), any());
+        when(event1.releaseInventory(eq(ZONE_ID_1), any()))
+                .thenAnswer(inv -> { zone1.release(inv.getArgument(1)); return true; });
+        when(event2.releaseInventory(eq(ZONE_ID_3), any()))
+                .thenAnswer(inv -> { zone3.release(inv.getArgument(1)); return true; });
+
+        assertThrows(RuntimeException.class, () ->
+                checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY, PAYMENT_METHOD_TOKEN));
+
+        // No inventory left SOLD: the confirmed zone was compensated, the other was released.
+        assertEquals(0, zone1.getSoldAmount());
+        assertEquals(0, zone3.getSoldAmount());
+        assertEquals(5, zone1.getAvailableAmount());
+        assertEquals(5, zone3.getAvailableAmount());
+        // Buyer is refunded (the sale never committed).
+        verify(mockPaymentGateway).refund(PAYMENT_TRANSACTION_ID, 300.0);
+    }
+
+    // --- C1: idempotent retry survives the market closing ---
+
+    // A completed purchase must be returned idempotently even if the market has since closed — the cache
+    // lookup runs before the market gate, so the retry returns the cached receipt instead of throwing.
+    @Test
+    void GivenCompletedCheckout_WhenMarketClosesThenSameKeyRetry_ThenReturnsCachedResultNotMarketClosed() {
+        PaymentResultDTO paymentResult = new PaymentResultDTO(PAYMENT_TRANSACTION_ID, "gateway", 100.0, "ILS",
+                LocalDateTime.now());
+        IssuanceResultDTO issuanceResult = new IssuanceResultDTO(ISSUANCE_TRANSACTION_ID, "issuer",
+                LocalDateTime.now(), List.of(new BarcodeDTO(TICKET_ID_1, "barcode-value-1", "QR")));
+
+        when(mockOrder.validateCanCheckout()).thenReturn(true);
+        when(mockOrder.getItems()).thenReturn(List.of(itemEvent1Zone1));
+        when(mockOrder.buy()).thenReturn(List.of(itemEvent1Zone1));
+        when(event1.calculatePriceforoneticket(anyInt(), anyDouble(), any(LocalDateTime.class))).thenReturn(100.0);
+        when(mockPaymentGateway.charge(any(PaymentRequestDTO.class))).thenReturn(paymentResult);
+        when(mockTicketIssuer.issue(any(IssuanceRequestDTO.class))).thenReturn(issuanceResult);
+        StandingZone zone1 = new StandingZone(ZONE_ID_1, "General", 100, 100.0);
+        zone1.reserve(InventorySelection.standing(1));
+        when(event1.getVenueMap().getZone(ZONE_ID_1)).thenReturn(zone1);
+
+        CheckoutResultDTO first = checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY,
+                PAYMENT_METHOD_TOKEN);
+
+        // The market closes after the purchase completed.
+        when(mockSystemAdminService.isMarketOpen()).thenReturn(false);
+
+        // The idempotent retry must still return the cached receipt, not throw MarketNotOpenException.
+        CheckoutResultDTO retry = checkoutService.checkoutMember(VALID_TOKEN, IDEMPOTENCY_KEY, CURRENCY,
+                PAYMENT_METHOD_TOKEN);
+
+        assertEquals(first, retry);
+        verify(mockPaymentGateway, times(1)).charge(any()); // no second charge
     }
 
 }

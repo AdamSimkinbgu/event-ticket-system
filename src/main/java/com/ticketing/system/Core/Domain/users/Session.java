@@ -4,6 +4,12 @@ import java.time.Instant;
 
 import com.ticketing.system.Core.Domain.shared.InvariantChecked;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+
 /**
  * Session aggregate — the unified identity record for both Member and Guest
  * sessions. Part of the auth rework (see docs/auth-rework-plan.md).
@@ -20,14 +26,40 @@ import com.ticketing.system.Core.Domain.shared.InvariantChecked;
  * <p>A Guest session can be promoted to a Member session in-place via
  * {@link #promoteTo(int, Instant)} — the sessionId is preserved, so any cart
  * or other state already attached to it survives the transition.
+ *
+ * <p>V3: mapped to JPA. The {@code sessionId} {@code @Id} is ASSIGNED by the
+ * application (the JWT {@code sid} for members, a generated id for guests), never
+ * {@code @GeneratedValue}. {@code userId} is a plain by-id column — never a
+ * {@code @ManyToOne} to User (the cross-aggregate reference rule). {@code @Version}
+ * drives optimistic locking and lets Spring Data tell a new entity (version == null)
+ * from a loaded one. Fields are non-final and a protected no-arg constructor exists
+ * purely so Hibernate can hydrate instances — the public constructor still enforces
+ * the invariants for application-created sessions.
  */
+@Entity
+@Table(name = "sessions")
 public class Session implements InvariantChecked {
 
-    private final String sessionId;
+    @Id
+    private String sessionId;
+
+    @Column(name = "user_id")
     private Integer userId;
-    private final Instant createdAt;
+
+    @Column(name = "created_at", nullable = false)
+    private Instant createdAt;
+
+    @Column(name = "last_seen_at", nullable = false)
     private Instant lastSeenAt;
+
+    @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
+
+    @Version
+    private Long version;
+
+    /** For JPA only — do not call from application code. */
+    protected Session() { }
 
     public Session(String sessionId, Integer userId, Instant createdAt, Instant expiresAt) {
         this.sessionId = sessionId;
@@ -57,6 +89,15 @@ public class Session implements InvariantChecked {
 
     public Instant getExpiresAt() {
         return expiresAt;
+    }
+
+    /**
+     * The JPA optimistic-lock version: {@code null} for a freshly constructed session
+     * (never persisted), non-null once loaded from the database. Lets the persistence
+     * adapter tell a new instance from a loaded one.
+     */
+    public Long getVersion() {
+        return version;
     }
 
     public boolean isMember() {
@@ -108,6 +149,23 @@ public class Session implements InvariantChecked {
             throw new IllegalArgumentException("newExpiresAt must not be null");
         }
         this.expiresAt = newExpiresAt;
+        checkInvariants();
+    }
+
+    /**
+     * Persistence support: copies the updatable state ({@code userId},
+     * {@code lastSeenAt}, {@code expiresAt}) from {@code source} onto this session,
+     * preserving identity ({@code sessionId}, {@code createdAt}) and the JPA
+     * {@code @Version}. Used by the JPA adapter to reproduce the in-memory
+     * repository's overwrite-on-save semantics when a brand-new instance reuses an
+     * already-persisted id — a case the normal merge/persist path can't express for
+     * an assigned id. Not part of the normal domain mutation flow (use
+     * {@link #promoteTo}, {@link #touch}, {@link #extendExpiry}).
+     */
+    public void overwriteFrom(Session source) {
+        this.userId = source.userId;
+        this.lastSeenAt = source.lastSeenAt;
+        this.expiresAt = source.expiresAt;
         checkInvariants();
     }
 

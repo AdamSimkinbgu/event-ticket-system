@@ -65,12 +65,12 @@ public class MyInvitationsView extends LkPage {
             case MyInvitationsPresenter.Outcome.NotAuthenticated ignored -> content.add(banner(
                 "Your session has expired — please sign in again."));
             case MyInvitationsPresenter.Outcome.Failure fail -> content.add(banner(
-                "Could not load invitations: " + fail.reason()));
+                Lk.withReason("Could not load invitations", fail.reason())));
         }
     }
 
     private void render(MyInvitationsPresenter.Outcome.Success ok) {
-        content.add(Lk.h2("Pending invitations"));
+        content.add(Lk.h2("Pending Invitations"));
         if (ok.pending().isEmpty()) {
             content.add(banner("You have no pending invitations right now."));
         } else {
@@ -171,7 +171,7 @@ public class MyInvitationsView extends LkPage {
             case MyInvitationsPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case MyInvitationsPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not accept invitation: " + fail.reason());
+                Toasts.failure("Could not accept the invitation — please try again.");
         }
     }
 
@@ -184,7 +184,7 @@ public class MyInvitationsView extends LkPage {
             case MyInvitationsPresenter.ActionOutcome.NotAuthenticated ignored ->
                 Toasts.failure("Your session has expired — please sign in again.");
             case MyInvitationsPresenter.ActionOutcome.Failure fail ->
-                Toasts.failure("Could not decline invitation: " + fail.reason());
+                Toasts.failure("Could not decline the invitation — please try again.");
         }
     }
 

@@ -6,16 +6,22 @@ import java.util.List;
 import java.util.Set;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import lombok.extern.slf4j.Slf4j;
 
 import com.ticketing.system.Core.Application.dto.CompanyDashboardDTO;
+import com.ticketing.system.Core.Application.dto.PurchaseHistoryDTO;
+import com.ticketing.system.Core.Application.dtoMappers.OrderReceiptMapper;
+import com.ticketing.system.Core.Domain.Tickets.ITicketRepository;
+import com.ticketing.system.Core.Domain.company.IProductionCompanyRepository;
 import com.ticketing.system.Core.Domain.events.IEventRepository;
 import com.ticketing.system.Core.Domain.messaging.ConversationType;
 import com.ticketing.system.Core.Domain.messaging.IConversationRepository;
 import com.ticketing.system.Core.Domain.orders.IOrderReceiptRepository;
 import com.ticketing.system.Core.Domain.orders.OrderReceipt;
 import com.ticketing.system.Core.Domain.orders.ReceiptLine;
+import com.ticketing.system.Core.Domain.users.IUserRepository;
 
 /**
  * Read-side aggregator for the owner-workspace dashboard counters (V2-WIRE-OWNER-DASH).
@@ -29,6 +35,7 @@ import com.ticketing.system.Core.Domain.orders.ReceiptLine;
  */
 @Service
 @Slf4j
+@Transactional(readOnly = true)
 public class CompanyAnalyticsService {
 
     private static final int WINDOW_DAYS = 30;
@@ -36,14 +43,23 @@ public class CompanyAnalyticsService {
     private final IEventRepository eventRepository;
     private final IOrderReceiptRepository orderReceiptRepository;
     private final IConversationRepository conversationRepository;
+    private final ITicketRepository ticketRepository;
+    private final IProductionCompanyRepository companyRepository;
+    private final IUserRepository userRepository;
 
     public CompanyAnalyticsService(
             IEventRepository eventRepository,
             IOrderReceiptRepository orderReceiptRepository,
-            IConversationRepository conversationRepository) {
+            IConversationRepository conversationRepository,
+            ITicketRepository ticketRepository,
+            IProductionCompanyRepository companyRepository,
+            IUserRepository userRepository) {
         this.eventRepository = eventRepository;
         this.orderReceiptRepository = orderReceiptRepository;
         this.conversationRepository = conversationRepository;
+        this.ticketRepository = ticketRepository;
+        this.companyRepository = companyRepository;
+        this.userRepository = userRepository;
     }
 
     /** Live dashboard counters for one company. Returns zeros for a fresh company with no events. */
@@ -77,8 +93,26 @@ public class CompanyAnalyticsService {
                 .filter(c -> c.getType() == ConversationType.INQUIRY && !c.isClosed())
                 .count();
 
-        log.debug("Dashboard for company {}: {} active events, {} tickets/30d, {} revenue/30d, {} open inquiries",
-                companyId, activeEvents, ticketsSold, revenue, openInquiries);
-        return new CompanyDashboardDTO(activeEvents, ticketsSold, revenue, openInquiries);
+        // Company rating is derived: the mean of this company's events' ratings (null if none rated).
+        Double rating = CompanyRatings.fromEvents(eventRepository.findByCompanyId(companyId));
+
+        log.debug("Dashboard for company {}: {} active events, {} tickets/30d, {} revenue/30d, {} open inquiries, rating {}",
+                companyId, activeEvents, ticketsSold, revenue, openInquiries, rating);
+        return new CompanyDashboardDTO(activeEvents, ticketsSold, revenue, openInquiries, rating);
+    }
+
+    public PurchaseHistoryDTO salesHistory(int companyId) {
+        List<Integer> eventIds = eventRepository.findIdsByCompany(companyId);
+        if (eventIds.isEmpty()) return new PurchaseHistoryDTO(List.of());
+        Set<Integer> companyEventIds = new HashSet<>(eventIds);
+        OrderReceiptMapper mapper = new OrderReceiptMapper();
+        List<PurchaseHistoryDTO.PurchaseRecordDTO> records = orderReceiptRepository
+                .findByEventIds(eventIds)
+                .stream()
+                .map(r -> mapper.toFilteredPurchaseRecordDTO(
+                        r, companyEventIds,
+                        ticketRepository, eventRepository, companyRepository, userRepository))
+                .toList();
+        return new PurchaseHistoryDTO(records);
     }
 }
