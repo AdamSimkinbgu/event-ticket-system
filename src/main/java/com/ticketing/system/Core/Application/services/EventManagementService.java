@@ -143,17 +143,9 @@ public class EventManagementService {
         // outside right now.
         DiscountPolicy discountPolicy = new DiscountPolicy(0);
 
-        PurchasePolicy companyPurchasePolicy = company.getPurchasePolicy();
-        if (companyPurchasePolicy == null) {
-            companyPurchasePolicy = new NoPurchasePolicy();
-        }
-
+        
         PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(request.purchasePolicy());
-
-        PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
-                companyPurchasePolicy,
-                eventSpecificPurchasePolicy);
-
+       
         Event newEvent = new Event(
                 newEventId,
                 request.name(),
@@ -165,7 +157,7 @@ public class EventManagementService {
                 EventStatus.DRAFT,
                 venueMap,
                 request.showDates(),
-                inheritedAndExtendedPurchasePolicy,
+                eventSpecificPurchasePolicy ,
                 discountPolicy);
         eventRepository.save(newEvent);
 
@@ -1018,18 +1010,9 @@ public class EventManagementService {
                 throw new UnauthorizedActionException("act on an event that does not belong to this company");
             }
 
-            PurchasePolicy companyPurchasePolicy = company.getPurchasePolicy();
-            if (companyPurchasePolicy == null) {
-                companyPurchasePolicy = new NoPurchasePolicy();
-            }
+           PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(config.purchasePolicy());
 
-            PurchasePolicy eventSpecificPurchasePolicy = buildPurchasePolicyFromDTO(config.purchasePolicy());
-
-            PurchasePolicy inheritedAndExtendedPurchasePolicy = new AndPurchasePolicy(
-                    companyPurchasePolicy,
-                    eventSpecificPurchasePolicy);
-
-            event.setPurchasePolicy(inheritedAndExtendedPurchasePolicy);
+            event.setPurchasePolicy(eventSpecificPurchasePolicy);
 
             eventRepository.save(event);
 
@@ -1140,11 +1123,7 @@ public class EventManagementService {
             throw new EventNotFoundException();
         if (event.getCompanyId() != companyId)
             throw new UnauthorizedActionException("act on an event that does not belong to this company");
-        PurchasePolicy stored = event.getPurchasePolicy();
-        if (stored instanceof AndPurchasePolicy a) {
-            return policyToDTO(a.getRightPolicy());
-        }
-        return policyToDTO(stored);
+        return policyToDTO(event.getPurchasePolicy());
     }
 
     private PurchasePolicyDTO policyToDTO(PurchasePolicy policy) {
