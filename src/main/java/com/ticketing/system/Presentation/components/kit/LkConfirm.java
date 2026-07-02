@@ -64,7 +64,7 @@ public class LkConfirm extends Dialog {
     }
 
     public LkConfirm(String title, String body, Severity severity) {
-        setWidth("440px");
+        setWidth("min(440px, 100vw - 32px)");
         setMaxWidth("92vw");
 
         card.getStyle()

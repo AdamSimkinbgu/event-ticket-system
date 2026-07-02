@@ -5,6 +5,7 @@
     --bg:#fafbfc; --card:#ffffff; --border:#e5e7eb; --border-strong:#cbd5e1;
     --ok:#16a34a; --warn:#f59e0b; --err:#dc2626;
     --radius:12px; --radius-s:8px; --vk-seat-size:30px;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
     --font:'Segoe UI',Tahoma,'Helvetica Neue',Arial,sans-serif;
     --mono:'Menlo','SFMono-Regular','Consolas',monospace;
   }
@@ -710,3 +711,9 @@ vaadin-notification-card[slot="top-center"],
 vaadin-notification-card[slot="top-stretch"] {
   margin-top: 60px;
 }
+
+/* ============ TEXT UTILITIES ============
+ * Reusable single-line ellipsis and 2-line clamp for long user-supplied
+ * text (titles, names) so it truncates cleanly instead of overflowing. */
+.lk-ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.lk-clamp-2{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
