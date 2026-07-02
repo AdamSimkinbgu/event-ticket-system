@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ticketing.system.Core.Application.interfaces.INotificationService;
 import com.ticketing.system.Core.Domain.notifications.INotificationRepository;
@@ -23,6 +24,8 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+// Each write op (notify*/markRead/revertSentToPending) runs inside one service-level transaction (Eval 5).
+@Transactional
 public class NotificationService implements INotificationService {
 
     private final NotificationDispatchService dispatcher;
